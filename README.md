@@ -59,7 +59,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Pickups: health, armor, ammo, keys, weapons, powerups, with Doom's messages.
 - Monsters wake up like in Doom: on sight in front of them, or when your shots reach their
   sector (sound spreads through open doors, stops at closed ones and crosses at most one sound-blocking
-  lines; ambush monsters must also see you). They chase (2D Doom-style movement with step/drop-off
+  line; ambush monsters must also see you). They chase (2D Doom-style movement with step/drop-off
   rules, they open doors), attack with melee, hitscan or projectiles, take pain, die,
   drop items, and fight each other when hit by another monster (infighting). Lost souls
   charge, Pain Elementals spit lost souls (three more when they die), Arch-viles raise
