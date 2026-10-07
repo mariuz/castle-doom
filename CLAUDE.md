@@ -77,6 +77,13 @@ Monster wake-up: grep `Wake:` (sprite, position, `saw` / `heard` /
 E1M1, `Y,X,W:1,G:480:712,A:0,U,W:1.5,X,W:2,Q` gives 38 sectors from the
 start (the two ambush zombies wake) and then 60 beyond the door.
 
+Finales: `E` exits the level, `U` presses a key on the intermission /
+finale. `--autotest E1M8 p --demo "E,W:4,S,U,W:0.5,S,U,W:0.5,S,Q"` shows
+the typing, the full text and the CREDIT picture; E3M8 with `E,W:1,U,W:0.3,U,W:35,S,Q`
+the bunny with THE END; MAP30 with `E,W:1` and five `U,W:0.3` reaches the
+cast call. Do not press `U` on the last screen of a game-ending finale in a
+script: it returns to the title and the demo (and `Q`) stops running.
+
 Icon of Sin: `--autotest MAP30 prefix --demo "Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q"`
 puts the player in the arena facing the face; grep `BrainAwake:`,
 `BrainSpit:`, `BrainSpawn:`, `BrainDeath:` (`D` kills the brain too, and the

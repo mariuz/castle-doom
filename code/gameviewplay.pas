@@ -9,7 +9,7 @@ uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
-  DoomIntermission;
+  DoomIntermission, DoomFinale, DoomDehacked;
 
 type
   TViewPlay = class(TCastleView)
@@ -27,6 +27,8 @@ type
     FMessageText, FLoadingText: TDoomFontText;
     FIntermissionBack: TCastleRectangleControl;
     FIntermissionScreen: TDoomIntermission;
+    FFinaleScreen: TDoomFinale;
+    FStrings: TDoomStrings;
     FIntermissionTicAccum: Single;
     FCrosshair: TCastleCrosshair;
     FAutomap: TDoomAutomap;
@@ -65,6 +67,11 @@ type
     procedure StartMap(const MapName: String; const KeepInventory: Boolean);
     procedure StartIntermission;
     procedure FinishIntermission;
+    { Show the finale after FMapName; false when the map has none. }
+    function StartFinale: Boolean;
+    procedure FinishFinale;
+    { The screen shown between levels (intermission or finale) was clicked. }
+    procedure AccelerateScreen;
     function DoomAngleFromCamera: Single;
   public
     { Set before starting the view. }
@@ -257,6 +264,12 @@ begin
   FIntermissionScreen.Anchor(vpMiddle);
   FIntermissionScreen.Exists := false;
   InsertFront(FIntermissionScreen);
+
+  FFinaleScreen := TDoomFinale.Create(FreeAtStop);
+  FFinaleScreen.Anchor(hpMiddle);
+  FFinaleScreen.Anchor(vpMiddle);
+  FFinaleScreen.Exists := false;
+  InsertFront(FFinaleScreen);
   FLoadingText := TDoomFontText.Create(FreeAtStop);
   FLoadingText.Graphics := Graphics;
   FLoadingText.Anchor(hpMiddle);
@@ -344,6 +357,7 @@ begin
   FSlotMenu := SlotMenuNone;
   FreeAndNil(FDemoSteps);
   FreeAndNil(FWorld);
+  FreeAndNil(FStrings);
   inherited;
 end;
 
@@ -467,10 +481,8 @@ begin
   else if Cmd = 'U' then
   begin
     if FIntermission then
-    begin
-      FIntermissionScreen.Accelerate;
-      if FIntermissionScreen.Done then FinishIntermission;
-    end else
+      AccelerateScreen
+    else
       FWorld.UseInFront;
   end
   else if Cmd = 'E' then
@@ -534,6 +546,7 @@ begin
   FIntermission := false;
   FIntermissionBack.Exists := false;
   FIntermissionScreen.Exists := false;
+  FFinaleScreen.Exists := false;
   FLoadingText.Exists := false;
   if Restored then
     FWorld.ShowMessage('Game loaded.')
@@ -797,10 +810,63 @@ procedure TViewPlay.FinishIntermission;
 var
   Next: String;
 begin
+  FIntermissionScreen.Exists := false;
+  { Doom 2 (G_WorldDone): the story text comes after the intermission. }
+  if Wad.IsDoom2 and StartFinale then Exit;
   Next := NextMapName(FMapName, FWorld.SecretExit, Wad.IsDoom2);
   if not Wad.HasLump(Next) then
     Next := Wad.MapNames[0];
   StartMap(Next, true);
+end;
+
+function TViewPlay.StartFinale: Boolean;
+begin
+  if FStrings = nil then
+    FStrings := TDoomStrings.Create(Wad);
+  Result := FFinaleScreen.Start(Graphics, Sounds, Music, FStrings, Wad.IsDoom2, FMapName, FWorld.SecretExit);
+  if not Result then Exit;
+  WritelnLog('Finale', 'Finale after %s (stage %d)', [FMapName, Ord(FFinaleScreen.Stage)]);
+  FIntermission := true;
+  FIntermissionTime := 0;
+  FIntermissionTicAccum := 0;
+  FIntermissionBack.Exists := true;
+  FIntermissionScreen.Exists := false;
+  FLoadingText.Exists := false;
+  FFinaleScreen.Exists := true;
+  FWorld.ExitRequested := false;
+  if FFinaleScreen.Done then FinishFinale;
+end;
+
+procedure TViewPlay.FinishFinale;
+var
+  Next: String;
+begin
+  FFinaleScreen.Exists := false;
+  if FFinaleScreen.Continues then
+  begin
+    Next := NextMapName(FMapName, FWorld.SecretExit, Wad.IsDoom2);
+    if not Wad.HasLump(Next) then
+      Next := Wad.MapNames[0];
+    StartMap(Next, true);
+  end else
+  begin
+    WritelnLog('Finale', 'The end');
+    Container.View := ViewMenu;
+  end;
+end;
+
+procedure TViewPlay.AccelerateScreen;
+begin
+  if FFinaleScreen.Exists then
+  begin
+    FFinaleScreen.Accelerate;
+    if FFinaleScreen.Done then FinishFinale;
+  end else
+  if FIntermissionScreen.Exists then
+  begin
+    FIntermissionScreen.Accelerate;
+    if FIntermissionScreen.Done then FinishIntermission;
+  end;
 end;
 
 procedure TViewPlay.Update(const SecondsPassed: Single; var HandleInput: Boolean);
@@ -842,6 +908,19 @@ begin
       end;
       if FIntermissionScreen.Done then
         FinishIntermission;
+    end else
+    if FFinaleScreen.Exists then
+    begin
+      FFinaleScreen.Height := EffectiveHeight;
+      FFinaleScreen.Width := EffectiveHeight * 4 / 3;
+      FIntermissionTicAccum := FIntermissionTicAccum + SecondsPassed;
+      while FIntermissionTicAccum >= TicSeconds do
+      begin
+        FIntermissionTicAccum := FIntermissionTicAccum - TicSeconds;
+        FFinaleScreen.Tic;
+      end;
+      if FFinaleScreen.Done then
+        FinishFinale;
     end;
     Exit;
   end;
@@ -928,7 +1007,11 @@ begin
   FCrosshair.Exists := FNavigation.MouseLook and not P.Dead and not FAutomap.Exists;
 
   if FWorld.ExitRequested then
-    StartIntermission;
+  begin
+    { Doom 1 (G_DoCompleted): ExM8 goes straight to the finale. }
+    if Wad.IsDoom2 or not StartFinale then
+      StartIntermission;
+  end;
 end;
 
 function TViewPlay.Press(const Event: TInputPressRelease): Boolean;
@@ -946,8 +1029,7 @@ begin
     if (FIntermissionTime > 0.3) and (Event.IsKey(keyE) or Event.IsKey(keySpace) or
        Event.IsKey(keyEnter) or Event.IsMouseButton(buttonLeft) or Event.IsKey(keyCtrl)) then
     begin
-      FIntermissionScreen.Accelerate;
-      if FIntermissionScreen.Done then FinishIntermission;
+      AccelerateScreen;
       Exit(true);
     end;
     if Event.IsKey(keyEscape) then

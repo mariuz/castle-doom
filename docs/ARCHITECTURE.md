@@ -83,6 +83,8 @@ Sizes, for orientation (lines of Pascal):
 | `gameviewmenu.pas` | 780 | title screen: Doom menu and options |
 | `doommenu.pas` | 420 | Doom's menu from `M_*` graphics |
 | `doomintermission.pas` | 330 | intermission screen |
+| `doomfinale.pas` | 460 | finale text, end pictures, bunny scroller, cast call |
+| `doomdehacked.pas` | 130 | BEX strings from `DEHACKED` lumps |
 | `doomautomap.pas` | 210 | automap drawn with 2D primitives |
 | `doomfont.pas` | 130 | STCFN text |
 | `doomactors.pas` | 248 | sprite billboards with animation |
@@ -610,6 +612,31 @@ with Doom's count-up (2% per tic, pistol click every 4 tics, explosion at the
 end, one-second pauses), par times, the ENTERING screen, and use/fire to skip.
 The control is kept 4:3 and centred on the viewport.
 
+The finale (`doomfinale.pas`, `f_finale.c`) is a third such screen. Doom 1
+goes to it straight from ExM8 (`G_DoCompleted` skips the intermission
+there); Doom 2 after the intermission of MAP06, 11, 20, 30 and the secret
+exits of MAP15 and MAP31 (`G_WorldDone`). Stages: the text typed over a
+tiled flat from (10, 10) with 11-pixel lines at 3 tics per character (a key
+completes it, a second key moves on; Doom 1 also moves on 250 tics after the
+text); the end picture (`CREDIT` or `HELP2`, `VICTORY2`, `ENDPIC`); the
+bunny scroller (`PFUB2` sliding off to `PFUB1` from tic 230 at half a pixel
+per tic, then `END0`..`END6` from tic 1130 with pistol clicks; Freedoom's
+END patches carry offsets that put "TO BE CONTINUED..." in the corner);
+and the cast call on `BOSSBACK`: the 17 members in Doom's order, drawn
+front-facing at (160, 170) with their walk frames, an attack every 12
+frames, the death frames on a key, then the next one, the name centred at
+y = 180. After a Doom 2 text the view loads the next map; after the end
+picture, the bunny or the cast (Esc) it returns to the title.
+
+The texts are not in Doom's WADs but in the executable; Freedoom puts its
+own (BSD-licensed) story, background flats and cast names in a `DEHACKED`
+lump as Boom BEX strings (`E1TEXT`, `C1TEXT`, `BGFLATE1`, `BGFLAT06`,
+`CC_ZOMBIE`...). `TDoomStrings` (`doomdehacked.pas`) reads every
+`DEHACKED` lump in load order (a PWAD's override the IWAD's), keeps only the
+`[STRINGS]` section, joins lines ending in a backslash and turns `\n` into
+newlines. Without a text (an IWAD with no `DEHACKED`) the text stage is
+skipped; flats fall back to vanilla's, cast names to Doom's.
+
 The weapon sprite and muzzle flash are two more `TCastleImageControl`s placed
 with Doom's formula (`x1 = centerx + (1 - 160 - leftoffset) * scale`,
 `WEAPONTOP = 32`) and bobbed with the camera speed. Screen flashes are
@@ -807,8 +834,8 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 
 ## 18. Known gaps and ideas
 
-- No finale screens: after E1M8 / MAP30 the game continues with the next
-  map (MAP30 wraps to MAP01).
+- Other DeHackEd sections (frames, things, weapons, code pointers) are
+  ignored; only BEX strings are read, and only the finale uses them so far.
 - Doom's "donut" (special 9) only lowers the pillar.
 - Sight is 2D (`SightClear` ignores opening heights and `REJECT`).
 - No demo playback; web saves live in one browser's `localStorage` (no

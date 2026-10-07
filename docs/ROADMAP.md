@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Finales: the story text typed over a flat (3 tics per character, a key
+  shows it all), then Doom 1's end picture (`CREDIT`, `VICTORY2`, `ENDPIC`)
+  or the E3M8 bunny scroller with THE END, Doom 2's texts after MAP06, 11,
+  20 and the MAP15 / MAP31 secret exits (the game then goes on), and the
+  MAP30 cast call (each member walks, attacks now and then, dies on a key
+  press). Texts, background flats and cast names come from the WAD's
+  `DEHACKED` lump (BEX `[STRINGS]`, `DoomDehacked`), so Freedoom's own
+  story is shown; music `D_VICTOR` / `D_READ_M` / `D_BUNNY` / `D_EVIL`.
 - Sound propagation and ambush monsters: a player's shot floods from the
   player's sector through open two-sided lines (closed doors stop it,
   `ML_SOUNDBLOCK` lines let it through once) and marks the sectors it
@@ -101,7 +109,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Finales**: the end-of-episode text screens (`E1TEXT`.. / `C1TEXT`..) over a flat, Doom 2's cast call after MAP30 and the bunny scroller after E3M8; now the game goes on to the next map (MAP30 wraps to MAP01). | The games actually end. | new `DoomFinale` view, `GameViewPlay.FinishIntermission` | M |
+| **More BEX strings**: pickup and door messages, level names on the automap, the quit / Nightmare prompts from `DEHACKED` (`TDoomStrings` already parses them), and `.deh` / `.bex` files given with `-deh`. | Freedoom's own wording everywhere, PWADs with text changes. | `DoomThings.PickupMessage`, `DoomWorld`, `DoomMenu` | S |
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
@@ -142,9 +150,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Finales (M): end-of-episode text screens and the Doom 2 cast call, now
-   that every boss level can be finished.
-2. Teleporting monsters (specials 125/126, monsters walking over
+1. Teleporting monsters (specials 125/126, monsters walking over
    teleporters) (S): several Doom 2 maps send monsters through teleporters.
-3. Weapon raise / lower when switching and the screen melt between levels
+2. Weapon raise / lower when switching and the screen melt between levels
    (S): two small things that make it feel like Doom.
+3. More BEX strings (S): Freedoom's own pickup messages and prompts, now
+   that `DoomDehacked` reads them.

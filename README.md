@@ -72,6 +72,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
 - Doom's text font for messages, and the real intermission screen (level names, FINISHED,
   animated kills/items/secrets/time with sounds, par times, ENTERING).
+- Finales: Freedoom's story texts (read from the WAD's `DEHACKED` strings), the end
+  pictures, the bunny scroller after E3M8 and the Doom 2 cast call after MAP30.
 - Doom's own menu from the WAD's graphics: New Game, episode and skill select (all five
   skills, with Nightmare's fast monsters and respawning), Load Game; `-skill 1..5`.
   The Options page picks WADs, map and skill.
@@ -88,7 +90,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no finale screens, monsters do not use
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: monsters do not use
 teleporters, sight checks are 2D, no glBSP `GL_` lumps or UDMF maps, the music synth
 approximates the OPL2.
 
@@ -142,6 +144,8 @@ code/doomhud.pas        status bar composition
 code/doomautomap.pas    automap (DrawPrimitive2D)
 code/doomfont.pas       STCFN text
 code/doomintermission.pas  intermission screen
+code/doomfinale.pas     finale text, end pictures, bunny scroller, cast call
+code/doomdehacked.pas   BEX strings from DEHACKED lumps
 code/doommenu.pas       Doom's menu (M_* graphics): main, episode, skill, load
 code/gameviewmenu.pas   title screen: Doom menu and options
 code/gameviewplay.pas   viewport, navigation, HUD, input
