@@ -72,6 +72,11 @@ and the log at `%LOCALAPPDATA%\castle-doom\castle-doom.log` (grep for
 (-416, 256); door at x=544..560, y=680..744 (stand at 480,712 facing angle 0);
 WR lift square 64..192 x 192..320 (stand at 0,256 facing 0 and walk).
 
+Monster wake-up: grep `Wake:` (sprite, position, `saw` / `heard` /
+`heard and saw (ambush)`) and `Noise:` (sectors a new shot reached). On
+E1M1, `Y,X,W:1,G:480:712,A:0,U,W:1.5,X,W:2,Q` gives 38 sectors from the
+start (the two ambush zombies wake) and then 60 beyond the door.
+
 Icon of Sin: `--autotest MAP30 prefix --demo "Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q"`
 puts the player in the arena facing the face; grep `BrainAwake:`,
 `BrainSpit:`, `BrainSpawn:`, `BrainDeath:` (`D` kills the brain too, and the

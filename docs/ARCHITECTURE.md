@@ -445,9 +445,19 @@ Three monsters have their own attack code, following `p_enemy.c`:
   spawns a row of `MISL` explosions 320 units in front of it, more every
   other tic, `DSBOSDTH`, and 120 tics later requests the normal exit.
 
-Monsters sleep until they see the player (`SightClear`: a 2D line-of-sight
-test against one-sided lines and closed two-sided lines) or hear a shot
-(`NoiseAlert`). Awake, they chase with Doom-style 2D movement (`TryMove2D`:
+Monsters sleep until they notice the player. Every shot calls `NoiseAlert`
+(`P_NoiseAlert` / `P_RecursiveSound`): starting at the player's sector, the
+sound crosses every two-sided line whose opening is above zero (a closed
+door stops it) and an `ML_SOUNDBLOCK` line only if it has not crossed one
+yet; every sector reached is flagged in `FSectorSound` (Doom's
+`soundtarget`) for the rest of the level, and the flags are saved. Doom
+recurses; a work list with "revisit only with fewer blocks" gives the same
+set without deep recursion. Idle monsters run `MonsterLook` (`A_Look`)
+every 10 tics: a flagged sector wakes them at once, but an `MTF_AMBUSH`
+monster also needs a line of sight; otherwise `P_LookForPlayers` applies:
+the player must be within 90 degrees of the monster's facing (or within 64
+units) and visible (`SightClear`: a 2D line-of-sight test against
+one-sided lines and closed two-sided lines). Awake, they chase with Doom-style 2D movement (`TryMove2D`:
 one-sided and blocking lines, openings too low, steps higher than 24, drop-offs
 unless floating, other solid things, the player), try other directions when
 blocked, open doors in their way, and attack when close (melee), when they
@@ -800,6 +810,7 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 - No finale screens: after E1M8 / MAP30 the game continues with the next
   map (MAP30 wraps to MAP01).
 - Doom's "donut" (special 9) only lowers the pillar.
+- Sight is 2D (`SightClear` ignores opening heights and `REJECT`).
 - No demo playback; web saves live in one browser's `localStorage` (no
   export / import). The in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
   `DoomMenu`.

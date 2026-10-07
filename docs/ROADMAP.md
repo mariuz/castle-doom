@@ -6,6 +6,15 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Sound propagation and ambush monsters: a player's shot floods from the
+  player's sector through open two-sided lines (closed doors stop it,
+  `ML_SOUNDBLOCK` lines let it through once) and marks the sectors it
+  reaches (`NoiseAlert`, saved with the game). Idle monsters look every 10
+  tics (`MonsterLook`, Doom's `A_Look`): a heard sector wakes them, except
+  `MTF_AMBUSH` monsters, which also need a line of sight; otherwise they
+  must see the player in their front half circle (or within melee range).
+  The 3000-unit sight limit is gone. The log says why each one woke
+  (`Wake:`) and how far each new noise went (`Noise:`).
 - Persistent web saves: in the browser the save JSON goes to the page's
   `localStorage` (`GameSaveStorage`, through the JOB JavaScript bridge that
   CGE's web target already uses), keyed `castle-doom:castle-config:/saveN.json`,
@@ -82,8 +91,7 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **Donut (special 9)**, **perpetual platforms stop/start**, **raise by shortest lower texture (30/96 are approximated as +64)**, **crusher return speed when blocked**. | Correctness of a few maps. | `ApplySpecial`, `TSectorMover` | S each |
 | **Spectres** are drawn like demons; add the fuzz/translucency effect (shader or `AlphaMode = amBlend` with low alpha). | Visual fidelity. | `DoomActors` material | S |
-| **`MTF_AMBUSH`** (deaf) flag: ambush monsters should ignore noise and wake only on sight in front of them. | Map authors rely on it for traps. | `TicMonster`, `NoiseAlert` | S |
-| **Sector sound propagation**: monsters currently wake on a 2D line-of-sight or any shot within 1200 units; Doom floods sound through sector neighbours with `ML_SOUNDBLOCK`. | Monsters wake more faithfully. | `NoiseAlert` | M |
+| **3D sight checks**: `SightClear` is 2D (one-sided and closed two-sided lines block); Doom's `P_CheckSight` also uses the heights of openings and the `REJECT` table, so a monster below a high ledge can "see" too much here. | Fewer early wake-ups and shots through ledges. | `SightClear`, `DoomMap` (`REJECT`) | S-M |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
 | **Teleport monsters** (specials 125/126) and monsters using teleporters. | Some Doom 2 maps rely on it. | `DoTeleport` for actors | S |
 | **Falling damage / knockback**: hitscans and explosions should push things. | Feel. | `DamageActor`, `DamagePlayer` | S |
@@ -134,9 +142,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Sector sound propagation and the `MTF_AMBUSH` flag (M): monsters wake like
-   in Doom, which matters more now that the harder skills spawn more of them.
-2. Finales (M): end-of-episode text screens and the Doom 2 cast call, now
+1. Finales (M): end-of-episode text screens and the Doom 2 cast call, now
    that every boss level can be finished.
-3. Teleporting monsters (specials 125/126, monsters walking over
+2. Teleporting monsters (specials 125/126, monsters walking over
    teleporters) (S): several Doom 2 maps send monsters through teleporters.
+3. Weapon raise / lower when switching and the screen melt between levels
+   (S): two small things that make it feel like Doom.

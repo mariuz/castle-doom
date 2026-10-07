@@ -96,6 +96,10 @@ begin
   Result.Add('brainEasy', FBrainEasy);
   Result.Add('brainDeathTics', FBrainDeathTics);
   Result.Add('brainPos', JsonFloatArray([FBrainX, FBrainY]));
+  Arr := TJSONArray.Create;
+  for I := 0 to High(FSectorSound) do
+    if FSectorSound[I] then Arr.Add(I);
+  Result.Add('sectorsHeard', Arr);
   Result.Add('startX', Double(FDoomStartX));
   Result.Add('startY', Double(FDoomStartY));
   Result.Add('startAngle', Double(FDoomStartAngle));
@@ -342,7 +346,7 @@ end;
 procedure TDoomWorld.RestoreDynamicState(const State: TJSONObject);
 var
   PJ, AJ, MJ: TJSONObject;
-  Arr, Sub: TJSONArray;
+  Arr, Sub, Heard: TJSONArray;
   Loaded: {$ifdef FPC}specialize{$endif} TList<TDoomActor>;
   I, Bits, Sec, Num, EffectNum: Integer;
   A: TDoomActor;
@@ -367,6 +371,11 @@ begin
   FBrainDeathTics := State.Get('brainDeathTics', 0);
   FBrainX := ArrayItemFloat(ObjArray(State, 'brainPos'), 0, 0);
   FBrainY := ArrayItemFloat(ObjArray(State, 'brainPos'), 1, 0);
+  Heard := ObjArray(State, 'sectorsHeard');
+  if Heard <> nil then
+    for I := 0 to Heard.Count - 1 do
+      if (Heard.Integers[I] >= 0) and (Heard.Integers[I] < Length(FSectorSound)) then
+        FSectorSound[Heard.Integers[I]] := true;
   FDoomStartX := State.Get('startX', Double(FDoomStartX));
   FDoomStartY := State.Get('startY', Double(FDoomStartY));
   FDoomStartAngle := State.Get('startAngle', Double(FDoomStartAngle));

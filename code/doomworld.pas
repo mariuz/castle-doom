@@ -134,6 +134,8 @@ type
     FBrainEasy: Boolean;
     FBrainDeathTics: Integer;
     FBrainX, FBrainY: Single;
+    { Sector heard the player fire (Doom's sector_t.soundtarget). }
+    FSectorSound: array of Boolean;
     FDynamic: array of Boolean;
     procedure ComputeDynamicSectors;
     procedure SpawnThings;
@@ -155,6 +157,8 @@ type
     function TryMove2D(const A: TDoomActor; const NX, NY: Single; out BlockedByLine: Integer): Boolean;
     function LineBlocksMissile(const Line: Integer; const X, Y, Z: Single): Boolean;
     function SightClear(const X1, Y1, X2, Y2: Single): Boolean;
+    { A_Look: True when an idle monster notices the player. }
+    function MonsterLook(const A: TDoomActor; out Reason: String): Boolean;
     procedure MonsterAttack(const A: TDoomActor);
     procedure MonsterHitscan(const A: TDoomActor);
     procedure SpawnMissile(const A: TDoomActor);
@@ -910,6 +914,8 @@ begin
   FBrainTargetIndex := 0;
   FBrainEasy := false;
   FBrainDeathTics := 0;
+  SetLength(FSectorSound, 0);
+  SetLength(FSectorSound, Length(FMap.Sectors));
   FTic := 0;
   FTicAccum := 0;
   { Light effect sectors. }
@@ -1546,24 +1552,111 @@ begin
   Result := true;
 end;
 
+{ P_NoiseAlert / P_RecursiveSound: the shot floods from the player's sector
+  through every two-sided line that is open (a closed door stops it); a line
+  flagged ML_SOUNDBLOCK lets it through only if it has not crossed one yet.
+  Sectors reached remember it; idle monsters there notice it in MonsterLook.
+  Doom recurses; this walks a work list instead (same result, no deep
+  recursion on big maps), revisiting a sector only with fewer blocks. }
 procedure TDoomWorld.NoiseAlert;
 var
+  Traversed: array of Integer; { 0 = not reached, else sound blocks + 1 }
+  StackSec, StackBlocks: array of Integer;
+  Count, Sec, Blocks, L, Other, I, Reached, Fresh: Integer;
+  Line: ^TDoomLinedef;
   A: TDoomActor;
-  D: Single;
-begin
-  for A in FActors do
-    if (A.Info^.Num = 89) and not A.Awake then
-      BrainAwake(A)
-    else
-    if (A.Info^.Kind = tkMonster) and (A.State = asIdle) and not A.Awake then
+
+  procedure Push(const S, B: Integer);
+  begin
+    if Count >= Length(StackSec) then
     begin
-      D := Sqrt(Sqr(A.DoomX - Player.X) + Sqr(A.DoomY - Player.Y));
-      if (D < 1200) and SightClear(A.DoomX, A.DoomY, Player.X, Player.Y) then
-      begin
-        A.Awake := true;
-        A.ReactionTics := Random1(8);
-      end;
+      SetLength(StackSec, Count * 2 + 16);
+      SetLength(StackBlocks, Count * 2 + 16);
     end;
+    StackSec[Count] := S;
+    StackBlocks[Count] := B;
+    Inc(Count);
+  end;
+
+begin
+  if (Player.Sector < 0) or (Length(FSectorSound) <> Length(FMap.Sectors)) then Exit;
+  SetLength(Traversed, Length(FMap.Sectors));
+  Count := 0;
+  Reached := 0;
+  Fresh := 0;
+  Push(Player.Sector, 0);
+  while Count > 0 do
+  begin
+    Dec(Count);
+    Sec := StackSec[Count];
+    Blocks := StackBlocks[Count];
+    if (Traversed[Sec] <> 0) and (Traversed[Sec] <= Blocks + 1) then Continue;
+    if Traversed[Sec] = 0 then Inc(Reached);
+    Traversed[Sec] := Blocks + 1;
+    if not FSectorSound[Sec] then Inc(Fresh);
+    FSectorSound[Sec] := true;
+    for I := 0 to High(FMap.Sectors[Sec].Lines) do
+    begin
+      L := FMap.Sectors[Sec].Lines[I];
+      Line := @FMap.Linedefs[L];
+      if ((Line^.Flags and ML_TWOSIDED) = 0) or (Line^.FrontSector < 0) or (Line^.BackSector < 0) then
+        Continue;
+      { P_LineOpening: no gap between the two sides, no sound. }
+      if Min(FMap.Sectors[Line^.FrontSector].CeilingHeight, FMap.Sectors[Line^.BackSector].CeilingHeight) -
+         Max(FMap.Sectors[Line^.FrontSector].FloorHeight, FMap.Sectors[Line^.BackSector].FloorHeight) <= 0 then
+        Continue;
+      if Line^.FrontSector = Sec then Other := Line^.BackSector else Other := Line^.FrontSector;
+      if (Line^.Flags and ML_SOUNDBLOCK) <> 0 then
+      begin
+        if Blocks = 0 then Push(Other, 1);
+      end else
+        Push(Other, Blocks);
+    end;
+  end;
+  if Fresh > 0 then
+    WritelnLog('Noise', 'Shot heard in %d sectors (%d new)', [Reached, Fresh]);
+  { The Icon of Sin's shooter listens the same way. }
+  for A in FActors do
+    if (A.Info^.Num = 89) and not A.Awake and (A.Sector >= 0) and FSectorSound[A.Sector] then
+      BrainAwake(A);
+end;
+
+{ A_Look: first the sector's sound (an ambush monster must also have a line
+  of sight to the player), then P_LookForPlayers: the player must be in the
+  front half circle (or within melee range) and in sight. }
+function TDoomWorld.MonsterLook(const A: TDoomActor; out Reason: String): Boolean;
+var
+  DX, DY, Diff: Single;
+begin
+  Result := false;
+  Reason := '';
+  if Player.Dead then Exit;
+  if (A.Sector >= 0) and (A.Sector < Length(FSectorSound)) and FSectorSound[A.Sector] then
+  begin
+    if (A.MapFlags and MTF_AMBUSH) = 0 then
+    begin
+      Reason := 'heard';
+      Exit(true);
+    end;
+    if SightClear(A.DoomX, A.DoomY, Player.X, Player.Y) then
+    begin
+      Reason := 'heard and saw (ambush)';
+      Exit(true);
+    end;
+  end;
+  DX := Player.X - A.DoomX;
+  DY := Player.Y - A.DoomY;
+  if Sqr(DX) + Sqr(DY) > Sqr(64) then
+  begin
+    Diff := RadToDeg(ArcTan2(DY, DX)) - A.Angle;
+    Diff := Diff - 360 * Round(Diff / 360);
+    if Abs(Diff) > 90 then Exit; { behind it }
+  end;
+  if SightClear(A.DoomX, A.DoomY, Player.X, Player.Y) then
+  begin
+    Reason := 'saw';
+    Result := true;
+  end;
 end;
 
 function TDoomWorld.SameSpecies(const A, B: TDoomActor): Boolean;
@@ -1594,6 +1687,7 @@ end;
 
 procedure TDoomWorld.TicMonster(const A: TDoomActor);
 var
+  Reason: String;
   DX, DY, Dist, Ang, Step, TX, TY, TZ, TR, RangeDist: Single;
   Blocked: Integer;
   Tries: Integer;
@@ -1611,12 +1705,11 @@ begin
   begin
     if not A.Awake then
     begin
-      { Look for the player a few times a second. }
+      { Look for the player a few times a second (spawn states last 10 tics). }
       if (FTic + A.MapFlags) mod 10 <> 0 then Exit;
-      if (Dist < 3000) and SightClear(A.DoomX, A.DoomY, Player.X, Player.Y) then
+      if MonsterLook(A, Reason) then
       begin
-        { Ambush monsters wait until they see you move into view; others also
-          react to being in front. Keep it simple: sight wakes everyone. }
+        WritelnLog('Wake', '%s at (%.0f, %.0f) %s', [A.Info^.Sprite, A.DoomX, A.DoomY, Reason]);
         A.Awake := true;
         { P_SpawnMobj: no reaction time on Nightmare. }
         if Skill = 4 then A.ReactionTics := 0 else A.ReactionTics := Random1(8);

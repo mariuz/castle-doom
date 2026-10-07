@@ -57,7 +57,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   stairs, teleporters, light changes, scrolling walls, switch textures, secret sectors,
   damaging floors, exits (normal and secret) with an intermission screen.
 - Pickups: health, armor, ammo, keys, weapons, powerups, with Doom's messages.
-- Monsters wake up on sight or noise, chase (2D Doom-style movement with step/drop-off
+- Monsters wake up like in Doom: on sight in front of them, or when your shots reach their
+  sector (sound spreads through open doors, stops at closed ones and crosses at most one sound-blocking
+  lines; ambush monsters must also see you). They chase (2D Doom-style movement with step/drop-off
   rules, they open doors), attack with melee, hitscan or projectiles, take pain, die,
   drop items, and fight each other when hit by another monster (infighting). Lost souls
   charge, Pain Elementals spit lost souls (three more when they die), Arch-viles raise
@@ -86,8 +88,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no finale screens, no sound propagation
-or ambush flag, no glBSP `GL_` lumps or UDMF maps, the music synth approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no finale screens, monsters do not use
+teleporters, sight checks are 2D, no glBSP `GL_` lumps or UDMF maps, the music synth
+approximates the OPL2.
 
 ## Build and run
 
