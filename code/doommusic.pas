@@ -1,7 +1,8 @@
 { Doom music: MUS and MIDI lumps rendered with a small OPL2-style FM
   synthesizer driven by the WAD's GENMIDI instrument bank (the same
   instrument definitions the original game used with AdLib / Sound Blaster
-  cards). The song is rendered once to a 16-bit WAV in memory, served through
+  cards). The song is rendered once to a 16-bit WAV in memory, a slice per
+  frame (TDoomMusic.Update) so a level start does not freeze, served through
   the custom "doommus:" URL protocol and looped by the engine's sound system.
 
   The FM model is an approximation of the Yamaha YM3812: two operators per
@@ -20,18 +21,36 @@ type
   strict private
     FWad: TDoomWad;
     FSounds: {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TCastleSound>;
+    { Rendered songs (WAV in memory), served by ReadMusic. }
+    FReady: {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TMemoryStream>;
+    { The song being rendered a slice per frame (a TSongRenderer), its lump
+      and the time spent so far; lumps waiting to be rendered. }
+    FRenderer: TObject;
+    FRendering: String;
+    FRenderTime: Double;
+    FQueue: TStringList;
     FCurrent: String;
     FEnabled: Boolean;
     FVolume: Single;
     function ReadMusic(const Url: String; out MimeType: String): TStream;
     procedure SetEnabled(const Value: Boolean);
     procedure SetVolume(const Value: Single);
+    { Queue a lump for rendering; First puts it before everything else. }
+    procedure Prepare(const LumpName: String; const First: Boolean);
+    procedure StartNextRender;
+    procedure FinishRender;
+    procedure StartPlaying(const LumpName: String);
   public
+    { Seconds of synthesis per Update call (one per frame). }
+    RenderBudget: Single;
     constructor Create(const AWad: TDoomWad);
     destructor Destroy; override;
     { Start looping the music lump (like 'D_E1M1'). Empty name stops music. }
     procedure Play(const LumpName: String);
     procedure Stop;
+    { Call every frame: renders the next slice of a queued song and starts
+      the current one as soon as it is ready. }
+    procedure Update;
     { Music lump for a map: D_E1M1..., or the Doom 2 track table. }
     function LumpForMap(const MapName: String): String;
     function TitleLump: String;
@@ -47,7 +66,7 @@ function RenderDoomSong(const Wad: TDoomWad; const SongData: PByte; const SongSi
 
 implementation
 
-uses Math, CastleDownload, CastleLog, CastleUriUtils, CastleUtils;
+uses Math, CastleDownload, CastleLog, CastleUriUtils, CastleUtils, CastleTimeUtils;
 
 const
   SampleRate = 22050;
@@ -606,19 +625,304 @@ begin
   Result := DbToGain(Op.AttDb);
 end;
 
-function RenderDoomSong(const Wad: TDoomWad; const SongData: PByte; const SongSize: Integer): TMemoryStream;
+{ TSongRenderer -------------------------------------------------------------- }
+
+{ The synthesizer as an object, so a song can be rendered a slice at a time
+  (TDoomMusic.Update) instead of blocking for seconds at a level start. }
+type
+  TSongRenderer = class
+  strict private
+    Instruments: array [0..174] of TInstrument;
+    Events: TMusicEventList;
+    Voices: array [0..MaxVoices - 1] of TVoice;
+    Channels: array [0..15] of TChannelState;
+    TotalSamples, SampleIndex, NextEvent, VoiceHigh: Integer;
+    Float: array of Single;
+    VibLfo, TremLfo, VibPhase, TremPhase, Peak: Double;
+    Age: Int64;
+    function FindVoice: Integer;
+    procedure ReleaseVoice(var Vc: TVoice);
+    procedure StartVoice(const Channel, Note, Velocity: Integer; const Params: TVoiceParams;
+      const PlayNote: Double);
+    procedure NoteOn(const Channel, Note, Velocity: Integer);
+    procedure NoteOff(const Channel, Note: Integer);
+    procedure UpdateVoiceFreqs(const Channel: Integer);
+    procedure UpdateVoiceGains(const Channel: Integer);
+    procedure HandleEvent(const Ev: TMusicEvent);
+    function RenderVoice(var Vc: TVoice; const VibMul, Trem: Double): Double;
+  public
+    destructor Destroy; override;
+    { Parse the song; false when it is not MUS / MIDI or GENMIDI is missing. }
+    function Init(const Wad: TDoomWad; const SongData: PByte; const SongSize: Integer): Boolean;
+    { Render up to Count more samples; true when the song is complete. }
+    function Step(const Count: Integer): Boolean;
+    function Done: Boolean;
+    { The finished song as a normalized 16-bit mono WAV (caller owns it). }
+    function MakeWav: TMemoryStream;
+    function Seconds: Double;
+  end;
+
+destructor TSongRenderer.Destroy;
+begin
+  FreeAndNil(Events);
+  inherited;
+end;
+
+function TSongRenderer.FindVoice: Integer;
 var
-  Instruments: array [0..174] of TInstrument;
-  Events: TMusicEventList;
-  Voices: array [0..MaxVoices - 1] of TVoice;
-  Channels: array [0..15] of TChannelState;
-  TotalSamples, SampleIndex, NextEvent, I, V, VoiceHigh: Integer;
+  J, Oldest: Integer;
+begin
+  for J := 0 to MaxVoices - 1 do
+    if not Voices[J].Active then Exit(J);
+  Oldest := 0;
+  for J := 1 to MaxVoices - 1 do
+    if Voices[J].Age < Voices[Oldest].Age then Oldest := J;
+  Result := Oldest;
+end;
+
+procedure TSongRenderer.ReleaseVoice(var Vc: TVoice);
+var
+  O: Integer;
+begin
+  for O := 0 to 1 do
+    if Vc.Ops[O].State <> esOff then
+    begin
+      if Vc.Ops[O].State = esAttack then Vc.Ops[O].AttDb := -20 * Log10(Max(Vc.Ops[O].AttackLevel, 1e-4));
+      Vc.Ops[O].State := esRelease;
+    end;
+end;
+
+procedure TSongRenderer.StartVoice(const Channel, Note, Velocity: Integer; const Params: TVoiceParams;
+  const PlayNote: Double);
+var
+  Idx, Block: Integer;
+  Freq: Double;
+begin
+  Idx := FindVoice;
+  if Idx >= VoiceHigh then VoiceHigh := Idx + 1;
+  Voices[Idx] := Default(TVoice);
+  Voices[Idx].Active := true;
+  Voices[Idx].Channel := Channel;
+  Voices[Idx].Note := Note;
+  Voices[Idx].Params := Params;
+  Voices[Idx].Age := Age; Inc(Age);
+  Voices[Idx].BaseFreq := 440 * Power(2, (PlayNote - 69) / 12);
+  Freq := Voices[Idx].BaseFreq * Power(2, Channels[Channel].PitchBend / 12);
+  Block := Clamped(Round(PlayNote) div 12 - 1, 0, 7);
+  SetupOperator(Voices[Idx].Ops[0], Params.Modulator, Freq, Block);
+  SetupOperator(Voices[Idx].Ops[1], Params.Carrier, Freq, Block);
+  Voices[Idx].Gain := (Velocity / 127) * (Channels[Channel].Volume / 127) * (Channels[Channel].Expression / 127);
+end;
+
+procedure TSongRenderer.NoteOn(const Channel, Note, Velocity: Integer);
+var
+  Inst: Integer;
+  PlayNote: Double;
+  I2: TInstrument;
+begin
+  if Channel = 9 then
+  begin
+    Inst := 128 + Note - 35;
+    if (Inst < 128) or (Inst > 174) then Exit;
+  end else
+    Inst := Clamped(Channels[Channel].Prog, 0, 127);
+  I2 := Instruments[Inst];
+  if I2.FixedPitch then PlayNote := I2.FixedNote else PlayNote := Note;
+  StartVoice(Channel, Note, Velocity, I2.Voices[0], PlayNote + I2.Voices[0].NoteOffset);
+  if I2.DoubleVoice then
+    StartVoice(Channel, Note, Velocity, I2.Voices[1], PlayNote + I2.Voices[1].NoteOffset + (I2.FineTuning - 128) / 64);
+end;
+
+procedure TSongRenderer.NoteOff(const Channel, Note: Integer);
+var
+  J: Integer;
+begin
+  for J := 0 to MaxVoices - 1 do
+    if Voices[J].Active and (Voices[J].Channel = Channel) and (Voices[J].Note = Note) and
+       (Voices[J].Ops[1].State <> esRelease) then
+      ReleaseVoice(Voices[J]);
+end;
+
+procedure TSongRenderer.UpdateVoiceFreqs(const Channel: Integer);
+var
+  J: Integer;
+  Freq: Double;
+begin
+  for J := 0 to MaxVoices - 1 do
+    if Voices[J].Active and (Voices[J].Channel = Channel) then
+    begin
+      Freq := Voices[J].BaseFreq * Power(2, Channels[Channel].PitchBend / 12);
+      Voices[J].Ops[0].PhaseInc := CyclesToPhase(Freq * MultiTable[Voices[J].Ops[0].Params.Multi] / SampleRate);
+      Voices[J].Ops[1].PhaseInc := CyclesToPhase(Freq * MultiTable[Voices[J].Ops[1].Params.Multi] / SampleRate);
+    end;
+end;
+
+procedure TSongRenderer.UpdateVoiceGains(const Channel: Integer);
+var
+  J: Integer;
+begin
+  for J := 0 to MaxVoices - 1 do
+    if Voices[J].Active and (Voices[J].Channel = Channel) then
+      Voices[J].Gain := 1.0 * (Channels[Channel].Volume / 127) * (Channels[Channel].Expression / 127);
+end;
+
+procedure TSongRenderer.HandleEvent(const Ev: TMusicEvent);
+var
+  J: Integer;
+begin
+  case Ev.Kind of
+    ekNoteOn: NoteOn(Ev.Channel, Ev.Data1, Ev.Data2);
+    ekNoteOff: NoteOff(Ev.Channel, Ev.Data1);
+    ekProgram: Channels[Ev.Channel].Prog := Ev.Data1;
+    ekVolume: begin Channels[Ev.Channel].Volume := Ev.Data1; UpdateVoiceGains(Ev.Channel); end;
+    ekExpression: begin Channels[Ev.Channel].Expression := Ev.Data1; UpdateVoiceGains(Ev.Channel); end;
+    ekPitchBend:
+      begin
+        Channels[Ev.Channel].PitchBend := (Ev.Data1 - 8192) / 8192 * 2;
+        UpdateVoiceFreqs(Ev.Channel);
+      end;
+    ekAllNotesOff:
+      for J := 0 to MaxVoices - 1 do
+        if Voices[J].Active and (Voices[J].Channel = Ev.Channel) then ReleaseVoice(Voices[J]);
+  end;
+end;
+
+function TSongRenderer.RenderVoice(var Vc: TVoice; const VibMul, Trem: Double): Double;
+var
+  ModOut, CarOut, Env0, Env1, Fb: Double;
+  Idx: Cardinal;
+  Inc0, Inc1: Cardinal;
+begin
+  Env0 := EnvelopeStep(Vc.Ops[0]);
+  Env1 := EnvelopeStep(Vc.Ops[1]);
+  if (Vc.Ops[1].State = esOff) and ((not Vc.Params.Additive) or (Vc.Ops[0].State = esOff)) then
+  begin
+    Vc.Active := false;
+    Exit(0);
+  end;
+  if Vc.Ops[0].Params.Vibrato then Inc0 := Trunc(Vc.Ops[0].PhaseInc * VibMul) else Inc0 := Vc.Ops[0].PhaseInc;
+  if Vc.Ops[1].Params.Vibrato then Inc1 := Trunc(Vc.Ops[1].PhaseInc * VibMul) else Inc1 := Vc.Ops[1].PhaseInc;
+  if Vc.Ops[0].Params.Tremolo then Env0 := Env0 * Trem;
+  if Vc.Ops[1].Params.Tremolo then Env1 := Env1 * Trem;
+
+  { Modulator with feedback (feedback 7 = up to 2 cycles of phase). }
+  Idx := Vc.Ops[0].Phase;
+  if Vc.Params.Feedback > 0 then
+  begin
+    Fb := (Vc.Ops[0].Out1 + Vc.Ops[0].Out2) * (2.0 / (1 shl (8 - Vc.Params.Feedback)));
+    Idx := Idx + Cardinal(Int64(Trunc(Fb * 4294967296.0)) and $FFFFFFFF);
+  end;
+  ModOut := WaveTables[Vc.Ops[0].Params.Waveform, Idx shr PhaseShift] * Env0 * Vc.Ops[0].StaticGain;
+  Vc.Ops[0].Out2 := Vc.Ops[0].Out1;
+  Vc.Ops[0].Out1 := ModOut;
+  Vc.Ops[0].Phase := Vc.Ops[0].Phase + Inc0;
+
+  if Vc.Params.Additive then
+  begin
+    CarOut := WaveTables[Vc.Ops[1].Params.Waveform, Vc.Ops[1].Phase shr PhaseShift] * Env1 * Vc.Ops[1].StaticGain;
+    Result := (ModOut + CarOut) * Vc.Gain;
+  end else
+  begin
+    { Full modulator output swings the carrier phase by up to 4 cycles. }
+    Idx := Vc.Ops[1].Phase + Cardinal(Int64(Trunc(ModOut * 4 * 4294967296.0)) and $FFFFFFFF);
+    CarOut := WaveTables[Vc.Ops[1].Params.Waveform, Idx shr PhaseShift] * Env1 * Vc.Ops[1].StaticGain;
+    Result := CarOut * Vc.Gain;
+  end;
+  Vc.Ops[1].Phase := Vc.Ops[1].Phase + Inc1;
+end;
+
+function TSongRenderer.Init(const Wad: TDoomWad; const SongData: PByte; const SongSize: Integer): Boolean;
+var
+  I: Integer;
   EndTime: Double;
+begin
+  Result := false;
+  if not LoadGenMidi(Wad, Instruments) then
+  begin
+    WritelnWarning('Music', 'No GENMIDI lump, cannot synthesize music');
+    Exit;
+  end;
+  FreeAndNil(Events);
+  Events := TMusicEventList.Create;
+  if not (ParseMus(SongData, SongSize, Events) or ParseMidi(SongData, SongSize, Events)) then
+    Exit;
+  EndTime := 0;
+  for I := 0 to Events.Count - 1 do
+    EndTime := Max(EndTime, Events[I].Time);
+  EndTime := Min(EndTime + 1.5, MaxSongSeconds);
+  TotalSamples := Trunc(EndTime * SampleRate);
+  if TotalSamples <= 0 then Exit;
+  SetLength(Float, TotalSamples);
+  Peak := 0;
+  for I := 0 to MaxVoices - 1 do Voices[I].Active := false;
+  for I := 0 to 15 do
+  begin
+    Channels[I].Prog := 0;
+    Channels[I].Volume := 100;
+    Channels[I].Expression := 127;
+    Channels[I].PitchBend := 0;
+  end;
+  Age := 0;
+  VoiceHigh := 0;
+  NextEvent := 0;
+  SampleIndex := 0;
+  VibPhase := 0;
+  TremPhase := 0;
+  VibLfo := 1;
+  TremLfo := 1;
+  Result := true;
+end;
+
+function TSongRenderer.Step(const Count: Integer): Boolean;
+var
+  Last, V: Integer;
+  Mix: Double;
+begin
+  if Count >= TotalSamples - SampleIndex then
+    Last := TotalSamples
+  else
+    Last := SampleIndex + Count;
+  while SampleIndex < Last do
+  begin
+    while (NextEvent < Events.Count) and (Events[NextEvent].Time * SampleRate <= SampleIndex) do
+    begin
+      HandleEvent(Events[NextEvent]);
+      Inc(NextEvent);
+    end;
+    { OPL vibrato: 6.1 Hz, about 7 cents; tremolo: 3.7 Hz, 1 dB. Updated every 32 samples. }
+    if (SampleIndex and 31) = 0 then
+    begin
+      VibPhase := VibPhase + 6.1 * 32 / SampleRate;
+      TremPhase := TremPhase + 3.7 * 32 / SampleRate;
+      VibLfo := Power(2, Sin(VibPhase * 2 * Pi) * 0.07 / 12);
+      TremLfo := Power(10, (Sin(TremPhase * 2 * Pi) - 1) * 0.5 / 20);
+    end;
+    Mix := 0;
+    for V := 0 to VoiceHigh - 1 do
+      if Voices[V].Active then
+        Mix := Mix + RenderVoice(Voices[V], VibLfo, TremLfo);
+    Float[SampleIndex] := Mix;
+    if Abs(Mix) > Peak then Peak := Abs(Mix);
+    Inc(SampleIndex);
+  end;
+  Result := Done;
+end;
+
+function TSongRenderer.Done: Boolean;
+begin
+  Result := SampleIndex >= TotalSamples;
+end;
+
+function TSongRenderer.Seconds: Double;
+begin
+  Result := TotalSamples / SampleRate;
+end;
+
+function TSongRenderer.MakeWav: TMemoryStream;
+var
   Samples: array of SmallInt;
-  Float: array of Single;
-  Mix, VibLfo, TremLfo, VibPhase, TremPhase, Peak, Norm: Double;
-  Age: Int64;
-  E: TMusicEvent;
+  I: Integer;
+  Norm: Double;
 
   procedure WriteU32(const S: TStream; const X: UInt32);
   begin
@@ -635,252 +939,44 @@ var
     S.WriteBuffer(T[1], 4);
   end;
 
-  function FindVoice: Integer;
-  var
-    J, Oldest: Integer;
-  begin
-    for J := 0 to MaxVoices - 1 do
-      if not Voices[J].Active then Exit(J);
-    Oldest := 0;
-    for J := 1 to MaxVoices - 1 do
-      if Voices[J].Age < Voices[Oldest].Age then Oldest := J;
-    Result := Oldest;
-  end;
+begin
+  { Normalize the whole song to -1 dBFS (the OPL had no master limiter,
+    but songs were authored for it; this keeps every track at a sane level). }
+  if Peak < 0.01 then Peak := 0.01;
+  Norm := 0.89 / Peak;
+  SetLength(Samples, TotalSamples);
+  for I := 0 to TotalSamples - 1 do
+    Samples[I] := Round(Float[I] * Norm * 32767);
+  Result := TMemoryStream.Create;
+  WriteTag(Result, 'RIFF');
+  WriteU32(Result, 36 + TotalSamples * 2);
+  WriteTag(Result, 'WAVE');
+  WriteTag(Result, 'fmt ');
+  WriteU32(Result, 16);
+  WriteU16(Result, 1);
+  WriteU16(Result, 1);
+  WriteU32(Result, SampleRate);
+  WriteU32(Result, SampleRate * 2);
+  WriteU16(Result, 2);
+  WriteU16(Result, 16);
+  WriteTag(Result, 'data');
+  WriteU32(Result, TotalSamples * 2);
+  Result.WriteBuffer(Samples[0], TotalSamples * 2);
+  Result.Position := 0;
+end;
 
-  procedure ReleaseVoice(var Vc: TVoice);
-  var
-    O: Integer;
-  begin
-    for O := 0 to 1 do
-      if Vc.Ops[O].State <> esOff then
-      begin
-        if Vc.Ops[O].State = esAttack then Vc.Ops[O].AttDb := -20 * Log10(Max(Vc.Ops[O].AttackLevel, 1e-4));
-        Vc.Ops[O].State := esRelease;
-      end;
-  end;
-
-  procedure StartVoice(const Channel, Note, Velocity: Integer; const Params: TVoiceParams;
-    const PlayNote: Double);
-  var
-    Idx, Block: Integer;
-    Freq: Double;
-  begin
-    Idx := FindVoice;
-    if Idx >= VoiceHigh then VoiceHigh := Idx + 1;
-    Voices[Idx] := Default(TVoice);
-    Voices[Idx].Active := true;
-    Voices[Idx].Channel := Channel;
-    Voices[Idx].Note := Note;
-    Voices[Idx].Params := Params;
-    Voices[Idx].Age := Age; Inc(Age);
-    Voices[Idx].BaseFreq := 440 * Power(2, (PlayNote - 69) / 12);
-    Freq := Voices[Idx].BaseFreq * Power(2, Channels[Channel].PitchBend / 12);
-    Block := Clamped(Round(PlayNote) div 12 - 1, 0, 7);
-    SetupOperator(Voices[Idx].Ops[0], Params.Modulator, Freq, Block);
-    SetupOperator(Voices[Idx].Ops[1], Params.Carrier, Freq, Block);
-    Voices[Idx].Gain := (Velocity / 127) * (Channels[Channel].Volume / 127) * (Channels[Channel].Expression / 127);
-  end;
-
-  procedure NoteOn(const Channel, Note, Velocity: Integer);
-  var
-    Inst: Integer;
-    PlayNote: Double;
-    I2: TInstrument;
-  begin
-    if Channel = 9 then
-    begin
-      Inst := 128 + Note - 35;
-      if (Inst < 128) or (Inst > 174) then Exit;
-    end else
-      Inst := Clamped(Channels[Channel].Prog, 0, 127);
-    I2 := Instruments[Inst];
-    if I2.FixedPitch then PlayNote := I2.FixedNote else PlayNote := Note;
-    StartVoice(Channel, Note, Velocity, I2.Voices[0], PlayNote + I2.Voices[0].NoteOffset);
-    if I2.DoubleVoice then
-      StartVoice(Channel, Note, Velocity, I2.Voices[1], PlayNote + I2.Voices[1].NoteOffset + (I2.FineTuning - 128) / 64);
-  end;
-
-  procedure NoteOff(const Channel, Note: Integer);
-  var
-    J: Integer;
-  begin
-    for J := 0 to MaxVoices - 1 do
-      if Voices[J].Active and (Voices[J].Channel = Channel) and (Voices[J].Note = Note) and
-         (Voices[J].Ops[1].State <> esRelease) then
-        ReleaseVoice(Voices[J]);
-  end;
-
-  procedure UpdateVoiceFreqs(const Channel: Integer);
-  var
-    J: Integer;
-    Freq: Double;
-  begin
-    for J := 0 to MaxVoices - 1 do
-      if Voices[J].Active and (Voices[J].Channel = Channel) then
-      begin
-        Freq := Voices[J].BaseFreq * Power(2, Channels[Channel].PitchBend / 12);
-        Voices[J].Ops[0].PhaseInc := CyclesToPhase(Freq * MultiTable[Voices[J].Ops[0].Params.Multi] / SampleRate);
-        Voices[J].Ops[1].PhaseInc := CyclesToPhase(Freq * MultiTable[Voices[J].Ops[1].Params.Multi] / SampleRate);
-      end;
-  end;
-
-  procedure UpdateVoiceGains(const Channel: Integer);
-  var
-    J: Integer;
-  begin
-    for J := 0 to MaxVoices - 1 do
-      if Voices[J].Active and (Voices[J].Channel = Channel) then
-        Voices[J].Gain := 1.0 * (Channels[Channel].Volume / 127) * (Channels[Channel].Expression / 127);
-  end;
-
-  procedure HandleEvent(const Ev: TMusicEvent);
-  var
-    J: Integer;
-  begin
-    case Ev.Kind of
-      ekNoteOn: NoteOn(Ev.Channel, Ev.Data1, Ev.Data2);
-      ekNoteOff: NoteOff(Ev.Channel, Ev.Data1);
-      ekProgram: Channels[Ev.Channel].Prog := Ev.Data1;
-      ekVolume: begin Channels[Ev.Channel].Volume := Ev.Data1; UpdateVoiceGains(Ev.Channel); end;
-      ekExpression: begin Channels[Ev.Channel].Expression := Ev.Data1; UpdateVoiceGains(Ev.Channel); end;
-      ekPitchBend:
-        begin
-          Channels[Ev.Channel].PitchBend := (Ev.Data1 - 8192) / 8192 * 2;
-          UpdateVoiceFreqs(Ev.Channel);
-        end;
-      ekAllNotesOff:
-        for J := 0 to MaxVoices - 1 do
-          if Voices[J].Active and (Voices[J].Channel = Ev.Channel) then ReleaseVoice(Voices[J]);
-    end;
-  end;
-
-  function RenderVoice(var Vc: TVoice; const VibMul, Trem: Double): Double;
-  var
-    ModOut, CarOut, Env0, Env1, Fb: Double;
-    Idx: Cardinal;
-    Inc0, Inc1: Cardinal;
-  begin
-    Env0 := EnvelopeStep(Vc.Ops[0]);
-    Env1 := EnvelopeStep(Vc.Ops[1]);
-    if (Vc.Ops[1].State = esOff) and ((not Vc.Params.Additive) or (Vc.Ops[0].State = esOff)) then
-    begin
-      Vc.Active := false;
-      Exit(0);
-    end;
-    if Vc.Ops[0].Params.Vibrato then Inc0 := Trunc(Vc.Ops[0].PhaseInc * VibMul) else Inc0 := Vc.Ops[0].PhaseInc;
-    if Vc.Ops[1].Params.Vibrato then Inc1 := Trunc(Vc.Ops[1].PhaseInc * VibMul) else Inc1 := Vc.Ops[1].PhaseInc;
-    if Vc.Ops[0].Params.Tremolo then Env0 := Env0 * Trem;
-    if Vc.Ops[1].Params.Tremolo then Env1 := Env1 * Trem;
-
-    { Modulator with feedback (feedback 7 = up to 2 cycles of phase). }
-    Idx := Vc.Ops[0].Phase;
-    if Vc.Params.Feedback > 0 then
-    begin
-      Fb := (Vc.Ops[0].Out1 + Vc.Ops[0].Out2) * (2.0 / (1 shl (8 - Vc.Params.Feedback)));
-      Idx := Idx + Cardinal(Int64(Trunc(Fb * 4294967296.0)) and $FFFFFFFF);
-    end;
-    ModOut := WaveTables[Vc.Ops[0].Params.Waveform, Idx shr PhaseShift] * Env0 * Vc.Ops[0].StaticGain;
-    Vc.Ops[0].Out2 := Vc.Ops[0].Out1;
-    Vc.Ops[0].Out1 := ModOut;
-    Vc.Ops[0].Phase := Vc.Ops[0].Phase + Inc0;
-
-    if Vc.Params.Additive then
-    begin
-      CarOut := WaveTables[Vc.Ops[1].Params.Waveform, Vc.Ops[1].Phase shr PhaseShift] * Env1 * Vc.Ops[1].StaticGain;
-      Result := (ModOut + CarOut) * Vc.Gain;
-    end else
-    begin
-      { Full modulator output swings the carrier phase by up to 4 cycles. }
-      Idx := Vc.Ops[1].Phase + Cardinal(Int64(Trunc(ModOut * 4 * 4294967296.0)) and $FFFFFFFF);
-      CarOut := WaveTables[Vc.Ops[1].Params.Waveform, Idx shr PhaseShift] * Env1 * Vc.Ops[1].StaticGain;
-      Result := CarOut * Vc.Gain;
-    end;
-    Vc.Ops[1].Phase := Vc.Ops[1].Phase + Inc1;
-  end;
-
+function RenderDoomSong(const Wad: TDoomWad; const SongData: PByte; const SongSize: Integer): TMemoryStream;
+var
+  R: TSongRenderer;
 begin
   Result := nil;
-  if not LoadGenMidi(Wad, Instruments) then
-  begin
-    WritelnWarning('Music', 'No GENMIDI lump, cannot synthesize music');
-    Exit;
-  end;
-  Events := TMusicEventList.Create;
+  R := TSongRenderer.Create;
   try
-    if not (ParseMus(SongData, SongSize, Events) or ParseMidi(SongData, SongSize, Events)) then
-      Exit;
-    EndTime := 0;
-    for I := 0 to Events.Count - 1 do
-      EndTime := Max(EndTime, Events[I].Time);
-    EndTime := Min(EndTime + 1.5, MaxSongSeconds);
-    TotalSamples := Trunc(EndTime * SampleRate);
-    if TotalSamples <= 0 then Exit;
-    SetLength(Samples, TotalSamples);
-    SetLength(Float, TotalSamples);
-    Peak := 0;
-    for I := 0 to MaxVoices - 1 do Voices[I].Active := false;
-    for I := 0 to 15 do
-    begin
-      Channels[I].Prog := 0;
-      Channels[I].Volume := 100;
-      Channels[I].Expression := 127;
-      Channels[I].PitchBend := 0;
-    end;
-    Age := 0;
-    VoiceHigh := 0;
-    NextEvent := 0;
-    VibPhase := 0;
-    TremPhase := 0;
-    VibLfo := 1;
-    TremLfo := 1;
-    for SampleIndex := 0 to TotalSamples - 1 do
-    begin
-      while (NextEvent < Events.Count) and (Events[NextEvent].Time * SampleRate <= SampleIndex) do
-      begin
-        E := Events[NextEvent];
-        HandleEvent(E);
-        Inc(NextEvent);
-      end;
-      { OPL vibrato: 6.1 Hz, about 7 cents; tremolo: 3.7 Hz, 1 dB. Updated every 32 samples. }
-      if (SampleIndex and 31) = 0 then
-      begin
-        VibPhase := VibPhase + 6.1 * 32 / SampleRate;
-        TremPhase := TremPhase + 3.7 * 32 / SampleRate;
-        VibLfo := Power(2, Sin(VibPhase * 2 * Pi) * 0.07 / 12);
-        TremLfo := Power(10, (Sin(TremPhase * 2 * Pi) - 1) * 0.5 / 20);
-      end;
-      Mix := 0;
-      for V := 0 to VoiceHigh - 1 do
-        if Voices[V].Active then
-          Mix := Mix + RenderVoice(Voices[V], VibLfo, TremLfo);
-      Float[SampleIndex] := Mix;
-      if Abs(Mix) > Peak then Peak := Abs(Mix);
-    end;
-    { Normalize the whole song to -1 dBFS (the OPL had no master limiter,
-      but songs were authored for it; this keeps every track at a sane level). }
-    if Peak < 0.01 then Peak := 0.01;
-    Norm := 0.89 / Peak;
-    for SampleIndex := 0 to TotalSamples - 1 do
-      Samples[SampleIndex] := Round(Float[SampleIndex] * Norm * 32767);
-
-    Result := TMemoryStream.Create;
-    WriteTag(Result, 'RIFF');
-    WriteU32(Result, 36 + TotalSamples * 2);
-    WriteTag(Result, 'WAVE');
-    WriteTag(Result, 'fmt ');
-    WriteU32(Result, 16);
-    WriteU16(Result, 1);
-    WriteU16(Result, 1);
-    WriteU32(Result, SampleRate);
-    WriteU32(Result, SampleRate * 2);
-    WriteU16(Result, 2);
-    WriteU16(Result, 16);
-    WriteTag(Result, 'data');
-    WriteU32(Result, TotalSamples * 2);
-    Result.WriteBuffer(Samples[0], TotalSamples * 2);
-    Result.Position := 0;
+    if not R.Init(Wad, SongData, SongSize) then Exit;
+    R.Step(MaxInt);
+    Result := R.MakeWav;
   finally
-    FreeAndNil(Events);
+    FreeAndNil(R);
   end;
 end;
 
@@ -892,14 +988,20 @@ begin
   FWad := AWad;
   FEnabled := true;
   FVolume := 0.5;
+  RenderBudget := 0.012;
   FSounds := {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TCastleSound>.Create([doOwnsValues]);
+  FReady := {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TMemoryStream>.Create([doOwnsValues]);
+  FQueue := TStringList.Create;
   RegisterUrlProtocol('doommus', {$ifdef FPC}@{$endif} ReadMusic, nil);
 end;
 
 destructor TDoomMusic.Destroy;
 begin
   Stop;
+  FreeAndNil(FRenderer);
+  FreeAndNil(FQueue);
   FreeAndNil(FSounds);
+  FreeAndNil(FReady);
   UnregisterUrlProtocol('doommus');
   inherited;
 end;
@@ -908,33 +1010,127 @@ function TDoomMusic.ReadMusic(const Url: String; out MimeType: String): TStream;
 var
   Name: String;
   Lump: Integer;
-  Start: TDateTime;
+  Wav: TMemoryStream;
 begin
   Name := UpperCase(ExtractUriName(Url));
   if LowerCase(ExtractFileExt(Name)) = '.wav' then
     Name := Copy(Name, 1, Length(Name) - 4);
-  Lump := FWad.FindLump(Name);
-  if Lump < 0 then
-    raise Exception.CreateFmt('Music lump %s not found', [Name]);
-  Start := Now;
-  Result := RenderDoomSong(FWad, FWad.LumpPointer(Lump), FWad.LumpSize(Lump));
-  if Result = nil then
-    raise Exception.CreateFmt('Lump %s is not a MUS/MIDI song', [Name]);
-  WritelnLog('Music', 'Rendered %s with the FM synthesizer: %.1f s of audio in %d ms', [
-    Name, Result.Size / (SampleRate * 2), Round((Now - Start) * 24 * 3600 * 1000)]);
+  if not FReady.TryGetValue(Name, Wav) then
+  begin
+    { Not rendered in slices (yet): render it all now. }
+    Lump := FWad.FindLump(Name);
+    if Lump < 0 then
+      raise Exception.CreateFmt('Music lump %s not found', [Name]);
+    Wav := RenderDoomSong(FWad, FWad.LumpPointer(Lump), FWad.LumpSize(Lump));
+    if Wav = nil then
+      raise Exception.CreateFmt('Lump %s is not a MUS/MIDI song', [Name]);
+    FReady.AddOrSetValue(Name, Wav);
+  end;
+  Result := TMemoryStream.Create;
+  Wav.Position := 0;
+  Result.CopyFrom(Wav, 0);
+  Result.Position := 0;
+  MimeType := 'audio/x-wav';
+end;
+
+procedure TDoomMusic.Prepare(const LumpName: String; const First: Boolean);
+var
+  Idx: Integer;
+begin
+  if (LumpName = '') or FReady.ContainsKey(LumpName) or (FRendering = LumpName) then Exit;
+  if FWad.FindLump(LumpName) < 0 then Exit;
+  Idx := FQueue.IndexOf(LumpName);
+  if Idx >= 0 then FQueue.Delete(Idx);
+  if First then FQueue.Insert(0, LumpName) else FQueue.Add(LumpName);
+end;
+
+procedure TDoomMusic.StartNextRender;
+var
+  Lump: Integer;
+  R: TSongRenderer;
+  Name: String;
+begin
+  while (FRenderer = nil) and (FQueue.Count > 0) do
+  begin
+    Name := FQueue[0];
+    FQueue.Delete(0);
+    if FReady.ContainsKey(Name) then Continue;
+    Lump := FWad.FindLump(Name);
+    if Lump < 0 then Continue;
+    R := TSongRenderer.Create;
+    if not R.Init(FWad, FWad.LumpPointer(Lump), FWad.LumpSize(Lump)) then
+    begin
+      WritelnWarning('Music', 'Lump %s is not a MUS/MIDI song', [Name]);
+      FreeAndNil(R);
+      Continue;
+    end;
+    FRenderer := R;
+    FRendering := Name;
+    FRenderTime := 0;
+  end;
+end;
+
+procedure TDoomMusic.FinishRender;
+var
+  Wav: TMemoryStream;
+  R: TSongRenderer;
+  Name: String;
+begin
+  R := FRenderer as TSongRenderer;
+  Name := FRendering;
+  Wav := R.MakeWav;
+  WritelnLog('Music', 'Rendered %s with the FM synthesizer: %.1f s of audio in %d ms (in slices)', [
+    Name, R.Seconds, Round(FRenderTime * 1000)]);
+  FreeAndNil(FRenderer);
+  FRendering := '';
+  FReady.AddOrSetValue(Name, Wav);
   { Debug aid: dump the rendered song to a directory. }
   if GetEnvironmentVariable('CASTLE_DOOM_DUMP_MUSIC') <> '' then
   begin
-    TMemoryStream(Result).SaveToFile(InclPathDelim(GetEnvironmentVariable('CASTLE_DOOM_DUMP_MUSIC')) + Name + '.wav');
-    Result.Position := 0;
+    Wav.SaveToFile(InclPathDelim(GetEnvironmentVariable('CASTLE_DOOM_DUMP_MUSIC')) + Name + '.wav');
+    Wav.Position := 0;
   end;
-  MimeType := 'audio/x-wav';
+  if FEnabled and (FCurrent = Name) then
+    StartPlaying(Name);
+end;
+
+procedure TDoomMusic.Update;
+var
+  Start: TTimerResult;
+  Spent: Double;
+begin
+  StartNextRender;
+  if FRenderer = nil then Exit;
+  Start := Timer;
+  repeat
+    if (FRenderer as TSongRenderer).Step(2048) then
+    begin
+      FRenderTime := FRenderTime + TimerSeconds(Timer, Start);
+      FinishRender;
+      Exit;
+    end;
+    Spent := TimerSeconds(Timer, Start);
+  until Spent >= RenderBudget;
+  FRenderTime := FRenderTime + Spent;
+end;
+
+procedure TDoomMusic.StartPlaying(const LumpName: String);
+var
+  S: TCastleSound;
+begin
+  if not FSounds.TryGetValue(LumpName, S) then
+  begin
+    S := TCastleSound.Create(nil);
+    S.Url := 'doommus:/' + LumpName + '.wav';
+    FSounds.Add(LumpName, S);
+  end;
+  SoundEngine.LoopingChannel[0].Volume := FVolume;
+  SoundEngine.LoopingChannel[0].Sound := S;
 end;
 
 procedure TDoomMusic.Play(const LumpName: String);
 var
   U: String;
-  S: TCastleSound;
 begin
   U := UpperCase(LumpName);
   if U = '' then
@@ -945,21 +1141,32 @@ begin
   if FCurrent = U then Exit;
   FCurrent := U;
   if not FEnabled then Exit;
-  if not FSounds.TryGetValue(U, S) then
+  if FWad.FindLump(U) < 0 then
   begin
-    if FWad.FindLump(U) < 0 then
-    begin
-      WritelnWarning('Music', 'Missing music lump %s', [U]);
-      FSounds.Add(U, nil);
-      Exit;
-    end;
-    S := TCastleSound.Create(nil);
-    S.Url := 'doommus:/' + U + '.wav';
-    FSounds.Add(U, S);
+    WritelnWarning('Music', 'Missing music lump %s', [U]);
+    SoundEngine.LoopingChannel[0].Sound := nil;
+    Exit;
   end;
-  if S = nil then Exit;
-  SoundEngine.LoopingChannel[0].Volume := FVolume;
-  SoundEngine.LoopingChannel[0].Sound := S;
+  if FReady.ContainsKey(U) then
+    StartPlaying(U)
+  else
+  begin
+    { Silence until the song is rendered (Update, a slice per frame); then
+      prepare the intermission track too, it is the next one needed. }
+    SoundEngine.LoopingChannel[0].Sound := nil;
+    if FRendering <> U then
+    begin
+      if FRenderer <> nil then
+      begin
+        { Another song (a prefetch) was in progress: it waits. }
+        FQueue.Insert(0, FRendering);
+        FreeAndNil(FRenderer);
+        FRendering := '';
+      end;
+      Prepare(U, true);
+    end;
+    Prepare(IntermissionLump, false);
+  end;
 end;
 
 procedure TDoomMusic.Stop;

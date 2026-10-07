@@ -994,6 +994,8 @@ var
 begin
   inherited;
   if FWorld = nil then Exit;
+  { Songs are rendered a slice per frame (no freeze at a level start). }
+  if Music <> nil then Music.Update;
 
   if FWipe.Active then
   begin

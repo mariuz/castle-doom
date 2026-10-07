@@ -726,6 +726,8 @@ end;
 procedure TViewMenu.Update(const SecondsPassed: Single; var HandleInput: Boolean);
 begin
   inherited;
+  { The title music is rendered a slice per frame. }
+  if FMusic <> nil then FMusic.Update;
   if FDoomMenu = nil then Exit;
   { 320x200 shown 4:3, as tall as the window (or as wide, if narrower). }
   FDoomMenu.Height := Min(EffectiveHeight, EffectiveWidth * 3 / 4);

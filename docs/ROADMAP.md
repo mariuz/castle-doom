@@ -11,6 +11,10 @@ L = several days). Items inside a section are in suggested order.
   started it, then follows real time. In the browser this capture raised an
   exception, which FPC's WebAssembly target cannot catch (the program
   stopped), so the web build still has no melt.
+- Music without the stall: songs are rendered a slice per frame (12 ms
+  budget, `TSongRenderer`) and start when ready; the intermission track is
+  prefetched. No more seconds-long freeze at every level start in the
+  browser (E1M1 used to block for 4 s there).
 - Web performance: sprites are GUI textures (no power-of-two resize, no
   mipmaps on the CPU); the browser build went from about 2 to about 22 FPS
   on E1M1 with the world at full tic rate. `Perf:` / `PerfView:` log lines
@@ -157,7 +161,7 @@ L = several days). Items inside a section are in suggested order.
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Screen melt on the web**: find which step of the FBO capture fails under WebGL (log each step; check `GLFeatures` for FBO / read-back support before calling anything that can raise, since exceptions abort the WebAssembly program). | Same transitions in the browser. | `GameViewPlay.CaptureScreen` | S |
-| **Music rendering stall**: the FM synthesizer renders a whole track before it plays (E1M1: 132 s of audio, 4 s blocking in the browser). Render the first seconds first or stream it. | Smooth level starts on the web. | `DoomMusic` | M |
+| **Music starts late in the browser**: rendering in slices means a few seconds of silence at a level start on the web; prefetch the next map's track during the current level. | Music from the first second. | `DoomMusic`, `GameViewPlay` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
 | **Hanging/floating things** bob (cacodemons hover), **gibs** for excessive damage (`XDEATH` frames). | Fidelity. | `DoomThings` frames, `KillActor` | S |
 
@@ -194,10 +198,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Music rendering without the stall (M): the web build blocks for seconds
-   at every level start while the FM synth renders the whole track.
-2. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
+1. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
    slopes (S-M): monster bullets currently hit by chance once the monster
    decided it sees you; aim height and blocking ledges are not traced.
-3. Screen melt on the web (S): find the failing capture step without
+2. Screen melt on the web (S): find the failing capture step without
    exceptions.
+3. Prefetch the next map's music during a level (S), so it starts at once
+   in the browser too.

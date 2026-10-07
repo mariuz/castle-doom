@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.2 (2026-10-08)
+
+- No more freeze at a level start while the music is synthesized: songs
+  are rendered a slice per frame and start when ready (in the browser E1M1
+  used to block for 4 seconds), and the intermission track is prepared in
+  the background.
+
 ## v0.2.1 (2026-10-08)
 
 - Much faster in the browser: sprite textures are no longer resized and

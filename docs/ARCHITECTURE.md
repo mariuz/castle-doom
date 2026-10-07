@@ -593,7 +593,7 @@ recreates that pipeline in software:
 2. `LoadGenMidi` reads the 175 instruments (128 melodic, 47 percussion), each
    with up to two voices of modulator/carrier parameters, feedback/connection,
    note offset, fine tuning, fixed pitch.
-3. `RenderDoomSong` runs the synthesizer: up to 36 voices, each two operators
+3. `TSongRenderer` runs the synthesizer (`RenderDoomSong` renders a whole song at once): up to 36 voices, each two operators
    with 32-bit fixed-point phase accumulators, 2048-entry wave tables for the
    four OPL waveforms, ADSR envelopes with YM3812 timings and rate scaling,
    key-scale level, total level, feedback (up to 2 cycles of phase), FM
@@ -604,7 +604,13 @@ recreates that pipeline in software:
    music channel, which loops it.
 
 Rendering a 2-minute track takes about a second natively and a few seconds in
-WebAssembly, once per track (sounds are cached). Set the environment variable
+WebAssembly, so it is not done in one go: `TDoomMusic.Play` queues the song
+and stays silent, and `TDoomMusic.Update` (called every frame by both views)
+renders it 2048 samples at a time for at most `RenderBudget` (12 ms) per
+frame, then starts it on the looping channel. When a song is queued, the
+intermission track is queued after it, so it is ready at the level's exit; a
+prefetch in progress gives way to a song that is needed now. Finished songs
+stay in memory (`FReady`, served by `ReadMusic`). Set the environment variable
 `CASTLE_DOOM_DUMP_MUSIC` to a folder to get the WAV files for listening.
 
 ---
