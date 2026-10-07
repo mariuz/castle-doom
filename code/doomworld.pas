@@ -10,7 +10,7 @@ unit DoomWorld;
 
 interface
 
-uses SysUtils, Classes, Generics.Collections,
+uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
   DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound;
 
@@ -129,6 +129,10 @@ type
     FDynamic: array of Boolean;
     procedure ComputeDynamicSectors;
     procedure SpawnThings;
+    { LoadMap, optionally restoring a saved game (State <> nil). }
+    procedure LoadMapCore(const MapName: String; const KeepInventory: Boolean; const State: TJSONObject);
+    procedure RestoreMapState(const State: TJSONObject);
+    procedure RestoreDynamicState(const State: TJSONObject);
     procedure RunTic;
     procedure TicActors;
     procedure TicMonster(const A: TDoomActor);
@@ -204,6 +208,10 @@ type
     destructor Destroy; override;
 
     procedure LoadMap(const MapName: String; const KeepInventory: Boolean);
+    { The whole level state as JSON (caller owns it); see doomworld_save.inc. }
+    function SaveState: TJSONObject;
+    { Rebuild the saved map and restore everything from SaveState's JSON. }
+    procedure LoadState(const State: TJSONObject);
     procedure UnloadMap;
     function MapLoaded: Boolean;
 
@@ -799,6 +807,11 @@ begin
 end;
 
 procedure TDoomWorld.LoadMap(const MapName: String; const KeepInventory: Boolean);
+begin
+  LoadMapCore(MapName, KeepInventory, nil);
+end;
+
+procedure TDoomWorld.LoadMapCore(const MapName: String; const KeepInventory: Boolean; const State: TJSONObject);
 var
   I: Integer;
   Saved: TPlayerState;
@@ -814,7 +827,11 @@ begin
   Saved := Player;
   T0 := Now;
   FMap := TDoomMap.Create(FWad, MapName);
+  { Dynamic sectors come from the map's original specials (a saved game may
+    have cleared some, but their sectors can still be moving). }
   ComputeDynamicSectors;
+  if State <> nil then
+    RestoreMapState(State);
   WritelnLog('Load', '%s: map parsed in %d ms', [MapName, Ms]);
   FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName));
   FGeometry.AddToWorld(FItems);
@@ -833,7 +850,8 @@ begin
   end else
     ResetPlayer;
   Player.Keys := [];
-  SpawnThings;
+  if State = nil then
+    SpawnThings;
   WritelnLog('Load', '%s: things spawned in %d ms', [MapName, Ms]);
   if not FHaveStart then
   begin
@@ -870,6 +888,8 @@ begin
     FLightPhase[I] := 0;
   end;
   PlayerTeleported := false;
+  if State <> nil then
+    RestoreDynamicState(State);
 end;
 
 function TDoomWorld.Random1(const N: Integer): Integer;
@@ -3566,6 +3586,8 @@ begin
   if not Repeatable then
     FMap.Linedefs[Line].Special := 0;
 end;
+
+{$I doomworld_save.inc}
 
 initialization
   InitEffectInfos;

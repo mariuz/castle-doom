@@ -69,6 +69,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
 - Doom's text font for messages, and the real intermission screen (level names, FINISHED,
   animated kills/items/secrets/time with sounds, par times, ENTERING).
+- Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
+  the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used
+  switches, corpses, monsters mid-fight, inventory and the automap.
 - External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-warp`), PWAD lumps
   overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
   `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`), so maps built with ZDBSP load too.
@@ -78,8 +81,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no save games, no difficulty menu,
-no Icon of Sin, no glBSP `GL_` lumps or UDMF maps, the music synth approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no difficulty menu, no Icon of Sin, web
+saves last only until the page reloads, no glBSP `GL_` lumps or UDMF maps, the music synth
+approximates the OPL2.
 
 ## Build and run
 
@@ -97,7 +101,8 @@ or open `CastleEngineManifest.xml` in the Castle Game Engine editor.
 Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` fog, `M` mouse look on/off,
 `J` music on/off, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
-`N`/`P` next/previous map, `F5` screenshot, `F8` engine inspector, `H` help, `Esc` menu.
+`F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `N`/`P` next/previous map,
+`F5` screenshot, `F8` engine inspector, `H` help, `Esc` menu.
 
 Automated smoke test (loads a map, runs a script, saves screenshots, quits):
 

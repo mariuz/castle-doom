@@ -460,6 +460,42 @@ state.
 
 ---
 
+### Save games
+
+`TDoomWorld.SaveState` (`doomworld_save.inc`, included into `doomworld.pas`
+so it can read private fields) returns the whole level as a `TJSONObject`
+(FPC's `fpjson`, the same library CGE's component serializer uses, so it
+compiles for the web too):
+
+| Part | Saved as |
+|---|---|
+| map, tic, BFG countdown, player start | scalars |
+| player | health, armour, ammo and max ammo, weapon and key bitmasks, stats, powerup timers, position, angle |
+| sectors | parallel arrays: floor, ceiling, light, original light, special, floor and ceiling flats |
+| linedefs | special (one-shot specials are cleared after use) and flags (`ML_MAPPED` automap reveal) |
+| sidedefs | only the ones that differ from the WAD (flipped switches): `[index, upper, lower, middle]` |
+| movers | every field of each active `TSectorMover` |
+| switch and light timers | arrays |
+| actors | type number or effect kind, sprite prefix, position, state, health, AI and missile fields, collision flags, animation (`TDoomActor.GetAnimation`), and `target` / `shooter` / `fire` as indexes into the saved list |
+
+`LoadState` calls `LoadMapCore` with the JSON: the map is parsed from the
+WAD, dynamic sectors are computed from the *original* specials (a cleared
+one-shot special may still have a moving sector), the sector / line / side
+state is applied **before** `TDoomGeometry` builds the scenes (so walls,
+flats and switch textures come out right), `SpawnThings` is skipped, and
+`RestoreDynamicState` recreates the player, movers, timers and actors and
+then resolves the actor references. The view adds the camera (position,
+direction including pitch, up), level time, the WAD list and a description,
+and writes compact JSON with `UrlSaveStream` to `castle-config:/save1..6.json`
+or `quicksave.json`; `ReadSaveFile` reads with `Download` and `GetJSON`.
+Loading refuses a save made with a different IWAD / PWAD set. The title
+screen's "Continue (quick save)" and `-loadgame N` load the save's WADs
+first, then hand the URL to the play view (`PendingSaveUrl`).
+
+On the desktop `castle-config:` is the user config directory (next to the
+log); in the browser CGE maps it to an in-memory file system, so web saves
+last only until the page reloads.
+
 ## 9. DoomSound: DMX sound effects
 
 Doom sound lumps (`DS*`) are DMX format: a small header (format 3, sample rate,
@@ -645,7 +681,9 @@ and quits. `--demo` runs a comma-separated script: `F:sec`/`B:sec`/`L:sec`/
 `R:sec` hold a movement key (through `Container.Pressed.KeyDown`, so the real
 navigation and collisions are exercised), `T:deg` turn, `A:deg` absolute
 angle, `G:x:y` teleport to Doom coordinates, `U` use, `X` fire, `E` exit the
-level, `N` next map, `K` give all weapons/ammo/keys, `Y` god mode,
+level, `N` next map, `SAVE:n` / `LOAD:n` save or load slot n (0 = quick
+save), `MENU:n` open the save (1) or load (2) slot menu (0 closes it),
+`K` give all weapons/ammo/keys, `Y` god mode,
 `P:type:dist` spawn an awake monster of that THINGS type in front,
 `C:n` select weapon n,
 `M` toggle automap, `I` reveal all map lines, `Z:f` zoom the automap by f,
@@ -705,8 +743,8 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 
 - No Icon of Sin (MAP30 boss brain and cube spawner).
 - Doom's "donut" (special 9) only lowers the pillar.
-- No demo playback, no save games, no difficulty selection
-  (things are spawned for "Hurt me plenty").
+- No demo playback, no difficulty selection (things are spawned for "Hurt me
+  plenty"); web saves are not persistent across page reloads.
 - Vanilla node format only. A blockmap-free design means all 2D queries scan
   all lines.
 - The FM synth approximates the OPL2 (envelope shapes and the modulation index
@@ -741,6 +779,8 @@ Where each engine feature is used, as a map for learning the engine:
 | `TCastleSound`, `SoundEngine.Play`, `TCastleSoundSource`, `SoundEngine.LoopingChannel[0]` | DoomSound, DoomMusic | effects and music |
 | `TCastleImageControl` (`Image`, `SmoothScaling`, `Stretch`), `TCastleLabel`, `TCastleRectangleControl`, `TCastleCrosshair`, `TCastleButton`, layout groups, `Anchor` | DoomHud, GameViewPlay, GameViewMenu | 2D UI |
 | `Container.Pressed`, `Container.MousePressed`, `TInputPressRelease.IsKey/IsMouseButton/MouseWheelScroll` | GameViewPlay | input |
+| `UrlSaveStream`, `Download`, `castle-config:` | GameViewPlay | writing and reading save games |
+| FPC `fpjson` / `jsonparser` (`TJSONObject`, `GetJSON`) | doomworld_save.inc, GameViewPlay | save game format |
 | `TCastleUserInterface.Render`, `DrawPrimitive2D`, `DrawRectangle`, `RenderRect` | DoomAutomap | immediate-mode 2D drawing |
 | `Container.Fps`, `WritelnLog`, `WritelnWarning`, `Application.MainWindow.SaveScreen` | GameViewPlay, everywhere | diagnostics and screenshots |
 | `castle-engine compile/package/generate-program`, `--target=web` | CI | builds |

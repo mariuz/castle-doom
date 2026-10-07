@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Save / load: F2 / F3 slot menus (6 slots, Doom font), F6 / F9 quick save /
+  load, "Continue (quick save)" on the title screen, `-loadgame N`. The whole
+  level state is JSON (`TDoomWorld.SaveState` / `LoadState` in
+  `doomworld_save.inc`): player, sectors, lines, changed sidedefs, movers,
+  switch timers, light timers, every actor with animation and references,
+  camera and level time; saves record their WADs and refuse other WAD sets.
+  Files are `castle-config:/save1..6.json` and `quicksave.json` (about
+  120 KB for a map).
 - Lost soul, Pain Elemental and Arch-vile behave like Doom: lost souls charge
   at 20 units/tic and slam whatever they hit (`StartSkullCharge`,
   `TicCharge`); Pain Elementals spit souls (refused above 20, killed at once
@@ -87,7 +95,7 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **glBSP `GL_` lumps** (`GL_VERT`, `GL_SEGS`, `GL_SSECT`, `GL_NODES` after a `GL_MAPxx` marker) and **UDMF** (`TEXTMAP`) maps. | Remaining community map formats. | `DoomMap` | M (glBSP), L (UDMF) |
 | **Boom/MBF specials** (generalized linedefs, scrolling floors, friction, translucency) and **DeHackEd** patches. | Big community map support; large job. | `DoomWorld.ApplySpecial`, `DoomThings` | L |
-| **Save / load game** (serialize sector heights, specials state, actors, player) with `CastleConfig` or JSON; **quick save**. | Longer sessions. | `DoomWorld` | M |
+| **Persistent web saves**: in the browser `castle-config:` is an in-memory store, so saves vanish on reload; store the JSON in `localStorage` (a small Pas2js/JS bridge) or offer download/upload of the save file. | Saves that survive on the Pages site. | `GameViewPlay` save I/O, web glue | S-M |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -104,7 +112,8 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Save / load game (M): the biggest remaining usability gap.
-2. Difficulty selection with a Doom-style menu (`M_*` graphics) (S + M).
-3. Icon of Sin (MAP30 boss brain, cube spawner) (M): the last Doom 2 boss
+1. Difficulty selection with a Doom-style menu (`M_*` graphics) (S + M).
+2. Icon of Sin (MAP30 boss brain, cube spawner) (M): the last Doom 2 boss
    that does not work yet.
+3. Persistent web saves (S-M): saves on the Pages site currently last only
+   until the page reloads.

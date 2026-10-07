@@ -85,6 +85,9 @@ type
     { Sector light level -> sprite brightness. }
     procedure SetLight(const Light: Integer);
     property Frame: Char read FFrame;
+    { Save games: the current frame sequence and position in it. }
+    procedure GetAnimation(out Frames: String; out Index, Tics, TicsLeft: Integer; out Loop: Boolean);
+    procedure SetAnimation(const Frames: String; const Index, Tics, TicsLeft: Integer; const Loop: Boolean);
     property Scene: TCastleScene read FScene;
   end;
 
@@ -191,6 +194,28 @@ begin
   FTicsLeft := FSeqTics;
   SequenceDone := false;
   FFrame := FSequence[1];
+  ApplySprite;
+end;
+
+procedure TDoomActor.GetAnimation(out Frames: String; out Index, Tics, TicsLeft: Integer; out Loop: Boolean);
+begin
+  Frames := FSequence;
+  Index := FSeqIndex;
+  Tics := FSeqTics;
+  TicsLeft := FTicsLeft;
+  Loop := FSeqLoop;
+end;
+
+procedure TDoomActor.SetAnimation(const Frames: String; const Index, Tics, TicsLeft: Integer; const Loop: Boolean);
+begin
+  FSequence := Frames;
+  if FSequence = '' then FSequence := 'A';
+  FSeqIndex := Clamped(Index, 0, Length(FSequence) - 1);
+  FSeqTics := Max(1, Tics);
+  FTicsLeft := Max(1, TicsLeft);
+  FSeqLoop := Loop;
+  SequenceDone := false;
+  FFrame := FSequence[FSeqIndex + 1];
   ApplySprite;
 end;
 

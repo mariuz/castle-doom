@@ -37,6 +37,11 @@ begin
       CmdIwad := Parameters[I + 1];
       Inc(I);
     end else
+    if ((Parameters[I] = '-loadgame') or (Parameters[I] = '--loadgame')) and (I + 1 <= Parameters.High) then
+    begin
+      CmdLoadSlot := StrToIntDef(Parameters[I + 1], 0);
+      Inc(I);
+    end else
     if ((Parameters[I] = '-warp') or (Parameters[I] = '--warp')) and (I + 1 <= Parameters.High) then
     begin
       CmdWarp := UpperCase(Parameters[I + 1]);

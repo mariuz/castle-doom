@@ -62,6 +62,16 @@ and the log at `%LOCALAPPDATA%\castle-doom\castle-doom.log` (grep for
 (-416, 256); door at x=544..560, y=680..744 (stand at 480,712 facing angle 0);
 WR lift square 64..192 x 192..320 (stand at 0,256 facing 0 and walk).
 
+Save games: `SAVE:n` / `LOAD:n` (0 = quick save) and `MENU:1|2|0` in a demo
+script, `-loadgame N` on the command line (works with `--autotest X prefix`
+for screenshots). Files: `%LOCALAPPDATA%\castle-doom\save1..6.json`,
+`quicksave.json`; log lines start with `Save:` ("restored N actors, M
+movers"). A good round trip on E1M1:
+`K,D,W:1.5,G:480:712,A:0,U,W:0.6,X,SAVE:1,S,E,W:0.5,U,U,U,W:2,X,S,LOAD:1,W:0.3,S`
+(HUD values after the load must equal the ones at the save). When adding
+state to `TDoomWorld`, `TDoomActor` or `TSectorMover`, add it to
+`doomworld_save.inc` too.
+
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices).

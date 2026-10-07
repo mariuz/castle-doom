@@ -5,7 +5,7 @@ unit GameViewPlay;
 
 interface
 
-uses Classes, SysUtils,
+uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
@@ -44,6 +44,18 @@ type
     FDemoTime: Single;
     FPendingMap: String;
     FPendingKeepInventory: Boolean;
+    { Saved game waiting to be applied by LoadPendingMap. }
+    FPendingSave: TJSONObject;
+    { 0 = none, 1 = save slot menu (F2), 2 = load slot menu (F3). }
+    FSlotMenu: Integer;
+    FSlotMenuBack: TCastleRectangleControl;
+    FSlotMenuText: TDoomFontText;
+    procedure SaveGame(const Slot: Integer);
+    procedure LoadGame(const Slot: Integer);
+    function LoadGameUrl(const Url: String): Boolean;
+    procedure RestoreViewState(const State: TJSONObject);
+    procedure OpenSlotMenu(const Mode: Integer);
+    procedure CloseSlotMenu;
     procedure RunDemo(const SecondsPassed: Single);
     procedure LoadPendingMap(Sender: TObject);
     procedure CreateUi;
@@ -60,6 +72,8 @@ type
     Graphics: TDoomGraphics;
     Sounds: TDoomSounds;
     Music: TDoomMusic;
+    { Set by the menu: load this saved game instead of StartMapName. }
+    PendingSaveUrl: String;
     StartMapName: String;
     constructor Create(AOwner: TComponent); override;
     procedure Start; override;
@@ -71,14 +85,85 @@ type
 var
   ViewPlay: TViewPlay;
 
+{ Saved game location: slot 0 is the quick save, 1..6 the F2/F3 slots.
+  castle-config: is the user config directory on desktop (next to the log);
+  in the browser it is an in-memory store that lasts until the page reloads. }
+function SaveSlotUrl(const Slot: Integer): String;
+{ Read a saved game, nil when missing or unreadable. Caller owns the result. }
+function ReadSaveFile(const Url: String): TJSONObject;
+
 implementation
 
-uses Math,
+uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
+  CastleDownload,
   CastleImages,
   CastleUriUtils, X3DNodes,
   DoomGeometry, DoomMap,
   GameViewMenu;
+
+const
+  SlotMenuNone = 0;
+  SlotMenuSave = 1;
+  SlotMenuLoad = 2;
+  SaveSlots = 6;
+
+function SaveSlotUrl(const Slot: Integer): String;
+begin
+  if Slot <= 0 then
+    Result := 'castle-config:/quicksave.json'
+  else
+    Result := Format('castle-config:/save%d.json', [Slot]);
+end;
+
+function ReadSaveFile(const Url: String): TJSONObject;
+var
+  S: TStream;
+  Text: TStringStream;
+  D: TJSONData;
+begin
+  Result := nil;
+  try
+    S := Download(Url);
+  except
+    Exit; { no such save }
+  end;
+  try
+    try
+      Text := TStringStream.Create('');
+      try
+        Text.CopyFrom(S, 0);
+        D := GetJSON(Text.DataString);
+        if D is TJSONObject then
+          Result := TJSONObject(D)
+        else
+          FreeAndNil(D);
+      finally
+        FreeAndNil(Text);
+      end;
+    except
+      on E: Exception do
+        WritelnWarning('Save', 'Cannot read %s: %s', [Url, E.Message]);
+    end;
+  finally
+    FreeAndNil(S);
+  end;
+end;
+
+procedure WriteSaveFile(const Url: String; const J: TJSONObject);
+var
+  S: TStream;
+  Text: String;
+begin
+  Text := J.AsJSON;
+  S := UrlSaveStream(Url);
+  try
+    if Text <> '' then
+      S.WriteBuffer(Text[1], Length(Text));
+  finally
+    FreeAndNil(S);
+  end;
+end;
 
 constructor TViewPlay.Create(AOwner: TComponent);
 begin
@@ -175,6 +260,7 @@ begin
     'Tab: automap   + / -: zoom   G: grid   I: reveal map' + NL +
     'F: fog (light diminishing)   M: mouse look' + NL +
     'N / P: next / previous map   J: music on/off' + NL +
+    'F2 / F3: save / load   F6 / F9: quick save / load' + NL +
     'F5: screenshot' + NL +
     'F8: Castle Game Engine inspector' + NL +
     'H: hide this help   Esc: menu';
@@ -198,6 +284,19 @@ begin
   FLoadingText.Anchor(vpMiddle);
   FLoadingText.Exists := false;
   InsertFront(FLoadingText);
+
+  { F2 / F3 save and load slot menu, in Doom's font over a dark panel. }
+  FSlotMenuBack := TCastleRectangleControl.Create(FreeAtStop);
+  FSlotMenuBack.FullSize := true;
+  FSlotMenuBack.Color := Vector4(0, 0, 0, 0.7);
+  FSlotMenuBack.Exists := false;
+  InsertFront(FSlotMenuBack);
+  FSlotMenuText := TDoomFontText.Create(FreeAtStop);
+  FSlotMenuText.Graphics := Graphics;
+  FSlotMenuText.Anchor(hpMiddle);
+  FSlotMenuText.Anchor(vpMiddle);
+  FSlotMenuText.Exists := false;
+  InsertFront(FSlotMenuText);
 end;
 
 procedure TViewPlay.SetupNavigation;
@@ -238,6 +337,8 @@ begin
 end;
 
 procedure TViewPlay.Start;
+var
+  Url: String;
 begin
   inherited;
   CreateUi;
@@ -247,11 +348,19 @@ begin
   begin
     if Wad.MapNames.Count > 0 then StartMapName := Wad.MapNames[0] else StartMapName := 'E1M1';
   end;
+  if PendingSaveUrl <> '' then
+  begin
+    Url := PendingSaveUrl;
+    PendingSaveUrl := '';
+    if LoadGameUrl(Url) then Exit;
+  end;
   StartMap(StartMapName, false);
 end;
 
 procedure TViewPlay.Stop;
 begin
+  FreeAndNil(FPendingSave);
+  FSlotMenu := SlotMenuNone;
   FreeAndNil(FDemoSteps);
   FreeAndNil(FWorld);
   inherited;
@@ -344,6 +453,14 @@ begin
     FAutomap.ZoomBy(Arg)
   else if Cmd = 'K' then
     FWorld.GiveAll
+  else if Cmd = 'MENU' then
+  begin
+    if Round(Arg) = 0 then CloseSlotMenu else OpenSlotMenu(Round(Arg));
+  end
+  else if Cmd = 'SAVE' then
+    SaveGame(Round(Arg))
+  else if Cmd = 'LOAD' then
+    LoadGame(Round(Arg))
   else if Cmd = 'Y' then
     FWorld.DebugGod
   else if Cmd = 'P' then
@@ -414,22 +531,179 @@ end;
 procedure TViewPlay.LoadPendingMap(Sender: TObject);
 var
   MapName: String;
-  KeepInventory: Boolean;
+  KeepInventory, Restored: Boolean;
 begin
   MapName := FPendingMap;
   KeepInventory := FPendingKeepInventory;
   FPendingMap := '';
   FMapName := MapName;
-  FWorld.LoadMap(MapName, KeepInventory);
-  PlacePlayer(FWorld.StartX, FWorld.StartY, FWorld.Player.Z, FWorld.StartAngle);
+  Restored := false;
+  if FPendingSave <> nil then
+  begin
+    FWorld.LoadState(FPendingSave);
+    RestoreViewState(FPendingSave);
+    FreeAndNil(FPendingSave);
+    Restored := true;
+  end else
+  begin
+    FWorld.LoadMap(MapName, KeepInventory);
+    PlacePlayer(FWorld.StartX, FWorld.StartY, FWorld.Player.Z, FWorld.StartAngle);
+    FLevelTime := 0;
+  end;
   FIntermission := false;
   FIntermissionBack.Exists := false;
   FIntermissionScreen.Exists := false;
   FLoadingText.Exists := false;
-  FLevelTime := 0;
-  FWorld.ShowMessage(Format('%s  (%s)', [MapName, Wad.Description]));
+  if Restored then
+    FWorld.ShowMessage('Game loaded.')
+  else
+    FWorld.ShowMessage(Format('%s  (%s)', [MapName, Wad.Description]));
   if Music <> nil then
     Music.Play(Music.LumpForMap(MapName));
+end;
+
+procedure TViewPlay.RestoreViewState(const State: TJSONObject);
+var
+  D: TJSONData;
+  C: TJSONArray;
+  Pos, Dir, Up: TVector3;
+begin
+  FLevelTime := State.Get('levelTime', 0.0);
+  D := State.Find('camera');
+  if (D is TJSONArray) and (TJSONArray(D).Count = 9) then
+  begin
+    C := TJSONArray(D);
+    Pos := Vector3(C.Floats[0], C.Floats[1], C.Floats[2]);
+    Dir := Vector3(C.Floats[3], C.Floats[4], C.Floats[5]);
+    Up := Vector3(C.Floats[6], C.Floats[7], C.Floats[8]);
+    FViewport.Camera.SetView(Pos, Dir, Up);
+    FLastCameraPos := Pos;
+  end else
+    PlacePlayer(FWorld.Player.X, FWorld.Player.Y, FWorld.Player.Z, FWorld.Player.Angle);
+end;
+
+procedure TViewPlay.SaveGame(const Slot: Integer);
+var
+  J: TJSONObject;
+  C, Wads: TJSONArray;
+  Pos, Dir, Up: TVector3;
+  I: Integer;
+  P: TPlayerState;
+begin
+  if (FWorld = nil) or (not FWorld.MapLoaded) or FIntermission or FWorld.Player.Dead or (FPendingMap <> '') then
+  begin
+    if FWorld <> nil then FWorld.ShowMessage('You can''t save now.');
+    Exit;
+  end;
+  J := FWorld.SaveState;
+  try
+    FViewport.Camera.GetView(Pos, Dir, Up);
+    C := TJSONArray.Create;
+    for I := 0 to 2 do C.Add(Double(Pos[I]));
+    for I := 0 to 2 do C.Add(Double(Dir[I]));
+    for I := 0 to 2 do C.Add(Double(Up[I]));
+    J.Add('camera', C);
+    J.Add('levelTime', Double(FLevelTime));
+    Wads := TJSONArray.Create;
+    for I := 0 to Wad.FileUrls.Count - 1 do
+      Wads.Add(Wad.FileUrls[I]);
+    J.Add('wads', Wads);
+    P := FWorld.Player;
+    J.Add('description', Format('%s  %d/%d  %d:%2.2d', [FMapName, P.Kills, P.TotalKills,
+      Trunc(FLevelTime) div 60, Trunc(FLevelTime) mod 60]));
+    J.Add('saved', FormatDateTime('yyyy-mm-dd hh:nn', Now));
+    try
+      WriteSaveFile(SaveSlotUrl(Slot), J);
+      WritelnLog('Save', 'Saved %s to %s', [FMapName, SaveSlotUrl(Slot)]);
+      FWorld.ShowMessage('Game saved.');
+    except
+      on E: Exception do
+      begin
+        WritelnWarning('Save', 'Saving failed: %s', [E.Message]);
+        FWorld.ShowMessage('Save failed.');
+      end;
+    end;
+  finally
+    FreeAndNil(J);
+  end;
+end;
+
+procedure TViewPlay.LoadGame(const Slot: Integer);
+begin
+  if FPendingMap <> '' then Exit;
+  if not LoadGameUrl(SaveSlotUrl(Slot)) then
+    if (FWorld <> nil) and FWorld.MapLoaded and (FWorld.Player.Message = '') then
+      FWorld.ShowMessage('No saved game there.');
+end;
+
+function TViewPlay.LoadGameUrl(const Url: String): Boolean;
+var
+  J: TJSONObject;
+  D: TJSONData;
+  Saved: TStringList;
+  I: Integer;
+begin
+  Result := false;
+  J := ReadSaveFile(Url);
+  if J = nil then Exit;
+  { A save only makes sense with the same IWAD + PWADs. }
+  Saved := TStringList.Create;
+  try
+    D := J.Find('wads');
+    if D is TJSONArray then
+      for I := 0 to TJSONArray(D).Count - 1 do
+        Saved.Add(TJSONArray(D).Strings[I]);
+    if Saved.Text <> Wad.FileUrls.Text then
+    begin
+      WritelnWarning('Save', '%s was saved with %s, current WADs are %s', [Url, Saved.CommaText, Wad.FileUrls.CommaText]);
+      if (FWorld <> nil) and FWorld.MapLoaded then
+        FWorld.ShowMessage('That save uses other WADs.');
+      FreeAndNil(J);
+      Exit;
+    end;
+  finally
+    FreeAndNil(Saved);
+  end;
+  FreeAndNil(FPendingSave);
+  FPendingSave := J;
+  WritelnLog('Save', 'Loading %s (%s)', [Url, J.Get('description', '')]);
+  StartMap(J.Get('map', ''), false);
+  Result := true;
+end;
+
+procedure TViewPlay.OpenSlotMenu(const Mode: Integer);
+var
+  Lines, Desc: String;
+  I: Integer;
+  J: TJSONObject;
+begin
+  if (FWorld = nil) or not FWorld.MapLoaded or FIntermission then Exit;
+  FSlotMenu := Mode;
+  if Mode = SlotMenuSave then Lines := 'SAVE GAME' else Lines := 'LOAD GAME';
+  Lines := Lines + NL + NL;
+  for I := 1 to SaveSlots do
+  begin
+    J := ReadSaveFile(SaveSlotUrl(I));
+    if J = nil then
+      Desc := 'EMPTY'
+    else
+    begin
+      Desc := J.Get('description', '?') + '   ' + J.Get('saved', '');
+      FreeAndNil(J);
+    end;
+    Lines := Lines + Format('%d  %s', [I, Desc]) + NL;
+  end;
+  Lines := Lines + NL + 'PRESS 1-' + IntToStr(SaveSlots) + ', ESC TO CANCEL';
+  FSlotMenuText.SetScale(Max(1, Round(EffectiveHeight / 200)) * 1.5);
+  FSlotMenuText.SetText(Lines);
+  FSlotMenuBack.Exists := true;
+end;
+
+procedure TViewPlay.CloseSlotMenu;
+begin
+  FSlotMenu := SlotMenuNone;
+  FSlotMenuBack.Exists := false;
+  FSlotMenuText.Exists := false;
 end;
 
 procedure TViewPlay.PlacePlayer(const DoomX, DoomY, DoomZ, AngleDeg: Single);
@@ -590,6 +864,12 @@ begin
     end;
     Exit;
   end;
+  if FSlotMenu <> SlotMenuNone then
+  begin
+    { The game is paused while picking a slot, like Doom's menus. }
+    FNavigation.Exists := false;
+    Exit;
+  end;
   FStatusBar.Exists := true;
   FNavigation.Exists := not FWorld.Player.Dead;
   FLevelTime := FLevelTime + SecondsPassed;
@@ -732,6 +1012,49 @@ begin
       end;
       Exit(true);
     end;
+  end;
+  if FSlotMenu <> SlotMenuNone then
+  begin
+    for Idx := 1 to SaveSlots do
+    begin
+      K := TKey(Ord(key0) + Idx);
+      if Event.IsKey(K) then
+      begin
+        if FSlotMenu = SlotMenuSave then
+        begin
+          CloseSlotMenu;
+          SaveGame(Idx);
+        end else
+        begin
+          CloseSlotMenu;
+          LoadGame(Idx);
+        end;
+        Exit(true);
+      end;
+    end;
+    if Event.IsKey(keyEscape) or Event.IsKey(keyF2) or Event.IsKey(keyF3) then
+      CloseSlotMenu;
+    Exit(true); { the menu swallows other input }
+  end;
+  if Event.IsKey(keyF2) then
+  begin
+    OpenSlotMenu(SlotMenuSave);
+    Exit(true);
+  end;
+  if Event.IsKey(keyF3) then
+  begin
+    OpenSlotMenu(SlotMenuLoad);
+    Exit(true);
+  end;
+  if Event.IsKey(keyF6) then
+  begin
+    SaveGame(0);
+    Exit(true);
+  end;
+  if Event.IsKey(keyF9) then
+  begin
+    LoadGame(0);
+    Exit(true);
   end;
   if Event.IsKey(keyTab) then
   begin

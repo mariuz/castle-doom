@@ -4,7 +4,7 @@ unit GameViewMenu;
 
 interface
 
-uses Classes, SysUtils,
+uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
   DoomWad, DoomGraphics, DoomSound, DoomMusic;
 
@@ -27,6 +27,9 @@ type
     procedure ClickOpenIwad(Sender: TObject);
     procedure ClickAddPwad(Sender: TObject);
     procedure ClickLastWads(Sender: TObject);
+    procedure ClickContinue(Sender: TObject);
+    procedure ContinueFromSlot(const Slot: Integer);
+    procedure AutoContinue(Sender: TObject);
     procedure UpdateWadsLabel;
     procedure RememberWads;
     procedure ClickPhase1(Sender: TObject);
@@ -56,6 +59,8 @@ var
   CmdIwad: String;
   CmdPwads: TStringList;
   CmdWarp: String;
+  { -loadgame N: start from saved game slot N (0 = quick save). }
+  CmdLoadSlot: Integer = -1;
 
 implementation
 
@@ -79,6 +84,7 @@ var
   B: TCastleButton;
   Row: TCastleHorizontalGroup;
   Header: TCastleLabel;
+  Save: TJSONObject;
 begin
   inherited;
   Back := TCastleRectangleControl.Create(FreeAtStop);
@@ -170,6 +176,14 @@ begin
   B.OnClick := {$ifdef FPC}@{$endif} ClickLastWads;
   B.Exists := UserConfig.GetValue('wads/iwad', '') <> '';
   Row.InsertFront(B);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := 'Continue (quick save)';
+  B.FontSize := 18;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickContinue;
+  Save := ReadSaveFile(SaveSlotUrl(0));
+  B.Exists := Save <> nil;
+  FreeAndNil(Save);
+  Row.InsertFront(B);
 
   FWadsLabel := TCastleLabel.Create(FreeAtStop);
   FWadsLabel.Color := Vector4(0.8, 0.8, 0.8, 1);
@@ -186,6 +200,12 @@ begin
   FStatus.Caption := 'Freedoom (BSD licence) by the Freedoom project. Castle Game Engine https://castle-engine.io';
   InsertFront(FStatus);
 
+  if CmdLoadSlot >= 0 then
+  begin
+    { Cannot change the view inside Start; do it after the first render. }
+    WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoContinue);
+    Exit;
+  end;
   if AutoTestMap = 'MENU' then
   begin
     LoadWads(Freedoom1, nil);
@@ -345,6 +365,55 @@ begin
     end;
   end else
     FWadsLabel.Caption := 'No file chosen (file dialogs are not available in the browser)';
+end;
+
+procedure TViewMenu.ClickContinue(Sender: TObject);
+begin
+  ContinueFromSlot(0);
+end;
+
+procedure TViewMenu.AutoContinue(Sender: TObject);
+var
+  Slot: Integer;
+begin
+  Slot := CmdLoadSlot;
+  CmdLoadSlot := -1;
+  ContinueFromSlot(Slot);
+end;
+
+{ Load a saved game: first its WADs, then the play view restores the level. }
+procedure TViewMenu.ContinueFromSlot(const Slot: Integer);
+var
+  Save: TJSONObject;
+  D: TJSONData;
+  Pwads: TStringList;
+  Iwad: String;
+  I: Integer;
+begin
+  Save := ReadSaveFile(SaveSlotUrl(Slot));
+  if Save = nil then
+  begin
+    FWadsLabel.Caption := 'No saved game in that slot';
+    Exit;
+  end;
+  Pwads := TStringList.Create;
+  try
+    Iwad := Freedoom1;
+    D := Save.Find('wads');
+    if (D is TJSONArray) and (TJSONArray(D).Count > 0) then
+    begin
+      Iwad := TJSONArray(D).Strings[0];
+      for I := 1 to TJSONArray(D).Count - 1 do
+        Pwads.Add(TJSONArray(D).Strings[I]);
+    end;
+    LoadWads(Iwad, Pwads);
+  finally
+    FreeAndNil(Pwads);
+    FreeAndNil(Save);
+  end;
+  if FWad = nil then Exit;
+  ViewPlay.PendingSaveUrl := SaveSlotUrl(Slot);
+  StartGame;
 end;
 
 procedure TViewMenu.ClickLastWads(Sender: TObject);
