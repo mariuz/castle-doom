@@ -6,6 +6,15 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Monster infighting: monsters keep a `Target` (nil = player); damage from
+  another monster retargets them, monster missiles hit other monsters (passing
+  through the shooter's own species like Doom), zombie hitscans hit whoever
+  stands in the line of fire, splash damage is attributed to the shooter,
+  cyberdemons and spiders ignore splash.
+- Boss-death triggers (`BossDeath`): E1M8 barons, E4M8 spiders and MAP07
+  mancubi lower tag 666 floors; MAP07 arachnotrons raise tag 667 by the
+  shortest lower texture; E4M6 cyberdemons blaze-open tag 666 doors; Keen
+  opens tag 666 doors; E2M8 / E3M8 end the level.
 - External WADs: `-iwad FILE`, `-file PWAD...`, `-warp MAP` on the command
   line, "Open IWAD..." / "Add PWAD..." / "Last WADs" in the menu (native file
   dialog, paths remembered in the user config). `TDoomWad` stacks files; lumps
@@ -22,8 +31,6 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Monster infighting**: monsters hit by another monster's projectile or hitscan should retarget it. | Classic Doom tactic. | `DamageActor` needs an attacker parameter; `TicMonster` needs a target other than the player | M |
-| **Boss triggers**: E1M8 (barons dead opens tag 666 floor), E2M8/E3M8 level end, MAP07 (mancubi 666, arachnotrons 667), Keen (MAP32 doors). | Those levels cannot be finished properly without them. | `KillActor` counts per type; a per-map check in `TicActors` | S |
 | **Pain Elemental** should spawn lost souls instead of firing fireballs; lost souls should charge. | Doom 2 levels play differently without it. | `MonsterAttack`, a charge state in `TicMonster` | M |
 | **Arch-vile**: resurrection of corpses and the fire attack with line-of-sight jump. | Doom 2 signature monster. | `TicMonster` special case, corpses are still actors (`asDead`) | M |
 | **Donut (special 9)**, **perpetual platforms stop/start**, **raise by shortest lower texture (30/96 are approximated as +64)**, **crusher return speed when blocked**. | Correctness of a few maps. | `ApplySpecial`, `TSectorMover` | S each |
@@ -80,9 +87,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Monster infighting and boss triggers (M + S): the remaining big behaviour
-   gaps on the original levels.
-2. Doom text font and intermission graphics (S + M): the most visible
+1. Doom text font and intermission graphics (S + M): the most visible
    presentation gap.
-3. Extended node formats (M): many community PWADs now loadable through
+2. Extended node formats (M): many community PWADs now loadable through
    `-file` use ZDoom nodes.
+3. Pain Elemental lost souls and Arch-vile behaviour (M each): the last two
+   Doom 2 monsters that are still approximations.

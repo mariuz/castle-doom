@@ -360,7 +360,22 @@ player's position between tics against special lines (segment intersection).
 health and armour caps, ammo per weapon, backpack, keys, powerups, weapon
 auto-switch.
 
-**Monsters** sleep until they see the player (`SightClear`: a 2D line-of-sight
+**Monsters** have a `Target` (nil means the player). `TicMonster`,
+`MonsterAttack`, `MonsterHitscan` and `SpawnMissile` all aim at
+`TargetPosition`. `DamageActor` takes the attacker: damage from a monster
+makes the victim turn on it (`P_DamageMobj`), damage from the player turns it
+back on the player, environmental damage (crushers, barrels) retargets nobody.
+Monster missiles carry their `Shooter` and hit any other monster except the
+shooter's own species (passed through, as in `PIT_CheckThing`); zombie
+hitscans hit the first monster standing in the line of fire; splash damage is
+blamed on the rocket's shooter and ignored by cyberdemons and spider
+masterminds. Dead targets drop the monster back to the player. When the last
+monster of a boss type dies, `BossDeath` runs Doom's `A_BossDeath` table:
+E1M8 barons / E4M8 spiders / MAP07 mancubi lower the tag 666 floors, MAP07
+arachnotrons raise tag 667 by the shortest lower texture, E4M6 cyberdemons
+blaze-open tag 666, Keen opens tag 666 doors, E2M8 and E3M8 end the level.
+
+Monsters sleep until they see the player (`SightClear`: a 2D line-of-sight
 test against one-sided lines and closed two-sided lines) or hear a shot
 (`NoiseAlert`). Awake, they chase with Doom-style 2D movement (`TryMove2D`:
 one-sided and blocking lines, openings too low, steps higher than 24, drop-offs
@@ -571,7 +586,8 @@ navigation and collisions are exercised), `T:deg` turn, `A:deg` absolute
 angle, `G:x:y` teleport to Doom coordinates, `U` use, `X` fire, `E` exit the
 level, `N` next map, `K` give all weapons/ammo/keys, `C:n` select weapon n,
 `M` toggle automap, `I` reveal all map lines, `Z:f` zoom the automap by f,
-`S` screenshot (`PREFIX_n.png`), `W:sec` wait, `Q` quit.
+`V` make every monster fight the nearest other species, `D` kill all monsters
+(boss triggers), `S` screenshot (`PREFIX_n.png`), `W:sec` wait, `Q` quit.
 The log (`%LOCALAPPDATA%\castle-doom\castle-doom.log` on Windows) records
 map/geometry/thing load times, music render times, and every screenshot with
 the player position.
@@ -624,9 +640,8 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 
 ## 18. Known gaps and ideas
 
-- No monster infighting, no Arch-vile resurrection, Pain Elemental shoots
-  cacodemon fireballs instead of spawning lost souls, no boss-death triggers
-  (E1M8 doors, MAP07, Keen), no Icon of Sin.
+- No Arch-vile resurrection, Pain Elemental shoots cacodemon fireballs
+  instead of spawning lost souls, no Icon of Sin.
 - Doom's "donut" (special 9) only lowers the pillar.
 - No demo playback, no save games, no difficulty selection
   (things are spawned for "Hurt me plenty").

@@ -51,6 +51,8 @@ Script commands: `F/B/L/R:sec` move, `T:deg` turn, `A:deg` absolute angle,
 map, `K` give all weapons/ammo/keys, `C:n` select weapon n (1 fist, 2 pistol,
 3 shotgun, 4 chaingun, 5 rockets, 6 plasma, 7 BFG, 8 chainsaw, 9 SSG),
 `M` toggle automap, `I` reveal all map lines, `Z:f` zoom automap by f,
+`V` force infighting (nearest other species), `D` kill all monsters (boss
+triggers; grep the log for `Infight:` and `BossDeath:`),
 `S` screenshot, `W:sec` wait, `Q` quit. Then read the screenshots (PNG)
 and the log at `%LOCALAPPDATA%\castle-doom\castle-doom.log` (grep for
 `Warning|Exception|Load:|Music|AutoTest`). Useful E1M1 spots: player start

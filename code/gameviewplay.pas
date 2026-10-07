@@ -335,6 +335,10 @@ begin
     FAutomap.ZoomBy(Arg)
   else if Cmd = 'K' then
     FWorld.GiveAll
+  else if Cmd = 'V' then
+    FWorld.DebugInfight
+  else if Cmd = 'D' then
+    FWorld.DebugKillAll
   else if Cmd = 'C' then
   begin
     case Round(Arg) of

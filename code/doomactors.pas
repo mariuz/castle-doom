@@ -58,6 +58,10 @@ type
     Removed: Boolean;
     { Missiles: fired by the player (hits monsters, never the player). }
     FromPlayer: Boolean;
+    { Missiles: the monster that fired it (nil for the player). }
+    Shooter: TDoomActor;
+    { Monsters: who they are after; nil means the player. }
+    Target: TDoomActor;
     { Fullbright sprite (explosions, projectiles, some items). }
     Bright: Boolean;
 

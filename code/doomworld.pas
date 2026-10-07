@@ -149,7 +149,12 @@ type
     procedure SpawnPlayerMissile(const Kind: TEffectKind);
     procedure BfgSpray(const X, Y: Single);
     procedure ExplodeMissile(const A: TDoomActor; const X, Y, Z: Single);
-    procedure KillActor(const A: TDoomActor);
+    procedure KillActor(const A: TDoomActor; const Killer: TDoomActor = nil; const ByPlayer: Boolean = true);
+    procedure BossDeath(const A: TDoomActor);
+    function SameSpecies(const A, B: TDoomActor): Boolean;
+    function TargetAlive(const A: TDoomActor): Boolean;
+    procedure TargetPosition(const A: TDoomActor; out TX, TY, TZ, TRadius: Single);
+    function FloorRaiseToTexture(const Sec: Integer): Single;
     procedure ExplodeBarrel(const A: TDoomActor);
     procedure RadiusDamage(const X, Y, Z: Single; const Radius, Damage: Integer; const Source: TDoomActor);
     procedure HitscanAttack(const Origin, Dir: TVector3; const Damage: Integer; const Splash: Integer);
@@ -200,7 +205,15 @@ type
     procedure NextWeapon(const Delta: Integer);
     procedure ShowMessage(const Msg: String);
     procedure DamagePlayer(const Damage: Integer; const FromActor: TDoomActor);
-    procedure DamageActor(const A: TDoomActor; const Damage: Integer; const HitX, HitY, HitZ: Single);
+    { Hurt a monster or barrel. ByPlayer: the player did it (monster turns on
+      the player); otherwise Attacker (a monster) becomes its new target,
+      nil Attacker means environmental damage (crusher, barrel) with no retarget. }
+    procedure DamageActor(const A: TDoomActor; const Damage: Integer; const HitX, HitY, HitZ: Single;
+      const Attacker: TDoomActor = nil; const ByPlayer: Boolean = true);
+    { Debug: every awake monster turns on the nearest other monster. }
+    procedure DebugInfight;
+    { Debug: kill every monster (exercises boss-death triggers). }
+    procedure DebugKillAll;
     procedure ResetPlayer;
     { Cheat for testing: all weapons, full ammo, keys. }
     procedure GiveAll;
@@ -457,7 +470,7 @@ begin
             begin
               Blocked := true;
               if Kind = mkCrusher then
-                World.DamageActor(A, 10, A.DoomX, A.DoomY, A.DoomZ + 32);
+                World.DamageActor(A, 10, A.DoomX, A.DoomY, A.DoomZ + 32, nil, false);
             end;
           if Blocked and (Kind = mkDoor) then
           begin
@@ -1226,7 +1239,7 @@ end;
 procedure TDoomWorld.TicActors;
 var
   I: Integer;
-  A: TDoomActor;
+  A, O: TDoomActor;
   Sec: Integer;
 begin
   for I := FActors.Count - 1 downto 0 do
@@ -1283,6 +1296,11 @@ begin
 
     if A.Removed then
     begin
+      for O in FActors do
+      begin
+        if O.Target = A then O.Target := nil;
+        if O.Shooter = A then O.Shooter := nil;
+      end;
       if A.Parent <> nil then A.Parent.Remove(A);
       FActors.Delete(I);
     end;
@@ -1431,16 +1449,45 @@ begin
     end;
 end;
 
+function TDoomWorld.SameSpecies(const A, B: TDoomActor): Boolean;
+begin
+  if (A = nil) or (B = nil) then Exit(false);
+  Result := (A.Info^.Num = B.Info^.Num) or
+    (((A.Info^.Num = 3003) or (A.Info^.Num = 69)) and ((B.Info^.Num = 3003) or (B.Info^.Num = 69)));
+end;
+
+function TDoomWorld.TargetAlive(const A: TDoomActor): Boolean;
+begin
+  if A.Target = nil then
+    Result := not Player.Dead
+  else
+    Result := (not A.Target.Removed) and (A.Target.State in [asIdle, asChase, asAttack, asPain]);
+end;
+
+procedure TDoomWorld.TargetPosition(const A: TDoomActor; out TX, TY, TZ, TRadius: Single);
+begin
+  if A.Target = nil then
+  begin
+    TX := Player.X; TY := Player.Y; TZ := Player.Z; TRadius := PlayerRadius;
+  end else
+  begin
+    TX := A.Target.DoomX; TY := A.Target.DoomY; TZ := A.Target.DoomZ; TRadius := A.Target.Info^.Radius;
+  end;
+end;
+
 procedure TDoomWorld.TicMonster(const A: TDoomActor);
 var
-  DX, DY, Dist, Ang, Step: Single;
+  DX, DY, Dist, Ang, Step, TX, TY, TZ, TR: Single;
   Blocked: Integer;
   Tries: Integer;
   Moved: Boolean;
 begin
-  if Player.Dead then Exit;
-  DX := Player.X - A.DoomX;
-  DY := Player.Y - A.DoomY;
+  { A dead target (monster corpse, or the player) sends the monster back to the player. }
+  if (A.Target <> nil) and not TargetAlive(A) then A.Target := nil;
+  if (A.Target = nil) and Player.Dead then Exit;
+  TargetPosition(A, TX, TY, TZ, TR);
+  DX := TX - A.DoomX;
+  DY := TY - A.DoomY;
   Dist := Sqrt(DX * DX + DY * DY);
 
   if A.State = asIdle then
@@ -1474,7 +1521,7 @@ begin
   if A.State <> asChase then Exit;
   if A.Info^.Speed = 0 then Exit;
 
-  { Face the player (with a little lag). }
+  { Face the target. }
   Ang := RadToDeg(ArcTan2(DY, DX));
   A.Angle := Ang;
 
@@ -1490,7 +1537,7 @@ begin
         MonsterAttack(A);
         Exit;
       end;
-    end else if SightClear(A.DoomX, A.DoomY, Player.X, Player.Y) then
+    end else if SightClear(A.DoomX, A.DoomY, TX, TY) then
     begin
       { Doom's P_CheckMissileRange: more likely to shoot when close. }
       if Random(256) >= Min(220, 40 + Trunc(Dist / 6)) then
@@ -1502,7 +1549,7 @@ begin
     A.ReactionTics := 10 + Random1(12);
   end;
 
-  { Move towards the player, trying other directions when blocked. }
+  { Move towards the target, trying other directions when blocked. }
   Step := A.Info^.Speed / MoveFrameTics(A.Info^.Num);
   if A.Info^.Floats then
     Step := Step * 1.2;
@@ -1527,13 +1574,15 @@ begin
   end;
   if A.Info^.Floats then
   begin
-    { Flyers drift towards the player's eye height. }
-    if Player.Z + 32 > A.DoomZ + 8 then A.DoomZ := A.DoomZ + 2
-    else if Player.Z + 32 < A.DoomZ - 8 then A.DoomZ := A.DoomZ - 2;
+    { Flyers drift towards the target's height. }
+    if TZ + 32 > A.DoomZ + 8 then A.DoomZ := A.DoomZ + 2
+    else if TZ + 32 < A.DoomZ - 8 then A.DoomZ := A.DoomZ - 2;
   end;
 end;
 
 procedure TDoomWorld.MonsterAttack(const A: TDoomActor);
+var
+  TX, TY, TZ, TR: Single;
 begin
   A.State := asAttack;
   A.PlaySequence(A.Info^.AttackFrames, 6, false);
@@ -1541,8 +1590,15 @@ begin
     akMelee:
       begin
         if A.Info^.AttackSound <> '' then FSounds.PlayAt(A.Info^.AttackSound, A);
-        if Sqrt(Sqr(Player.X - A.DoomX) + Sqr(Player.Y - A.DoomY)) < 64 + A.Info^.Radius then
-          DamagePlayer(Dice(A.Info^.DamageDice, A.Info^.DamageFaces), A);
+        TargetPosition(A, TX, TY, TZ, TR);
+        if Sqrt(Sqr(TX - A.DoomX) + Sqr(TY - A.DoomY)) < 64 + A.Info^.Radius then
+        begin
+          if A.Target = nil then
+            DamagePlayer(Dice(A.Info^.DamageDice, A.Info^.DamageFaces), A)
+          else
+            DamageActor(A.Target, Dice(A.Info^.DamageDice, A.Info^.DamageFaces),
+              TX, TY, TZ + 32, A, false);
+        end;
       end;
     akHitscan: MonsterHitscan(A);
     akMissile: SpawnMissile(A);
@@ -1551,25 +1607,58 @@ end;
 
 procedure TDoomWorld.MonsterHitscan(const A: TDoomActor);
 var
-  Dist, Chance: Single;
+  Dist, Chance, TX, TY, TZ, TR, Len, T, PX, PY, D: Single;
   Shots, I: Integer;
+  O, Blocker: TDoomActor;
+  BlockerT: Single;
 begin
   if A.Info^.AttackSound <> '' then FSounds.PlayAt(A.Info^.AttackSound, A);
-  Dist := Sqrt(Sqr(Player.X - A.DoomX) + Sqr(Player.Y - A.DoomY));
+  TargetPosition(A, TX, TY, TZ, TR);
+  Dist := Sqrt(Sqr(TX - A.DoomX) + Sqr(TY - A.DoomY));
   Chance := Clamped(0.55 - Dist / 2000, 0.1, 0.55);
-  if Player.InvisibleTics > 0 then Chance := Chance * 0.4;
+  if (A.Target = nil) and (Player.InvisibleTics > 0) then Chance := Chance * 0.4;
   Shots := 1;
   if A.Info^.Num in [9, 7] then Shots := 3;
+
+  { Another monster standing in the line of fire takes the bullets instead
+    (that is how zombies start fights in Doom). }
+  Blocker := nil;
+  BlockerT := 1;
+  if Dist > 1 then
+    for O in FActors do
+      if (O <> A) and (O <> A.Target) and (not O.Removed) and (O.Info^.Kind = tkMonster) and
+         (O.State in [asIdle, asChase, asAttack, asPain]) then
+      begin
+        T := ((O.DoomX - A.DoomX) * (TX - A.DoomX) + (O.DoomY - A.DoomY) * (TY - A.DoomY)) / Sqr(Dist);
+        if (T <= 0.05) or (T >= BlockerT) then Continue;
+        PX := A.DoomX + (TX - A.DoomX) * T;
+        PY := A.DoomY + (TY - A.DoomY) * T;
+        D := Sqrt(Sqr(O.DoomX - PX) + Sqr(O.DoomY - PY));
+        if D < O.Info^.Radius then
+        begin
+          Blocker := O;
+          BlockerT := T;
+        end;
+      end;
+
   for I := 1 to Shots do
     if Random < Chance then
-      DamagePlayer(Dice(A.Info^.DamageDice, A.Info^.DamageFaces), A);
+    begin
+      if Blocker <> nil then
+        DamageActor(Blocker, Dice(A.Info^.DamageDice, A.Info^.DamageFaces),
+          Blocker.DoomX, Blocker.DoomY, Blocker.DoomZ + 32, A, false)
+      else if A.Target = nil then
+        DamagePlayer(Dice(A.Info^.DamageDice, A.Info^.DamageFaces), A)
+      else
+        DamageActor(A.Target, Dice(A.Info^.DamageDice, A.Info^.DamageFaces), TX, TY, TZ + 32, A, false);
+    end;
 end;
 
 procedure TDoomWorld.SpawnMissile(const A: TDoomActor);
 var
   K: TEffectKind;
   M: TDoomActor;
-  DX, DY, DZ, Len, Speed: Single;
+  DX, DY, DZ, Len, Speed, TX, TY, TZ, TR: Single;
 begin
   case A.Info^.Num of
     3001: K := ekBal1;
@@ -1581,16 +1670,18 @@ begin
     68: K := ekArachPlasma;
     else K := ekBal1;
   end;
+  TargetPosition(A, TX, TY, TZ, TR);
   M := TDoomActor.Create(nil, FGraphics, @EffectInfos[K]);
   M.State := asMissile;
   M.Bright := true;
+  M.Shooter := A;
   M.DoomX := A.DoomX + Cos(DegToRad(A.Angle)) * (A.Info^.Radius + 8);
   M.DoomY := A.DoomY + Sin(DegToRad(A.Angle)) * (A.Info^.Radius + 8);
   M.DoomZ := A.DoomZ + A.Info^.Height * 0.6;
   M.Sector := A.Sector;
-  DX := Player.X - M.DoomX;
-  DY := Player.Y - M.DoomY;
-  DZ := (Player.Z + 28) - M.DoomZ;
+  DX := TX - M.DoomX;
+  DY := TY - M.DoomY;
+  DZ := (TZ + 28) - M.DoomZ;
   Len := Sqrt(DX * DX + DY * DY + DZ * DZ);
   if Len < 1 then Len := 1;
   Speed := EffectInfos[K].Speed;
@@ -1653,13 +1744,30 @@ begin
         Break;
       end;
   end else
-  { The player? }
-  if (not Player.Dead) and (Abs(Player.X - NX) < PlayerRadius + A.Info^.Radius) and
-     (Abs(Player.Y - NY) < PlayerRadius + A.Info^.Radius) and
-     (NZ > Player.Z - 8) and (NZ < Player.Z + PlayerHeight + 8) then
   begin
-    DamagePlayer(Dice(A.MissileDamageDice, A.MissileDamageFaces), A);
-    Hit := true;
+    { Other monsters in the way take the hit (and turn on the shooter);
+      monsters of the shooter's own species are passed through, like Doom. }
+    for O in FActors do
+      if (O <> A) and (O <> A.Shooter) and (not O.Removed) and O.Pickable and
+         (O.State in [asIdle, asChase, asAttack, asPain]) and
+         ((O.Info^.Kind = tkMonster) or (O.Info^.Num = 2035)) and
+         not SameSpecies(O, A.Shooter) and
+         (Abs(O.DoomX - NX) < O.Info^.Radius + A.Info^.Radius) and
+         (Abs(O.DoomY - NY) < O.Info^.Radius + A.Info^.Radius) and
+         (NZ > O.DoomZ - 8) and (NZ < O.DoomZ + O.Info^.Height + 8) then
+      begin
+        DamageActor(O, Dice(A.MissileDamageDice, A.MissileDamageFaces), NX, NY, NZ, A.Shooter, false);
+        Hit := true;
+        Break;
+      end;
+    { The player? }
+    if (not Hit) and (not Player.Dead) and (Abs(Player.X - NX) < PlayerRadius + A.Info^.Radius) and
+       (Abs(Player.Y - NY) < PlayerRadius + A.Info^.Radius) and
+       (NZ > Player.Z - 8) and (NZ < Player.Z + PlayerHeight + 8) then
+    begin
+      DamagePlayer(Dice(A.MissileDamageDice, A.MissileDamageFaces), A);
+      Hit := true;
+    end;
   end;
 
   { Walls / closed openings / floor / ceiling. }
@@ -1855,12 +1963,14 @@ begin
     FSounds.Play('DSPLPAIN');
 end;
 
-procedure TDoomWorld.DamageActor(const A: TDoomActor; const Damage: Integer; const HitX, HitY, HitZ: Single);
+procedure TDoomWorld.DamageActor(const A: TDoomActor; const Damage: Integer; const HitX, HitY, HitZ: Single;
+  const Attacker: TDoomActor; const ByPlayer: Boolean);
 var
   Blood: TDoomActor;
 begin
   if (A.State in [asDying, asDead, asEffect, asMissile]) or (Damage <= 0) then Exit;
   if not ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) then Exit;
+  if (Attacker = A) then Exit;
   A.Health := A.Health - Damage;
   if A.Info^.Num <> 2035 then
   begin
@@ -1877,12 +1987,17 @@ begin
   end;
   if A.Health <= 0 then
   begin
-    KillActor(A);
+    KillActor(A, Attacker, ByPlayer);
     Exit;
   end;
-  { Getting shot wakes a monster up. }
+  { Getting shot wakes a monster up, and it turns on whoever hurt it
+    (P_DamageMobj: the damage source becomes the new target). }
   if A.Info^.Kind = tkMonster then
   begin
+    if ByPlayer then
+      A.Target := nil
+    else if (Attacker <> nil) and (Attacker.Info^.Kind = tkMonster) then
+      A.Target := Attacker;
     if not A.Awake then
     begin
       A.Awake := true;
@@ -1902,7 +2017,7 @@ begin
   end;
 end;
 
-procedure TDoomWorld.KillActor(const A: TDoomActor);
+procedure TDoomWorld.KillActor(const A: TDoomActor; const Killer: TDoomActor; const ByPlayer: Boolean);
 var
   Drop: TDoomActor;
   Info: PThingInfo;
@@ -1912,6 +2027,8 @@ begin
     ExplodeBarrel(A);
     Exit;
   end;
+  if (not ByPlayer) and (Killer <> nil) and (Killer.Info^.Kind = tkMonster) then
+    WritelnLog('Infight', '%s killed %s', [Killer.Info^.Sprite, A.Info^.Sprite]);
   A.State := asDying;
   A.Collides := false;
   A.Pickable := false;
@@ -1920,8 +2037,12 @@ begin
   if A.Info^.Kind = tkMonster then
   begin
     Inc(Player.Kills);
-    Player.FaceState := 3; { evil grin }
-    Player.FaceTics := 35;
+    if ByPlayer then
+    begin
+      Player.FaceState := 3; { evil grin }
+      Player.FaceTics := 35;
+    end;
+    BossDeath(A);
   end;
   if A.Info^.Drop <> 0 then
   begin
@@ -1936,6 +2057,123 @@ begin
       FActors.Add(Drop);
       FItems.Add(Drop);
     end;
+  end;
+end;
+
+function TDoomWorld.FloorRaiseToTexture(const Sec: Integer): Single;
+var
+  L, Side: Integer;
+  Img: TDoomImage;
+  MinH: Integer;
+  Tex: String;
+begin
+  { EV_DoFloor raiseToTexture: raise by the shortest lower texture around. }
+  MinH := 32000;
+  for L in FMap.Sectors[Sec].Lines do
+    if (FMap.Linedefs[L].Flags and ML_TWOSIDED) <> 0 then
+      for Side := 0 to 1 do
+        if FMap.Linedefs[L].Side[Side] >= 0 then
+        begin
+          Tex := FMap.Sidedefs[FMap.Linedefs[L].Side[Side]].LowerTex;
+          if (Tex <> '') and (Tex <> '-') then
+          begin
+            Img := FGraphics.Texture(Tex);
+            if (Img <> nil) and (Img.Height < MinH) then MinH := Img.Height;
+          end;
+        end;
+  if MinH = 32000 then MinH := 0;
+  Result := FMap.Sectors[Sec].FloorHeight + MinH;
+end;
+
+{ A_BossDeath: the last boss of a kind on special maps opens the way or ends the level. }
+procedure TDoomWorld.BossDeath(const A: TDoomActor);
+var
+  O: TDoomActor;
+  Num, S, Tag: Integer;
+  MapName: String;
+  Action: String;
+begin
+  Num := A.Info^.Num;
+  MapName := FMap.Name;
+  Action := '';
+  Tag := 666;
+  if FWad.IsDoom2 then
+  begin
+    if (MapName = 'MAP07') and (Num = 67) then Action := 'floorlower';
+    if (MapName = 'MAP07') and (Num = 68) then begin Action := 'floortexture'; Tag := 667; end;
+    if Num = 72 then Action := 'dooropen'; { Commander Keen, any map }
+  end else
+  begin
+    if (MapName = 'E1M8') and (Num = 3003) then Action := 'floorlower';
+    if (MapName = 'E2M8') and (Num = 16) then Action := 'exit';
+    if (MapName = 'E3M8') and (Num = 7) then Action := 'exit';
+    if (MapName = 'E4M6') and (Num = 16) then Action := 'doorblaze';
+    if (MapName = 'E4M8') and (Num = 7) then Action := 'floorlower';
+  end;
+  if Action = '' then Exit;
+  { Only when the last one of that kind dies. }
+  for O in FActors do
+    if (O <> A) and (not O.Removed) and (O.Info^.Num = Num) and
+       (O.State in [asIdle, asChase, asAttack, asPain]) then
+      Exit;
+  WritelnLog('BossDeath', '%s: all %s dead, action %s on tag %d', [MapName, A.Info^.Sprite, Action, Tag]);
+  if Action = 'exit' then
+  begin
+    FExitRequested := true;
+    Exit;
+  end;
+  S := -1;
+  repeat
+    S := FMap.FindSectorFromTag(Tag, S);
+    if S < 0 then Break;
+    if Action = 'floorlower' then DoFloor(S, FMap.LowestFloorSurrounding(S), FloorSpeed)
+    else if Action = 'floortexture' then DoFloor(S, FloorRaiseToTexture(S), FloorSpeed / 2)
+    else if Action = 'dooropen' then DoDoor(S, true, false, false, 0)
+    else if Action = 'doorblaze' then DoDoor(S, true, false, true, 0);
+  until false;
+end;
+
+procedure TDoomWorld.DebugInfight;
+var
+  A, O, Best: TDoomActor;
+  D, BestD: Single;
+begin
+  for A in FActors do
+    if (A.Info^.Kind = tkMonster) and (A.State in [asIdle, asChase]) then
+    begin
+      Best := nil;
+      BestD := 1e9;
+      for O in FActors do
+        if (O <> A) and (O.Info^.Kind = tkMonster) and (O.State in [asIdle, asChase, asAttack, asPain]) and
+           not SameSpecies(A, O) then
+        begin
+          D := Sqr(O.DoomX - A.DoomX) + Sqr(O.DoomY - A.DoomY);
+          if D < BestD then begin BestD := D; Best := O; end;
+        end;
+      if Best <> nil then
+      begin
+        A.Target := Best;
+        A.Awake := true;
+        A.ReactionTics := 0;
+        if A.State = asIdle then
+        begin
+          A.State := asChase;
+          A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
+        end;
+      end;
+    end;
+end;
+
+procedure TDoomWorld.DebugKillAll;
+var
+  I: Integer;
+  A: TDoomActor;
+begin
+  for I := FActors.Count - 1 downto 0 do
+  begin
+    A := FActors[I];
+    if (A.Info^.Kind = tkMonster) and (A.State in [asIdle, asChase, asAttack, asPain]) then
+      DamageActor(A, 100000, A.DoomX, A.DoomY, A.DoomZ + 32);
   end;
 end;
 
@@ -1954,24 +2192,30 @@ end;
 
 procedure TDoomWorld.RadiusDamage(const X, Y, Z: Single; const Radius, Damage: Integer; const Source: TDoomActor);
 var
-  O: TDoomActor;
+  O, Attacker: TDoomActor;
   D: Single;
   I: Integer;
+  ByPlayer: Boolean;
 begin
+  { Who gets the blame: the player's rocket, a monster's rocket (its owner),
+    or nobody (barrels, crushers). }
+  Attacker := nil;
+  ByPlayer := false;
+  if Source = nil then ByPlayer := true
+  else if Source.FromPlayer then ByPlayer := true
+  else if Source.Shooter <> nil then Attacker := Source.Shooter;
   for I := FActors.Count - 1 downto 0 do
   begin
     O := FActors[I];
     if (O = Source) or O.Removed then Continue;
     if not ((O.Info^.Kind = tkMonster) or (O.Info^.Num = 2035)) then Continue;
     if O.State in [asDying, asDead] then Continue;
+    { Cyberdemons and Spider Masterminds ignore splash damage (P_RadiusAttack). }
+    if O.Info^.Num in [16, 7] then Continue;
     D := Max(Abs(O.DoomX - X), Abs(O.DoomY - Y)) - O.Info^.Radius;
     if D < 0 then D := 0;
     if D >= Radius then Continue;
-    if (O.Info^.Num = 2035) and (Source <> nil) and (Source.Info^.Num = 2035) then
-    begin
-      { Chain reaction with a little delay: just damage it now. }
-    end;
-    DamageActor(O, Damage - Trunc(D), O.DoomX, O.DoomY, O.DoomZ + 24);
+    DamageActor(O, Damage - Trunc(D), O.DoomX, O.DoomY, O.DoomZ + 24, Attacker, ByPlayer);
   end;
   D := Max(Abs(Player.X - X), Abs(Player.Y - Y)) - PlayerRadius;
   if D < 0 then D := 0;
