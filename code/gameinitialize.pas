@@ -7,7 +7,7 @@ implementation
 
 uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
-  CastleUtils,
+  CastleUtils, CastleTimeUtils,
   GameViewMenu, GameViewPlay;
 
 var
@@ -69,6 +69,13 @@ begin
     end;
     Inc(I);
   end;
+  {$ifdef WASI}
+  { Temporary: find where the web build spends its frame time (CGE's frame
+    profiler logs a summary every 20 frames to the browser console). }
+  FrameProfiler.Enabled := true;
+  FrameProfiler.FramesForSummary := 20;
+  FrameProfiler.LogSummary := true;
+  {$endif}
   Window.Container.LoadSettings('castle-data:/CastleSettings.xml');
   { Remembered WAD paths live in the user config (castle-config:/). }
   UserConfig.Load;
