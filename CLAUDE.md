@@ -52,7 +52,10 @@ map, `K` give all weapons/ammo/keys, `C:n` select weapon n (1 fist, 2 pistol,
 3 shotgun, 4 chaingun, 5 rockets, 6 plasma, 7 BFG, 8 chainsaw, 9 SSG),
 `M` toggle automap, `I` reveal all map lines, `Z:f` zoom automap by f,
 `V` force infighting (nearest other species), `D` kill all monsters (boss
-triggers; grep the log for `Infight:` and `BossDeath:`),
+triggers; grep the log for `Infight:` and `BossDeath:`), `Y` god mode,
+`P:type:dist` spawn an awake monster (THINGS type) dist units in front
+(e.g. `Y,P:3001:250,D,W:2,P:64:200` raises an imp with an Arch-vile; grep
+`PainSkull:`, `Raise:`, `VileAttack:`),
 `S` screenshot, `W:sec` wait, `Q` quit. Then read the screenshots (PNG)
 and the log at `%LOCALAPPDATA%\castle-doom\castle-doom.log` (grep for
 `Warning|Exception|Load:|Music|AutoTest`). Useful E1M1 spots: player start
@@ -89,6 +92,12 @@ Goertzel on semitone vs quarter-tone frequencies).
 - **`TKey` name clash**: CGE's `CastleKeysMouse.TKey` vs the project; Doom keys
   are `TDoomKey`.
 - **Reserved words**: `Program` cannot be a field name (`Prog` is used).
+- **Pascal evaluates every argument**: `BoolToStr(X = nil, 'a', X.Field)` or
+  `IfThen(...)` still dereferences `X`; branch with `if` instead (this
+  crashed the Arch-vile log line once).
+- **Test windows open on the user's desktop**; a stray key press reaches the
+  game (one run started MAP03 instead of MAP02 via the menu's arrow keys).
+  Rerun before suspecting the code.
 - **FPC main branch (web) differs from 3.2.2**: `Generics.Defaults`
   `TComparison<T>` is an anonymous-function type there, so `@Function`
   comparers fail; `DoomMusic` uses its own merge sort. Prefer plain code over

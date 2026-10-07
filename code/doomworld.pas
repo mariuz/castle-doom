@@ -61,7 +61,7 @@ type
   { Projectiles and visual effects spawned by the world (not in THINGS). }
   TEffectKind = (ekPuff, ekBlood, ekTeleFog, ekBarrelExplosion,
     ekBal1, ekBal2, ekBal7, ekRocket, ekRevenantRocket, ekFatShot, ekArachPlasma,
-    ekPlasmaBall, ekBfgBall);
+    ekPlasmaBall, ekBfgBall, ekVileFire);
 
   TMoverKind = (mkDoor, mkLift, mkFloor, mkCeiling, mkCrusher);
   TMoverPhase = (mpMoving, mpWaiting, mpDone);
@@ -151,6 +151,16 @@ type
     procedure ExplodeMissile(const A: TDoomActor; const X, Y, Z: Single);
     procedure KillActor(const A: TDoomActor; const Killer: TDoomActor = nil; const ByPlayer: Boolean = true);
     procedure BossDeath(const A: TDoomActor);
+    function SpawnMonster(const TypeNum: Integer; const X, Y, Z: Single): TDoomActor;
+    procedure StartSkullCharge(const A: TDoomActor);
+    procedure StopSkullCharge(const A: TDoomActor);
+    procedure TicCharge(const A: TDoomActor);
+    procedure PainShootSkull(const A: TDoomActor; const AngleDeg: Single);
+    function CanRaise(const Num: Integer): Boolean;
+    function VileTryRaise(const A: TDoomActor): Boolean;
+    procedure VileStartAttack(const A: TDoomActor);
+    procedure VileAttack(const A: TDoomActor);
+    procedure FollowVileFire(const F: TDoomActor);
     function SameSpecies(const A, B: TDoomActor): Boolean;
     function TargetAlive(const A: TDoomActor): Boolean;
     procedure TargetPosition(const A: TDoomActor; out TX, TY, TZ, TRadius: Single);
@@ -185,6 +195,9 @@ type
     PlayerTeleportX, PlayerTeleportY, PlayerTeleportZ, PlayerTeleportAngle: Single;
     { Set when the player just took damage (view shakes/flashes). }
     LastDamage: Integer;
+    { Upward distance the player still has to be thrown (Arch-vile blast);
+      the view consumes it, gravity brings the player down. }
+    PlayerKnockUp: Single;
 
     constructor Create(const AWad: TDoomWad; const AGraphics: TDoomGraphics;
       const ASounds: TDoomSounds; const AItems: TCastleRootTransform);
@@ -214,6 +227,11 @@ type
     procedure DebugInfight;
     { Debug: kill every monster (exercises boss-death triggers). }
     procedure DebugKillAll;
+    { Debug: make the player invulnerable for an hour. }
+    procedure DebugGod;
+    { Debug: spawn an awake monster of this THINGS type Distance units in
+      front of the player. }
+    function DebugSpawn(const TypeNum: Integer; const Distance: Single): TDoomActor;
     procedure ResetPlayer;
     { Cheat for testing: all weapons, full ammo, keys. }
     procedure GiveAll;
@@ -290,6 +308,7 @@ begin
   Effect(ekBlood, 'BLUD', 'CBA', 8);
   Effect(ekTeleFog, 'TFOG', 'ABABCDEFGHIJ', 6);
   Effect(ekBarrelExplosion, 'BEXP', 'ABCDE', 6);
+  Effect(ekVileFire, 'FIRE', 'ABCDEFGH', 3);
   Missile(ekBal1, 'BAL1', 6, 10, 3, 8, 'AB', 'CDE', 'BAL1', 'DSFIRSHT', 'DSFIRXPL');
   Missile(ekBal2, 'BAL2', 6, 10, 5, 8, 'AB', 'CDE', 'BAL2', 'DSFIRSHT', 'DSFIRXPL');
   Missile(ekBal7, 'BAL7', 6, 15, 8, 8, 'AB', 'CDE', 'BAL7', 'DSFIRSHT', 'DSFIRXPL');
@@ -1264,14 +1283,34 @@ begin
           A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
         end;
       asAttack:
-        if A.SequenceDone then
         begin
-          A.State := asChase;
-          A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
-          A.ReactionTics := 20 + Random1(35);
+          if A.Charging then
+            TicCharge(A)
+          else
+          begin
+            { A_VileAttack happens on frame O of the Arch-vile's attack. }
+            if (A.Info^.Num = 64) and (A.Frame = 'O') and not A.AttackFired then
+            begin
+              A.AttackFired := true;
+              VileAttack(A);
+            end;
+            if A.SequenceDone then
+            begin
+              if A.Fire <> nil then
+              begin
+                A.Fire.Removed := true;
+                A.Fire := nil;
+              end;
+              A.State := asChase;
+              A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
+              A.ReactionTics := 20 + Random1(35);
+            end;
+          end;
         end;
       asMissile: TicMissile(A);
     end;
+    if A.Info = @EffectInfos[ekVileFire] then
+      FollowVileFire(A);
     if (A.Info^.Kind = tkMonster) and (A.State in [asIdle, asChase, asAttack]) then
       TicMonster(A);
 
@@ -1300,6 +1339,7 @@ begin
       begin
         if O.Target = A then O.Target := nil;
         if O.Shooter = A then O.Shooter := nil;
+        if O.Fire = A then O.Fire := nil;
       end;
       if A.Parent <> nil then A.Parent.Remove(A);
       FActors.Delete(I);
@@ -1477,7 +1517,7 @@ end;
 
 procedure TDoomWorld.TicMonster(const A: TDoomActor);
 var
-  DX, DY, Dist, Ang, Step, TX, TY, TZ, TR: Single;
+  DX, DY, Dist, Ang, Step, TX, TY, TZ, TR, RangeDist: Single;
   Blocked: Integer;
   Tries: Integer;
   Moved: Boolean;
@@ -1521,6 +1561,9 @@ begin
   if A.State <> asChase then Exit;
   if A.Info^.Speed = 0 then Exit;
 
+  { A_VileChase: an Arch-vile touching a corpse raises it instead of moving. }
+  if (A.Info^.Num = 64) and VileTryRaise(A) then Exit;
+
   { Face the target. }
   Ang := RadToDeg(ArcTan2(DY, DX));
   A.Angle := Ang;
@@ -1539,8 +1582,14 @@ begin
       end;
     end else if SightClear(A.DoomX, A.DoomY, TX, TY) then
     begin
-      { Doom's P_CheckMissileRange: more likely to shoot when close. }
-      if Random(256) >= Min(220, 40 + Trunc(Dist / 6)) then
+      { Doom's P_CheckMissileRange: more likely to shoot when close; lost
+        souls, cyberdemons and spiders count half the distance; Arch-viles
+        only attack within 14 * 64 units. }
+      RangeDist := Dist;
+      if (A.Info^.Num = 3006) or (A.Info^.Num = 16) or (A.Info^.Num = 7) then
+        RangeDist := Dist / 2;
+      if ((A.Info^.Num <> 64) or (Dist <= 14 * 64)) and
+         (Random(256) >= Min(220, 40 + Trunc(RangeDist / 6))) then
       begin
         MonsterAttack(A);
         Exit;
@@ -1580,10 +1629,350 @@ begin
   end;
 end;
 
+function TDoomWorld.SpawnMonster(const TypeNum: Integer; const X, Y, Z: Single): TDoomActor;
+var
+  Info: PThingInfo;
+  Sec: Integer;
+begin
+  Result := nil;
+  Info := FindThingInfo(TypeNum);
+  if Info = nil then Exit;
+  Sec := FMap.SectorAt(X, Y);
+  if Sec < 0 then Exit;
+  Result := TDoomActor.Create(nil, FGraphics, Info);
+  Result.DoomX := X;
+  Result.DoomY := Y;
+  Result.DoomZ := Z;
+  Result.Sector := Sec;
+  Result.Awake := true;
+  Result.SetLight(FMap.Sectors[Sec].LightLevel);
+  Result.UpdateTransform;
+  FActors.Add(Result);
+  FItems.Add(Result);
+end;
+
+{ A_SkullAttack: fly at the target's middle at 20 units per tic. }
+procedure TDoomWorld.StartSkullCharge(const A: TDoomActor);
+const
+  SkullSpeed = 20;
+var
+  TX, TY, TZ, TR, DX, DY, Dist: Single;
+  TargetHeight: Single;
+begin
+  TargetPosition(A, TX, TY, TZ, TR);
+  if A.Target = nil then TargetHeight := PlayerHeight else TargetHeight := A.Target.Info^.Height;
+  DX := TX - A.DoomX;
+  DY := TY - A.DoomY;
+  Dist := Sqrt(DX * DX + DY * DY);
+  if Dist < 1 then Dist := 1;
+  A.Angle := RadToDeg(ArcTan2(DY, DX));
+  A.VelX := DX / Dist * SkullSpeed;
+  A.VelY := DY / Dist * SkullSpeed;
+  A.VelZ := ((TZ + TargetHeight / 2) - A.DoomZ) / Max(1, Dist / SkullSpeed);
+  A.Charging := true;
+  A.ChargeTics := 3 * TicRate;
+  A.State := asAttack;
+  A.PlaySequence('CD', 4, true);
+  if A.Info^.AttackSound <> '' then FSounds.PlayAt(A.Info^.AttackSound, A);
+end;
+
+procedure TDoomWorld.StopSkullCharge(const A: TDoomActor);
+begin
+  A.Charging := false;
+  A.VelX := 0; A.VelY := 0; A.VelZ := 0;
+  if A.State = asAttack then
+  begin
+    A.State := asChase;
+    A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
+  end;
+  A.ReactionTics := 10 + Random1(20);
+end;
+
+procedure TDoomWorld.TicCharge(const A: TDoomActor);
+var
+  NX, NY, NZ, OldZ, R: Single;
+  O: TDoomActor;
+  Blocked, Sec: Integer;
+begin
+  Dec(A.ChargeTics);
+  if A.ChargeTics <= 0 then
+  begin
+    StopSkullCharge(A);
+    Exit;
+  end;
+  R := A.Info^.Radius;
+  NX := A.DoomX + A.VelX;
+  NY := A.DoomY + A.VelY;
+  NZ := A.DoomZ + A.VelZ;
+
+  { PIT_CheckThing with MF_SKULLFLY: slam into whatever is hit. }
+  if (not Player.Dead) and (Abs(Player.X - NX) < PlayerRadius + R) and (Abs(Player.Y - NY) < PlayerRadius + R) and
+     (NZ < Player.Z + PlayerHeight) and (NZ + A.Info^.Height > Player.Z) then
+  begin
+    DamagePlayer(Dice(A.Info^.DamageDice, A.Info^.DamageFaces), A);
+    StopSkullCharge(A);
+    Exit;
+  end;
+  for O in FActors do
+    if (O <> A) and (not O.Removed) and O.Collides and (O.State in [asIdle, asChase, asAttack, asPain]) and
+       ((O.Info^.Kind = tkMonster) or (O.Info^.Num = 2035)) and
+       (Abs(O.DoomX - NX) < O.Info^.Radius + R) and (Abs(O.DoomY - NY) < O.Info^.Radius + R) and
+       (NZ < O.DoomZ + O.Info^.Height) and (NZ + A.Info^.Height > O.DoomZ) then
+    begin
+      DamageActor(O, Dice(A.Info^.DamageDice, A.Info^.DamageFaces), NX, NY, NZ + 8, A, false);
+      StopSkullCharge(A);
+      Exit;
+    end;
+
+  { Walls stop it (P_TryMove fails: P_SlideMove is not used for skulls). }
+  OldZ := A.DoomZ;
+  A.DoomZ := NZ;
+  if not TryMove2D(A, NX, NY, Blocked) then
+  begin
+    A.DoomZ := OldZ;
+    StopSkullCharge(A);
+    Exit;
+  end;
+  { Floors and ceilings: P_ZMovement bounces a flying skull. }
+  Sec := A.Sector;
+  if Sec >= 0 then
+  begin
+    if A.DoomZ < FMap.Sectors[Sec].FloorHeight then
+    begin
+      A.DoomZ := FMap.Sectors[Sec].FloorHeight;
+      A.VelZ := -A.VelZ;
+    end else if A.DoomZ + A.Info^.Height > FMap.Sectors[Sec].CeilingHeight then
+    begin
+      A.DoomZ := FMap.Sectors[Sec].CeilingHeight - A.Info^.Height;
+      A.VelZ := -A.VelZ;
+    end;
+  end;
+end;
+
+{ A_PainShootSkull: spawn a lost soul in front and send it at the target. }
+procedure TDoomWorld.PainShootSkull(const A: TDoomActor; const AngleDeg: Single);
+var
+  O, S: TDoomActor;
+  Count, Blocked: Integer;
+  Prestep, X, Y: Single;
+  SkullInfo: PThingInfo;
+begin
+  { Doom refuses when more than 20 lost souls are on the level. }
+  Count := 0;
+  for O in FActors do
+    if (O.Info^.Num = 3006) and (not O.Removed) and (O.State in [asIdle, asChase, asAttack, asPain]) then
+      Inc(Count);
+  if Count > 20 then Exit;
+  SkullInfo := FindThingInfo(3006);
+  if SkullInfo = nil then Exit;
+  Prestep := 4 + 3 * (A.Info^.Radius + SkullInfo^.Radius) / 2;
+  X := A.DoomX + Cos(DegToRad(AngleDeg)) * Prestep;
+  Y := A.DoomY + Sin(DegToRad(AngleDeg)) * Prestep;
+  { Vanilla can spawn souls through walls; we refuse instead. }
+  if not SightClear(A.DoomX, A.DoomY, X, Y) then Exit;
+  S := SpawnMonster(3006, A.DoomX, A.DoomY, A.DoomZ + 8);
+  if S = nil then Exit;
+  S.Target := A.Target;
+  S.Angle := AngleDeg;
+  if not TryMove2D(S, X, Y, Blocked) then
+  begin
+    { No room: the new soul dies at once, like P_DamageMobj(newmobj, 10000). }
+    WritelnLog('PainSkull', 'lost soul spawned into a blocked spot, killed');
+    DamageActor(S, 10000, S.DoomX, S.DoomY, S.DoomZ + 8, nil, false);
+    Exit;
+  end;
+  S.DoomZ := A.DoomZ + 8;
+  WritelnLog('PainSkull', 'Pain Elemental spits a lost soul (%d alive)', [Count + 1]);
+  StartSkullCharge(S);
+end;
+
+function TDoomWorld.CanRaise(const Num: Integer): Boolean;
+begin
+  { Monsters without a raise state in info.c. }
+  case Num of
+    3006, 16, 7, 64, 72, 88: Result := false;
+    else Result := true;
+  end;
+end;
+
+{ A_VileChase: look for a corpse within reach whose spot is free. }
+function TDoomWorld.VileTryRaise(const A: TDoomActor): Boolean;
+var
+  C, O: TDoomActor;
+  Fits: Boolean;
+  Reach: Single;
+  Frames: String;
+  I: Integer;
+begin
+  Result := false;
+  for C in FActors do
+  begin
+    if (C.State <> asDead) or C.Removed or (C.Info^.Kind <> tkMonster) or not CanRaise(C.Info^.Num) then
+      Continue;
+    Reach := C.Info^.Radius + A.Info^.Radius + A.Info^.Speed;
+    if (Abs(C.DoomX - A.DoomX) > Reach) or (Abs(C.DoomY - A.DoomY) > Reach) then Continue;
+    { The corpse must fit where it lies (P_CheckPosition). }
+    Fits := true;
+    for O in FActors do
+      if (O <> C) and (O <> A) and (not O.Removed) and O.Collides and
+         (O.Info^.Kind in [tkMonster, tkDecoration]) and
+         (Abs(O.DoomX - C.DoomX) < O.Info^.Radius + C.Info^.Radius) and
+         (Abs(O.DoomY - C.DoomY) < O.Info^.Radius + C.Info^.Radius) then
+      begin
+        Fits := false;
+        Break;
+      end;
+    if Fits and (not Player.Dead) and (Abs(Player.X - C.DoomX) < PlayerRadius + C.Info^.Radius) and
+       (Abs(Player.Y - C.DoomY) < PlayerRadius + C.Info^.Radius) then
+      Fits := false;
+    if not Fits then Continue;
+
+    { Heal: the vile faces the corpse and plays its healing frames. }
+    A.Angle := RadToDeg(ArcTan2(C.DoomY - A.DoomY, C.DoomX - A.DoomX));
+    A.State := asAttack;
+    A.AttackFired := true; { no fire attack this time }
+    A.PlaySequence('[\]', 10, false);
+    FSounds.PlayAt('DSSLOP', C);
+    { The corpse comes back: death frames in reverse, full health. }
+    C.Health := C.Info^.Health;
+    C.Collides := C.Info^.Solid;
+    C.Pickable := true;
+    C.Target := nil;
+    C.Awake := true;
+    C.State := asPain;
+    Frames := '';
+    for I := Length(C.Info^.DeathFrames) downto 1 do
+      Frames := Frames + C.Info^.DeathFrames[I];
+    C.PlaySequence(Frames, 5, false);
+    WritelnLog('Raise', 'Arch-vile raised %s', [C.Info^.Sprite]);
+    Exit(true);
+  end;
+end;
+
+{ A_VileTarget: start the attack and light the fire on the target. }
+procedure TDoomWorld.VileStartAttack(const A: TDoomActor);
+var
+  F: TDoomActor;
+begin
+  A.State := asAttack;
+  A.PlaySequence(A.Info^.AttackFrames, 9, false);
+  A.AttackFired := false;
+  if A.Info^.AttackSound <> '' then FSounds.PlayAt(A.Info^.AttackSound, A);
+  if A.Fire <> nil then A.Fire.Removed := true;
+  F := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekVileFire]);
+  F.State := asEffect;
+  F.Bright := true;
+  F.Shooter := A;
+  F.Collides := false;
+  F.Pickable := false;
+  F.SetLight(255);
+  F.PlaySequence('ABCDEFGH', 3, true);
+  A.Fire := F;
+  FollowVileFire(F);
+  FActors.Add(F);
+  FItems.Add(F);
+  FSounds.PlayAt('DSFLAMST', F);
+end;
+
+{ A_Fire: keep the fire in front of the target while the vile attacks. }
+procedure TDoomWorld.FollowVileFire(const F: TDoomActor);
+var
+  V: TDoomActor;
+  TX, TY, TZ, TR, Facing: Single;
+begin
+  V := F.Shooter;
+  if (V = nil) or V.Removed or (V.State <> asAttack) or (V.Fire <> F) then
+  begin
+    F.Removed := true;
+    Exit;
+  end;
+  TargetPosition(V, TX, TY, TZ, TR);
+  if V.Target = nil then Facing := Player.Angle else Facing := V.Target.Angle;
+  F.DoomX := TX + Cos(DegToRad(Facing)) * 24;
+  F.DoomY := TY + Sin(DegToRad(Facing)) * 24;
+  F.DoomZ := TZ;
+  F.Sector := FMap.SectorAt(F.DoomX, F.DoomY);
+  F.UpdateTransform;
+end;
+
+{ A_VileAttack: if the vile still sees the target, blast it. }
+procedure TDoomWorld.VileAttack(const A: TDoomActor);
+var
+  TX, TY, TZ, TR, FX, FY: Single;
+begin
+  if not TargetAlive(A) then Exit;
+  TargetPosition(A, TX, TY, TZ, TR);
+  if not SightClear(A.DoomX, A.DoomY, TX, TY) then Exit;
+  FSounds.PlayAt('DSBAREXP', A);
+  if A.Target = nil then
+  begin
+    DamagePlayer(20, A);
+    { momz = 1000 / mass: the player flies up about 50 units. }
+    PlayerKnockUp := PlayerKnockUp + 50;
+  end else
+    DamageActor(A.Target, 20, TX, TY, TZ + 32, A, false);
+  { The fire moves between the vile and the target and explodes for 70. }
+  FX := TX - Cos(DegToRad(A.Angle)) * 24;
+  FY := TY - Sin(DegToRad(A.Angle)) * 24;
+  if A.Fire <> nil then
+  begin
+    A.Fire.DoomX := FX;
+    A.Fire.DoomY := FY;
+    RadiusDamage(FX, FY, TZ, 70, 70, A.Fire);
+  end else
+    RadiusDamage(FX, FY, TZ, 70, 70, A);
+  if A.Target = nil then
+    WritelnLog('VileAttack', 'Arch-vile blast hits the player')
+  else
+    WritelnLog('VileAttack', 'Arch-vile blast hits %s', [A.Target.Info^.Sprite]);
+end;
+
+procedure TDoomWorld.DebugGod;
+begin
+  Player.InvulnerableTics := 3600 * TicRate;
+end;
+
+function TDoomWorld.DebugSpawn(const TypeNum: Integer; const Distance: Single): TDoomActor;
+var
+  X, Y: Single;
+  Sec: Integer;
+begin
+  X := Player.X + Cos(DegToRad(Player.Angle)) * Distance;
+  Y := Player.Y + Sin(DegToRad(Player.Angle)) * Distance;
+  Sec := FMap.SectorAt(X, Y);
+  if Sec < 0 then Exit(nil);
+  Result := SpawnMonster(TypeNum, X, Y, FMap.Sectors[Sec].FloorHeight);
+  if Result <> nil then
+  begin
+    Result.Angle := Player.Angle + 180;
+    WritelnLog('Spawn', '%s at %.0f %.0f', [Result.Info^.Sprite, X, Y]);
+  end;
+end;
+
 procedure TDoomWorld.MonsterAttack(const A: TDoomActor);
 var
   TX, TY, TZ, TR: Single;
 begin
+  case A.Info^.Num of
+    3006:
+      begin
+        StartSkullCharge(A);
+        Exit;
+      end;
+    71:
+      begin
+        { A_PainAttack: spit a lost soul. }
+        A.State := asAttack;
+        A.PlaySequence(A.Info^.AttackFrames, 5, false);
+        PainShootSkull(A, A.Angle);
+        Exit;
+      end;
+    64:
+      begin
+        VileStartAttack(A);
+        Exit;
+      end;
+  end;
   A.State := asAttack;
   A.PlaySequence(A.Info^.AttackFrames, 6, false);
   case A.Info^.Attack of
@@ -1972,6 +2361,12 @@ begin
   if not ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) then Exit;
   if (Attacker = A) then Exit;
   A.Health := A.Health - Damage;
+  if A.Charging then
+  begin
+    { P_DamageMobj: a hit stops a flying lost soul. }
+    A.Charging := false;
+    A.VelX := 0; A.VelY := 0; A.VelZ := 0;
+  end;
   if A.Info^.Num <> 2035 then
   begin
     Blood := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekBlood]);
@@ -2043,6 +2438,13 @@ begin
       Player.FaceTics := 35;
     end;
     BossDeath(A);
+    { A_PainDie: three lost souls at right angles. }
+    if A.Info^.Num = 71 then
+    begin
+      PainShootSkull(A, A.Angle + 90);
+      PainShootSkull(A, A.Angle + 180);
+      PainShootSkull(A, A.Angle + 270);
+    end;
   end;
   if A.Info^.Drop <> 0 then
   begin

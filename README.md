@@ -59,8 +59,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Pickups: health, armor, ammo, keys, weapons, powerups, with Doom's messages.
 - Monsters wake up on sight or noise, chase (2D Doom-style movement with step/drop-off
   rules, they open doors), attack with melee, hitscan or projectiles, take pain, die,
-  drop items, and fight each other when hit by another monster (infighting). Barrels
-  explode with splash damage. Boss deaths trigger the special map events (E1M8, E2M8,
+  drop items, and fight each other when hit by another monster (infighting). Lost souls
+  charge, Pain Elementals spit lost souls (three more when they die), Arch-viles raise
+  the dead and burn you with their fire attack. Barrels explode with splash damage. Boss deaths trigger the special map events (E1M8, E2M8,
   E3M8, E4M6, E4M8, MAP07, Commander Keen).
 - Weapons: fist, chainsaw, pistol, shotgun, super shotgun, chaingun, and real projectiles
   for the rocket launcher (splash damage), plasma gun and BFG (charge, ball, tracer spray).
@@ -78,8 +79,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 ## Not (yet) done
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no save games, no difficulty menu,
-Pain Elemental and Arch-vile are approximations, no glBSP `GL_` lumps or UDMF maps, the
-music synth approximates the OPL2.
+no Icon of Sin, no glBSP `GL_` lumps or UDMF maps, the music synth approximates the OPL2.
 
 ## Build and run
 

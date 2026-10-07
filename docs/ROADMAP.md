@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Lost soul, Pain Elemental and Arch-vile behave like Doom: lost souls charge
+  at 20 units/tic and slam whatever they hit (`StartSkullCharge`,
+  `TicCharge`); Pain Elementals spit souls (refused above 20, killed at once
+  when spawned into a blocked spot) and release three on death
+  (`PainShootSkull`); Arch-viles raise corpses they touch with the heal
+  frames and reversed death frames (`VileTryRaise`), and attack with a fire
+  that tracks the target, then 20 damage + 70 splash + an upward throw if
+  they still see it (`VileStartAttack`, `FollowVileFire`, `VileAttack`).
 - ZDoom extended nodes: `XNOD`/`ZNOD` in NODES and the GL variants
   `XGLN`/`ZGLN`/`XGL2`/`ZGL2`/`XGL3`/`ZGL3` (in NODES or, as ZDBSP writes
   them, in SSECTORS), zlib via FPC's `zstream` (works on the web too); node
@@ -42,10 +50,9 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Pain Elemental** should spawn lost souls instead of firing fireballs; lost souls should charge. | Doom 2 levels play differently without it. | `MonsterAttack`, a charge state in `TicMonster` | M |
-| **Arch-vile**: resurrection of corpses and the fire attack with line-of-sight jump. | Doom 2 signature monster. | `TicMonster` special case, corpses are still actors (`asDead`) | M |
 | **Donut (special 9)**, **perpetual platforms stop/start**, **raise by shortest lower texture (30/96 are approximated as +64)**, **crusher return speed when blocked**. | Correctness of a few maps. | `ApplySpecial`, `TSectorMover` | S each |
 | **Spectres** are drawn like demons; add the fuzz/translucency effect (shader or `AlphaMode = amBlend` with low alpha). | Visual fidelity. | `DoomActors` material | S |
+| **Icon of Sin** (MAP30): the boss brain (shoot through the wall to win), the shooter that spits cubes at `BOSSTARGET` spots, cubes that spawn random monsters. | MAP30 cannot be finished without it. | `DoomWorld` (types 87, 88, 89), `DoomThings` | M |
 | **Difficulty selection** (currently "Hurt me plenty" thing flags only) and the **`MTF_AMBUSH`** (deaf) flag. | Replayability. | `SpawnThings`, menu | S |
 | **Sector sound propagation**: monsters currently wake on a 2D line-of-sight or any shot within 1200 units; Doom floods sound through sector neighbours with `ML_SOUNDBLOCK`. | Monsters wake more faithfully. | `NoiseAlert` | M |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
@@ -97,7 +104,7 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Pain Elemental lost souls and Arch-vile behaviour (M each): the last two
-   Doom 2 monsters that are still approximations.
-2. Save / load game (M): the biggest remaining usability gap.
-3. Difficulty selection with a Doom-style menu (`M_*` graphics) (S + M).
+1. Save / load game (M): the biggest remaining usability gap.
+2. Difficulty selection with a Doom-style menu (`M_*` graphics) (S + M).
+3. Icon of Sin (MAP30 boss brain, cube spawner) (M): the last Doom 2 boss
+   that does not work yet.

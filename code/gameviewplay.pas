@@ -344,6 +344,10 @@ begin
     FAutomap.ZoomBy(Arg)
   else if Cmd = 'K' then
     FWorld.GiveAll
+  else if Cmd = 'Y' then
+    FWorld.DebugGod
+  else if Cmd = 'P' then
+    FWorld.DebugSpawn(Round(Arg), Arg2)
   else if Cmd = 'V' then
     FWorld.DebugInfight
   else if Cmd = 'D' then
@@ -546,6 +550,8 @@ end;
 
 procedure TViewPlay.Update(const SecondsPassed: Single; var HandleInput: Boolean);
 var
+  Lift, MaxEye: Single;
+  Sec: Integer;
   CamPos, CamDir: TVector3;
   Feet: TVector3;
   P: TPlayerState;
@@ -622,6 +628,23 @@ begin
   begin
     FWorld.PlayerTeleported := false;
     PlacePlayer(FWorld.PlayerTeleportX, FWorld.PlayerTeleportY, FWorld.PlayerTeleportZ, FWorld.PlayerTeleportAngle);
+  end;
+
+  { Arch-vile blast: throw the camera up (under the ceiling); the walk
+    navigation's gravity brings it back down. }
+  if FWorld.PlayerKnockUp > 0 then
+  begin
+    Lift := Min(FWorld.PlayerKnockUp, 400 * SecondsPassed);
+    FWorld.PlayerKnockUp := FWorld.PlayerKnockUp - Lift;
+    CamPos := FViewport.Camera.Translation;
+    Sec := FWorld.Map.SectorAt(FWorld.Player.X, FWorld.Player.Y);
+    MaxEye := CamPos.Y + Lift;
+    if Sec >= 0 then
+      MaxEye := Min(MaxEye, FWorld.Map.Sectors[Sec].CeilingHeight - (PlayerHeight - PlayerViewHeight) - 1);
+    if MaxEye > CamPos.Y then
+      FViewport.Camera.Translation := Vector3(CamPos.X, MaxEye, CamPos.Z)
+    else
+      FWorld.PlayerKnockUp := 0;
   end;
 
   { Hold the fire button for automatic weapons. }

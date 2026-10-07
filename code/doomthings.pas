@@ -177,7 +177,7 @@ begin
   Monster(3001, 'TROO', 20, 56, 60, 8, 200, 'AB', 'ABCD', 'EFG', 'H', 'IJKLM', akMissile, 3, 8, 'DSBGSIT1', 'DSFIRSHT', 'DSDMPAIN', 'DSBGDTH1');
   Monster(3002, 'SARG', 30, 56, 150, 10, 180, 'AB', 'ABCD', 'EFG', 'H', 'IJKLMN', akMelee, 4, 10, 'DSSGTSIT', 'DSSGTATK', 'DSDMPAIN', 'DSSGTDTH');
   Monster(58, 'SARG', 30, 56, 150, 10, 180, 'AB', 'ABCD', 'EFG', 'H', 'IJKLMN', akMelee, 4, 10, 'DSSGTSIT', 'DSSGTATK', 'DSDMPAIN', 'DSSGTDTH');
-  Monster(3006, 'SKUL', 16, 56, 100, 8, 256, 'AB', 'AB', 'CD', 'E', 'FGHIJK', akMelee, 3, 8, '', 'DSSKLATK', 'DSDMPAIN', 'DSFIRXPL', 0, true);
+  Monster(3006, 'SKUL', 16, 56, 100, 8, 256, 'AB', 'AB', 'CD', 'E', 'FGHIJK', akMissile, 3, 8, '', 'DSSKLATK', 'DSDMPAIN', 'DSFIRXPL', 0, true);
   Monster(3005, 'HEAD', 31, 56, 400, 8, 128, 'A', 'A', 'BCD', 'E', 'GHIJKL', akMissile, 5, 8, 'DSCACSIT', 'DSFIRSHT', 'DSDMPAIN', 'DSCACDTH', 0, true);
   Monster(3003, 'BOSS', 24, 64, 1000, 8, 50, 'AB', 'ABCD', 'EFG', 'H', 'IJKLMNO', akMissile, 8, 8, 'DSBRSSIT', 'DSFIRSHT', 'DSDMPAIN', 'DSBRSDTH');
   Monster(69, 'BOS2', 24, 64, 500, 8, 50, 'AB', 'ABCD', 'EFG', 'H', 'IJKLMNO', akMissile, 8, 8, 'DSBRSSIT', 'DSFIRSHT', 'DSDMPAIN', 'DSBRSDTH');

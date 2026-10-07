@@ -399,6 +399,32 @@ E1M8 barons / E4M8 spiders / MAP07 mancubi lower the tag 666 floors, MAP07
 arachnotrons raise tag 667 by the shortest lower texture, E4M6 cyberdemons
 blaze-open tag 666, Keen opens tag 666 doors, E2M8 and E3M8 end the level.
 
+Three monsters have their own attack code, following `p_enemy.c`:
+
+- **Lost soul** (`StartSkullCharge`, `TicCharge`): `A_SkullAttack` sends it
+  at the target's middle at 20 units per tic (`Charging`, a 3 s safety
+  limit). Each tic it checks the player and every solid monster in its path
+  and slams the first one for 3d8 (`PIT_CheckThing` with `MF_SKULLFLY`); a
+  wall stops it (`TryMove2D` fails); floors and ceilings bounce it
+  (`P_ZMovement`); any damage taken stops the charge. It charges from range
+  like a missile attacker, with half the distance in the range check.
+- **Pain Elemental** (`PainShootSkull`): `A_PainAttack` spawns a lost soul
+  `4 + 3 * (31 + 16) / 2` units ahead and starts its charge at once; nothing
+  spawns when more than 20 souls are alive, and a soul whose spot is blocked
+  dies immediately. `A_PainDie` releases three souls at +90, +180 and +270
+  degrees. (Vanilla can spawn souls through walls; a sight check refuses it.)
+- **Arch-vile** (`VileTryRaise`, `VileStartAttack`, `FollowVileFire`,
+  `VileAttack`): while chasing, a corpse within reach (radii + speed) whose
+  spot is free is raised: the vile plays its heal frames `[`, `\`, `]` with
+  `DSSLOP`, and the corpse plays its death frames backwards (as `asPain`)
+  and returns at full health. Cyberdemons, spiders, lost souls, viles, Keen
+  and the boss brain cannot be raised. The attack (frames G to P, 9 tics
+  each, only within 14x64 units) lights a `FIRE` effect that stays 24 units
+  in front of the target; on frame O, if the vile still sees the target, the
+  target takes 20 damage, the fire jumps between them and explodes for 70
+  (`RadiusDamage` blamed on the vile), and the player is thrown about 50
+  units up (`PlayerKnockUp`, applied by the view under the ceiling).
+
 Monsters sleep until they see the player (`SightClear`: a 2D line-of-sight
 test against one-sided lines and closed two-sided lines) or hear a shot
 (`NoiseAlert`). Awake, they chase with Doom-style 2D movement (`TryMove2D`:
@@ -619,7 +645,9 @@ and quits. `--demo` runs a comma-separated script: `F:sec`/`B:sec`/`L:sec`/
 `R:sec` hold a movement key (through `Container.Pressed.KeyDown`, so the real
 navigation and collisions are exercised), `T:deg` turn, `A:deg` absolute
 angle, `G:x:y` teleport to Doom coordinates, `U` use, `X` fire, `E` exit the
-level, `N` next map, `K` give all weapons/ammo/keys, `C:n` select weapon n,
+level, `N` next map, `K` give all weapons/ammo/keys, `Y` god mode,
+`P:type:dist` spawn an awake monster of that THINGS type in front,
+`C:n` select weapon n,
 `M` toggle automap, `I` reveal all map lines, `Z:f` zoom the automap by f,
 `V` make every monster fight the nearest other species, `D` kill all monsters
 (boss triggers), `S` screenshot (`PREFIX_n.png`), `W:sec` wait, `Q` quit.
@@ -675,8 +703,7 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 
 ## 18. Known gaps and ideas
 
-- No Arch-vile resurrection, Pain Elemental shoots cacodemon fireballs
-  instead of spawning lost souls, no Icon of Sin.
+- No Icon of Sin (MAP30 boss brain and cube spawner).
 - Doom's "donut" (special 9) only lowers the pillar.
 - No demo playback, no save games, no difficulty selection
   (things are spawned for "Hurt me plenty").

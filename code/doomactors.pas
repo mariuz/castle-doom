@@ -62,6 +62,13 @@ type
     Shooter: TDoomActor;
     { Monsters: who they are after; nil means the player. }
     Target: TDoomActor;
+    { Lost souls: flying at the target (A_SkullAttack / MF_SKULLFLY). }
+    Charging: Boolean;
+    ChargeTics: Integer;
+    { Arch-vile: the attack's damage already dealt this attack. }
+    AttackFired: Boolean;
+    { Arch-vile: its fire on the target during the attack. }
+    Fire: TDoomActor;
     { Fullbright sprite (explosions, projectiles, some items). }
     Bright: Boolean;
 
