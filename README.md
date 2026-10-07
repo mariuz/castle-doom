@@ -34,6 +34,7 @@ is mapped onto a Castle Game Engine feature.
 | Shooting | `Items.WorldRay` ray casts against walls and sprite billboards |
 | Doors, lifts, floors, ceilings, stairs, crushers | sector height changes regenerate the affected `TCastleScene` coordinates in place |
 | Sounds (`DS*` DMX lumps) | converted to WAV on the fly via `doomsfx:/DSPISTOL` URL protocol, positional audio with `TCastleSoundSource` |
+| Music (`D_*` MUS or MIDI lumps + `GENMIDI` OPL patches) | a small OPL2-style FM synthesizer in `DoomMusic` renders the song to WAV (`doommus:/D_E1M1.wav`), looped on `SoundEngine.LoopingChannel[0]` |
 | Status bar | `STBAR` + digit patches composed into one image shown by a pixel-perfect `TCastleImageControl` |
 | Weapon sprites, flashes, screen flashes, messages | `TCastleImageControl`, `TCastleRectangleControl`, `TCastleLabel` |
 | Title / intermission | `TCastleView`s |
@@ -53,16 +54,20 @@ is mapped onto a Castle Game Engine feature.
 - Weapons: fist, chainsaw, pistol, shotgun, super shotgun, chaingun, rocket launcher,
   plasma, BFG (projectile weapons are approximated as instant hits with splash).
 - Status bar with face, keys, arms, ammo table; weapon bobbing; damage and bonus flashes.
+- Music: MUS and MIDI lumps played through an FM synthesizer driven by the WAD's GENMIDI
+  instrument bank (the AdLib / Sound Blaster sound of the original), title, level and
+  intermission tracks.
 
 ## Not (yet) done
 
-- Music (Doom MUS format; the engine has no MIDI playback).
 - Monster infighting, Arch-vile resurrection, Pain Elemental spawning, boss triggers.
 - Extended node formats (ZDoom XNOD/ZNOD); Freedoom uses vanilla nodes.
 
 ## Build and run
 
-Install Castle Game Engine 7 (its Windows download bundles Free Pascal), then:
+Install Castle Game Engine 7 (its Windows download bundles Free Pascal), then
+(on Windows, copy `OpenAL32.dll` and `wrap_oal.dll` from the engine's `bin/` next to the
+executable for sound; `castle-engine package` does that automatically):
 
 ```bash
 castle-engine compile --mode=release
@@ -73,7 +78,8 @@ or open `CastleEngineManifest.xml` in the Castle Game Engine editor.
 
 Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` fog, `M` mouse look on/off,
-`N`/`P` next/previous map, `F5` screenshot, `F8` engine inspector, `H` help, `Esc` menu.
+`J` music on/off, `N`/`P` next/previous map, `F5` screenshot, `F8` engine inspector,
+`H` help, `Esc` menu.
 
 Automated smoke test (loads a map, runs a script, saves screenshots, quits):
 
@@ -101,6 +107,7 @@ code/doomthings.pas     thing type table (info.c reduced)
 code/doomactors.pas     sprite billboards with frame animation
 code/doomworld.pas      game logic: movers, specials, pickups, AI, weapons
 code/doomsound.pas      DMX -> WAV, doomsfx: protocol
+code/doommusic.pas      MUS/MIDI parsing, GENMIDI FM synthesizer, doommus: protocol
 code/doomhud.pas        status bar composition
 code/gameviewmenu.pas   title screen
 code/gameviewplay.pas   viewport, navigation, HUD, input

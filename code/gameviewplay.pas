@@ -8,7 +8,7 @@ interface
 uses Classes, SysUtils,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors,
-  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud;
+  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic;
 
 type
   TViewPlay = class(TCastleView)
@@ -37,7 +37,10 @@ type
     FDemoSteps: TStringList;
     FDemoStep: Integer;
     FDemoTime: Single;
+    FPendingMap: String;
+    FPendingKeepInventory: Boolean;
     procedure RunDemo(const SecondsPassed: Single);
+    procedure LoadPendingMap(Sender: TObject);
     procedure CreateUi;
     procedure SetupNavigation;
     procedure PlacePlayer(const DoomX, DoomY, DoomZ, AngleDeg: Single);
@@ -51,6 +54,7 @@ type
     Wad: TDoomWad;
     Graphics: TDoomGraphics;
     Sounds: TDoomSounds;
+    Music: TDoomMusic;
     StartMapName: String;
     constructor Create(AOwner: TComponent); override;
     procedure Start; override;
@@ -158,7 +162,8 @@ begin
     'E / Space: use (doors, switches)' + NL +
     '1-7, wheel: weapons' + NL +
     'F: fog (light diminishing)   M: mouse look' + NL +
-    'N / P: next / previous map   F5: screenshot' + NL +
+    'N / P: next / previous map   J: music on/off' + NL +
+    'F5: screenshot' + NL +
     'F8: Castle Game Engine inspector' + NL +
     'H: hide this help   Esc: menu';
   InsertFront(FHelpLabel);
@@ -256,6 +261,7 @@ begin
     FDemoTime := 0;
   end;
   FNavigation.MouseLook := false;
+  if FPendingMap <> '' then Exit;
   if FDemoStep >= FDemoSteps.Count then
   begin
     Application.Terminate;
@@ -340,6 +346,25 @@ end;
 
 procedure TViewPlay.StartMap(const MapName: String; const KeepInventory: Boolean);
 begin
+  { Show "Loading" for one frame before the (synchronous, possibly slow) load. }
+  FPendingMap := MapName;
+  FPendingKeepInventory := KeepInventory;
+  FIntermission := true; { pauses Update until the map is in }
+  FIntermissionBack.Exists := true;
+  FIntermissionLabel.Exists := true;
+  FIntermissionLabel.Caption := 'Loading ' + MapName + '...';
+  if Music <> nil then Music.Stop;
+  WaitForRenderAndCall({$ifdef FPC}@{$endif} LoadPendingMap);
+end;
+
+procedure TViewPlay.LoadPendingMap(Sender: TObject);
+var
+  MapName: String;
+  KeepInventory: Boolean;
+begin
+  MapName := FPendingMap;
+  KeepInventory := FPendingKeepInventory;
+  FPendingMap := '';
   FMapName := MapName;
   FWorld.LoadMap(MapName, KeepInventory);
   PlacePlayer(FWorld.StartX, FWorld.StartY, FWorld.Player.Z, FWorld.StartAngle);
@@ -348,6 +373,8 @@ begin
   FIntermissionLabel.Exists := false;
   FLevelTime := 0;
   FWorld.ShowMessage(Format('%s  (%s)', [MapName, ExtractUriName(Wad.Url)]));
+  if Music <> nil then
+    Music.Play(Music.LumpForMap(MapName));
 end;
 
 procedure TViewPlay.PlacePlayer(const DoomX, DoomY, DoomZ, AngleDeg: Single);
@@ -446,6 +473,8 @@ begin
   P := FWorld.Player;
   FIntermissionBack.Exists := true;
   FIntermissionLabel.Exists := true;
+  if Music <> nil then
+    Music.Play(Music.IntermissionLump);
   FIntermissionLabel.Caption := Format(
     '%s FINISHED' + NL + NL +
     'KILLS  %d / %d' + NL +
@@ -561,6 +590,7 @@ begin
 
   if FIntermission then
   begin
+    if FPendingMap <> '' then Exit;
     if (FIntermissionTime > 1) and (Event.IsKey(keyE) or Event.IsKey(keySpace) or
        Event.IsKey(keyEnter) or Event.IsMouseButton(buttonLeft)) then
     begin
@@ -620,6 +650,12 @@ begin
   if Event.IsKey(keyM) then
   begin
     FNavigation.MouseLook := not FNavigation.MouseLook;
+    Exit(true);
+  end;
+  if Event.IsKey(keyJ) and (Music <> nil) then
+  begin
+    Music.Enabled := not Music.Enabled;
+    FWorld.ShowMessage('Music ' + BoolToStr(Music.Enabled, 'on', 'off'));
     Exit(true);
   end;
   if Event.IsKey(keyH) then

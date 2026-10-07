@@ -745,13 +745,23 @@ procedure TDoomWorld.LoadMap(const MapName: String; const KeepInventory: Boolean
 var
   I: Integer;
   Saved: TPlayerState;
+  T0: TDateTime;
+
+  function Ms: Integer;
+  begin
+    Result := Round((Now - T0) * 24 * 3600 * 1000);
+  end;
+
 begin
   UnloadMap;
   Saved := Player;
+  T0 := Now;
   FMap := TDoomMap.Create(FWad, MapName);
   ComputeDynamicSectors;
+  WritelnLog('Load', '%s: map parsed in %d ms', [MapName, Ms]);
   FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName));
   FGeometry.AddToWorld(FItems);
+  WritelnLog('Load', '%s: geometry built in %d ms', [MapName, Ms]);
   FItems.Add(FPlayerEmitter);
   if KeepInventory and not Saved.Dead then
   begin
@@ -767,6 +777,7 @@ begin
     ResetPlayer;
   Player.Keys := [];
   SpawnThings;
+  WritelnLog('Load', '%s: things spawned in %d ms', [MapName, Ms]);
   if not FHaveStart then
   begin
     FDoomStartX := FMap.Vertices[0].X;

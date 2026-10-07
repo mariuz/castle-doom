@@ -6,7 +6,7 @@ interface
 
 uses Classes, SysUtils,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
-  DoomWad, DoomGraphics, DoomSound;
+  DoomWad, DoomGraphics, DoomSound, DoomMusic;
 
 type
   TViewMenu = class(TCastleView)
@@ -18,6 +18,7 @@ type
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
     FSounds: TDoomSounds;
+    FMusic: TDoomMusic;
     FWadUrl: String;
     FMapIndex: Integer;
     procedure LoadWad(const Url: String);
@@ -160,7 +161,10 @@ begin
   if FWad = nil then
     LoadWad('castle-data:/wads/freedoom1.wad')
   else
+  begin
     UpdateMapLabel;
+    FMusic.Play(FMusic.TitleLump);
+  end;
 end;
 
 procedure TViewMenu.Stop;
@@ -175,6 +179,7 @@ begin
   if (FWad <> nil) and (FWadUrl = Url) then Exit;
   { The play view may still reference the old objects; it is stopped when
     this view is active, so it is safe to replace them. }
+  FreeAndNil(FMusic);
   FreeAndNil(FSounds);
   FreeAndNil(FGraphics);
   FreeAndNil(FWad);
@@ -182,6 +187,9 @@ begin
   FWad := TDoomWad.Create(Url);
   FGraphics := TDoomGraphics.Create(FWad);
   FSounds := TDoomSounds.Create(FWad);
+  FMusic := TDoomMusic.Create(FWad);
+  if AutoTestMap = '' then
+    FMusic.Play(FMusic.TitleLump);
   FMapIndex := 0;
   Img := FGraphics.Patch('TITLEPIC');
   if Img <> nil then
@@ -229,6 +237,7 @@ begin
   ViewPlay.Wad := FWad;
   ViewPlay.Graphics := FGraphics;
   ViewPlay.Sounds := FSounds;
+  ViewPlay.Music := FMusic;
   ViewPlay.StartMapName := FWad.MapNames[FMapIndex];
   Container.View := ViewPlay;
 end;

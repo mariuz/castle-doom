@@ -1,4 +1,4 @@
-{ Decoding Doom graphics from a WAD into Castle Game Engine images and
+﻿{ Decoding Doom graphics from a WAD into Castle Game Engine images and
   X3D texture nodes: patches (sprites, HUD graphics), composed wall textures
   (PNAMES + TEXTURE1/TEXTURE2), flats (64x64 floors/ceilings) and the
   sprite frame/rotation directory. }
@@ -446,13 +446,47 @@ begin
     Result := FWad.FindLump(Name);
 end;
 
+{ Uncompressed 32-bit TGA: a header and raw BGRA pixels, bottom row first,
+  which is exactly how TRGBAlphaImage stores them. Much cheaper to write and
+  read than PNG, which matters in WebAssembly. }
+procedure WriteTga(const Img: TRGBAlphaImage; const Stream: TStream);
+var
+  Header: array [0..17] of Byte;
+  I, N: Integer;
+  Src: PVector4Byte;
+  Buf: array of Byte;
+begin
+  FillChar(Header, SizeOf(Header), 0);
+  Header[2] := 2; { uncompressed true-color }
+  Header[12] := Img.Width and $FF;
+  Header[13] := (Img.Width shr 8) and $FF;
+  Header[14] := Img.Height and $FF;
+  Header[15] := (Img.Height shr 8) and $FF;
+  Header[16] := 32;
+  Header[17] := 8; { 8 alpha bits, origin bottom-left }
+  Stream.WriteBuffer(Header, SizeOf(Header));
+  N := Img.Width * Img.Height;
+  SetLength(Buf, N * 4);
+  Src := PVector4Byte(Img.RawPixels);
+  for I := 0 to N - 1 do
+  begin
+    Buf[I * 4] := Src^.Z;
+    Buf[I * 4 + 1] := Src^.Y;
+    Buf[I * 4 + 2] := Src^.X;
+    Buf[I * 4 + 3] := Src^.W;
+    Inc(Src);
+  end;
+  if N > 0 then
+    Stream.WriteBuffer(Buf[0], N * 4);
+end;
+
 function TDoomGraphics.ReadGfx(const Url: String; out MimeType: String): TStream;
 var
   Path, Kind, Name: String;
   Img: TDoomImage;
   P: Integer;
 begin
-  { doomgfx:/tex/NAME.png, doomgfx:/flat/NAME.png, doomgfx:/patch/NAME.png }
+  { doomgfx:/tex/NAME.tga, doomgfx:/flat/NAME.tga, doomgfx:/patch/NAME.tga }
   Path := Url;
   P := Pos(':', Path);
   if P > 0 then Delete(Path, 1, P);
@@ -461,7 +495,7 @@ begin
   if P = 0 then raise Exception.CreateFmt('Bad doomgfx URL: %s', [Url]);
   Kind := Copy(Path, 1, P - 1);
   Name := Copy(Path, P + 1, MaxInt);
-  if LowerCase(ExtractFileExt(Name)) = '.png' then
+  if LowerCase(ExtractFileExt(Name)) = '.tga' then
     Name := Copy(Name, 1, Length(Name) - 4);
   if Kind = 'tex' then Img := Texture(Name)
   else if Kind = 'flat' then Img := Flat(Name)
@@ -471,9 +505,9 @@ begin
   if Img = nil then
     raise Exception.CreateFmt('Doom graphic not found: %s', [Url]);
   Result := TMemoryStream.Create;
-  SaveImage(Img.Image, 'image/png', Result);
+  WriteTga(Img.Image, Result);
   Result.Position := 0;
-  MimeType := 'image/png';
+  MimeType := 'image/x-targa';
 end;
 
 procedure TDoomGraphics.ResolveAnim(const Img: TDoomImage; const IsFlat: Boolean);
@@ -503,7 +537,7 @@ begin
     { Loud magenta/black checkerboard, like most engines show for a missing texture. }
     FMissing := TDoomImage.Create;
     FMissing.Name := 'MISSING';
-    FMissing.Url := 'doomgfx:/missing/MISSING.png';
+    FMissing.Url := 'doomgfx:/missing/MISSING.tga';
     FMissing.Width := 64;
     FMissing.Height := 64;
     FMissing.Image := TRGBAlphaImage.Create(64, 64);
@@ -532,7 +566,7 @@ begin
   PatchCount := PInt16(P + 20)^;
   Result := TDoomImage.Create;
   Result.Name := Def.Name;
-  Result.Url := 'doomgfx:/tex/' + Def.Name + '.png';
+  Result.Url := 'doomgfx:/tex/' + Def.Name + '.tga';
   if (W <= 0) or (H <= 0) or (W > 4096) or (H > 4096) then
   begin
     W := 64;
@@ -605,7 +639,7 @@ begin
   end;
   Result := TDoomImage.Create;
   Result.Name := U;
-  Result.Url := 'doomgfx:/flat/' + U + '.png';
+  Result.Url := 'doomgfx:/flat/' + U + '.tga';
   Result.Width := 64;
   Result.Height := 64;
   Result.Image := TRGBAlphaImage.Create(64, 64);
@@ -641,7 +675,7 @@ begin
   end;
   Result := TDoomImage.Create;
   Result.Name := U;
-  Result.Url := 'doomgfx:/patch/' + U + '.png';
+  Result.Url := 'doomgfx:/patch/' + U + '.tga';
   Result.Width := W;
   Result.Height := H;
   Result.LeftOffset := PInt16(P + 4)^;
