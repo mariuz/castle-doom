@@ -933,6 +933,12 @@ var
   R: TRectangle;
 begin
   Result := nil;
+  {$ifdef WASI}
+  { In the browser this raised an exception (FBO set-up or read-back under
+    WebGL), and exceptions cannot be caught in FPC's WebAssembly target:
+    the program stopped ("LONGJMP not supported"). No melt on the web. }
+  Exit;
+  {$endif}
   R := Container.PixelsRect;
   if (R.Width <= 0) or (R.Height <= 0) then Exit;
   try
