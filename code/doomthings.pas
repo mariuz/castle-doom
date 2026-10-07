@@ -13,7 +13,9 @@ type
     tkPickup,
     tkPlayerStart,
     tkTeleportDest,
-    tkInvisible
+    tkInvisible,
+    { Kept as hidden actors: Icon of Sin spawn spots (87) and shooter (89). }
+    tkBossSpot
   );
 
   TPickupKind = (
@@ -166,8 +168,8 @@ begin
   Special(4, tkPlayerStart);
   Special(11, tkInvisible);
   Special(14, tkTeleportDest);
-  Special(87, tkInvisible); { boss spawn spot }
-  Special(89, tkInvisible); { boss brain shooter }
+  Special(87, tkBossSpot); { boss spawn spot (MT_BOSSTARGET) }
+  Special(89, tkBossSpot); { boss brain shooter (MT_BOSSSPIT) }
 
   { Monsters: num, sprite, radius, height, hp, speed, pain chance,
     idle, move, attack, pain, death frames, attack kind, damage, sounds, drop }
@@ -190,7 +192,8 @@ begin
   Monster(71, 'PAIN', 31, 56, 400, 8, 128, 'AB', 'ABC', 'DEF', 'G', 'HIJKLM', akMissile, 3, 8, 'DSPESIT', 'DSSKLATK', 'DSPEPAIN', 'DSPEDTH', 0, true);
   Monster(84, 'SSWV', 20, 56, 50, 8, 170, 'AB', 'ABCD', 'EFG', 'H', 'IJKLM', akHitscan, 3, 5, 'DSSSSIT', 'DSPISTOL', 'DSPOPAIN', 'DSSSDTH', 2007);
   Monster(72, 'KEEN', 16, 72, 100, 0, 256, 'A', 'A', '', 'M', 'BCDEFGHIJKL', akNone, 0, 0, '', '', 'DSKEENPN', 'DSKEENDT');
-  Monster(88, 'BBRN', 16, 16, 250, 0, 255, 'A', 'A', '', 'B', 'BCDE', akNone, 0, 0, '', '', 'DSBOSPN', 'DSBOSDTH');
+  { Boss brain: its pain and death sounds play at full volume from DoomWorld. }
+  Monster(88, 'BBRN', 16, 16, 250, 0, 255, 'A', 'A', '', 'B', 'A', akNone, 0, 0, '', '', '', '');
   Infos[High(Infos) - 1].Hanging := true; { Keen hangs from the ceiling }
 
   { Weapons }

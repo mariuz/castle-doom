@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Icon of Sin (MAP30): the boss shooter (89) wakes on sight or any shot,
+  says `DSBOSSIT`, and after 181 tics spits a cube every 150 tics (every
+  other one on the two easy skills) at the spawn spots (87) in turn; cubes
+  fly through walls and become fire plus a random monster with Doom's odds,
+  which telefrags anything in the spot (the player too). The brain (88)
+  screams on pain, does not count as a kill, and its death sets off a row
+  of explosions and ends the level 120 tics later. Cube flights, the target
+  index and the death countdown are saved.
 - Doom menu and skill levels: the title screen is Doom's own menu drawn from
   the WAD's `M_*` graphics over a dimmed `TITLEPIC` (`DoomMenu`): New Game,
   episode select (Doom 1 WADs), skill select with the Nightmare confirmation,
@@ -69,7 +77,6 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **Donut (special 9)**, **perpetual platforms stop/start**, **raise by shortest lower texture (30/96 are approximated as +64)**, **crusher return speed when blocked**. | Correctness of a few maps. | `ApplySpecial`, `TSectorMover` | S each |
 | **Spectres** are drawn like demons; add the fuzz/translucency effect (shader or `AlphaMode = amBlend` with low alpha). | Visual fidelity. | `DoomActors` material | S |
-| **Icon of Sin** (MAP30): the boss brain (shoot through the wall to win), the shooter that spits cubes at `BOSSTARGET` spots, cubes that spawn random monsters. | MAP30 cannot be finished without it. | `DoomWorld` (types 87, 88, 89), `DoomThings` | M |
 | **`MTF_AMBUSH`** (deaf) flag: ambush monsters should ignore noise and wake only on sight in front of them. | Map authors rely on it for traps. | `TicMonster`, `NoiseAlert` | S |
 | **Sector sound propagation**: monsters currently wake on a 2D line-of-sight or any shot within 1200 units; Doom floods sound through sector neighbours with `ML_SOUNDBLOCK`. | Monsters wake more faithfully. | `NoiseAlert` | M |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
@@ -81,6 +88,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
+| **Finales**: the end-of-episode text screens (`E1TEXT`.. / `C1TEXT`..) over a flat, Doom 2's cast call after MAP30 and the bunny scroller after E3M8; now the game goes on to the next map (MAP30 wraps to MAP01). | The games actually end. | new `DoomFinale` view, `GameViewPlay.FinishIntermission` | M |
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
@@ -121,9 +129,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Icon of Sin (MAP30 boss brain, cube spawner) (M): the last Doom 2 boss
-   that does not work yet.
-2. Persistent web saves (S-M): saves on the Pages site currently last only
+1. Persistent web saves (S-M): saves on the Pages site currently last only
    until the page reloads.
-3. Sector sound propagation and the `MTF_AMBUSH` flag (M): monsters wake like
+2. Sector sound propagation and the `MTF_AMBUSH` flag (M): monsters wake like
    in Doom, which matters more now that the harder skills spawn more of them.
+3. Finales (M): end-of-episode text screens and the Doom 2 cast call, now
+   that every boss level can be finished.

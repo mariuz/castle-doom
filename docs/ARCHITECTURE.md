@@ -425,6 +425,25 @@ Three monsters have their own attack code, following `p_enemy.c`:
   target takes 20 damage, the fire jumps between them and explodes for 70
   (`RadiusDamage` blamed on the vile), and the player is thrown about 50
   units up (`PlayerKnockUp`, applied by the view under the ceiling).
+- **Icon of Sin** (`BrainAwake`, `TicBrainShooter`, `BrainSpit`,
+  `TicSpawnCube`, `StartBrainDeath`, `TicBrainDeath`): the shooter (89) and
+  the spawn spots (87) are `tkBossSpot` things, kept as hidden actors so the
+  save code handles them like any other. The shooter wakes when it sees the
+  player or on any shot (`NoiseAlert`; Doom's sound flood reaches it in
+  practice), plays `DSBOSSIT`, waits 181 tics and then calls `A_BrainSpit`
+  every 150 tics: on skills 1-2 only every other time, the next spot in
+  THINGS order gets a `BOSF` cube (`ekSpawnShot`, speed 10, no clipping)
+  whose `Target` is the spot and whose `ReactionTics` is the flight time.
+  On arrival the cube becomes `FIRE` (`ekSpawnFire`, `DSTELEPT`) and a
+  monster picked with `A_SpawnFly`'s table (imp 50/256, demon 40, spectre
+  30, pain elemental 10, cacodemon 30, arch-vile 2, revenant 10,
+  arachnotron 20, mancubus 30, hell knight 24, baron 10); `P_TeleportMove`
+  on MAP30 telefrags whatever stands there, the player included. The brain
+  (88) is a monster with speed 0, pain chance 255 (`BBRN` B for 36 tics,
+  `DSBOSPN` at full volume) and no kill count; rockets reach it with splash
+  damage through the opening in its wall. Its death (`A_BrainScream`)
+  spawns a row of `MISL` explosions 320 units in front of it, more every
+  other tic, `DSBOSDTH`, and 120 tics later requests the normal exit.
 
 Monsters sleep until they see the player (`SightClear`: a 2D line-of-sight
 test against one-sided lines and closed two-sided lines) or hear a shot
@@ -768,7 +787,8 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 
 ## 18. Known gaps and ideas
 
-- No Icon of Sin (MAP30 boss brain and cube spawner).
+- No finale screens: after E1M8 / MAP30 the game continues with the next
+  map (MAP30 wraps to MAP01).
 - Doom's "donut" (special 9) only lowers the pillar.
 - No demo playback; web saves are not persistent across page reloads. The
   in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by

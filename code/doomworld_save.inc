@@ -92,6 +92,10 @@ begin
   Result.Add('tic', FTic);
   Result.Add('bfgCountdown', FBfgCountdown);
   Result.Add('skill', Skill);
+  Result.Add('brainTarget', FBrainTargetIndex);
+  Result.Add('brainEasy', FBrainEasy);
+  Result.Add('brainDeathTics', FBrainDeathTics);
+  Result.Add('brainPos', JsonFloatArray([FBrainX, FBrainY]));
   Result.Add('startX', Double(FDoomStartX));
   Result.Add('startY', Double(FDoomStartY));
   Result.Add('startAngle', Double(FDoomStartAngle));
@@ -358,6 +362,11 @@ begin
   FTic := State.Get('tic', Int64(0));
   FBfgCountdown := State.Get('bfgCountdown', 0);
   Skill := State.Get('skill', 2);
+  FBrainTargetIndex := State.Get('brainTarget', 0);
+  FBrainEasy := State.Get('brainEasy', false);
+  FBrainDeathTics := State.Get('brainDeathTics', 0);
+  FBrainX := ArrayItemFloat(ObjArray(State, 'brainPos'), 0, 0);
+  FBrainY := ArrayItemFloat(ObjArray(State, 'brainPos'), 1, 0);
   FDoomStartX := State.Get('startX', Double(FDoomStartX));
   FDoomStartY := State.Get('startY', Double(FDoomStartY));
   FDoomStartAngle := State.Get('startAngle', Double(FDoomStartAngle));
@@ -509,7 +518,7 @@ begin
             A.Pickable := AJ.Get('pickable', false);
             A.SetAnimation(AJ.Get('frames', Info^.IdleFrames), AJ.Get('frameIndex', 0),
               AJ.Get('frameTics', 6), AJ.Get('frameTicsLeft', 6), AJ.Get('frameLoop', true));
-            if Info^.Kind = tkTeleportDest then
+            if Info^.Kind in [tkTeleportDest, tkBossSpot] then
               A.Scene.Exists := false;
             if A.Sector >= 0 then
               A.SetLight(FMap.Sectors[A.Sector].LightLevel)

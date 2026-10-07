@@ -62,7 +62,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   drop items, and fight each other when hit by another monster (infighting). Lost souls
   charge, Pain Elementals spit lost souls (three more when they die), Arch-viles raise
   the dead and burn you with their fire attack. Barrels explode with splash damage. Boss deaths trigger the special map events (E1M8, E2M8,
-  E3M8, E4M6, E4M8, MAP07, Commander Keen).
+  E3M8, E4M6, E4M8, MAP07, Commander Keen). The Icon of Sin on MAP30 spits cubes that
+  spawn monsters and dies to rockets through the hole in its wall.
 - Weapons: fist, chainsaw, pistol, shotgun, super shotgun, chaingun, and real projectiles
   for the rocket launcher (splash damage), plasma gun and BFG (charge, ball, tracer spray).
 - Status bar with face, keys, arms, ammo table; weapon bobbing; damage and bonus flashes.
@@ -84,7 +85,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no Icon of Sin, web
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no finale screens, web
 saves last only until the page reloads, no glBSP `GL_` lumps or UDMF maps, the music synth
 approximates the OPL2.
 

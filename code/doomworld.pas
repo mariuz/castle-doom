@@ -61,7 +61,9 @@ type
   { Projectiles and visual effects spawned by the world (not in THINGS). }
   TEffectKind = (ekPuff, ekBlood, ekTeleFog, ekBarrelExplosion,
     ekBal1, ekBal2, ekBal7, ekRocket, ekRevenantRocket, ekFatShot, ekArachPlasma,
-    ekPlasmaBall, ekBfgBall, ekVileFire);
+    ekPlasmaBall, ekBfgBall, ekVileFire,
+    { Icon of Sin: the spawn cube, its fire, the explosions when the brain dies. }
+    ekSpawnShot, ekSpawnFire, ekBrainExplosion);
 
   TMoverKind = (mkDoor, mkLift, mkFloor, mkCeiling, mkCrusher);
   TMoverPhase = (mpMoving, mpWaiting, mpDone);
@@ -126,6 +128,12 @@ type
     FDoomStartX, FDoomStartY, FDoomStartAngle: Single;
     FHaveStart: Boolean;
     FBfgCountdown: Integer;
+    { Icon of Sin: next spawn spot, A_BrainSpit's "easy" toggle, tics left
+      until the dead brain ends the level, and where it was. }
+    FBrainTargetIndex: Integer;
+    FBrainEasy: Boolean;
+    FBrainDeathTics: Integer;
+    FBrainX, FBrainY: Single;
     FDynamic: array of Boolean;
     procedure ComputeDynamicSectors;
     procedure SpawnThings;
@@ -156,6 +164,13 @@ type
     procedure KillActor(const A: TDoomActor; const Killer: TDoomActor = nil; const ByPlayer: Boolean = true);
     procedure BossDeath(const A: TDoomActor);
     procedure NightmareRespawn(const A: TDoomActor);
+    procedure BrainAwake(const A: TDoomActor);
+    procedure TicBrainShooter(const A: TDoomActor);
+    procedure BrainSpit(const A: TDoomActor);
+    procedure TicSpawnCube(const A: TDoomActor);
+    procedure StartBrainDeath(const A: TDoomActor);
+    procedure TicBrainDeath;
+    function SpawnEffectAt(const Kind: TEffectKind; const X, Y, Z: Single; const Tics: Integer): TDoomActor;
     function SpawnFog(const X, Y, Z: Single; const Sec: Integer): TDoomActor;
     function SpawnMonster(const TypeNum: Integer; const X, Y, Z: Single): TDoomActor;
     procedure StartSkullCharge(const A: TDoomActor);
@@ -322,6 +337,12 @@ begin
   Effect(ekTeleFog, 'TFOG', 'ABABCDEFGHIJ', 6);
   Effect(ekBarrelExplosion, 'BEXP', 'ABCDE', 6);
   Effect(ekVileFire, 'FIRE', 'ABCDEFGH', 3);
+  Effect(ekSpawnShot, 'BOSF', 'ABCD', 3);
+  EffectInfos[ekSpawnShot].Speed := 10;
+  EffectInfos[ekSpawnShot].Radius := 6;
+  EffectInfos[ekSpawnShot].Height := 32;
+  Effect(ekSpawnFire, 'FIRE', 'ABCDEFGH', 4);
+  Effect(ekBrainExplosion, 'MISL', 'BCD', 10);
   Missile(ekBal1, 'BAL1', 6, 10, 3, 8, 'AB', 'CDE', 'BAL1', 'DSFIRSHT', 'DSFIRXPL');
   Missile(ekBal2, 'BAL2', 6, 10, 5, 8, 'AB', 'CDE', 'BAL2', 'DSFIRSHT', 'DSFIRXPL');
   Missile(ekBal7, 'BAL7', 6, 15, 8, 8, 'AB', 'CDE', 'BAL7', 'DSFIRSHT', 'DSFIRXPL');
@@ -803,7 +824,7 @@ begin
       A.DoomZ := FMap.Sectors[Sec].CeilingHeight - Info^.Height
     else
       A.DoomZ := FMap.Sectors[Sec].FloorHeight;
-    if Info^.Kind = tkTeleportDest then
+    if Info^.Kind in [tkTeleportDest, tkBossSpot] then
       A.Scene.Exists := false;
     if Info^.Num = 2035 then
       A.Health := 20; { barrel }
@@ -812,7 +833,8 @@ begin
     A.UpdateTransform;
     FActors.Add(A);
     FItems.Add(A);
-    if Info^.Kind = tkMonster then Inc(Player.TotalKills);
+    { The boss brain has no MF_COUNTKILL. }
+    if (Info^.Kind = tkMonster) and (Info^.Num <> 88) then Inc(Player.TotalKills);
     if (Info^.Kind = tkPickup) and (Info^.Pickup in [pkStimpack, pkMedikit, pkHealthBonus, pkArmorBonus,
       pkArmorGreen, pkArmorBlue, pkSoulsphere, pkMegasphere, pkBerserk, pkInvulnerability, pkInvisibility,
       pkRadSuit, pkComputerMap, pkLightAmp]) then Inc(Player.TotalItems);
@@ -885,6 +907,9 @@ begin
   FExitRequested := false;
   FSecretExit := false;
   FBfgCountdown := 0;
+  FBrainTargetIndex := 0;
+  FBrainEasy := false;
+  FBrainDeathTics := 0;
   FTic := 0;
   FTicAccum := 0;
   { Light effect sectors. }
@@ -1042,6 +1067,8 @@ begin
   TicLights;
   TicButtons;
   TicActors;
+  if FBrainDeathTics > 0 then
+    TicBrainDeath;
   if not Player.Dead then
   begin
     CheckPickups;
@@ -1344,8 +1371,14 @@ begin
             end;
           end;
         end;
-      asMissile: TicMissile(A);
+      asMissile:
+        if A.Info = @EffectInfos[ekSpawnShot] then
+          TicSpawnCube(A)
+        else
+          TicMissile(A);
     end;
+    if A.Info^.Num = 89 then
+      TicBrainShooter(A);
     if A.Info = @EffectInfos[ekVileFire] then
       FollowVileFire(A);
     if (A.Info^.Kind = tkMonster) and (A.State in [asIdle, asChase, asAttack]) then
@@ -1519,6 +1552,9 @@ var
   D: Single;
 begin
   for A in FActors do
+    if (A.Info^.Num = 89) and not A.Awake then
+      BrainAwake(A)
+    else
     if (A.Info^.Kind = tkMonster) and (A.State = asIdle) and not A.Awake then
     begin
       D := Sqrt(Sqr(A.DoomX - Player.X) + Sqr(A.DoomY - Player.Y));
@@ -1831,6 +1867,200 @@ begin
   S.DoomZ := A.DoomZ + 8;
   WritelnLog('PainSkull', 'Pain Elemental spits a lost soul (%d alive)', [Count + 1]);
   StartSkullCharge(S);
+end;
+
+function TDoomWorld.SpawnEffectAt(const Kind: TEffectKind; const X, Y, Z: Single; const Tics: Integer): TDoomActor;
+begin
+  Result := TDoomActor.Create(nil, FGraphics, @EffectInfos[Kind]);
+  Result.State := asEffect;
+  Result.Bright := true;
+  Result.DoomX := X; Result.DoomY := Y; Result.DoomZ := Z;
+  Result.Sector := FMap.SectorAt(X, Y);
+  Result.Collides := false; Result.Pickable := false;
+  Result.SetLight(255);
+  Result.PlaySequence(EffectInfos[Kind].IdleFrames, Tics, false);
+  Result.UpdateTransform;
+  FActors.Add(Result);
+  FItems.Add(Result);
+end;
+
+{ Icon of Sin (p_enemy.c A_BrainAwake / A_BrainSpit / A_SpawnFly /
+  A_BrainScream / A_BrainDie). The shooter (89) and the spawn spots (87) are
+  hidden actors. A woken shooter waits 181 tics, then every 150 tics spits a
+  cube at the next spot in turn; the cube flies through walls and, when it
+  arrives, becomes fire and a random monster that telefrags whatever stands
+  there. Killing the brain (88) sets off explosions and ends the level. }
+procedure TDoomWorld.BrainAwake(const A: TDoomActor);
+var
+  O: TDoomActor;
+  N: Integer;
+begin
+  A.Awake := true;
+  A.ReactionTics := 181;
+  N := 0;
+  for O in FActors do
+    if O.Info^.Num = 87 then Inc(N);
+  FSounds.Play('DSBOSSIT');
+  WritelnLog('BrainAwake', 'Icon of Sin awake, %d spawn spots', [N]);
+end;
+
+procedure TDoomWorld.TicBrainShooter(const A: TDoomActor);
+begin
+  if not A.Awake then
+  begin
+    { A_Look: sight wakes it too. }
+    if ((FTic + 5) mod 10 = 0) and not Player.Dead and
+       SightClear(A.DoomX, A.DoomY, Player.X, Player.Y) then
+      BrainAwake(A);
+    Exit;
+  end;
+  if FBrainDeathTics > 0 then Exit;
+  Dec(A.ReactionTics);
+  if A.ReactionTics > 0 then Exit;
+  A.ReactionTics := 150;
+  BrainSpit(A);
+end;
+
+procedure TDoomWorld.BrainSpit(const A: TDoomActor);
+var
+  O, Targ, Cube: TDoomActor;
+  Spots: array of TDoomActor;
+  DX, DY, DZ, Dist, Speed: Single;
+begin
+  { On the two easy skills only every other spit happens. }
+  FBrainEasy := not FBrainEasy;
+  if (Skill <= 1) and not FBrainEasy then Exit;
+  Spots := nil;
+  for O in FActors do
+    if O.Info^.Num = 87 then
+    begin
+      SetLength(Spots, Length(Spots) + 1);
+      Spots[High(Spots)] := O;
+    end;
+  if Length(Spots) = 0 then Exit;
+  Targ := Spots[FBrainTargetIndex mod Length(Spots)];
+  FBrainTargetIndex := (FBrainTargetIndex + 1) mod Length(Spots);
+
+  Cube := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekSpawnShot]);
+  Cube.State := asMissile;
+  Cube.Bright := true;
+  Cube.Shooter := A;
+  Cube.Target := Targ;
+  Cube.DoomX := A.DoomX;
+  Cube.DoomY := A.DoomY;
+  Cube.DoomZ := A.DoomZ + 32;
+  Cube.Sector := A.Sector;
+  { P_SpawnMissile: full speed horizontally, the height difference spread
+    over the flight. }
+  DX := Targ.DoomX - Cube.DoomX;
+  DY := Targ.DoomY - Cube.DoomY;
+  DZ := Targ.DoomZ - Cube.DoomZ;
+  Dist := Max(1, Sqrt(DX * DX + DY * DY));
+  Speed := EffectInfos[ekSpawnShot].Speed;
+  Cube.VelX := DX / Dist * Speed;
+  Cube.VelY := DY / Dist * Speed;
+  Cube.VelZ := DZ / Max(1, Dist / Speed);
+  Cube.Angle := RadToDeg(ArcTan2(DY, DX));
+  Cube.ReactionTics := Max(1, Round(Dist / Speed));
+  Cube.Collides := false;
+  Cube.Pickable := false;
+  Cube.SetLight(255);
+  Cube.PlaySequence('ABCD', 3, true);
+  Cube.UpdateTransform;
+  FActors.Add(Cube);
+  FItems.Add(Cube);
+  FSounds.Play('DSBOSPIT');
+  WritelnLog('BrainSpit', 'Cube to (%f, %f), %d tics', [Targ.DoomX, Targ.DoomY, Cube.ReactionTics]);
+end;
+
+procedure TDoomWorld.TicSpawnCube(const A: TDoomActor);
+var
+  X, Y, Z: Single;
+  R, TypeNum, Sec: Integer;
+  M, O: TDoomActor;
+begin
+  { MF_NOCLIP: straight through walls. }
+  A.DoomX := A.DoomX + A.VelX;
+  A.DoomY := A.DoomY + A.VelY;
+  A.DoomZ := A.DoomZ + A.VelZ;
+  Sec := FMap.SectorAt(A.DoomX, A.DoomY);
+  if Sec >= 0 then A.Sector := Sec;
+  { A_SpawnSound every fourth frame. }
+  if A.ReactionTics mod 12 = 0 then FSounds.PlayAt('DSBOSCUB', A);
+  Dec(A.ReactionTics);
+  if A.ReactionTics > 0 then Exit;
+
+  if A.Target <> nil then
+  begin
+    X := A.Target.DoomX;
+    Y := A.Target.DoomY;
+  end else
+  begin
+    X := A.DoomX;
+    Y := A.DoomY;
+  end;
+  A.Removed := true;
+  Sec := FMap.SectorAt(X, Y);
+  if Sec < 0 then Exit;
+  Z := FMap.Sectors[Sec].FloorHeight;
+  FSounds.PlayAt('DSTELEPT', SpawnEffectAt(ekSpawnFire, X, Y, Z, 4));
+
+  { A_SpawnFly: the monster by P_Random. }
+  R := Random(256);
+  if R < 50 then TypeNum := 3001        { imp }
+  else if R < 90 then TypeNum := 3002   { demon }
+  else if R < 120 then TypeNum := 58    { spectre }
+  else if R < 130 then TypeNum := 71    { pain elemental }
+  else if R < 160 then TypeNum := 3005  { cacodemon }
+  else if R < 162 then TypeNum := 64    { arch-vile }
+  else if R < 172 then TypeNum := 66    { revenant }
+  else if R < 192 then TypeNum := 68    { arachnotron }
+  else if R < 222 then TypeNum := 67    { mancubus }
+  else if R < 246 then TypeNum := 69    { hell knight }
+  else TypeNum := 3003;                 { baron }
+  M := SpawnMonster(TypeNum, X, Y, Z);
+  if M = nil then Exit;
+  M.Angle := RadToDeg(ArcTan2(Player.Y - Y, Player.X - X));
+  M.UpdateTransform;
+  { P_TeleportMove: on MAP30 monsters telefrag anything in the spot. }
+  for O in FActors do
+    if (O <> M) and (not O.Removed) and (O.Info^.Kind = tkMonster) and
+       (O.State in [asIdle, asChase, asAttack, asPain]) and
+       (Abs(O.DoomX - X) < O.Info^.Radius + M.Info^.Radius) and
+       (Abs(O.DoomY - Y) < O.Info^.Radius + M.Info^.Radius) then
+      DamageActor(O, 10000, O.DoomX, O.DoomY, O.DoomZ + 32, nil, false);
+  if (not Player.Dead) and (Abs(Player.X - X) < PlayerRadius + M.Info^.Radius) and
+     (Abs(Player.Y - Y) < PlayerRadius + M.Info^.Radius) then
+    DamagePlayer(10000, M);
+  WritelnLog('BrainSpawn', '%s at (%f, %f)', [M.Info^.Sprite, X, Y]);
+end;
+
+procedure TDoomWorld.StartBrainDeath(const A: TDoomActor);
+var
+  I: Integer;
+begin
+  { A_BrainScream: a row of explosions in front of the brain, the death
+    scream at full volume; A_BrainDie (G_ExitLevel) 120 tics later. }
+  FBrainX := A.DoomX;
+  FBrainY := A.DoomY;
+  FBrainDeathTics := 120;
+  for I := 0 to (196 + 320) div 8 do
+    SpawnEffectAt(ekBrainExplosion, FBrainX - 196 + I * 8, FBrainY - 320, 128 + Random(256) * 2, 4 + Random(10));
+  FSounds.Play('DSBOSDTH');
+  WritelnLog('BrainDeath', 'Icon of Sin killed, exit in %d tics', [FBrainDeathTics]);
+end;
+
+procedure TDoomWorld.TicBrainDeath;
+begin
+  { A_BrainExplode keeps the explosions coming. }
+  if FTic mod 2 = 0 then
+    SpawnEffectAt(ekBrainExplosion, FBrainX - 196 + Random(516), FBrainY - 320, 128 + Random(256) * 2, 10);
+  Dec(FBrainDeathTics);
+  if FBrainDeathTics = 0 then
+  begin
+    WritelnLog('BrainDeath', 'Level exit');
+    FExitRequested := true;
+  end;
 end;
 
 function TDoomWorld.SpawnFog(const X, Y, Z: Single; const Sec: Integer): TDoomActor;
@@ -2518,7 +2748,13 @@ begin
     if (A.Info^.PainFrame <> #0) and (Random(256) < A.Info^.PainChance) then
     begin
       A.State := asPain;
-      A.PlaySequence(A.Info^.PainFrame, 6, false);
+      if A.Info^.Num = 88 then
+      begin
+        { A_BrainPain: BBRN B for 36 tics, the scream at full volume. }
+        A.PlaySequence(A.Info^.PainFrame, 36, false);
+        FSounds.Play('DSBOSPN');
+      end else
+        A.PlaySequence(A.Info^.PainFrame, 6, false);
       if A.Info^.PainSound <> '' then FSounds.PlayAt(A.Info^.PainSound, A);
     end;
   end;
@@ -2541,6 +2777,9 @@ begin
   A.Pickable := false;
   A.PlaySequence(A.Info^.DeathFrames, 5, false);
   if A.Info^.DeathSound <> '' then FSounds.PlayAt(A.Info^.DeathSound, A);
+  if A.Info^.Num = 88 then
+    StartBrainDeath(A)
+  else
   if A.Info^.Kind = tkMonster then
   begin
     Inc(Player.Kills);

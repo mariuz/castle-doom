@@ -72,6 +72,11 @@ and the log at `%LOCALAPPDATA%\castle-doom\castle-doom.log` (grep for
 (-416, 256); door at x=544..560, y=680..744 (stand at 480,712 facing angle 0);
 WR lift square 64..192 x 192..320 (stand at 0,256 facing 0 and walk).
 
+Icon of Sin: `--autotest MAP30 prefix --demo "Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q"`
+puts the player in the arena facing the face; grep `BrainAwake:`,
+`BrainSpit:`, `BrainSpawn:`, `BrainDeath:` (`D` kills the brain too, and the
+level exits 120 tics later).
+
 Save games: `SAVE:n` / `LOAD:n` (0 = quick save) and `MENU:1|2|0` in a demo
 script, `-loadgame N` on the command line (works with `--autotest X prefix`
 for screenshots). Files: `%LOCALAPPDATA%\castle-doom\save1..6.json`,
