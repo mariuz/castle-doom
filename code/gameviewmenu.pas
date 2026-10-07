@@ -19,9 +19,16 @@ type
     FGraphics: TDoomGraphics;
     FSounds: TDoomSounds;
     FMusic: TDoomMusic;
-    FWadUrl: String;
+    FIwadUrl: String;
+    FPwads: TStringList;
+    FWadsLabel: TCastleLabel;
     FMapIndex: Integer;
-    procedure LoadWad(const Url: String);
+    procedure LoadWads(const Iwad: String; const Pwads: TStrings);
+    procedure ClickOpenIwad(Sender: TObject);
+    procedure ClickAddPwad(Sender: TObject);
+    procedure ClickLastWads(Sender: TObject);
+    procedure UpdateWadsLabel;
+    procedure RememberWads;
     procedure ClickPhase1(Sender: TObject);
     procedure ClickPhase2(Sender: TObject);
     procedure ClickStart(Sender: TObject);
@@ -33,6 +40,7 @@ type
     procedure AutoScreenshot(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     procedure Start; override;
     procedure Stop; override;
     function Press(const Event: TInputPressRelease): Boolean; override;
@@ -44,15 +52,25 @@ var
   AutoTestMap: String;
   AutoTestPrefix: String;
   AutoTestDemo: String;
+  { Set from the command line: -iwad FILE, -file PWAD..., -warp MAP. }
+  CmdIwad: String;
+  CmdPwads: TStringList;
+  CmdWarp: String;
 
 implementation
 
-uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow,
+uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils,
+  CastleStringUtils,
   GameViewPlay;
+
+const
+  Freedoom1 = 'castle-data:/wads/freedoom1.wad';
+  Freedoom2 = 'castle-data:/wads/freedoom2.wad';
 
 constructor TViewMenu.Create(AOwner: TComponent);
 begin
   inherited;
+  FPwads := TStringList.Create;
 end;
 
 procedure TViewMenu.Start;
@@ -132,6 +150,33 @@ begin
   B.OnClick := {$ifdef FPC}@{$endif} ClickStart;
   FButtons.InsertFront(B);
 
+  { Your own WADs (desktop only: needs a native file dialog). }
+  Row := TCastleHorizontalGroup.Create(FreeAtStop);
+  Row.Spacing := 10;
+  FButtons.InsertFront(Row);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := 'Open IWAD...';
+  B.FontSize := 18;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickOpenIwad;
+  Row.InsertFront(B);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := 'Add PWAD...';
+  B.FontSize := 18;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickAddPwad;
+  Row.InsertFront(B);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := 'Last WADs';
+  B.FontSize := 18;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickLastWads;
+  B.Exists := UserConfig.GetValue('wads/iwad', '') <> '';
+  Row.InsertFront(B);
+
+  FWadsLabel := TCastleLabel.Create(FreeAtStop);
+  FWadsLabel.Color := Vector4(0.8, 0.8, 0.8, 1);
+  FWadsLabel.FontSize := 16;
+  FWadsLabel.Alignment := hpMiddle;
+  FButtons.InsertFront(FWadsLabel);
+
   FStatus := TCastleLabel.Create(FreeAtStop);
   FStatus.Color := Vector4(0.8, 0.8, 0.8, 1);
   FStatus.FontSize := 16;
@@ -143,26 +188,40 @@ begin
 
   if AutoTestMap = 'MENU' then
   begin
-    LoadWad('castle-data:/wads/freedoom1.wad');
+    LoadWads(Freedoom1, nil);
     WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoScreenshot);
     Exit;
   end;
-  if AutoTestMap <> '' then
+  if (AutoTestMap <> '') or (CmdIwad <> '') or (CmdPwads.Count > 0) or (CmdWarp <> '') then
   begin
-    if Copy(AutoTestMap, 1, 3) = 'MAP' then
-      LoadWad('castle-data:/wads/freedoom2.wad')
+    { Command line: explicit IWAD, or Freedoom matching the map names. }
+    if CmdIwad <> '' then
+      LoadWads(CmdIwad, CmdPwads)
+    else if (Copy(AutoTestMap, 1, 3) = 'MAP') or (Copy(CmdWarp, 1, 3) = 'MAP') then
+      LoadWads(Freedoom2, CmdPwads)
     else
-      LoadWad('castle-data:/wads/freedoom1.wad');
-    FMapIndex := Max(0, FWad.MapNames.IndexOf(AutoTestMap));
-    { Cannot change the view inside Start; do it after the first render. }
-    WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoStart);
+      LoadWads(Freedoom1, CmdPwads);
+    if FWad = nil then Exit;
+    if AutoTestMap <> '' then
+      FMapIndex := Max(0, FWad.MapNames.IndexOf(AutoTestMap))
+    else if CmdWarp <> '' then
+      FMapIndex := Max(0, FWad.MapNames.IndexOf(CmdWarp));
+    UpdateMapLabel;
+    if (AutoTestMap <> '') or (CmdWarp <> '') then
+    begin
+      { Cannot change the view inside Start; do it after the first render. }
+      WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoStart);
+      Exit;
+    end;
+    FMusic.Play(FMusic.TitleLump);
     Exit;
   end;
   if FWad = nil then
-    LoadWad('castle-data:/wads/freedoom1.wad')
+    LoadWads(Freedoom1, nil)
   else
   begin
     UpdateMapLabel;
+    UpdateWadsLabel;
     FMusic.Play(FMusic.TitleLump);
   end;
 end;
@@ -172,29 +231,133 @@ begin
   inherited;
 end;
 
-procedure TViewMenu.LoadWad(const Url: String);
+destructor TViewMenu.Destroy;
+begin
+  FreeAndNil(FPwads);
+  inherited;
+end;
+
+procedure TViewMenu.LoadWads(const Iwad: String; const Pwads: TStrings);
 var
   Img: TDoomImage;
+  I: Integer;
+  NewPwads: TStringList;
 begin
-  if (FWad <> nil) and (FWadUrl = Url) then Exit;
-  { The play view may still reference the old objects; it is stopped when
-    this view is active, so it is safe to replace them. }
-  FreeAndNil(FMusic);
-  FreeAndNil(FSounds);
-  FreeAndNil(FGraphics);
-  FreeAndNil(FWad);
-  FWadUrl := Url;
-  FWad := TDoomWad.Create(Url);
-  FGraphics := TDoomGraphics.Create(FWad);
-  FSounds := TDoomSounds.Create(FWad);
-  FMusic := TDoomMusic.Create(FWad);
-  if AutoTestMap = '' then
-    FMusic.Play(FMusic.TitleLump);
-  FMapIndex := 0;
-  Img := FGraphics.Patch('TITLEPIC');
-  if Img <> nil then
-    FTitle.Image := Img.Image.MakeCopy;
-  UpdateMapLabel;
+  NewPwads := TStringList.Create;
+  try
+    if Pwads <> nil then NewPwads.Assign(Pwads);
+    if (FWad <> nil) and (FIwadUrl = Iwad) and (NewPwads.Text = FPwads.Text) then Exit;
+    { The play view may still reference the old objects; it is stopped when
+      this view is active, so it is safe to replace them. }
+    FreeAndNil(FMusic);
+    FreeAndNil(FSounds);
+    FreeAndNil(FGraphics);
+    FreeAndNil(FWad);
+    try
+      FWad := TDoomWad.Create(Iwad);
+      for I := 0 to NewPwads.Count - 1 do
+        FWad.AddFile(NewPwads[I]);
+      FGraphics := TDoomGraphics.Create(FWad);
+      FSounds := TDoomSounds.Create(FWad);
+      FMusic := TDoomMusic.Create(FWad);
+    except
+      on E: Exception do
+      begin
+        WritelnWarning('WAD', 'Cannot load WADs: %s', [E.Message]);
+        FreeAndNil(FMusic);
+        FreeAndNil(FSounds);
+        FreeAndNil(FGraphics);
+        FreeAndNil(FWad);
+        if Iwad <> Freedoom1 then
+        begin
+          LoadWads(Freedoom1, nil);
+          FWadsLabel.Caption := 'Could not load: ' + E.Message;
+        end else
+          raise;
+        Exit;
+      end;
+    end;
+    FIwadUrl := Iwad;
+    FPwads.Assign(NewPwads);
+    if (AutoTestMap = '') and (CmdWarp = '') then
+      FMusic.Play(FMusic.TitleLump);
+    FMapIndex := 0;
+    Img := FGraphics.Patch('TITLEPIC');
+    if Img <> nil then
+      FTitle.Image := Img.Image.MakeCopy;
+    UpdateMapLabel;
+    UpdateWadsLabel;
+    RememberWads;
+  finally
+    FreeAndNil(NewPwads);
+  end;
+end;
+
+procedure TViewMenu.UpdateWadsLabel;
+begin
+  if FWadsLabel = nil then Exit;
+  if FWad <> nil then
+    FWadsLabel.Caption := 'Loaded: ' + FWad.Description
+  else
+    FWadsLabel.Caption := '';
+end;
+
+procedure TViewMenu.RememberWads;
+begin
+  { Only remember user files, not the bundled Freedoom. }
+  if (FIwadUrl <> Freedoom1) and (FIwadUrl <> Freedoom2) or (FPwads.Count > 0) then
+  begin
+    UserConfig.SetValue('wads/iwad', FIwadUrl);
+    UserConfig.SetValue('wads/pwads', FPwads.DelimitedText);
+    UserConfig.Save;
+  end;
+end;
+
+procedure TViewMenu.ClickOpenIwad(Sender: TObject);
+var
+  Url: String;
+begin
+  Url := UserConfig.GetValue('wads/iwad', '');
+  if Application.MainWindow.FileDialog('Open Doom IWAD', Url, true,
+      'Doom WAD files (*.wad)|*.wad|All files (*)|*') then
+    LoadWads(Url, nil)
+  else
+    FWadsLabel.Caption := 'No file chosen (file dialogs are not available in the browser)';
+end;
+
+procedure TViewMenu.ClickAddPwad(Sender: TObject);
+var
+  Url: String;
+  Pwads: TStringList;
+begin
+  Url := UserConfig.GetValue('wads/lastpwad', '');
+  if Application.MainWindow.FileDialog('Add Doom PWAD (-file)', Url, true,
+      'Doom WAD files (*.wad)|*.wad|All files (*)|*') then
+  begin
+    UserConfig.SetValue('wads/lastpwad', Url);
+    Pwads := TStringList.Create;
+    try
+      Pwads.Assign(FPwads);
+      Pwads.Add(Url);
+      LoadWads(FIwadUrl, Pwads);
+    finally
+      FreeAndNil(Pwads);
+    end;
+  end else
+    FWadsLabel.Caption := 'No file chosen (file dialogs are not available in the browser)';
+end;
+
+procedure TViewMenu.ClickLastWads(Sender: TObject);
+var
+  Pwads: TStringList;
+begin
+  Pwads := TStringList.Create;
+  try
+    Pwads.DelimitedText := UserConfig.GetValue('wads/pwads', '');
+    LoadWads(UserConfig.GetValue('wads/iwad', Freedoom1), Pwads);
+  finally
+    FreeAndNil(Pwads);
+  end;
 end;
 
 procedure TViewMenu.UpdateMapLabel;
@@ -209,12 +372,12 @@ end;
 
 procedure TViewMenu.ClickPhase1(Sender: TObject);
 begin
-  LoadWad('castle-data:/wads/freedoom1.wad');
+  LoadWads(Freedoom1, nil);
 end;
 
 procedure TViewMenu.ClickPhase2(Sender: TObject);
 begin
-  LoadWad('castle-data:/wads/freedoom2.wad');
+  LoadWads(Freedoom2, nil);
 end;
 
 procedure TViewMenu.ClickPrevMap(Sender: TObject);
@@ -276,4 +439,8 @@ begin
   end;
 end;
 
+initialization
+  CmdPwads := TStringList.Create;
+finalization
+  FreeAndNil(CmdPwads);
 end.

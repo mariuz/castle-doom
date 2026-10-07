@@ -8,8 +8,13 @@
 
 Doom levels, rendered and played with [Castle Game Engine](https://castle-engine.io/)
 (Object Pascal). It reads the original WAD format directly: Freedoom Phase 1 and
-Phase 2 (BSD licensed, bundled in `data/wads/`) work out of the box, and any
-vanilla-format Doom 1 / Doom 2 IWAD or PWAD can be dropped in next to them.
+Phase 2 (BSD licensed, bundled in `data/wads/`) work out of the box, and your own
+vanilla-format Doom 1 / Doom 2 IWADs and PWADs can be loaded from the menu
+("Open IWAD...", "Add PWAD...") or the command line:
+
+```bash
+castle-doom -iwad DOOM2.WAD -file mymap.wad -warp MAP01
+```
 
 This project is deliberately written as a *tour of the engine*: every Doom subsystem
 is mapped onto a Castle Game Engine feature.
@@ -59,15 +64,17 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   for the rocket launcher (splash damage), plasma gun and BFG (charge, ball, tracer spray).
 - Status bar with face, keys, arms, ammo table; weapon bobbing; damage and bonus flashes.
 - Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
+- External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-warp`), PWAD lumps
+  overriding the IWAD's like in Doom.
 - Music: MUS and MIDI lumps played through an FM synthesizer driven by the WAD's GENMIDI
   instrument bank (the AdLib / Sound Blaster sound of the original), title, level and
   intermission tracks.
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no external WAD loading yet, no monster
-infighting, no boss triggers, no save games, vanilla node format only, the music synth
-approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no monster infighting, no boss triggers,
+no save games, vanilla node format only (no ZDoom nodes yet), the music synth approximates
+the OPL2.
 
 ## Build and run
 

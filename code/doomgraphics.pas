@@ -80,7 +80,6 @@ type
     FAnimGroups: TAnimGroupList;
     FAnimByName: {$ifdef FPC}specialize{$endif} TDictionary<String, TAnimGroup>;
     FMissing: TDoomImage;
-    FPatchStart, FPatchEnd: Integer;
     procedure ReadPNames;
     procedure ReadTextureLump(const LumpName: String);
     procedure IndexFlats;
@@ -259,8 +258,6 @@ begin
   FAnimByName := {$ifdef FPC}specialize{$endif} TDictionary<String, TAnimGroup>.Create;
 
   RegisterUrlProtocol('doomgfx', {$ifdef FPC}@{$endif} ReadGfx, nil);
-  FPatchStart := FWad.FindLump('P_START');
-  FPatchEnd := FWad.FindLump('P_END');
   ReadPNames;
   ReadTextureLump('TEXTURE1');
   if FWad.HasLump('TEXTURE2') then
@@ -332,25 +329,27 @@ end;
 
 procedure TDoomGraphics.IndexFlats;
 var
-  S, E, I: Integer;
+  I: Integer;
   N: String;
+  Inside: Boolean;
 begin
-  S := FWad.FindLump('F_START');
-  E := FWad.FindLump('F_END');
-  if (S < 0) or (E < 0) then
-  begin
-    WritelnWarning('Graphics', 'No F_START/F_END markers, no flats');
-    Exit;
-  end;
-  for I := S + 1 to E - 1 do
+  { Walk every file's F_START..F_END (or FF_START..FF_END in PWADs);
+    later files override earlier flats of the same name. }
+  Inside := false;
+  for I := 0 to FWad.LumpCount - 1 do
   begin
     N := FWad.LumpName(I);
-    if (FWad.LumpSize(I) >= 4096) and not FFlatLumps.ContainsKey(N) then
+    if (N = 'F_START') or (N = 'FF_START') then begin Inside := true; Continue; end;
+    if (N = 'F_END') or (N = 'FF_END') then begin Inside := false; Continue; end;
+    if Inside and (FWad.LumpSize(I) >= 4096) then
     begin
-      FFlatLumps.Add(N, I);
-      FFlatOrder.Add(N);
+      if not FFlatLumps.ContainsKey(N) then
+        FFlatOrder.Add(N);
+      FFlatLumps.AddOrSetValue(N, I);
     end;
   end;
+  if FFlatLumps.Count = 0 then
+    WritelnWarning('Graphics', 'No F_START/F_END markers, no flats');
 end;
 
 procedure TDoomGraphics.IndexSprites;
@@ -365,25 +364,27 @@ procedure TDoomGraphics.IndexSprites;
   end;
 
 var
-  S, E, I: Integer;
+  I: Integer;
   N: String;
+  Inside: Boolean;
 begin
-  S := FWad.FindLump('S_START');
-  E := FWad.FindLump('S_END');
-  if (S < 0) or (E < 0) then
-  begin
-    WritelnWarning('Graphics', 'No S_START/S_END markers, no sprites');
-    Exit;
-  end;
-  for I := S + 1 to E - 1 do
+  { Walk every file's S_START..S_END (or SS_START..SS_END in PWADs);
+    later files override earlier frames of the same name. }
+  Inside := false;
+  for I := 0 to FWad.LumpCount - 1 do
   begin
     N := FWad.LumpName(I);
+    if (N = 'S_START') or (N = 'SS_START') then begin Inside := true; Continue; end;
+    if (N = 'S_END') or (N = 'SS_END') then begin Inside := false; Continue; end;
+    if not Inside then Continue;
     if FWad.LumpSize(I) < 8 then Continue;
     if Length(N) >= 6 then
       AddRef(Copy(N, 1, 6), I, false);
     if Length(N) = 8 then
       AddRef(Copy(N, 1, 4) + Copy(N, 7, 2), I, true);
   end;
+  if FSprites.Count = 0 then
+    WritelnWarning('Graphics', 'No S_START/S_END markers, no sprites');
 end;
 
 procedure TDoomGraphics.AddAnimRange(const First, Last: String; const IsFlat: Boolean);
@@ -436,14 +437,8 @@ end;
 
 function TDoomGraphics.FindPatchLump(const Name: String): Integer;
 begin
-  Result := -1;
-  if (FPatchStart >= 0) and (FPatchEnd > FPatchStart) then
-  begin
-    Result := FWad.FindLump(Name, FPatchStart);
-    if Result > FPatchEnd then Result := -1;
-  end;
-  if Result < 0 then
-    Result := FWad.FindLump(Name);
+  { Last file wins, so PWAD patches replace IWAD ones. }
+  Result := FWad.FindLump(Name);
 end;
 
 { Uncompressed 32-bit TGA: a header and raw BGRA pixels, bottom row first,

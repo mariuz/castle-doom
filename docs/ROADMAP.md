@@ -6,6 +6,11 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- External WADs: `-iwad FILE`, `-file PWAD...`, `-warp MAP` on the command
+  line, "Open IWAD..." / "Add PWAD..." / "Last WADs" in the menu (native file
+  dialog, paths remembered in the user config). `TDoomWad` stacks files; lumps
+  are looked up from the last file backwards so PWAD maps, textures, sprites
+  (S_START/SS_START ranges), flats, sounds and music override the IWAD's.
 - Automap (Tab): `DoomAutomap` draws seen linedefs with `DrawPrimitive2D` in
   Doom's colours, player arrow, zoom (+/-, wheel), 128-unit grid (G), reveal
   all (I). Lines are revealed per visited sector and its neighbours.
@@ -56,7 +61,6 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Load external WADs**: command line `-iwad`/`-file`, PWAD merging (later lumps override earlier ones), a file picker in the menu (`castle-config:` for the last path). | Play the original IWADs and community maps. | `DoomWad` (lump directory merge), menu | M |
 | **Extended node formats** (`XNOD`, `ZNOD`, `XGLN`, `ZGLN`) used by modern maps; the subsector polygon code already works from any node tree. | Modern PWADs. | `DoomMap.LoadLumps` | M |
 | **Boom/MBF specials** (generalized linedefs, scrolling floors, friction, translucency) and **DeHackEd** patches. | Big community map support; large job. | `DoomWorld.ApplySpecial`, `DoomThings` | L |
 | **Save / load game** (serialize sector heights, specials state, actors, player) with `CastleConfig` or JSON; **quick save**. | Longer sessions. | `DoomWorld` | M |
@@ -76,9 +80,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. External WAD loading (M): turns the demo into something people can use with
-   their own IWADs and PWADs.
-2. Monster infighting and boss triggers (M + S): the remaining big behaviour
+1. Monster infighting and boss triggers (M + S): the remaining big behaviour
    gaps on the original levels.
-3. Doom text font and intermission graphics (S + M): the most visible
+2. Doom text font and intermission graphics (S + M): the most visible
    presentation gap.
+3. Extended node formats (M): many community PWADs now loadable through
+   `-file` use ZDoom nodes.

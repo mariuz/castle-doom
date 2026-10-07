@@ -403,7 +403,7 @@ begin
   FIntermissionBack.Exists := false;
   FIntermissionLabel.Exists := false;
   FLevelTime := 0;
-  FWorld.ShowMessage(Format('%s  (%s)', [MapName, ExtractUriName(Wad.Url)]));
+  FWorld.ShowMessage(Format('%s  (%s)', [MapName, Wad.Description]));
   if Music <> nil then
     Music.Play(Music.LumpForMap(MapName));
 end;

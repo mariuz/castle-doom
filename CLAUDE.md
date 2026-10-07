@@ -57,6 +57,10 @@ and the log at `%LOCALAPPDATA%\castle-doom\castle-doom.log` (grep for
 (-416, 256); door at x=544..560, y=680..744 (stand at 480,712 facing angle 0);
 WR lift square 64..192 x 192..320 (stand at 0,256 facing 0 and walk).
 
+External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
+`--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
+test (E1M1 must then log 2231 vertices).
+
 Set `CASTLE_DOOM_DUMP_MUSIC=<dir>` to write rendered music WAVs for analysis
 (a pitch-grid/level check script lived in the scratchpad as `analyze_wav.py`:
 Goertzel on semitone vs quarter-tone frequencies).

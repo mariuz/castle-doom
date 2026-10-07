@@ -131,6 +131,14 @@ The file is fetched with CGE's `Download('castle-data:/wads/freedoom1.wad')`.
 it works identically on desktop (a directory) and on the web (the build tool
 packs `data/` into a zip the browser downloads before start).
 
+Several files can be stacked (`AddFile`): the IWAD first, then PWADs, exactly
+like Doom's `-file`. The merged directory keeps a file index per lump and
+`FindLump` searches from the last file backwards, so a PWAD's `E1M1`,
+`TEXTURE1`, sprites, flats, sounds or music replace the IWAD's. Sprite and
+flat ranges (`S_START`/`SS_START`, `F_START`/`FF_START`) are scanned across
+all files in `DoomGraphics`. Plain file paths from the command line are
+turned into `file://` URLs with `FilenameToUriSafe`.
+
 Also here: the 256-colour `PLAYPAL` palette (as `TVector4Byte`), the list of map
 marker lumps (`E1M1`... or `MAP01`...), and a flag for Doom 2 style naming.
 
@@ -478,10 +486,13 @@ CGE structures an application as `TCastleView`s pushed on the window's
 container. `GameInitialize` creates the window (`TCastleWindow`), parses the
 command line, creates both views and shows the menu.
 
-`TViewMenu` loads a WAD (`TDoomWad`, `TDoomGraphics`, `TDoomSounds`,
+`TViewMenu` loads a WAD set (`TDoomWad`, `TDoomGraphics`, `TDoomSounds`,
 `TDoomMusic`), shows `TITLEPIC` in an image control, buttons
 (`TCastleButton` in `TCastleHorizontalGroup`/`TCastleVerticalGroup`) to pick
-Freedoom Phase 1 or 2 and the map, and plays the title track. Starting hands
+Freedoom Phase 1 or 2 and the map, "Open IWAD..." and "Add PWAD..." using the
+window's native `FileDialog` (desktop only), a "Last WADs" shortcut backed by
+`UserConfig` (`castle-config:`), and plays the title track. The command line
+accepts Doom's `-iwad FILE`, `-file PWAD...` and `-warp MAP`. Starting hands
 the WAD objects to `TViewPlay` and sets `Container.View`. (A view cannot
 change the container's view from inside its own `Start`; the autotest path
 uses `WaitForRenderAndCall` for that.)
@@ -635,7 +646,8 @@ Where each engine feature is used, as a map for learning the engine:
 | `TCastleWindow`, `Application`, `Window.ParseParameters` | GameInitialize | window and command line |
 | `TCastleView`, `Container.View`, `WaitForRenderAndCall` | GameViewMenu, GameViewPlay | screens, deferred work |
 | `Container.LoadSettings('castle-data:/CastleSettings.xml')` | GameInitialize | UI scaling |
-| `Download`, `castle-data:` | DoomWad | reading the WAD |
+| `Download`, `castle-data:`, `FilenameToUriSafe` | DoomWad | reading WADs from data or user files |
+| `TCastleWindow.FileDialog`, `UserConfig` (`CastleConfig`) | GameViewMenu | picking and remembering user WADs |
 | `RegisterUrlProtocol`, `TUrlReadEvent` | DoomGraphics, DoomSound, DoomMusic | in-memory assets |
 | `TRGBAlphaImage`, `PixelPtr`, `RawPixels` | DoomGraphics, DoomHud | decoding and composing pictures |
 | `TImageTextureNode`, `TTexturePropertiesNode`, `magNearest`, `bmClampToEdge` | DoomGraphics | texture nodes |
