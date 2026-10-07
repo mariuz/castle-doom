@@ -11,7 +11,7 @@ unit DoomMusic;
 
 interface
 
-uses SysUtils, Classes, Generics.Collections, Generics.Defaults,
+uses SysUtils, Classes, Generics.Collections,
   CastleSoundEngine,
   DoomWad;
 
@@ -327,11 +327,46 @@ type
   end;
   TTickEventList = {$ifdef FPC}specialize{$endif} TList<TTickEvent>;
 
-function CompareTick(constref A, B: TTickEvent): Integer;
+function TickBefore(const A, B: TTickEvent): Boolean;
 begin
-  if A.Tick < B.Tick then Exit(-1);
-  if A.Tick > B.Tick then Exit(1);
-  Result := A.Order - B.Order;
+  if A.Tick <> B.Tick then Exit(A.Tick < B.Tick);
+  Result := A.Order <= B.Order;
+end;
+
+{ Stable merge sort by (Tick, Order); avoids Generics.Defaults comparers,
+  whose types differ between FPC 3.2 and the main branch. }
+procedure SortTickEvents(var A: array of TTickEvent);
+var
+  Tmp: array of TTickEvent;
+
+  procedure Sort(const Lo, Hi: Integer);
+  var
+    Mid, I, J, K: Integer;
+  begin
+    if Hi - Lo < 1 then Exit;
+    Mid := (Lo + Hi) div 2;
+    Sort(Lo, Mid);
+    Sort(Mid + 1, Hi);
+    I := Lo; J := Mid + 1; K := Lo;
+    while (I <= Mid) and (J <= Hi) do
+    begin
+      if TickBefore(A[I], A[J]) then
+      begin
+        Tmp[K] := A[I]; Inc(I);
+      end else
+      begin
+        Tmp[K] := A[J]; Inc(J);
+      end;
+      Inc(K);
+    end;
+    while I <= Mid do begin Tmp[K] := A[I]; Inc(I); Inc(K); end;
+    while J <= Hi do begin Tmp[K] := A[J]; Inc(J); Inc(K); end;
+    for K := Lo to Hi do A[K] := Tmp[K];
+  end;
+
+begin
+  SetLength(Tmp, Length(A));
+  Sort(0, High(A));
 end;
 
 function ParseMidi(const Data: PByte; const Size: Integer; const Events: TMusicEventList): Boolean;
@@ -344,7 +379,7 @@ var
   Tempo: Integer;
   LastTick: Int64;
   Time: Double;
-  Comparer: {$ifdef FPC}specialize{$endif} IComparer<TTickEvent>;
+  Sorted: array of TTickEvent;
 
   function ReadVlq: Integer;
   var
@@ -464,21 +499,21 @@ begin
       Pos := TrackEnd;
     end;
 
-    Comparer := {$ifdef FPC}specialize{$endif} TComparer<TTickEvent>.Construct({$ifdef FPC}@{$endif} CompareTick);
-    All.Sort(Comparer);
+    Sorted := All.ToArray;
+    SortTickEvents(Sorted);
 
     Tempo := 500000;
     LastTick := 0;
     Time := 0;
-    for I := 0 to All.Count - 1 do
+    for I := 0 to High(Sorted) do
     begin
-      Time := Time + (All[I].Tick - LastTick) * (Tempo / 1000000) / Division;
-      LastTick := All[I].Tick;
-      if All[I].IsTempo then
-        Tempo := All[I].Tempo
+      Time := Time + (Sorted[I].Tick - LastTick) * (Tempo / 1000000) / Division;
+      LastTick := Sorted[I].Tick;
+      if Sorted[I].IsTempo then
+        Tempo := Sorted[I].Tempo
       else
       begin
-        TE := All[I];
+        TE := Sorted[I];
         TE.Ev.Time := Time;
         Events.Add(TE.Ev);
       end;
