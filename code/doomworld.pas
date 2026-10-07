@@ -124,6 +124,10 @@ type
     FButtons: array of TButtonTimer;
     FTic: Int64;
     FTicAccum: Single;
+    { Time spent per stage (seconds), logged as "Perf:" every 10 s. }
+    FPerf: array [0..7] of Double;
+    FPerfTics, FPerfFrames: Integer;
+    FPerfClock: Double;
     FExitRequested: Boolean;
     FSecretExit: Boolean;
     FLightSectors: array of Integer;
@@ -186,6 +190,7 @@ type
     procedure KillActor(const A: TDoomActor; const Killer: TDoomActor = nil; const ByPlayer: Boolean = true);
     procedure BossDeath(const A: TDoomActor);
     procedure NightmareRespawn(const A: TDoomActor);
+    procedure PerfLog;
     procedure BrainAwake(const A: TDoomActor);
     procedure TicBrainShooter(const A: TDoomActor);
     procedure BrainSpit(const A: TDoomActor);
@@ -324,7 +329,7 @@ function NextMapName(const Current: String; const Secret: Boolean; const IsDoom2
 
 implementation
 
-uses Math, CastleLog, CastleStringUtils, CastleBehaviors;
+uses Math, CastleLog, CastleStringUtils, CastleBehaviors, CastleTimeUtils;
 
 const
   DoorSpeed = 2;
@@ -1120,6 +1125,7 @@ procedure TDoomWorld.Update(const SecondsPassed: Single; const PlayerFeetX, Play
   const PlayerAngleDeg: Single; const CameraPos, CameraDir: TVector3);
 var
   Steps: Integer;
+  T: TTimerResult;
 begin
   if FMap = nil then Exit;
   Player.X := PlayerFeetX;
@@ -1140,28 +1146,74 @@ begin
     RunTic;
     Inc(Steps);
   end;
+  T := Timer;
   FGeometry.Update(SecondsPassed, CameraPos);
   FGeometry.FlushDirty;
+  FPerf[7] := FPerf[7] + TimerSeconds(Timer, T);
+  Inc(FPerfFrames);
+  FPerfClock := FPerfClock + SecondsPassed;
+  if FPerfClock >= 10 then PerfLog;
+end;
+
+procedure TDoomWorld.PerfLog;
+const
+  Names: array [0..7] of String = ('anim', 'movers', 'lights', 'actors', 'pickups+lines', 'player', 'other', 'geometry');
+var
+  I: Integer;
+  S: String;
+begin
+  S := '';
+  for I := 0 to High(FPerf) do
+  begin
+    S := S + Format(' %s %.2f', [Names[I], FPerf[I] * 1000 / Max(1, FPerfTics)]);
+    FPerf[I] := 0;
+  end;
+  WritelnLog('Perf', '%d tics, %d frames in %.1f s; ms per tic:%s (geometry per tic too)',
+    [FPerfTics, FPerfFrames, FPerfClock, S]);
+  FPerfTics := 0;
+  FPerfFrames := 0;
+  FPerfClock := 0;
 end;
 
 procedure TDoomWorld.RunTic;
+var
+  T: TTimerResult;
+
+  procedure Lap(const Index: Integer);
+  var
+    Now: TTimerResult;
+  begin
+    Now := Timer;
+    FPerf[Index] := FPerf[Index] + TimerSeconds(Now, T);
+    T := Now;
+  end;
+
 begin
+  T := Timer;
   Inc(FTic);
+  Inc(FPerfTics);
   FGraphics.AnimationTic(FTic);
+  Lap(0);
   TicMovers;
+  Lap(1);
   TicLights;
   TicButtons;
+  Lap(2);
   TicActors;
   if FBrainDeathTics > 0 then
     TicBrainDeath;
+  Lap(3);
   if not Player.Dead then
   begin
     CheckPickups;
     CheckCrossings;
   end;
+  Lap(4);
   TicPlayer;
+  Lap(5);
   FOldPlayerX := Player.X;
   FOldPlayerY := Player.Y;
+  Lap(6);
 end;
 
 procedure TDoomWorld.TicMovers;
