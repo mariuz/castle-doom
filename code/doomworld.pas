@@ -51,6 +51,12 @@ type
     WeaponFrame: Char;
     FlashFrame: Char;
     Refire: Boolean;
+    { Weapon change (A_Lower / A_Raise): 0 ready, 1 lowering, 2 raising;
+      the offset below WEAPONTOP in Doom pixels (0 up .. 96 out of view);
+      the weapon that comes up once the old one is down. }
+    WeaponSwitch: Integer;
+    WeaponOffset: Single;
+    PendingWeapon: TWeapon;
     { Status bar face: tics left for the "ouch" / "evil grin" expressions. }
     FaceTics: Integer;
     FaceState: Integer;
@@ -253,6 +259,8 @@ type
     { The player fires the current weapon. }
     procedure FireWeapon;
     procedure SelectWeapon(const W: TWeapon);
+    { Start lowering the current weapon to bring up W (P_SetPsprite S_LOWER). }
+    procedure ChangeWeapon(const W: TWeapon);
     procedure NextWeapon(const Delta: Integer);
     procedure ShowMessage(const Msg: String);
     procedure DamagePlayer(const Damage: Integer; const FromActor: TDoomActor);
@@ -900,6 +908,11 @@ begin
   end else
     ResetPlayer;
   Player.Keys := [];
+  { P_SetupPsprites: the weapon comes up from below at the start of a level. }
+  Player.PendingWeapon := Player.Weapon;
+  Player.WeaponSwitch := 2;
+  Player.WeaponOffset := 96;
+  Player.AttackTics := 0;
   if State = nil then
     SpawnThings;
   WritelnLog('Load', '%s: things spawned in %d ms', [MapName, Ms]);
@@ -1020,13 +1033,14 @@ begin
     ShowMessage('No ammo for that weapon.');
     Exit;
   end;
-  if W <> Player.Weapon then
-  begin
-    Player.Weapon := W;
-    Player.AttackTics := 0;
-    Player.WeaponFrame := 'A';
-    Player.FlashFrame := #0;
-  end;
+  ChangeWeapon(W);
+end;
+
+procedure TDoomWorld.ChangeWeapon(const W: TWeapon);
+begin
+  if (W = Player.Weapon) and (Player.WeaponSwitch <> 1) then Exit;
+  Player.PendingWeapon := W;
+  Player.WeaponSwitch := 1;
 end;
 
 procedure TDoomWorld.NextWeapon(const Delta: Integer);
@@ -1305,6 +1319,33 @@ var
 begin
   if Player.AttackTics > 0 then
     Dec(Player.AttackTics);
+  { A_Lower / A_Raise at 6 pixels per tic; the old weapon finishes its
+    attack first. }
+  case Player.WeaponSwitch of
+    1:
+      if Player.AttackTics <= 0 then
+      begin
+        Player.WeaponOffset := Player.WeaponOffset + 6;
+        if Player.WeaponOffset >= 96 then
+        begin
+          Player.WeaponOffset := 96;
+          Player.Weapon := Player.PendingWeapon;
+          Player.WeaponFrame := 'A';
+          Player.FlashFrame := #0;
+          Player.WeaponSwitch := 2;
+          if Player.Weapon = wpChainsaw then FSounds.Play('DSSAWUP');
+        end;
+      end;
+    2:
+      begin
+        Player.WeaponOffset := Player.WeaponOffset - 6;
+        if Player.WeaponOffset <= 0 then
+        begin
+          Player.WeaponOffset := 0;
+          Player.WeaponSwitch := 0;
+        end;
+      end;
+  end;
   case Player.Weapon of
     wpPistol: Total := 18;
     wpShotgun: Total := 36;
@@ -3191,6 +3232,8 @@ var
 begin
   if Player.Dead or (FMap = nil) or not FHaveRay then Exit;
   if Player.AttackTics > 0 then Exit;
+  { A_WeaponReady only: no firing while the weapon goes down or up. }
+  if Player.WeaponSwitch <> 0 then Exit;
   Ammo := AmmoFor(Player.Weapon);
   Cost := 1;
   if Player.Weapon = wpBfg then Cost := 40;
@@ -3316,10 +3359,7 @@ var
     Include(Player.Weapons, W);
     if T <> amNoAmmo then GiveAmmo(T, Amount);
     if not HadWeapon then
-    begin
-      Player.Weapon := W;
-      Player.AttackTics := 0;
-    end;
+      ChangeWeapon(W);
     Result := true;
   end;
 
@@ -3346,7 +3386,7 @@ begin
       pkArmorBlue: begin Player.Armor := 200; Player.ArmorType := 2; end;
       pkSoulsphere: begin Player.Health := Min(200, Player.Health + 100); Sound := 'DSGETPOW'; end;
       pkMegasphere: begin Player.Health := 200; Player.Armor := 200; Player.ArmorType := 2; Sound := 'DSGETPOW'; end;
-      pkBerserk: begin Player.BerserkTics := 60 * TicRate; GiveHealth(100, 100); Player.Weapon := wpFist; Sound := 'DSGETPOW'; end;
+      pkBerserk: begin Player.BerserkTics := 60 * TicRate; GiveHealth(100, 100); ChangeWeapon(wpFist); Sound := 'DSGETPOW'; end;
       pkInvulnerability: begin Player.InvulnerableTics := 30 * TicRate; Sound := 'DSGETPOW'; end;
       pkInvisibility: begin Player.InvisibleTics := 60 * TicRate; Sound := 'DSGETPOW'; end;
       pkRadSuit: begin Player.RadSuitTics := 60 * TicRate; Sound := 'DSGETPOW'; end;

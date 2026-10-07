@@ -644,7 +644,27 @@ skipped; flats fall back to vanilla's, cast names to Doom's.
 
 The weapon sprite and muzzle flash are two more `TCastleImageControl`s placed
 with Doom's formula (`x1 = centerx + (1 - 160 - leftoffset) * scale`,
-`WEAPONTOP = 32`) and bobbed with the camera speed. Screen flashes are
+`WEAPONTOP = 32`) and bobbed with the camera speed. A weapon change goes
+through `TDoomWorld.ChangeWeapon`: `Player.WeaponSwitch` 1 lowers the sprite
+by 6 Doom pixels per tic (`WeaponOffset`, added to `WEAPONTOP`) once the
+current attack has finished, swaps in `PendingWeapon` at 96, then 2 raises
+it back to 0 (`A_Lower` / `A_Raise`); `FireWeapon` refuses meanwhile and the
+bob stops. Every level starts at 96 (raising).
+
+The screen melt (`doomwipe.pas`, `f_wipe.c`): `TViewPlay.BeginWipe` grabs
+the old screen with `Container.SaveScreen` (a `TRGBImage` read back from the
+frame buffer) and hands it to `TDoomWipe`, a full-size control in front of
+everything whose `Render` draws it as 160 vertical strips with
+`TDrawableImage.Draw(ScreenRect, ImageRect)`, each strip shifted down by its
+own offset on the 200-line grid. `wipe_initMelt` gives every column a start
+delay of 0..15 tics differing by at most one from its neighbour;
+`wipe_doMelt` moves a column 1, 2, 4, 8, 16 pixels and then 8 per tic, so it
+takes about a second. The level keeps running underneath (Doom freezes it).
+Melts start at level → intermission (`StartIntermission`), into a finale
+(`StartFinale`) and at a new map: `StartMap` captures the intermission or
+finale screen before the "LOADING" frame and `LoadPendingMap` starts the
+melt once the level is in. The wipe advances at most two tics per frame,
+because the first frame after a level load is long. Screen flashes are
 full-size `TCastleRectangleControl`s with animated alpha; messages and the
 help panel are `TCastleLabel`s.
 
@@ -886,4 +906,5 @@ Where each engine feature is used, as a map for learning the engine:
 | FPC `fpjson` / `jsonparser` (`TJSONObject`, `GetJSON`) | doomworld_save.inc, GameViewPlay | save game format |
 | `TCastleUserInterface.Render`, `DrawPrimitive2D`, `DrawRectangle`, `RenderRect` | DoomAutomap | immediate-mode 2D drawing |
 | `Container.Fps`, `WritelnLog`, `WritelnWarning`, `Application.MainWindow.SaveScreen` | GameViewPlay, everywhere | diagnostics and screenshots |
+| `Container.SaveScreen`, `TDrawableImage.Draw(ScreenRect, ImageRect)`, `TCastleUserInterface.Render` / `RenderRect` | GameViewPlay, DoomWipe | the screen melt |
 | `castle-engine compile/package/generate-program`, `--target=web` | CI | builds |

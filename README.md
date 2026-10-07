@@ -68,7 +68,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   spawn monsters and dies to rockets through the hole in its wall.
 - Weapons: fist, chainsaw, pistol, shotgun, super shotgun, chaingun, and real projectiles
   for the rocket launcher (splash damage), plasma gun and BFG (charge, ball, tracer spray).
-- Status bar with face, keys, arms, ammo table; weapon bobbing; damage and bonus flashes.
+- Status bar with face, keys, arms, ammo table; weapon bobbing, weapons lowered and raised
+  when switching; damage and bonus flashes; Doom's screen melt between levels.
 - Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
 - Doom's text font for messages, and the real intermission screen (level names, FINISHED,
   animated kills/items/secrets/time with sounds, par times, ENTERING).
@@ -145,6 +146,7 @@ code/doomfont.pas       STCFN text
 code/doomintermission.pas  intermission screen
 code/doomfinale.pas     finale text, end pictures, bunny scroller, cast call
 code/doomdehacked.pas   BEX strings from DEHACKED lumps
+code/doomwipe.pas       the screen melt
 code/doommenu.pas       Doom's menu (M_* graphics): main, episode, skill, load
 code/gameviewmenu.pas   title screen: Doom menu and options
 code/gameviewplay.pas   viewport, navigation, HUD, input

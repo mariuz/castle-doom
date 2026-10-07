@@ -6,6 +6,12 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Weapon raise / lower and the screen melt: switching weapons (keys,
+  running out of ammo, a new weapon picked up, berserk) lowers the old one
+  6 pixels per tic, swaps it out of view and raises the new one (`A_Lower` /
+  `A_Raise`); no firing meanwhile; every level starts with the weapon coming
+  up. Level → intermission, intermission → next level and the finales melt
+  the old screen down in 160 columns like `f_wipe.c` (`DoomWipe`).
 - Monsters use teleporters and walk-over lines like in Doom
   (`P_CrossSpecialLine` for non-players): crossing a 39 / 97 teleporter or a
   monster-only 125 / 126 from the front teleports them with fog at both
@@ -119,7 +125,6 @@ L = several days). Items inside a section are in suggested order.
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
-| **Weapon sprite bobbing and raise/lower animation** when switching weapons; **screen melt** wipe between levels. | Doom feel. | `GameViewPlay` | S |
 | **Palette flashes** done through the real `PLAYPAL` palettes (red/yellow/green tints) instead of a translucent rectangle. | Fidelity. | `GameViewPlay` | S |
 | **Hanging/floating things** bob (cacodemons hover), **gibs** for excessive damage (`XDEATH` frames). | Fidelity. | `DoomThings` frames, `KillActor` | S |
 
@@ -156,9 +161,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Weapon raise / lower when switching and the screen melt between levels
-   (S): two small things that make it feel like Doom.
-2. More BEX strings (S): Freedoom's own pickup messages and prompts, now
+1. More BEX strings (S): Freedoom's own pickup messages and prompts, now
    that `DoomDehacked` reads them.
-3. Spectre fuzz (S): spectres are drawn like plain demons; a translucent
+2. Spectre fuzz (S): spectres are drawn like plain demons; a translucent
    or shader "fuzz" look.
+3. 3D sight checks (S-M): opening heights and `REJECT` in `SightClear`, so
+   monsters stop seeing (and shooting) over ledges they could not in Doom.

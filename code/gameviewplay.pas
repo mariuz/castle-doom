@@ -7,9 +7,9 @@ interface
 
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
-  CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors,
+  CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
-  DoomIntermission, DoomFinale, DoomDehacked;
+  DoomIntermission, DoomFinale, DoomDehacked, DoomWipe;
 
 type
   TViewPlay = class(TCastleView)
@@ -28,6 +28,10 @@ type
     FIntermissionBack: TCastleRectangleControl;
     FIntermissionScreen: TDoomIntermission;
     FFinaleScreen: TDoomFinale;
+    FWipe: TDoomWipe;
+    FWipeTicAccum: Single;
+    { Old screen captured by StartMap, melted once the new map is in. }
+    FPendingWipe: TCastleImage;
     FStrings: TDoomStrings;
     FIntermissionTicAccum: Single;
     FCrosshair: TCastleCrosshair;
@@ -72,6 +76,9 @@ type
     procedure FinishFinale;
     { The screen shown between levels (intermission or finale) was clicked. }
     procedure AccelerateScreen;
+    { Capture what is on screen now (for the melt). }
+    function CaptureScreen: TCastleImage;
+    procedure BeginWipe;
     function DoomAngleFromCamera: Single;
   public
     { Set before starting the view. }
@@ -106,7 +113,6 @@ implementation
 uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
   CastleDownload,
-  CastleImages,
   CastleUriUtils, X3DNodes,
   DoomGeometry, DoomMap,
   GameViewMenu, GameSaveStorage;
@@ -289,6 +295,11 @@ begin
   FSlotMenuText.Anchor(vpMiddle);
   FSlotMenuText.Exists := false;
   InsertFront(FSlotMenuText);
+
+  { The screen melt, above everything. }
+  FWipe := TDoomWipe.Create(FreeAtStop);
+  FWipe.Exists := false;
+  InsertFront(FWipe);
 end;
 
 procedure TViewPlay.SetupNavigation;
@@ -358,6 +369,7 @@ begin
   FreeAndNil(FDemoSteps);
   FreeAndNil(FWorld);
   FreeAndNil(FStrings);
+  FreeAndNil(FPendingWipe);
   inherited;
 end;
 
@@ -509,12 +521,18 @@ end;
 
 procedure TViewPlay.StartMap(const MapName: String; const KeepInventory: Boolean);
 begin
+  { The melt goes from what is on screen now (intermission, finale text) to
+    the new level; not on the first map of the session (nothing to melt). }
+  FreeAndNil(FPendingWipe);
+  if (FWorld <> nil) and FWorld.MapLoaded then
+    FPendingWipe := CaptureScreen;
   { Show "Loading" for one frame before the (synchronous, possibly slow) load. }
   FPendingMap := MapName;
   FPendingKeepInventory := KeepInventory;
   FIntermission := true; { pauses Update until the map is in }
   FIntermissionBack.Exists := true;
   FIntermissionScreen.Exists := false;
+  FFinaleScreen.Exists := false;
   FLoadingText.SetScale(Max(1, EffectiveHeight / 200));
   FLoadingText.SetText('LOADING ' + MapName + '...');
   if Music <> nil then Music.Stop;
@@ -548,6 +566,12 @@ begin
   FIntermissionScreen.Exists := false;
   FFinaleScreen.Exists := false;
   FLoadingText.Exists := false;
+  if FPendingWipe <> nil then
+  begin
+    FWipe.Start(FPendingWipe); { the wipe owns it now }
+    FPendingWipe := nil;
+    FWipeTicAccum := 0;
+  end;
   if Restored then
     FWorld.ShowMessage('Game loaded.')
   else
@@ -740,7 +764,7 @@ begin
     Speed := 0;
   FLastCameraPos := CamPos;
   Bob := Min(16, Speed / 25);
-  if P.AttackTics > 0 then Bob := 0;
+  if (P.AttackTics > 0) or (P.WeaponSwitch <> 0) then Bob := 0;
   FBobPhase := FBobPhase + SecondsPassed * (2 * Pi / 1.8);
   BobX := Bob * Cos(FBobPhase);
   BobY := Bob * Abs(Sin(FBobPhase));
@@ -761,7 +785,7 @@ begin
     { Doom: x1 = centerx + (sx - 160 - leftoffset) * scale, with sx = 1. }
     FWeaponImage.Translation := Vector2(
       W / 2 + (1 - 160 - Img.LeftOffset + BobX) * S,
-      H - (32 - Img.TopOffset + BobY) * S - Img.Height * S);
+      H - (32 + P.WeaponOffset - Img.TopOffset + BobY) * S - Img.Height * S);
   end else
     FWeaponImage.Exists := false;
 
@@ -792,6 +816,7 @@ var
   P: TPlayerState;
   Next: String;
 begin
+  BeginWipe;
   FIntermission := true;
   FIntermissionTime := 0;
   FIntermissionTicAccum := 0;
@@ -810,7 +835,8 @@ procedure TViewPlay.FinishIntermission;
 var
   Next: String;
 begin
-  FIntermissionScreen.Exists := false;
+  { The intermission stays visible until StartMap / StartFinale has
+    captured it for the melt. }
   { Doom 2 (G_WorldDone): the story text comes after the intermission. }
   if Wad.IsDoom2 and StartFinale then Exit;
   Next := NextMapName(FMapName, FWorld.SecretExit, Wad.IsDoom2);
@@ -823,6 +849,8 @@ function TViewPlay.StartFinale: Boolean;
 begin
   if FStrings = nil then
     FStrings := TDoomStrings.Create(Wad);
+  if not HasFinale(FMapName, Wad.IsDoom2, FWorld.SecretExit) then Exit(false);
+  BeginWipe;
   Result := FFinaleScreen.Start(Graphics, Sounds, Music, FStrings, Wad.IsDoom2, FMapName, FWorld.SecretExit);
   if not Result then Exit;
   WritelnLog('Finale', 'Finale after %s (stage %d)', [FMapName, Ord(FFinaleScreen.Stage)]);
@@ -841,7 +869,6 @@ procedure TViewPlay.FinishFinale;
 var
   Next: String;
 begin
-  FFinaleScreen.Exists := false;
   if FFinaleScreen.Continues then
   begin
     Next := NextMapName(FMapName, FWorld.SecretExit, Wad.IsDoom2);
@@ -850,9 +877,29 @@ begin
     StartMap(Next, true);
   end else
   begin
+    FFinaleScreen.Exists := false;
     WritelnLog('Finale', 'The end');
     Container.View := ViewMenu;
   end;
+end;
+
+function TViewPlay.CaptureScreen: TCastleImage;
+begin
+  try
+    Result := Container.SaveScreen;
+  except
+    on E: Exception do
+    begin
+      WritelnWarning('Wipe', 'Cannot capture the screen: %s', [E.Message]);
+      Result := nil;
+    end;
+  end;
+end;
+
+procedure TViewPlay.BeginWipe;
+begin
+  FWipe.Start(CaptureScreen);
+  FWipeTicAccum := 0;
 end;
 
 procedure TViewPlay.AccelerateScreen;
@@ -879,6 +926,18 @@ var
 begin
   inherited;
   if FWorld = nil then Exit;
+
+  if FWipe.Active then
+  begin
+    { At most two tics per frame: the frame after a level load is long and
+      would otherwise finish the melt before it is ever drawn. }
+    FWipeTicAccum := Min(FWipeTicAccum + SecondsPassed, 2 * TicSeconds);
+    while FWipe.Active and (FWipeTicAccum >= TicSeconds) do
+    begin
+      FWipeTicAccum := FWipeTicAccum - TicSeconds;
+      FWipe.Tic;
+    end;
+  end;
 
   if AutoTestDemo <> '' then
   begin
