@@ -42,12 +42,12 @@ jobs:
           sudo apt-get install -y fpc binaryen make git unzip
           fpc -iV
 
-      - name: Cache FPC (trunk + wasm32) and Pas2js
+      - name: Restore cached FPC (trunk + wasm32) and Pas2js
         id: cache-tools
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.TOOLS }}
-          key: cge-web-tools-v1-${{ env.FPC_COMMIT }}
+          key: cge-web-tools-v2-${{ env.FPC_COMMIT }}
 
       - name: Build FPC main branch (native x86_64 and wasm32-wasip1 cross compiler)
         if: steps.cache-tools.outputs.cache-hit != 'true'
@@ -68,6 +68,9 @@ jobs:
           ln -sf "../lib/fpc/$FPCVER/ppcrosswasm32" "$TOOLS/fpc/bin/ppcrosswasm32"
           # Config so "fpc" finds the units for every target.
           "$TOOLS/fpc/bin/fpcmkcfg" -d basepath="$TOOLS/fpc/lib/fpc/$FPCVER" -o "$TOOLS/fpc/fpc.cfg"
+          # FPC installs its own pas2js without a pas2js.cfg; it must not shadow
+          # the real Pas2js built below (see https://castle-engine.io/web).
+          rm -f "$TOOLS/fpc/bin/pas2js" "$TOOLS/fpc/bin/compileserver"
 
       - name: Build Pas2js
         if: steps.cache-tools.outputs.cache-hit != 'true'
@@ -83,11 +86,19 @@ jobs:
           ls -l bin/x86_64-linux/
           rm -rf "$TOOLS/fpc-src/compiler/ppc"* || true
 
+      - name: Save toolchain cache
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.TOOLS }}
+          key: cge-web-tools-v2-${{ env.FPC_COMMIT }}
+
       - name: Set up Castle Game Engine (snapshot) build tool
         run: |
           set -eux
           export PPC_CONFIG_PATH="$TOOLS/fpc"
-          export PATH="$TOOLS/fpc/bin:$TOOLS/pas2js/bin/x86_64-linux:$PATH"
+          export PATH="$TOOLS/pas2js/bin/x86_64-linux:$TOOLS/fpc/bin:$PATH"
+          rm -f "$TOOLS/fpc/bin/pas2js" "$TOOLS/fpc/bin/compileserver"
           fpc -iV
           fpc -Pwasm32 -Twasip1 -iTP
           pas2js -iV || true
@@ -101,7 +112,8 @@ jobs:
           set -eux
           export PPC_CONFIG_PATH="$TOOLS/fpc"
           export CASTLE_ENGINE_PATH="$HOME/castle-engine"
-          export PATH="$TOOLS/fpc/bin:$TOOLS/pas2js/bin/x86_64-linux:$HOME/castle-engine/tools/build-tool:$PATH"
+          export PATH="$TOOLS/pas2js/bin/x86_64-linux:$TOOLS/fpc/bin:$HOME/castle-engine/tools/build-tool:$PATH"
+          which pas2js
           castle-engine compile --target=web --mode=release --verbose
           ls -l castle-engine-output/web/dist/
 
