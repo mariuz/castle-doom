@@ -1,0 +1,74 @@
+# Native builds (Windows x86_64, Linux x86_64) using the Castle Game Engine
+# Docker image, which bundles FPC with cross-compilers and the CGE build tool.
+#
+# - On every push / pull request: build and keep the packages as workflow artifacts.
+# - On a tag like v1.2.3: also attach the packages to a GitHub Release.
+#
+# See https://castle-engine.io/github_actions and https://castle-engine.io/docker
+
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-native:
+    name: Package Windows and Linux
+    runs-on: ubuntu-latest
+    container: kambi/castle-engine-cloud-builds-tools:cge-unstable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show versions
+        run: |
+          castle-engine --version
+          fpc -iV
+
+      - name: Package Windows (x86_64)
+        run: castle-engine package --os=win64 --cpu=x86_64 --mode=release --verbose
+
+      - name: Package Linux (x86_64)
+        run: castle-engine package --os=linux --cpu=x86_64 --mode=release --verbose
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: castle-doom-windows
+          path: "*-win64-x86_64.zip"
+          if-no-files-found: error
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: castle-doom-linux
+          path: "*-linux-x86_64.tar.gz"
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-native
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: packages
+      - name: List packages
+        run: ls -l packages
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packages/*.zip
+            packages/*.tar.gz
+          generate_release_notes: true

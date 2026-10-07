@@ -1,0 +1,136 @@
+# WebAssembly build, published to GitHub Pages.
+#
+# Castle Game Engine compiles to the web with FPC (wasm32-wasip1 cross
+# compiler, from FPC's main branch) plus Pas2js for the small JS glue.
+# The CGE Docker image does not ship these yet, so this job builds them from
+# source once and caches the result (~10 minutes on a cache miss, ~1 minute
+# afterwards). See https://castle-engine.io/web .
+#
+# Result: https://<owner>.github.io/<repo>/ (landing page) and .../play/ (the game).
+
+name: Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # FPC main-branch commit tested by Castle Game Engine for WebAssembly.
+  FPC_COMMIT: b0003f71dda8388ad74292edb82ba401296fc106
+  TOOLS: /home/runner/cge-web-tools
+
+jobs:
+  build-web:
+    name: Build WebAssembly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bootstrap FPC and helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fpc binaryen make git unzip
+          fpc -iV
+
+      - name: Cache FPC (trunk + wasm32) and Pas2js
+        id: cache-tools
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TOOLS }}
+          key: cge-web-tools-v1-${{ env.FPC_COMMIT }}
+
+      - name: Build FPC main branch (native x86_64 and wasm32-wasip1 cross compiler)
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          set -eux
+          mkdir -p "$TOOLS"
+          git clone https://gitlab.com/freepascal.org/fpc/source.git "$TOOLS/fpc-src"
+          cd "$TOOLS/fpc-src"
+          git checkout "$FPC_COMMIT"
+          # Native compiler, bootstrapped with the distribution FPC 3.2.2.
+          make all FPC=/usr/bin/fpc
+          make install INSTALL_PREFIX="$TOOLS/fpc" FPC=/usr/bin/fpc
+          FPCVER="$("$TOOLS/fpc/lib/fpc/"*/ppcx64 -iV)"
+          ln -sf "../lib/fpc/$FPCVER/ppcx64" "$TOOLS/fpc/bin/ppcx64"
+          # Cross compiler + RTL/packages for WebAssembly.
+          make crossall OS_TARGET=wasip1 CPU_TARGET=wasm32 FPC="$TOOLS/fpc/bin/ppcx64"
+          make crossinstall OS_TARGET=wasip1 CPU_TARGET=wasm32 INSTALL_PREFIX="$TOOLS/fpc" FPC="$TOOLS/fpc/bin/ppcx64"
+          ln -sf "../lib/fpc/$FPCVER/ppcrosswasm32" "$TOOLS/fpc/bin/ppcrosswasm32"
+          # Config so "fpc" finds the units for every target.
+          "$TOOLS/fpc/bin/fpcmkcfg" -d basepath="$TOOLS/fpc/lib/fpc/$FPCVER" -o "$TOOLS/fpc/fpc.cfg"
+
+      - name: Build Pas2js
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          set -eux
+          export PPC_CONFIG_PATH="$TOOLS/fpc"
+          export PATH="$TOOLS/fpc/bin:$PATH"
+          git clone --depth 1 https://gitlab.com/freepascal.org/fpc/pas2js.git "$TOOLS/pas2js"
+          cd "$TOOLS/pas2js"
+          # Pas2js main expects the FPC sources (fcl-passrc, fcl-js...) in "compiler/".
+          ln -sfn "$TOOLS/fpc-src" compiler
+          make clean all FPC="$TOOLS/fpc/bin/fpc"
+          ls -l bin/x86_64-linux/
+          rm -rf "$TOOLS/fpc-src/compiler/ppc"* || true
+
+      - name: Set up Castle Game Engine (snapshot) build tool
+        run: |
+          set -eux
+          export PPC_CONFIG_PATH="$TOOLS/fpc"
+          export PATH="$TOOLS/fpc/bin:$TOOLS/pas2js/bin/x86_64-linux:$PATH"
+          fpc -iV
+          fpc -Pwasm32 -Twasip1 -iTP
+          pas2js -iV || true
+          git clone --depth 1 --branch snapshot https://github.com/castle-engine/castle-engine.git "$HOME/castle-engine"
+          cd "$HOME/castle-engine"
+          ./tools/build-tool/castle-engine_compile.sh
+          ls -l tools/build-tool/castle-engine
+
+      - name: Compile for web
+        run: |
+          set -eux
+          export PPC_CONFIG_PATH="$TOOLS/fpc"
+          export CASTLE_ENGINE_PATH="$HOME/castle-engine"
+          export PATH="$TOOLS/fpc/bin:$TOOLS/pas2js/bin/x86_64-linux:$HOME/castle-engine/tools/build-tool:$PATH"
+          castle-engine compile --target=web --mode=release --verbose
+          ls -l castle-engine-output/web/dist/
+
+      - name: Assemble site
+        run: |
+          set -eux
+          mkdir -p _site/play _site/docs
+          cp pages/index.html _site/
+          cp docs/*.png _site/docs/
+          cp -R castle-engine-output/web/dist/* _site/play/
+          du -sh _site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build-web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

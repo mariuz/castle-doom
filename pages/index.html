@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Castle DOOM</title>
+  <meta name="description" content="Doom levels rendered and played with Castle Game Engine, running in your browser through WebAssembly.">
+  <style>
+    :root {
+      --bg: #140a08;
+      --panel: #241410;
+      --text: #f1e4d8;
+      --muted: #b89f90;
+      --accent: #ff5a2d;
+      --accent-2: #ffb347;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+    header { text-align: center; padding: 32px 0 16px; }
+    h1 { font-size: clamp(2.2rem, 6vw, 4rem); margin: 0; letter-spacing: 0.08em; color: var(--accent); text-transform: uppercase; }
+    header p { color: var(--muted); font-size: 1.15rem; margin: 8px 0 24px; }
+    .cta {
+      display: inline-block; padding: 14px 28px; border-radius: 8px;
+      background: var(--accent); color: #fff; font-weight: 700; font-size: 1.2rem;
+      text-decoration: none; letter-spacing: 0.04em;
+    }
+    .cta:hover { background: #ff7347; }
+    .cta.secondary { background: var(--panel); border: 1px solid #4a2c22; color: var(--text); margin-left: 8px; }
+    .note { color: var(--muted); font-size: 0.95rem; margin-top: 12px; }
+    .hero img { width: 100%; height: auto; border-radius: 10px; border: 1px solid #4a2c22; display: block; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 14px; }
+    .grid img { width: 100%; height: auto; border-radius: 8px; border: 1px solid #4a2c22; display: block; }
+    section { margin-top: 40px; }
+    h2 { color: var(--accent-2); margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #3a221b; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    code { background: var(--panel); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+    kbd { background: var(--panel); border: 1px solid #4a2c22; border-radius: 4px; padding: 1px 6px; font-family: inherit; }
+    footer { margin-top: 48px; color: var(--muted); font-size: 0.9rem; text-align: center; }
+    a { color: var(--accent-2); }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Castle DOOM</h1>
+    <p>Doom levels, rendered and played with <a href="https://castle-engine.io/">Castle Game Engine</a>. Freedoom Phase 1 &amp; 2 included.</p>
+    <a class="cta" href="play/">Play in the browser</a>
+    <a class="cta secondary" href="https://github.com/mariuz/castle-doom/releases">Download for Windows / Linux</a>
+    <p class="note">The browser version downloads about 90 MB (two WADs plus the engine) and needs WebGL 2. Click the canvas to capture the mouse.</p>
+  </header>
+
+  <div class="hero"><img src="docs/screenshot-e1m1-start.png" alt="E1M1 start room rendered by Castle DOOM"></div>
+  <div class="grid">
+    <img src="docs/screenshot-e1m1-door.png" alt="A door opened to the outdoors area">
+    <img src="docs/screenshot-e1m1-lift.png" alt="Riding a lift while a zombieman charges">
+    <img src="docs/screenshot-map04.png" alt="MAP04 of Freedoom Phase 2 with a cacodemon">
+  </div>
+
+  <section>
+    <h2>Controls</h2>
+    <p>
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows move, <kbd>Shift</kbd> run, mouse look,
+      left mouse / <kbd>Ctrl</kbd> fire, <kbd>E</kbd> / <kbd>Space</kbd> use (doors, switches),
+      <kbd>1</kbd>-<kbd>7</kbd> and wheel weapons, <kbd>F</kbd> fog, <kbd>M</kbd> mouse look on/off,
+      <kbd>N</kbd> / <kbd>P</kbd> next / previous map, <kbd>H</kbd> help, <kbd>Esc</kbd> menu.
+    </p>
+  </section>
+
+  <section>
+    <h2>How Doom maps onto the engine</h2>
+    <table>
+      <tr><th>Doom</th><th>Castle Game Engine</th></tr>
+      <tr><td>WAD lumps, BSP nodes, subsectors</td><td>Plain Pascal records; convex subsector polygons recovered by clipping against the BSP partition lines</td></tr>
+      <tr><td>Walls, floors, ceilings, sector light</td><td>X3D nodes built in code: <code>IndexedTriangleSet</code>, <code>UnlitMaterial</code>, per-vertex <code>Color</code>; one scene per movable sector</td></tr>
+      <tr><td>Textures, flats, sprites</td><td>Decoded from patches, served through a custom <code>doomgfx:</code> URL protocol so the engine's texture cache shares them</td></tr>
+      <tr><td>Sky, light diminishing</td><td>Camera-following textured cylinder with fog disabled; <code>TCastleFog</code> on the viewport</td></tr>
+      <tr><td>Player</td><td><code>TCastleWalkNavigation</code> with gravity, step climbing and precise collisions</td></tr>
+      <tr><td>Things, monsters</td><td><code>TCastleBillboard</code> sprites with Doom's 8-rotation selection; 2D Doom-style movement rules</td></tr>
+      <tr><td>Shooting</td><td><code>WorldRay</code> ray casts against walls and sprites</td></tr>
+      <tr><td>Doors, lifts, floors, crushers, stairs, teleporters</td><td>Sector heights change and the affected scenes are regenerated in place</td></tr>
+      <tr><td>Sounds</td><td>DMX lumps converted to WAV on the fly (<code>doomsfx:</code> protocol), positional with <code>TCastleSoundSource</code></td></tr>
+    </table>
+  </section>
+
+  <footer>
+    <p><a href="https://github.com/mariuz/castle-doom">Source code on GitHub</a> (MIT). Freedoom is BSD licensed by the Freedoom project. Built with Castle Game Engine, FPC for WebAssembly and Pas2js.</p>
+  </footer>
+</main>
+</body>
+</html>

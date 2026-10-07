@@ -1,0 +1,7 @@
+# Castle Game Engine build output
+castle-engine-output/
+castle-auto-generated-resources.res
+*.dll
+castle-doom.exe
+castle-doom
+*.lps
