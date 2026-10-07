@@ -6,6 +6,12 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- ZDoom extended nodes: `XNOD`/`ZNOD` in NODES and the GL variants
+  `XGLN`/`ZGLN`/`XGL2`/`ZGL2`/`XGL3`/`ZGL3` (in NODES or, as ZDBSP writes
+  them, in SSECTORS), zlib via FPC's `zstream` (works on the web too); node
+  children normalized to a format-independent flag; sidedef indices above
+  32767 accepted. `tools/make_znodes.py` converts E1M1 to all six formats
+  for testing; every format yields the same 682 polygons / 6,712,683 area.
 - Doom's text font (`DoomFont`: STCFN patches composed into an image) for the
   player messages and the loading screen; the real intermission screen
   (`DoomIntermission`): WIMAP/INTERPIC background, WILV/CWILV level names,
@@ -72,7 +78,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Extended node formats** (`XNOD`, `ZNOD`, `XGLN`, `ZGLN`) used by modern maps; the subsector polygon code already works from any node tree. | Modern PWADs. | `DoomMap.LoadLumps` | M |
+| **glBSP `GL_` lumps** (`GL_VERT`, `GL_SEGS`, `GL_SSECT`, `GL_NODES` after a `GL_MAPxx` marker) and **UDMF** (`TEXTMAP`) maps. | Remaining community map formats. | `DoomMap` | M (glBSP), L (UDMF) |
 | **Boom/MBF specials** (generalized linedefs, scrolling floors, friction, translucency) and **DeHackEd** patches. | Big community map support; large job. | `DoomWorld.ApplySpecial`, `DoomThings` | L |
 | **Save / load game** (serialize sector heights, specials state, actors, player) with `CastleConfig` or JSON; **quick save**. | Longer sessions. | `DoomWorld` | M |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
@@ -91,8 +97,7 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Extended node formats (M): many community PWADs now loadable through
-   `-file` use ZDoom nodes.
-2. Pain Elemental lost souls and Arch-vile behaviour (M each): the last two
+1. Pain Elemental lost souls and Arch-vile behaviour (M each): the last two
    Doom 2 monsters that are still approximations.
-3. Save / load game (M): the biggest remaining usability gap.
+2. Save / load game (M): the biggest remaining usability gap.
+3. Difficulty selection with a Doom-style menu (`M_*` graphics) (S + M).

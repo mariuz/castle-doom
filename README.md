@@ -69,16 +69,17 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Doom's text font for messages, and the real intermission screen (level names, FINISHED,
   animated kills/items/secrets/time with sounds, par times, ENTERING).
 - External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-warp`), PWAD lumps
-  overriding the IWAD's like in Doom.
+  overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
+  `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`), so maps built with ZDBSP load too.
 - Music: MUS and MIDI lumps played through an FM synthesizer driven by the WAD's GENMIDI
   instrument bank (the AdLib / Sound Blaster sound of the original), title, level and
   intermission tracks.
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no save games, vanilla node format only
-(no ZDoom nodes yet), Pain Elemental and Arch-vile are approximations, the music synth
-approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no save games, no difficulty menu,
+Pain Elemental and Arch-vile are approximations, no glBSP `GL_` lumps or UDMF maps, the
+music synth approximates the OPL2.
 
 ## Build and run
 

@@ -99,7 +99,13 @@ Goertzel on semitone vs quarter-tone frequencies).
   `fpc/bin` that shadows the real one (error `can't find unit "System"`);
   the workflow deletes it. The `actions/cache` post step does not run on
   failure, so the toolchain is saved explicitly with `actions/cache/save`.
-- **Vanilla NODES only**: `DoomMap` raises on `XNOD`/`ZNOD`. Freedoom is fine.
+- **Node formats**: vanilla and all ZDoom extended variants load (see
+  ARCHITECTURE section 5). After touching `DoomMap`, run
+  `python tools/make_znodes.py C:\TMP\sp` and load each generated
+  `e1m1_*.wad` with `-file`; the log must show "682 subsector polygons, total
+  area 6712683" for every format. glBSP `GL_*` lumps and UDMF are not supported.
+- **FPC on wasm32**: loop counters must be 32-bit (`Int64` loop variables do
+  not compile there).
 - CGE log goes to `%LOCALAPPDATA%\castle-doom\castle-doom.log`; `WritelnLog`
   also reaches the browser console on the web.
 

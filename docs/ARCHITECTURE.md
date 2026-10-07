@@ -190,8 +190,30 @@ engine picks up from the cache.
 
 `TDoomMap.Create(Wad, 'E1M1')` reads the lumps that follow the map marker:
 `THINGS`, `LINEDEFS`, `SIDEDEFS`, `VERTEXES`, `SEGS`, `SSECTORS`, `NODES`,
-`SECTORS`. Only the vanilla node format is supported (an `XNOD`/`ZNOD` header
-raises a clear exception); Freedoom ships vanilla nodes.
+`SECTORS`.
+
+The BSP comes in several formats, all loaded into the same structures
+(`Nodes`, `Segs`, `Subsectors`, extra `Vertices`), so nothing downstream
+cares which one a map used (`TDoomMap.NodesFormat` tells):
+
+| Format | Where | Notes |
+|---|---|---|
+| vanilla | `NODES` (28-byte), `SEGS`, `SSECTORS` | 16-bit indices, child bit 15 = subsector |
+| `XNOD` / `ZNOD` | `NODES` | ZDoom extended: 32-bit indices, extra fixed-point vertices, child bit 31; `Z` = zlib-compressed |
+| `XGLN` / `ZGLN` | `NODES` or `SSECTORS` | GL nodes: closed subsectors with minisegs (linedef `FFFF`), only v1 stored per seg |
+| `XGL2` / `ZGL2` | same | as XGLN with 32-bit linedef numbers |
+| `XGL3` / `ZGL3` | same | as XGL2 with 16.16 fixed-point partition lines |
+
+`LoadExtendedNodes` reads them with a bounds-checked cursor, decompresses
+`Z*` variants with FPC's `zstream` (the same unit CGE's Tiled loader uses, so
+it works in WebAssembly), maps seg vertex numbers (original `VERTEXES` first,
+new vertices appended) and closes GL segs (`v2` = next seg's `v1` around the
+subsector). Node children are normalized to a `NodeSubsector` flag
+(`$40000000`) regardless of format. Minisegs have `Linedef = -1`;
+`SideSector` returns -1 for them. Sidedef numbers are read unsigned with
+`$FFFF` meaning "none", so maps with more than 32767 sidedefs work.
+`tools/make_znodes.py` converts Freedoom's E1M1 into all six formats; each
+must log the same "682 subsector polygons, total area 6712683" as vanilla.
 
 Two things are derived that Doom's renderer never needed:
 
