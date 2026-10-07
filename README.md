@@ -40,8 +40,8 @@ is mapped onto a Castle Game Engine feature.
 | Title / intermission | `TCastleView`s |
 
 **Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for a unit-by-unit explanation of how
-the port works and which engine APIs each part uses; [CLAUDE.md](CLAUDE.md) has build, test and
-contribution notes.
+the port works and which engine APIs each part uses; [docs/ROADMAP.md](docs/ROADMAP.md) lists
+what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and contribution notes.
 
 ## What works
 
@@ -64,8 +64,9 @@ contribution notes.
 
 ## Not (yet) done
 
-- Monster infighting, Arch-vile resurrection, Pain Elemental spawning, boss triggers.
-- Extended node formats (ZDoom XNOD/ZNOD); Freedoom uses vanilla nodes.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: player projectiles are approximated as
+instant hits, no monster infighting, no boss triggers, no automap, no save games, vanilla
+node format only, the music synth approximates the OPL2.
 
 ## Build and run
 

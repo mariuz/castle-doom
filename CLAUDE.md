@@ -119,9 +119,9 @@ Goertzel on semitone vs quarter-tone frequencies).
 - Commit messages: imperative summary, then what/why; end with the
   `Co-Authored-By` line when an agent wrote the change.
 
-## Ideas queued (not started)
+## What to work on next
 
-Real player projectiles (rocket/plasma actors), monster infighting, boss
-triggers (E1M8, MAP07, Keen), automap, difficulty selection, save games,
-a blockmap for 2D queries on huge maps, register-accurate OPL emulation,
-rendering music in a background thread on desktop.
+`docs/ROADMAP.md` is the prioritized list of missing features with pointers
+into the code and size estimates. Pick from its "Suggested next three" unless
+the user asks for something specific, and update the roadmap when an item is
+done.
