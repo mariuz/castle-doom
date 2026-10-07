@@ -73,6 +73,9 @@ type
       corpse has lain there. }
     SpawnX, SpawnY, SpawnAngle: Single;
     DeadTics: Integer;
+    { MF_SHADOW (the spectre): drawn as Doom's "fuzz", a shimmering dark
+      silhouette that darkens whatever is behind it. }
+    Fuzz: Boolean;
     { Fullbright sprite (explosions, projectiles, some items). }
     Bright: Boolean;
 
@@ -115,6 +118,15 @@ begin
   FRot := 1;
   FFrame := 'A';
   BuildScene;
+  Fuzz := Info^.Num = 58;
+  if Fuzz then
+  begin
+    { Black and translucent: the background shows through darkened, like
+      Doom's colormap-6 fuzz columns; AnimateTic varies the opacity. }
+    FAppearance.AlphaMode := amBlend;
+    FMaterial.EmissiveColor := Vector3(0, 0, 0);
+    FMaterial.Transparency := 0.6;
+  end;
   Billboard := TCastleBillboard.Create(Self);
   Billboard.AxisOfRotation := Vector3(0, 1, 0);
   AddBehavior(Billboard);
@@ -226,6 +238,9 @@ end;
 procedure TDoomActor.AnimateTic;
 begin
   SequenceDone := false;
+  { R_DrawFuzzColumn's shimmer: a different darkness every tic. }
+  if Fuzz then
+    FMaterial.Transparency := 0.5 + Random * 0.3;
   if Length(FSequence) <= 1 then
   begin
     if (not FSeqLoop) and (FTicsLeft > 0) then
@@ -281,6 +296,9 @@ end;
 
 procedure TDoomActor.SetLight(const Light: Integer);
 begin
+  if Fuzz then
+    FMaterial.EmissiveColor := Vector3(0, 0, 0)
+  else
   if Bright then
     FMaterial.EmissiveColor := Vector3(1, 1, 1)
   else

@@ -77,6 +77,9 @@ Player messages are logged as `Message:`; E1M1 pickups for a quick check:
 shells." and "Blue passcard secured!" (Freedoom's BEX strings). Menu
 screenshots also take `MENUQUIT` (the quit question).
 
+`INVIS` in a demo gives partial invisibility (the weapon turns to fuzz);
+`P:58:180` spawns a spectre to look at.
+
 Monster wake-up: grep `Wake:` (sprite, position, `saw` / `heard` /
 `heard and saw (ambush)`) and `Noise:` (sectors a new shot reached). On
 E1M1, `Y,X,W:1,G:480:712,A:0,U,W:1.5,X,W:2,Q` gives 38 sectors from the

@@ -6,6 +6,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Fuzz: spectres are drawn as a dark translucent silhouette whose opacity
+  changes every tic (`TDoomActor.Fuzz`: `AlphaMode = amBlend`, black
+  unlit material, random `Transparency`), and with partial invisibility the
+  player's weapon is drawn the same way, blinking back in the last seconds.
 - BEX strings everywhere: pickup messages (`GOT*`), locked door / switch
   messages (`PD_*K` / `PD_*O`), the level title on entering a map and at the
   bottom of the automap (`HUSTR_E1M1`, `HUSTR_1`), the automap grid toggle
@@ -120,7 +124,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Donut (special 9)**, **perpetual platforms stop/start**, **raise by shortest lower texture (30/96 are approximated as +64)**, **crusher return speed when blocked**. | Correctness of a few maps. | `ApplySpecial`, `TSectorMover` | S each |
-| **Spectres** are drawn like demons; add the fuzz/translucency effect (shader or `AlphaMode = amBlend` with low alpha). | Visual fidelity. | `DoomActors` material | S |
+| **Column fuzz shader**: Doom's fuzz also shifts columns up and down by a pixel (`fuzzoffset`); a `TEffectNode` fragment shader could add that wobble to spectres and the invisible weapon. | Closer look. | `DoomActors` appearance | S |
 | **3D sight checks**: `SightClear` is 2D (one-sided and closed two-sided lines block); Doom's `P_CheckSight` also uses the heights of openings and the `REJECT` table, so a monster below a high ledge can "see" too much here. | Fewer early wake-ups and shots through ledges. | `SightClear`, `DoomMap` (`REJECT`) | S-M |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
 | **Falling damage / knockback**: hitscans and explosions should push things. | Feel. | `DamageActor`, `DamagePlayer` | S |
@@ -171,9 +175,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Spectre fuzz (S): spectres are drawn like plain demons; a translucent
-   or shader "fuzz" look.
-2. 3D sight checks (S-M): opening heights and `REJECT` in `SightClear`, so
+1. 3D sight checks (S-M): opening heights and `REJECT` in `SightClear`, so
    monsters stop seeing (and shooting) over ledges they could not in Doom.
-3. Palette flashes through `PLAYPAL` (S): the red / gold / green screen
+2. Palette flashes through `PLAYPAL` (S): the red / gold / green screen
    tints the way Doom does them.
+3. Screen melt on the web (S): capture the old frame by rendering to a
+   texture, since `SaveScreen` reads black under WebGL.

@@ -468,6 +468,8 @@ begin
     FAutomap.ShowAll := not FAutomap.ShowAll
   else if Cmd = 'Z' then
     FAutomap.ZoomBy(Arg)
+  else if Cmd = 'INVIS' then
+    FWorld.Player.InvisibleTics := 60 * 35
   else if Cmd = 'K' then
     FWorld.GiveAll
   else if Cmd = 'MENU' then
@@ -778,6 +780,18 @@ begin
   FBobPhase := FBobPhase + SecondsPassed * (2 * Pi / 1.8);
   BobX := Bob * Cos(FBobPhase);
   BobY := Bob * Abs(Sin(FBobPhase));
+
+  { Partial invisibility: the weapon is drawn as fuzz too, blinking back to
+    normal in the last seconds (st_stuff / r_things: > 4*32 tics or bit 8). }
+  if (P.InvisibleTics > 4 * 32) or ((P.InvisibleTics and 8) <> 0) then
+  begin
+    FWeaponImage.Color := Vector4(0, 0, 0, 0.3 + Random * 0.25);
+    FFlashImage.Color := Vector4(0, 0, 0, 0.3 + Random * 0.25);
+  end else
+  begin
+    FWeaponImage.Color := White;
+    FFlashImage.Color := White;
+  end;
 
   SpriteName := FWorld.WeaponSprite(P.Weapon) + P.WeaponFrame + '0';
   Img := Graphics.Patch(SpriteName);

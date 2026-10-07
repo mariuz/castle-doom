@@ -60,7 +60,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Monsters wake up like in Doom: on sight in front of them, or when your shots reach their
   sector (sound spreads through open doors, stops at closed ones and crosses at most one sound-blocking
   line; ambush monsters must also see you). They chase (2D Doom-style movement with step/drop-off
-  rules, they open doors and use teleporters and monster-only teleport lines), attack with melee, hitscan or projectiles, take pain, die,
+  rules, they open doors and use teleporters and monster-only teleport lines; spectres are
+  drawn as shimmering fuzz), attack with melee, hitscan or projectiles, take pain, die,
   drop items, and fight each other when hit by another monster (infighting). Lost souls
   charge, Pain Elementals spit lost souls (three more when they die), Arch-viles raise
   the dead and burn you with their fire attack. Barrels explode with splash damage. Boss deaths trigger the special map events (E1M8, E2M8,

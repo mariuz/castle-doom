@@ -338,6 +338,13 @@ position come from the patch's width, height and offsets (Doom's origin is at
 the feet). `UpdateRotation` picks one of the 8 rotation sprites with Doom's
 formula `(angle_to_thing - thing_angle + 202.5°) / 45°`, and `ApplySprite`
 sets the quad's coordinates (mirrored if needed) and the texture node's URL.
+Spectres (`Fuzz`, Doom's `MF_SHADOW`) get `AlphaMode = amBlend`, a black
+unlit colour and a `Transparency` re-rolled between 0.5 and 0.8 every tic:
+the background shows through darkened and shimmering, an approximation of
+`R_DrawFuzzColumn` (which darkens the pixels behind with colormap 6 at
+random row offsets). The view draws the player's weapon the same way during
+partial invisibility (`TCastleImageControl.Color` black with a random alpha,
+normal again in the blinking last seconds).
 
 Animation is a frame sequence (`PlaySequence('ABCD', tics, loop)`) advanced by
 `AnimateTic`; `SequenceDone` tells the world when a one-shot sequence (pain,
