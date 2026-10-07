@@ -6,10 +6,15 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
-- Screen melt in the browser too: the old screen is rendered off-screen into
-  an FBO (`TGLRenderToTexture`, `Container.RenderControl`) and read back from
-  there, which works under WebGL; the melt skips the frame that started it
-  and then follows real time.
+- The screen melt captures the old screen off-screen (an FBO via
+  `TGLRenderToTexture`, `Container.RenderControl`) and skips the frame that
+  started it, then follows real time. In the browser this capture raised an
+  exception, which FPC's WebAssembly target cannot catch (the program
+  stopped), so the web build still has no melt.
+- Web performance: sprites are GUI textures (no power-of-two resize, no
+  mipmaps on the CPU); the browser build went from about 2 to about 22 FPS
+  on E1M1 with the world at full tic rate. `Perf:` / `PerfView:` log lines
+  every 10 s show where the time goes.
 - Palette flashes from `PLAYPAL` (`ST_doPaletteStuff`): `damagecount` /
   `bonuscount` like Doom, berserk red fading out, the radiation suit green.
   Each palette is palette 0 blended towards one colour, so
@@ -151,6 +156,8 @@ L = several days). Items inside a section are in suggested order.
 | **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
+| **Screen melt on the web**: find which step of the FBO capture fails under WebGL (log each step; check `GLFeatures` for FBO / read-back support before calling anything that can raise, since exceptions abort the WebAssembly program). | Same transitions in the browser. | `GameViewPlay.CaptureScreen` | S |
+| **Music rendering stall**: the FM synthesizer renders a whole track before it plays (E1M1: 132 s of audio, 4 s blocking in the browser). Render the first seconds first or stream it. | Smooth level starts on the web. | `DoomMusic` | M |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
 | **Hanging/floating things** bob (cacodemons hover), **gibs** for excessive damage (`XDEATH` frames). | Fidelity. | `DoomThings` frames, `KillActor` | S |
 
@@ -187,10 +194,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
+1. Music rendering without the stall (M): the web build blocks for seconds
+   at every level start while the FM synth renders the whole track.
+2. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
    slopes (S-M): monster bullets currently hit by chance once the monster
    decided it sees you; aim height and blocking ledges are not traced.
-2. Light diminishing as a shader (`COLORMAP`) instead of fog (M): the
-   authentic look of Doom's lighting.
-3. Sky (S): Doom's vertical sky stretch and the per-episode skies, the
-   sky-floor hack for pits.
+3. Screen melt on the web (S): find the failing capture step without
+   exceptions.

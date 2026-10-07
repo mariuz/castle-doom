@@ -176,6 +176,14 @@ Goertzel on semitone vs quarter-tone frequencies).
   JS `null` (use `InvokeJSValueResult` for `localStorage.getItem`). To test
   the deployed page, open https://mariuz.github.io/castle-doom/play/ in the
   browser pane; the browser console shows the CGE log.
+- **Exceptions abort the WebAssembly program**: FPC's wasm32 target has no
+  setjmp/longjmp, so any raised exception (even inside `try`/`except`)
+  stops the web build ("Runtime error 217", "LONGJMP not supported"). Code
+  that runs on the web must check conditions instead of relying on
+  exceptions; test new web paths on the live page and watch the console.
+- **Web performance**: watch the `Perf:` / `PerfView:` lines in the browser
+  console. Textures that are resized to powers of two or mipmapped are CPU
+  work in WebAssembly; sprites use `GuiTexture`.
 - **FPC on wasm32**: loop counters must be 32-bit (`Int64` loop variables do
   not compile there).
 - CGE log goes to `%LOCALAPPDATA%\castle-doom\castle-doom.log`; `WritelnLog`

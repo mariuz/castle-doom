@@ -332,7 +332,9 @@ health, speed, pain chance, attack kind, damage dice, pickup kind and sounds.
 `PickupMessage` has the original messages.
 
 A `TDoomActor` is a `TCastleTransform` with a child `TCastleScene` holding one
-textured quad, and a `TCastleBillboard` behavior (`AxisOfRotation = (0,1,0)`)
+textured quad (its `TTexturePropertiesNode` has `GuiTexture`: no power-of-two
+resize and no mipmaps, nearest filtering; resizing hundreds of odd-sized
+sprites on the CPU made the web build crawl), and a `TCastleBillboard` behavior (`AxisOfRotation = (0,1,0)`)
 that turns the quad toward the camera every frame. The quad's size and
 position come from the patch's width, height and offsets (Doom's origin is at
 the feet). `UpdateRotation` picks one of the 8 rotation sprites with Doom's
@@ -679,8 +681,11 @@ the old screen off-screen, the way CGE's `render_3d_to_texture_and_use_as_quad`
 example does: a `TGLRenderToTexture` with `Buffer = tbNone` (an FBO with
 colour and depth renderbuffers), `Container.RenderControl(Self, ...)` renders
 the whole view into it, and `SaveScreen_NoFlush(..., ColorBuffer)` reads the
-`TRGBImage` back from the FBO (reading the window's back buffer with
-`Container.SaveScreen` gives black under WebGL). The image goes to `TDoomWipe`, a full-size control in front of
+`TRGBImage` back from the FBO. The web build has no melt: reading the
+window's back buffer gives black under WebGL, and the FBO capture raised an
+exception there, which FPC's WebAssembly target cannot catch (the program
+stops with "LONGJMP not supported"), so `CaptureScreen` returns nil under
+`{$ifdef WASI}`. The image goes to `TDoomWipe`, a full-size control in front of
 everything whose `Render` draws it as 160 vertical strips with
 `TDrawableImage.Draw(ScreenRect, ImageRect)`, each strip shifted down by its
 own offset on the 200-line grid. `wipe_initMelt` gives every column a start

@@ -2,10 +2,14 @@
 
 ## v0.2.1 (2026-10-08)
 
-- The screen melt between levels now works in the browser too (the old
-  screen is rendered off-screen into an FBO instead of read back from the
-  window, which gave black under WebGL), and keeps its pace when the first
-  frames of a level are slow.
+- Much faster in the browser: sprite textures are no longer resized and
+  mipmapped on the CPU (hundreds per level); E1M1 went from about 2 to about
+  22 FPS on the Pages site. Sprites are also drawn crisp (nearest filtering),
+  like Doom.
+- The screen melt captures the old screen off-screen and keeps its pace when
+  the first frames of a level are slow (desktop; the browser still has no
+  melt).
+- `Perf:` / `PerfView:` log lines every 10 s with the time per game stage.
 
 ## v0.2.0 (2026-10-08)
 
