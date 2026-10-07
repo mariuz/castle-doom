@@ -79,7 +79,7 @@ end;
 
 initialization
   ApplicationProperties.ApplicationName := 'castle-doom';
-  ApplicationProperties.Version := '0.1.0';
+  ApplicationProperties.Version := '0.2.0';
   InitializeLog;
   Application.OnInitialize := @ApplicationInitialize;
   Window := TCastleWindow.Create(Application);

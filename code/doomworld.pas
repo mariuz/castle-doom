@@ -38,7 +38,9 @@ type
     Message: String;
     MessageTics: Integer;
     { 0..1, red/yellow screen flashes for the view. }
-    DamageFlash, BonusFlash: Single;
+    { Doom's damagecount / bonuscount: the red and gold palette flashes
+      (ST_doPaletteStuff), counting down one per tic. }
+    DamageCount, BonusCount: Integer;
     Kills, Items, Secrets: Integer;
     TotalKills, TotalItems, TotalSecrets: Integer;
     BerserkTics, InvulnerableTics, InvisibleTics, RadSuitTics, LightAmpTics: Integer;
@@ -297,6 +299,9 @@ type
     { Cheat for testing: all weapons, full ammo, keys. }
     procedure GiveAll;
     function AmmoFor(const W: TWeapon): TAmmoType;
+    { ST_doPaletteStuff: which PLAYPAL palette the screen shows now (0 none,
+      1..8 damage / berserk red, 9..12 bonus gold, 13 radiation suit). }
+    function PaletteIndex: Integer;
     function WeaponSprite(const W: TWeapon): String;
     function FlashSprite(const W: TWeapon): String;
 
@@ -1008,6 +1013,28 @@ begin
   WritelnLog('Message', Msg);
 end;
 
+function TDoomWorld.PaletteIndex: Integer;
+var
+  Cnt, Berserk: Integer;
+begin
+  Cnt := Player.DamageCount;
+  if Player.BerserkTics > 0 then
+  begin
+    { The berserk red fades over the first 12 * 64 tics (powers[pw_strength]
+      counts up in Doom; ours counts down from 60 s). }
+    Berserk := 12 - (60 * TicRate - Player.BerserkTics) div 64;
+    if Berserk > Cnt then Cnt := Berserk;
+  end;
+  if Cnt > 0 then
+    Result := Min(8, (Cnt + 7) div 8)
+  else if Player.BonusCount > 0 then
+    Result := 8 + Min(4, (Player.BonusCount + 7) div 8)
+  else if (Player.RadSuitTics > 4 * 32) or ((Player.RadSuitTics and 8) <> 0) then
+    Result := 13
+  else
+    Result := 0;
+end;
+
 function TDoomWorld.AmmoFor(const W: TWeapon): TAmmoType;
 begin
   case W of
@@ -1115,8 +1142,6 @@ begin
   end;
   FGeometry.Update(SecondsPassed, CameraPos);
   FGeometry.FlushDirty;
-  Player.DamageFlash := Max(0, Player.DamageFlash - SecondsPassed * 1.5);
-  Player.BonusFlash := Max(0, Player.BonusFlash - SecondsPassed * 2);
 end;
 
 procedure TDoomWorld.RunTic;
@@ -1254,6 +1279,8 @@ begin
   if Player.MessageTics > 0 then Dec(Player.MessageTics);
   if Player.FaceTics > 0 then Dec(Player.FaceTics) else Player.FaceState := 0;
   if Player.BerserkTics > 0 then Dec(Player.BerserkTics);
+  if Player.DamageCount > 0 then Dec(Player.DamageCount);
+  if Player.BonusCount > 0 then Dec(Player.BonusCount);
   if Player.InvulnerableTics > 0 then Dec(Player.InvulnerableTics);
   if Player.InvisibleTics > 0 then Dec(Player.InvisibleTics);
   if Player.RadSuitTics > 0 then Dec(Player.RadSuitTics);
@@ -2932,7 +2959,8 @@ begin
     Dmg := Dmg - Saved;
   end;
   Player.Health := Player.Health - Dmg;
-  Player.DamageFlash := Min(1, Player.DamageFlash + Dmg / 40);
+  { P_DamageMobj: damagecount grows by the damage after armour, up to 100. }
+  Player.DamageCount := Min(100, Player.DamageCount + Dmg);
   LastDamage := Dmg;
   if Dmg >= 20 then
   begin
@@ -3531,7 +3559,7 @@ begin
         Inc(Player.Items);
       ShowMessage(Msg);
       FSounds.Play(Sound);
-      Player.BonusFlash := Min(1, Player.BonusFlash + 0.5);
+      Player.BonusCount := Player.BonusCount + 6; { BONUSADD }
       A.Removed := true;
     end;
   end;

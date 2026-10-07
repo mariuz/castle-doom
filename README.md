@@ -4,7 +4,7 @@
 [![Web](https://github.com/mariuz/castle-doom/actions/workflows/web.yml/badge.svg)](https://github.com/mariuz/castle-doom/actions/workflows/web.yml)
 
 **Play in the browser: https://mariuz.github.io/castle-doom/** (WebAssembly build)
-&middot; **Downloads: [Releases](https://github.com/mariuz/castle-doom/releases)** (Windows, Linux)
+&middot; **Downloads: [Releases](https://github.com/mariuz/castle-doom/releases)** (Windows, Linux) &middot; [Changelog](docs/CHANGELOG.md)
 
 Doom levels, rendered and played with [Castle Game Engine](https://castle-engine.io/)
 (Object Pascal). It reads the original WAD format directly: Freedoom Phase 1 and
@@ -70,7 +70,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Weapons: fist, chainsaw, pistol, shotgun, super shotgun, chaingun, and real projectiles
   for the rocket launcher (splash damage), plasma gun and BFG (charge, ball, tracer spray).
 - Status bar with face, keys, arms, ammo table; weapon bobbing, weapons lowered and raised
-  when switching; damage and bonus flashes; Doom's screen melt between levels.
+  when switching; damage, pickup and radiation-suit tints from the WAD's palettes; Doom's
+  screen melt between levels.
 - Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
 - Doom's text font for messages, and the real intermission screen (level names, FINISHED,
   animated kills/items/secrets/time with sounds, par times, ENTERING).

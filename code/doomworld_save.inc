@@ -134,6 +134,8 @@ begin
   PJ.Add('totalItems', Player.TotalItems);
   PJ.Add('totalSecrets', Player.TotalSecrets);
   PJ.Add('berserk', Player.BerserkTics);
+  PJ.Add('damageCount', Player.DamageCount);
+  PJ.Add('bonusCount', Player.BonusCount);
   PJ.Add('invulnerable', Player.InvulnerableTics);
   PJ.Add('invisible', Player.InvisibleTics);
   PJ.Add('radSuit', Player.RadSuitTics);
@@ -417,6 +419,8 @@ begin
     Player.TotalItems := PJ.Get('totalItems', 0);
     Player.TotalSecrets := PJ.Get('totalSecrets', 0);
     Player.BerserkTics := PJ.Get('berserk', 0);
+    Player.DamageCount := PJ.Get('damageCount', 0);
+    Player.BonusCount := PJ.Get('bonusCount', 0);
     Player.InvulnerableTics := PJ.Get('invulnerable', 0);
     Player.InvisibleTics := PJ.Get('invisible', 0);
     Player.RadSuitTics := PJ.Get('radSuit', 0);

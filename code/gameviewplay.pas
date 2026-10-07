@@ -22,7 +22,9 @@ type
     FStatusBar: TDoomStatusBar;
     FWeaponImage, FFlashImage: TCastleImageControl;
     FWeaponImageName, FFlashImageName: String;
-    FDamageFlash, FBonusFlash: TCastleRectangleControl;
+    { The PLAYPAL palette shifts as a full-screen tint (see PaletteTint). }
+    FPaletteFlash: TCastleRectangleControl;
+    FPaletteTints: array [0..13] of TVector4;
     FInfoLabel, FHelpLabel: TCastleLabel;
     FMessageText, FLoadingText, FAutomapTitle: TDoomFontText;
     FIntermissionBack: TCastleRectangleControl;
@@ -166,6 +168,9 @@ end;
 procedure TViewPlay.CreateUi;
 var
   Camera: TCastleCamera;
+  I: Integer;
+  Tint: TVector3;
+  TintAmount: Single;
 begin
   FViewport := TCastleViewport.Create(FreeAtStop);
   FViewport.FullSize := true;
@@ -198,14 +203,17 @@ begin
   InsertFront(FAutomap);
 
   { Screen flashes. }
-  FDamageFlash := TCastleRectangleControl.Create(FreeAtStop);
-  FDamageFlash.FullSize := true;
-  FDamageFlash.Color := Vector4(1, 0, 0, 0);
-  InsertFront(FDamageFlash);
-  FBonusFlash := TCastleRectangleControl.Create(FreeAtStop);
-  FBonusFlash.FullSize := true;
-  FBonusFlash.Color := Vector4(1, 0.9, 0.3, 0);
-  InsertFront(FBonusFlash);
+  FPaletteFlash := TCastleRectangleControl.Create(FreeAtStop);
+  FPaletteFlash.FullSize := true;
+  FPaletteFlash.Color := Vector4(0, 0, 0, 0);
+  InsertFront(FPaletteFlash);
+  { Every PLAYPAL palette is palette 0 blended towards one colour, so an
+    alpha-blended rectangle of that colour reproduces it exactly. }
+  for I := 0 to High(FPaletteTints) do
+    if (I = 0) or not Wad.PaletteTint(I, Tint, TintAmount) then
+      FPaletteTints[I] := Vector4(0, 0, 0, 0)
+    else
+      FPaletteTints[I] := Vector4(Tint, TintAmount);
 
   { Weapon sprite and muzzle flash. }
   FWeaponImage := TCastleImageControl.Create(FreeAtStop);
@@ -1083,8 +1091,7 @@ begin
     FWorld.Player.Refire := false;
 
   P := FWorld.Player;
-  FDamageFlash.Color := Vector4(1, 0, 0, P.DamageFlash * 0.55);
-  FBonusFlash.Color := Vector4(1, 0.9, 0.3, P.BonusFlash * 0.25);
+  FPaletteFlash.Color := FPaletteTints[FWorld.PaletteIndex];
   FMessageText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
   FAutomapTitle.Exists := FAutomap.Exists;
   if FAutomap.Exists then

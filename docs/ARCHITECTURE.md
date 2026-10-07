@@ -690,9 +690,15 @@ melt once the level is in. The wipe advances at most two tics per frame,
 because the first frame after a level load is long. The web build has no
 melt: `SaveScreen` reads back a black image under WebGL, and the first frames
 of a new level run at about 1 FPS in the browser, so `CaptureScreen` returns
-nil there (`{$ifdef WASI}`). Screen flashes are
-full-size `TCastleRectangleControl`s with animated alpha; messages and the
-help panel are `TCastleLabel`s.
+nil there (`{$ifdef WASI}`). The screen tints follow
+`ST_doPaletteStuff`: `TDoomWorld.PaletteIndex` picks PLAYPAL palette 1..8
+(red, from `DamageCount` or the fading berserk), 9..12 (gold, `BonusCount`)
+or 13 (radiation suit), and one full-size `TCastleRectangleControl` draws it.
+Doom's palettes are palette 0 blended towards a single colour, so
+`TDoomWad.PaletteTint` recovers that colour and the blend amount from the
+black and white entries (Freedoom: red 1/9..8/9, gold 1/8..4/8, green 1/8),
+and an alpha-blended rectangle reproduces the palette shift exactly. The
+help panel is a `TCastleLabel`.
 
 ---
 

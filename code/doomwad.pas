@@ -57,6 +57,11 @@ type
 
     { Palette 0 of PLAYPAL, as opaque RGBA. }
     function PaletteColor(const Index: Byte): TVector4Byte;
+    { PLAYPAL palette PalIndex (1..13: damage reds, bonus golds, radiation
+      green) as a blend of palette 0 towards Color by Amount (0..1), solved
+      from the black and white entries. False when the WAD has no such
+      palette. }
+    function PaletteTint(const PalIndex: Integer; out Color: TVector3; out Amount: Single): Boolean;
     { URL of the IWAD. }
     function Url: String;
     { All loaded files, IWAD first. }
@@ -282,6 +287,49 @@ begin
   SetLength(Result, FLumps[Index].Size);
   if FLumps[Index].Size > 0 then
     Move(LumpPointer(Index)^, Result[0], FLumps[Index].Size);
+end;
+
+function TDoomWad.PaletteTint(const PalIndex: Integer; out Color: TVector3; out Amount: Single): Boolean;
+var
+  Lump, I, Dark, Bright, C, N, Sum, DarkSum, BrightSum: Integer;
+  P: PByte;
+  A: Single;
+begin
+  Result := false;
+  Color := Vector3(0, 0, 0);
+  Amount := 0;
+  Lump := FindLump('PLAYPAL');
+  if (Lump < 0) or (LumpSize(Lump) < (PalIndex + 1) * 768) then Exit;
+  P := LumpPointer(Lump);
+  { The darkest and the brightest colour of palette 0. }
+  Dark := 0;
+  Bright := 0;
+  DarkSum := MaxInt;
+  BrightSum := -1;
+  for I := 0 to 255 do
+  begin
+    Sum := P[I * 3] + P[I * 3 + 1] + P[I * 3 + 2];
+    if Sum < DarkSum then begin DarkSum := Sum; Dark := I; end;
+    if Sum > BrightSum then begin BrightSum := Sum; Bright := I; end;
+  end;
+  { Palette k = base + (tint - base) * a: the bright - dark spread shrinks
+    by (1 - a), and the dark entry moves to dark + (tint - dark) * a. }
+  A := 0;
+  N := 0;
+  for C := 0 to 2 do
+    if P[Bright * 3 + C] > P[Dark * 3 + C] then
+    begin
+      A := A + 1 - (P[PalIndex * 768 + Bright * 3 + C] - P[PalIndex * 768 + Dark * 3 + C]) /
+        (P[Bright * 3 + C] - P[Dark * 3 + C]);
+      Inc(N);
+    end;
+  if N = 0 then Exit;
+  A := A / N;
+  if A <= 0.001 then Exit;
+  for C := 0 to 2 do
+    Color.Data[C] := Clamped((P[PalIndex * 768 + Dark * 3 + C] - P[Dark * 3 + C] * (1 - A)) / A, 0, 255) / 255;
+  Amount := Min(1, A);
+  Result := true;
 end;
 
 function TDoomWad.PaletteColor(const Index: Byte): TVector4Byte;

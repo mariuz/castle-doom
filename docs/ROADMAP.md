@@ -6,6 +6,11 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Palette flashes from `PLAYPAL` (`ST_doPaletteStuff`): `damagecount` /
+  `bonuscount` like Doom, berserk red fading out, the radiation suit green.
+  Each palette is palette 0 blended towards one colour, so
+  `TDoomWad.PaletteTint` solves that colour and amount from the black and
+  white entries and the view draws one full-screen rectangle with it.
 - 3D sight checks (`CheckSight`, Doom's `P_CheckSight`): the `REJECT` table
   first, then the line from the viewer's eye (3/4 of its height) to the
   target with the vertical window narrowed at every opening crossed (higher
@@ -145,7 +150,6 @@ L = several days). Items inside a section are in suggested order.
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
 | **Screen melt on the web**: capture the old frame with a render-to-texture pass (`TGLRenderToTexture` / a viewport rendered into an image) instead of `SaveScreen`, which reads black under WebGL. | Same transitions in the browser. | `GameViewPlay.CaptureScreen` | S |
-| **Palette flashes** done through the real `PLAYPAL` palettes (red/yellow/green tints) instead of a translucent rectangle. | Fidelity. | `GameViewPlay` | S |
 | **Hanging/floating things** bob (cacodemons hover), **gibs** for excessive damage (`XDEATH` frames). | Fidelity. | `DoomThings` frames, `KillActor` | S |
 
 ## 3. Audio
@@ -181,10 +185,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Palette flashes through `PLAYPAL` (S): the red / gold / green screen
-   tints the way Doom does them.
-2. Screen melt on the web (S): capture the old frame by rendering to a
+1. Screen melt on the web (S): capture the old frame by rendering to a
    texture, since `SaveScreen` reads black under WebGL.
-3. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
+2. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
    slopes (S-M): monster bullets currently hit by chance once the monster
    decided it sees you; aim height and blocking ledges are not traced.
+3. Light diminishing as a shader (`COLORMAP`) instead of fog (M): the
+   authentic look of Doom's lighting.

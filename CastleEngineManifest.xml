@@ -8,9 +8,9 @@
   qualified_name="io.castleengine.castledoom"
   caption="Castle DOOM"
   author="castle-doom"
-  version="0.1.0"
   screen_orientation="landscape"
 >
+  <version value="0.2.0" code="2" />
   <compiler_options>
     <search_paths>
       <path value="code/" />
