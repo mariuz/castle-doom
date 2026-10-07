@@ -8,7 +8,7 @@ interface
 uses Classes, SysUtils,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors,
-  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic;
+  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap;
 
 type
   TViewPlay = class(TCastleView)
@@ -25,6 +25,7 @@ type
     FMessageLabel, FInfoLabel, FHelpLabel, FIntermissionLabel: TCastleLabel;
     FIntermissionBack: TCastleRectangleControl;
     FCrosshair: TCastleCrosshair;
+    FAutomap: TDoomAutomap;
     FMapName: String;
     FIntermission: Boolean;
     FIntermissionTime: Single;
@@ -109,6 +110,11 @@ begin
   FViewport.InsertFront(FNavigation);
   SetupNavigation;
 
+  { Automap, drawn over the 3D view and under the HUD. }
+  FAutomap := TDoomAutomap.Create(FreeAtStop);
+  FAutomap.Exists := false;
+  InsertFront(FAutomap);
+
   { Screen flashes. }
   FDamageFlash := TCastleRectangleControl.Create(FreeAtStop);
   FDamageFlash.FullSize := true;
@@ -161,6 +167,7 @@ begin
     'Mouse: look   LMB / Ctrl: fire' + NL +
     'E / Space: use (doors, switches)' + NL +
     '1-7, wheel: weapons' + NL +
+    'Tab: automap   + / -: zoom   G: grid   I: reveal map' + NL +
     'F: fog (light diminishing)   M: mouse look' + NL +
     'N / P: next / previous map   J: music on/off' + NL +
     'F5: screenshot' + NL +
@@ -226,6 +233,7 @@ begin
   inherited;
   CreateUi;
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
+  FAutomap.World := FWorld;
   if StartMapName = '' then
   begin
     if Wad.MapNames.Count > 0 then StartMapName := Wad.MapNames[0] else StartMapName := 'E1M1';
@@ -319,6 +327,12 @@ begin
     if Sec >= 0 then
       PlacePlayer(Arg, Arg2, FWorld.Map.Sectors[Sec].FloorHeight, DoomAngleFromCamera);
   end
+  else if Cmd = 'M' then
+    FAutomap.Exists := not FAutomap.Exists
+  else if Cmd = 'I' then
+    FAutomap.ShowAll := not FAutomap.ShowAll
+  else if Cmd = 'Z' then
+    FAutomap.ZoomBy(Arg)
   else if Cmd = 'K' then
     FWorld.GiveAll
   else if Cmd = 'C' then
@@ -590,7 +604,7 @@ begin
   FStatusBar.Height := FViewport.EffectiveWidth / 10;
   FStatusBar.Refresh(FWorld, SecondsPassed);
   UpdateWeaponSprite(SecondsPassed);
-  FCrosshair.Exists := FNavigation.MouseLook and not P.Dead;
+  FCrosshair.Exists := FNavigation.MouseLook and not P.Dead and not FAutomap.Exists;
 
   if FWorld.ExitRequested then
     StartIntermission;
@@ -655,6 +669,39 @@ begin
         6: FWorld.SelectWeapon(wpPlasma);
         7: FWorld.SelectWeapon(wpBfg);
       end;
+      Exit(true);
+    end;
+  end;
+  if Event.IsKey(keyTab) then
+  begin
+    FAutomap.Exists := not FAutomap.Exists;
+    Exit(true);
+  end;
+  if FAutomap.Exists then
+  begin
+    if Event.IsKey(keyPlus) or Event.IsKey(keyNumpadPlus) or (Event.IsKey(keyEqual)) then
+    begin
+      FAutomap.ZoomBy(1.25);
+      Exit(true);
+    end;
+    if Event.IsKey(keyMinus) or Event.IsKey(keyNumpadMinus) then
+    begin
+      FAutomap.ZoomBy(1 / 1.25);
+      Exit(true);
+    end;
+    if Event.IsKey(keyG) then
+    begin
+      FAutomap.Grid := not FAutomap.Grid;
+      Exit(true);
+    end;
+    if Event.IsKey(keyI) then
+    begin
+      FAutomap.ShowAll := not FAutomap.ShowAll;
+      Exit(true);
+    end;
+    if Event.EventType = itMouseWheel then
+    begin
+      if Event.MouseWheelScroll > 0 then FAutomap.ZoomBy(1.25) else FAutomap.ZoomBy(1 / 1.25);
       Exit(true);
     end;
   end;

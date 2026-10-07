@@ -6,6 +6,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Automap (Tab): `DoomAutomap` draws seen linedefs with `DrawPrimitive2D` in
+  Doom's colours, player arrow, zoom (+/-, wheel), 128-unit grid (G), reveal
+  all (I). Lines are revealed per visited sector and its neighbours.
 - Player projectiles: rockets, plasma balls and the BFG ball (40-tic charge,
   100d8 direct hit, 40-tracer spray over 90°) are real `TDoomActor` missiles
   (`SpawnPlayerMissile`, `BfgSpray`); rockets keep their splash damage.
@@ -31,7 +34,6 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Automap** (Tab): draw linedefs from `DoomMap` in a 2D `TCastleViewport` or with `DrawPrimitive2D`, colour by one/two-sided and secret, player arrow, map markers. | Expected Doom feature, nice showcase of CGE 2D drawing. | new `DoomAutomap` unit, `GameViewPlay` | M |
 | **Doom text font** (`STCFN*` patches) for messages and the intermission instead of the engine's default font; CGE `TCastleFont` from an image, or compose labels from patches like the status bar. | Looks right. | `DoomHud` | S |
 | **Intermission screen** with the `WIMAP0`/`INTERPIC` background and animated level-stats count-up and sound; **title/credits cycle**, **episode/skill menu** using `M_*` graphics. | Polish, menus look like Doom. | `GameViewMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
@@ -74,8 +76,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Automap (M): expected by everyone who plays Doom, and a nice CGE 2D demo.
-2. External WAD loading (M): turns the demo into something people can use with
+1. External WAD loading (M): turns the demo into something people can use with
    their own IWADs and PWADs.
-3. Monster infighting and boss triggers (M + S): the remaining big behaviour
+2. Monster infighting and boss triggers (M + S): the remaining big behaviour
    gaps on the original levels.
+3. Doom text font and intermission graphics (S + M): the most visible
+   presentation gap.

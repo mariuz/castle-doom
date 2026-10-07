@@ -81,6 +81,7 @@ Sizes, for orientation (lines of Pascal):
 | `doommap.pas` | 677 | map lumps, BSP queries, subsector polygons |
 | `doomthings.pas` | 363 | thing type table (info.c reduced) |
 | `gameviewmenu.pas` | 279 | title screen |
+| `doomautomap.pas` | 210 | automap drawn with 2D primitives |
 | `doomactors.pas` | 248 | sprite billboards with animation |
 | `doomwad.pas` | 225 | WAD directory and palette |
 | `doomhud.pas` | 193 | status bar composition |
@@ -457,6 +458,20 @@ help panel are `TCastleLabel`s.
 
 ---
 
+### The automap
+
+`TDoomAutomap` (`doomautomap.pas`) is a `TCastleUserInterface` whose `Render`
+override draws straight with CGE's immediate 2D primitives: `DrawRectangle`
+for the black background and one `DrawPrimitive2D(pmLines, ...)` call per
+colour group (red one-sided and secret lines, brown floor-height changes,
+yellow ceiling-height changes, grey two-sided lines and dimmed unseen lines
+when the reveal cheat is on), plus the player arrow from Doom's
+`player_arrow` line list rotated by the player angle. It is inserted above the
+viewport and below the HUD, follows the player, zooms with +/- or the wheel
+and can show a 128-unit grid. Lines become visible when the player's sector or
+a neighbouring sector has been visited (`DoomWorld.RevealAutomap` sets
+`ML_MAPPED`, a cheap stand-in for Doom marking rendered segs).
+
 ## 12. Views: menu and play
 
 CGE structures an application as `TCastleView`s pushed on the window's
@@ -544,6 +559,7 @@ and quits. `--demo` runs a comma-separated script: `F:sec`/`B:sec`/`L:sec`/
 navigation and collisions are exercised), `T:deg` turn, `A:deg` absolute
 angle, `G:x:y` teleport to Doom coordinates, `U` use, `X` fire, `E` exit the
 level, `N` next map, `K` give all weapons/ammo/keys, `C:n` select weapon n,
+`M` toggle automap, `I` reveal all map lines, `Z:f` zoom the automap by f,
 `S` screenshot (`PREFIX_n.png`), `W:sec` wait, `Q` quit.
 The log (`%LOCALAPPDATA%\castle-doom\castle-doom.log` on Windows) records
 map/geometry/thing load times, music render times, and every screenshot with
@@ -601,7 +617,7 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
   cacodemon fireballs instead of spawning lost souls, no boss-death triggers
   (E1M8 doors, MAP07, Keen), no Icon of Sin.
 - Doom's "donut" (special 9) only lowers the pillar.
-- No automap, no demo playback, no save games, no difficulty selection
+- No demo playback, no save games, no difficulty selection
   (things are spawned for "Hurt me plenty").
 - Vanilla node format only. A blockmap-free design means all 2D queries scan
   all lines.
@@ -636,5 +652,6 @@ Where each engine feature is used, as a map for learning the engine:
 | `TCastleSound`, `SoundEngine.Play`, `TCastleSoundSource`, `SoundEngine.LoopingChannel[0]` | DoomSound, DoomMusic | effects and music |
 | `TCastleImageControl` (`Image`, `SmoothScaling`, `Stretch`), `TCastleLabel`, `TCastleRectangleControl`, `TCastleCrosshair`, `TCastleButton`, layout groups, `Anchor` | DoomHud, GameViewPlay, GameViewMenu | 2D UI |
 | `Container.Pressed`, `Container.MousePressed`, `TInputPressRelease.IsKey/IsMouseButton/MouseWheelScroll` | GameViewPlay | input |
+| `TCastleUserInterface.Render`, `DrawPrimitive2D`, `DrawRectangle`, `RenderRect` | DoomAutomap | immediate-mode 2D drawing |
 | `Container.Fps`, `WritelnLog`, `WritelnWarning`, `Application.MainWindow.SaveScreen` | GameViewPlay, everywhere | diagnostics and screenshots |
 | `castle-engine compile/package/generate-program`, `--target=web` | CI | builds |

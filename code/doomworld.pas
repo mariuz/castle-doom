@@ -136,6 +136,7 @@ type
     procedure TicMovers;
     procedure TicLights;
     procedure TicPlayer;
+    procedure RevealAutomap;
     procedure TicButtons;
     procedure CheckPickups;
     procedure CheckCrossings;
@@ -1114,6 +1115,7 @@ begin
 
   Sec := Player.Sector;
   if Sec < 0 then Exit;
+  if FTic mod 8 = 0 then RevealAutomap;
   Special := FMap.Sectors[Sec].Special;
   if Special = 9 then
   begin
@@ -1138,6 +1140,24 @@ begin
           end;
         end;
     end;
+end;
+
+{ Mark the linedefs of the player's sector and its neighbours as mapped
+  (Doom marks the lines it actually rendered; this is a cheap stand-in). }
+procedure TDoomWorld.RevealAutomap;
+var
+  Sec, L, O, L2: Integer;
+begin
+  Sec := Player.Sector;
+  if Sec < 0 then Exit;
+  for L in FMap.Sectors[Sec].Lines do
+  begin
+    FMap.Linedefs[L].Flags := FMap.Linedefs[L].Flags or ML_MAPPED;
+    O := FMap.OtherSector(L, Sec);
+    if O >= 0 then
+      for L2 in FMap.Sectors[O].Lines do
+        FMap.Linedefs[L2].Flags := FMap.Linedefs[L2].Flags or ML_MAPPED;
+  end;
 end;
 
 procedure TDoomWorld.UpdateWeaponAnimation;

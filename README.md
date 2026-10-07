@@ -58,14 +58,16 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Weapons: fist, chainsaw, pistol, shotgun, super shotgun, chaingun, and real projectiles
   for the rocket launcher (splash damage), plasma gun and BFG (charge, ball, tracer spray).
 - Status bar with face, keys, arms, ammo table; weapon bobbing; damage and bonus flashes.
+- Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
 - Music: MUS and MIDI lumps played through an FM synthesizer driven by the WAD's GENMIDI
   instrument bank (the AdLib / Sound Blaster sound of the original), title, level and
   intermission tracks.
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no monster infighting, no boss triggers,
-no automap, no save games, vanilla node format only, the music synth approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no external WAD loading yet, no monster
+infighting, no boss triggers, no save games, vanilla node format only, the music synth
+approximates the OPL2.
 
 ## Build and run
 
@@ -82,8 +84,8 @@ or open `CastleEngineManifest.xml` in the Castle Game Engine editor.
 
 Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` fog, `M` mouse look on/off,
-`J` music on/off, `N`/`P` next/previous map, `F5` screenshot, `F8` engine inspector,
-`H` help, `Esc` menu.
+`J` music on/off, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
+`N`/`P` next/previous map, `F5` screenshot, `F8` engine inspector, `H` help, `Esc` menu.
 
 Automated smoke test (loads a map, runs a script, saves screenshots, quits):
 
@@ -113,6 +115,7 @@ code/doomworld.pas      game logic: movers, specials, pickups, AI, weapons
 code/doomsound.pas      DMX -> WAV, doomsfx: protocol
 code/doommusic.pas      MUS/MIDI parsing, GENMIDI FM synthesizer, doommus: protocol
 code/doomhud.pas        status bar composition
+code/doomautomap.pas    automap (DrawPrimitive2D)
 code/gameviewmenu.pas   title screen
 code/gameviewplay.pas   viewport, navigation, HUD, input
 ```
