@@ -37,6 +37,10 @@ type
     FWipeSkipFrame: Boolean;
     { Old screen captured by StartMap, melted once the new map is in. }
     FPendingWipe: TCastleImage;
+    { Frame time spent in the world update, the status bar and the weapon
+      sprite, logged as "PerfView:" every 10 s (see also TDoomWorld "Perf:"). }
+    FPerfWorld, FPerfStatusBar, FPerfWeapon, FPerfClock: Double;
+    FPerfFrames: Integer;
     FStrings: TDoomStrings;
     FIntermissionTicAccum: Single;
     FCrosshair: TCastleCrosshair;
@@ -118,7 +122,7 @@ implementation
 uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
   CastleDownload,
-  CastleUriUtils, X3DNodes, CastleGLImages, CastleRectangles,
+  CastleUriUtils, X3DNodes, CastleGLImages, CastleRectangles, CastleTimeUtils,
   DoomGeometry, DoomMap,
   GameViewMenu, GameSaveStorage;
 
@@ -980,6 +984,7 @@ var
   CamPos, CamDir: TVector3;
   Feet: TVector3;
   P: TPlayerState;
+  PerfT: TTimerResult;
 begin
   inherited;
   if FWorld = nil then Exit;
@@ -1081,7 +1086,9 @@ begin
   CamDir := FViewport.Camera.Direction;
   Feet := CgeToDoom(CamPos);
   Feet.Z := Feet.Z - PlayerViewHeight;
+  PerfT := Timer;
   FWorld.Update(SecondsPassed, Feet.X, Feet.Y, Feet.Z, DoomAngleFromCamera, CamPos, CamDir);
+  FPerfWorld := FPerfWorld + TimerSeconds(Timer, PerfT);
 
   if FWorld.PlayerTeleported then
   begin
@@ -1127,8 +1134,21 @@ begin
     FMapName, Container.Fps.ToString, FWorld.Actors.Count, BoolToStr(FFogEnabled, 'on', 'off')]);
   FStatusBar.Width := FViewport.EffectiveWidth;
   FStatusBar.Height := FViewport.EffectiveWidth / 10;
+  PerfT := Timer;
   FStatusBar.Refresh(FWorld, SecondsPassed);
+  FPerfStatusBar := FPerfStatusBar + TimerSeconds(Timer, PerfT);
+  PerfT := Timer;
   UpdateWeaponSprite(SecondsPassed);
+  FPerfWeapon := FPerfWeapon + TimerSeconds(Timer, PerfT);
+  Inc(FPerfFrames);
+  FPerfClock := FPerfClock + SecondsPassed;
+  if FPerfClock >= 10 then
+  begin
+    WritelnLog('PerfView', '%d frames in %.1f s; ms per frame: world %.2f, status bar %.2f, weapon %.2f',
+      [FPerfFrames, FPerfClock, FPerfWorld * 1000 / FPerfFrames, FPerfStatusBar * 1000 / FPerfFrames,
+       FPerfWeapon * 1000 / FPerfFrames]);
+    FPerfWorld := 0; FPerfStatusBar := 0; FPerfWeapon := 0; FPerfClock := 0; FPerfFrames := 0;
+  end;
   FCrosshair.Exists := FNavigation.MouseLook and not P.Dead and not FAutomap.Exists;
 
   if FWorld.ExitRequested then
