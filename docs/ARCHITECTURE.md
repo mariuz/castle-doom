@@ -462,7 +462,12 @@ units) and visible (`SightClear`: a 2D line-of-sight test against
 one-sided lines and closed two-sided lines). Awake, they chase with Doom-style 2D movement (`TryMove2D`:
 one-sided and blocking lines, openings too low, steps higher than 24, drop-offs
 unless floating, other solid things, the player), try other directions when
-blocked, open doors in their way, and attack when close (melee), when they
+blocked, open doors in their way, set off the walk-over lines Doom allows
+monsters (`MonsterCrossLines`: door raise 4, lifts 10 and 88, teleporters 39
+and 97 and the monster-only 125 / 126, checked against a per-map list of
+such lines after every step; `TeleportActor` moves them to the tagged
+sector's teleport destination with fog at both ends and refuses while the
+spot is occupied, except on MAP30 where monsters telefrag), and attack when close (melee), when they
 have line of sight (hitscan with a distance-based hit chance), or by spawning
 a projectile actor (`SpawnMissile`: imp, cacodemon, baron, cyberdemon,
 revenant, mancubus, arachnotron). Projectiles fly as actors (`TicMissile`),

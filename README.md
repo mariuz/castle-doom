@@ -60,7 +60,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Monsters wake up like in Doom: on sight in front of them, or when your shots reach their
   sector (sound spreads through open doors, stops at closed ones and crosses at most one sound-blocking
   line; ambush monsters must also see you). They chase (2D Doom-style movement with step/drop-off
-  rules, they open doors), attack with melee, hitscan or projectiles, take pain, die,
+  rules, they open doors and use teleporters and monster-only teleport lines), attack with melee, hitscan or projectiles, take pain, die,
   drop items, and fight each other when hit by another monster (infighting). Lost souls
   charge, Pain Elementals spit lost souls (three more when they die), Arch-viles raise
   the dead and burn you with their fire attack. Barrels explode with splash damage. Boss deaths trigger the special map events (E1M8, E2M8,
@@ -90,9 +90,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: monsters do not use
-teleporters, sight checks are 2D, no glBSP `GL_` lumps or UDMF maps, the music synth
-approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: sight checks are 2D, no spectre fuzz,
+no glBSP `GL_` lumps or UDMF maps, the music synth approximates the OPL2.
 
 ## Build and run
 

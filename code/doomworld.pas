@@ -136,6 +136,8 @@ type
     FBrainX, FBrainY: Single;
     { Sector heard the player fire (Doom's sector_t.soundtarget). }
     FSectorSound: array of Boolean;
+    { Lines whose special monsters may trigger by walking over them. }
+    FMonsterCrossLines: array of Integer;
     FDynamic: array of Boolean;
     procedure ComputeDynamicSectors;
     procedure SpawnThings;
@@ -210,6 +212,10 @@ type
     procedure DoStairs(const Line: Integer; const StepSize: Integer; const Speed: Single);
     procedure DoLight(const Sec: Integer; const Level: Integer);
     procedure DoTeleport(const Line: Integer);
+    { EV_Teleport for a monster; false when there is no free destination. }
+    function TeleportActor(const A: TDoomActor; const Line: Integer): Boolean;
+    { P_CrossSpecialLine for a monster that moved from (OldX, OldY). }
+    procedure MonsterCrossLines(const A: TDoomActor; const OldX, OldY: Single);
     procedure StopPlats(const Tag: Integer);
     function CheckKey(const Line: Integer; const Key: TDoomKey; const Skull: TDoomKey; const IsDoor: Boolean): Boolean;
     procedure ChangeLineButton(const Line: Integer; const Repeatable: Boolean);
@@ -300,6 +306,9 @@ const
   FloorSpeed = 1;
   CeilSpeed = 1;
   ManualDoorSpecials: array [0..9] of Integer = (1, 26, 27, 28, 31, 32, 33, 34, 117, 118);
+  { P_CrossSpecialLine: the walk-over specials a monster can set off (door
+    raise, two lifts, teleporters and the monster-only teleporters). }
+  MonsterCrossSpecials = [4, 10, 39, 88, 97, 125, 126];
 
 var
   EffectInfos: array [TEffectKind] of TThingInfo;
@@ -916,6 +925,13 @@ begin
   FBrainDeathTics := 0;
   SetLength(FSectorSound, 0);
   SetLength(FSectorSound, Length(FMap.Sectors));
+  SetLength(FMonsterCrossLines, 0);
+  for I := 0 to High(FMap.Linedefs) do
+    if FMap.Linedefs[I].Special in MonsterCrossSpecials then
+    begin
+      SetLength(FMonsterCrossLines, Length(FMonsterCrossLines) + 1);
+      FMonsterCrossLines[High(FMonsterCrossLines)] := I;
+    end;
   FTic := 0;
   FTicAccum := 0;
   { Light effect sectors. }
@@ -1688,6 +1704,7 @@ end;
 procedure TDoomWorld.TicMonster(const A: TDoomActor);
 var
   Reason: String;
+  OldX, OldY: Single;
   DX, DY, Dist, Ang, Step, TX, TY, TZ, TR, RangeDist: Single;
   Blocked: Integer;
   Tries: Integer;
@@ -1778,6 +1795,8 @@ begin
     Step := Step * 2;
   Moved := false;
   Tries := 0;
+  OldX := A.DoomX;
+  OldY := A.DoomY;
   while (not Moved) and (Tries < 4) do
   begin
     case Tries of
@@ -1795,6 +1814,8 @@ begin
     end;
     Inc(Tries);
   end;
+  if Moved then
+    MonsterCrossLines(A, OldX, OldY);
   if A.Info^.Floats then
   begin
     { Flyers drift towards the target's height. }
@@ -3716,6 +3737,84 @@ begin
       M.Phase := mpDone;
 end;
 
+procedure TDoomWorld.MonsterCrossLines(const A: TDoomActor; const OldX, OldY: Single);
+var
+  I, L, Special: Integer;
+  V1, V2: TDoomVertex;
+  T: Single;
+begin
+  for I := 0 to High(FMonsterCrossLines) do
+  begin
+    L := FMonsterCrossLines[I];
+    Special := FMap.Linedefs[L].Special;
+    if not (Special in MonsterCrossSpecials) then Continue; { a W1 already used }
+    V1 := FMap.Vertices[FMap.Linedefs[L].V1];
+    V2 := FMap.Vertices[FMap.Linedefs[L].V2];
+    if not SegmentsIntersect(OldX, OldY, A.DoomX, A.DoomY, V1.X, V1.Y, V2.X, V2.Y, T) then Continue;
+    case Special of
+      39, 97, 125, 126:
+        { EV_Teleport: only from the front side. }
+        if (FMap.PointOnLineSide(OldX, OldY, L) = 0) and TeleportActor(A, L) then
+        begin
+          if Special in [39, 125] then FMap.Linedefs[L].Special := 0;
+          Exit; { it is somewhere else now }
+        end;
+      else
+        ApplySpecial(L, acCross, true);
+    end;
+  end;
+end;
+
+function TDoomWorld.TeleportActor(const A: TDoomActor; const Line: Integer): Boolean;
+var
+  Tag, S: Integer;
+  D, O: TDoomActor;
+  Z: Single;
+  TeleFrag: Boolean;
+begin
+  Result := false;
+  Tag := FMap.Linedefs[Line].Tag;
+  { P_TeleportMove: monsters only telefrag on MAP30. }
+  TeleFrag := FMap.Name = 'MAP30';
+  S := -1;
+  repeat
+    S := FMap.FindSectorFromTag(Tag, S);
+    if S < 0 then Exit;
+    for D in FActors do
+      if (D.Info^.Kind = tkTeleportDest) and (D.Sector = S) then
+      begin
+        Z := FMap.Sectors[S].FloorHeight;
+        for O in FActors do
+          if (O <> A) and (not O.Removed) and O.Collides and
+             (O.Info^.Kind in [tkMonster, tkDecoration, tkPickup]) and
+             (O.State in [asIdle, asChase, asAttack, asPain]) and
+             (Abs(O.DoomX - D.DoomX) < O.Info^.Radius + A.Info^.Radius) and
+             (Abs(O.DoomY - D.DoomY) < O.Info^.Radius + A.Info^.Radius) then
+          begin
+            if not TeleFrag then Exit;
+            DamageActor(O, 10000, O.DoomX, O.DoomY, O.DoomZ + 32, nil, false);
+          end;
+        if (not Player.Dead) and (Abs(Player.X - D.DoomX) < PlayerRadius + A.Info^.Radius) and
+           (Abs(Player.Y - D.DoomY) < PlayerRadius + A.Info^.Radius) then
+        begin
+          if not TeleFrag then Exit;
+          DamagePlayer(10000, A);
+        end;
+        SpawnFog(A.DoomX, A.DoomY, A.DoomZ, A.Sector);
+        A.DoomX := D.DoomX;
+        A.DoomY := D.DoomY;
+        A.DoomZ := Z;
+        A.Sector := S;
+        A.Angle := D.Angle;
+        A.VelX := 0; A.VelY := 0; A.VelZ := 0;
+        A.UpdateTransform;
+        SpawnFog(D.DoomX + Cos(DegToRad(D.Angle)) * 20, D.DoomY + Sin(DegToRad(D.Angle)) * 20, Z, S);
+        WritelnLog('Teleport', '%s teleported to (%.0f, %.0f) by line %d', [A.Info^.Sprite, D.DoomX, D.DoomY, Line]);
+        Exit(true);
+      end;
+  until false;
+end;
+
 procedure TDoomWorld.DoTeleport(const Line: Integer);
 var
   Tag, S: Integer;
@@ -3827,7 +3926,7 @@ begin
   Repeatable := false;
 
   { Monsters only open plain doors. }
-  if ByMonster and not (Special in [1, 117, 2, 4, 108, 90, 105, 86, 106, 39, 97, 125, 126]) then Exit;
+  if ByMonster and not (Special in [1, 117, 2, 4, 108, 90, 105, 86, 106, 10, 88, 39, 97, 125, 126]) then Exit;
 
   case Activation of
     acUse:

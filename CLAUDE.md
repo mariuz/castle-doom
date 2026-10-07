@@ -84,6 +84,11 @@ the bunny with THE END; MAP30 with `E,W:1` and five `U,W:0.3` reaches the
 cast call. Do not press `U` on the last screen of a game-ending finale in a
 script: it returns to the title and the demo (and `Q`) stops running.
 
+Monster teleports: MAP07 has a room of monster-only 126 lines in open
+space; `--autotest MAP07 p --demo "Y,G:-1089:1064,A:189,P:3001:150,W:3,S,Q"`
+spawns an imp that walks over one; grep `Teleport:` (it lands at
+(-1312, 256)).
+
 Icon of Sin: `--autotest MAP30 prefix --demo "Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q"`
 puts the player in the arena facing the face; grep `BrainAwake:`,
 `BrainSpit:`, `BrainSpawn:`, `BrainDeath:` (`D` kills the brain too, and the

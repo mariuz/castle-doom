@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Monsters use teleporters and walk-over lines like in Doom
+  (`P_CrossSpecialLine` for non-players): crossing a 39 / 97 teleporter or a
+  monster-only 125 / 126 from the front teleports them with fog at both
+  ends (refused while something stands on the destination, except on MAP30
+  where they telefrag), and they can trigger the walk-over door raise (4)
+  and lifts (10, 88). Monster closets and teleport traps (MAP07's arena,
+  many Freedoom maps) now work.
 - Finales: the story text typed over a flat (3 tics per character, a key
   shows it all), then Doom 1's end picture (`CREDIT`, `VICTORY2`, `ENDPIC`)
   or the E3M8 bunny scroller with THE END, Doom 2's texts after MAP06, 11,
@@ -101,7 +108,6 @@ L = several days). Items inside a section are in suggested order.
 | **Spectres** are drawn like demons; add the fuzz/translucency effect (shader or `AlphaMode = amBlend` with low alpha). | Visual fidelity. | `DoomActors` material | S |
 | **3D sight checks**: `SightClear` is 2D (one-sided and closed two-sided lines block); Doom's `P_CheckSight` also uses the heights of openings and the `REJECT` table, so a monster below a high ledge can "see" too much here. | Fewer early wake-ups and shots through ledges. | `SightClear`, `DoomMap` (`REJECT`) | S-M |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
-| **Teleport monsters** (specials 125/126) and monsters using teleporters. | Some Doom 2 maps rely on it. | `DoTeleport` for actors | S |
 | **Falling damage / knockback**: hitscans and explosions should push things. | Feel. | `DamageActor`, `DamagePlayer` | S |
 | **Item respawn / deathmatch starts**: not applicable to single player, but the flags are parsed. | Only if multiplayer ever happens. | - | - |
 
@@ -150,9 +156,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Teleporting monsters (specials 125/126, monsters walking over
-   teleporters) (S): several Doom 2 maps send monsters through teleporters.
-2. Weapon raise / lower when switching and the screen melt between levels
+1. Weapon raise / lower when switching and the screen melt between levels
    (S): two small things that make it feel like Doom.
-3. More BEX strings (S): Freedoom's own pickup messages and prompts, now
+2. More BEX strings (S): Freedoom's own pickup messages and prompts, now
    that `DoomDehacked` reads them.
+3. Spectre fuzz (S): spectres are drawn like plain demons; a translucent
+   or shader "fuzz" look.
