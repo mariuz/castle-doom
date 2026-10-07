@@ -102,7 +102,7 @@ type
 
 implementation
 
-uses Math, CastleUtils, CastleLog,
+uses Math, CastleUtils, CastleLog, CastleRenderOptions,
   DoomGeometry;
 
 constructor TDoomActor.Create(AOwner: TComponent; const AGraphics: TDoomGraphics;
@@ -138,6 +138,7 @@ end;
 
 procedure TDoomActor.BuildScene;
 var
+  Props: TTexturePropertiesNode;
   Root: TX3DRootNode;
   Shape: TShapeNode;
   Geometry: TIndexedTriangleSetNode;
@@ -158,6 +159,18 @@ begin
   FTexture := TImageTextureNode.Create;
   FTexture.RepeatS := false;
   FTexture.RepeatT := false;
+  { Like CGE's own sprite sheets: GuiTexture means no power-of-two resize and
+    no mipmaps. Sprites have odd sizes (36x48...) and there are hundreds per
+    level; resizing and mipmapping each one on the CPU kept the web build at
+    about 1 FPS while a level's sprites were first shown. Nearest filtering
+    is also the crisp Doom look. }
+  Props := TTexturePropertiesNode.Create;
+  Props.GuiTexture := true;
+  Props.MagnificationFilter := magNearest;
+  Props.MinificationFilter := minNearest;
+  Props.BoundaryModeS := bmClampToEdge;
+  Props.BoundaryModeT := bmClampToEdge;
+  FTexture.TextureProperties := Props;
   FAppearance.Texture := FTexture;
   Shape := TShapeNode.Create;
   Shape.Appearance := FAppearance;
