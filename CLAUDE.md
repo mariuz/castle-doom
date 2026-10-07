@@ -72,6 +72,11 @@ and the log at `%LOCALAPPDATA%\castle-doom\castle-doom.log` (grep for
 (-416, 256); door at x=544..560, y=680..744 (stand at 480,712 facing angle 0);
 WR lift square 64..192 x 192..320 (stand at 0,256 facing 0 and walk).
 
+Player messages are logged as `Message:`; E1M1 pickups for a quick check:
+`Y,G:416:864,W:0.3,G:2192:576,W:0.3,Q` gives "Picked up some shotgun
+shells." and "Blue passcard secured!" (Freedoom's BEX strings). Menu
+screenshots also take `MENUQUIT` (the quit question).
+
 Monster wake-up: grep `Wake:` (sprite, position, `saw` / `heard` /
 `heard and saw (ambush)`) and `Noise:` (sectors a new shot reached). On
 E1M1, `Y,X,W:1,G:480:712,A:0,U,W:1.5,X,W:2,Q` gives 38 sectors from the
@@ -189,6 +194,8 @@ Goertzel on semitone vs quarter-tone frequencies).
 
 ## Git / CI
 
+- Jobs have `timeout-minutes`; if a run still hangs, `gh run cancel <id>`
+  then `gh run rerun <id>` once the cancel has gone through.
 - `main` is the only branch; every push builds Windows/Linux packages
   (`build.yml`) and deploys the web build (`web.yml`). Tags `vX.Y.Z` create a
   GitHub Release with the packages. Check runs with

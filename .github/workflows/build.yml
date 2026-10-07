@@ -22,6 +22,7 @@ jobs:
   build-native:
     name: Package Windows and Linux
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     container: kambi/castle-engine-cloud-builds-tools:cge-unstable
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +57,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build-native
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:

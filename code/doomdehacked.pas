@@ -22,6 +22,9 @@ type
     function Get(const Key: String; const Default: String = ''): String;
     function Has(const Key: String): Boolean;
     function Count: Integer;
+    { Doom's level title (HUSTR_E1M1 / HUSTR_1), e.g. "E1M1: Outer Prison";
+      the map name itself when the WAD has none. }
+    function LevelName(const MapName: String; const IsDoom2: Boolean): String;
   end;
 
 implementation
@@ -123,6 +126,18 @@ end;
 function TDoomStrings.Count: Integer;
 begin
   Result := FValues.Count;
+end;
+
+function TDoomStrings.LevelName(const MapName: String; const IsDoom2: Boolean): String;
+var
+  N: Integer;
+begin
+  if IsDoom2 and (Copy(MapName, 1, 3) = 'MAP') then
+  begin
+    N := StrToIntDef(Copy(MapName, 4, 2), 0);
+    Result := Get('HUSTR_' + IntToStr(N), MapName);
+  end else
+    Result := Get('HUSTR_' + MapName, MapName);
 end;
 
 end.

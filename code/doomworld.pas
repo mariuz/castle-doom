@@ -12,7 +12,7 @@ interface
 
 uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
-  DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound;
+  DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked;
 
 const
   TicRate = 35;
@@ -238,6 +238,8 @@ type
     { Skill level, Doom's gameskill: 0 "I'm too young to die" .. 4 "Nightmare!".
       Set before LoadMap (things are spawned by it); saved with the game. }
     Skill: Integer;
+    { The WAD's BEX strings (pickup and door messages); may be nil. Not owned. }
+    Strings: TDoomStrings;
 
     constructor Create(const AWad: TDoomWad; const AGraphics: TDoomGraphics;
       const ASounds: TDoomSounds; const AItems: TCastleRootTransform);
@@ -263,6 +265,8 @@ type
     procedure ChangeWeapon(const W: TWeapon);
     procedure NextWeapon(const Delta: Integer);
     procedure ShowMessage(const Msg: String);
+    { BEX string Key, or Default without one. }
+    function Text(const Key, Default: String): String;
     procedure DamagePlayer(const Damage: Integer; const FromActor: TDoomActor);
     { Hurt a monster or barrel. ByPlayer: the player did it (monster turns on
       the player); otherwise Attacker (a monster) becomes its new target,
@@ -978,10 +982,19 @@ begin
   Result := Count * Random1(Faces);
 end;
 
+function TDoomWorld.Text(const Key, Default: String): String;
+begin
+  if (Strings <> nil) and (Key <> '') then
+    Result := Strings.Get(Key, Default)
+  else
+    Result := Default;
+end;
+
 procedure TDoomWorld.ShowMessage(const Msg: String);
 begin
   Player.Message := Msg;
   Player.MessageTics := 4 * TicRate;
+  WritelnLog('Message', Msg);
 end;
 
 function TDoomWorld.AmmoFor(const W: TWeapon): TAmmoType;
@@ -3374,7 +3387,7 @@ begin
     P := A.Info^.Pickup;
     Picked := true;
     Sound := 'DSITEMUP';
-    Msg := PickupMessage(P, Player.Health < 25);
+    Msg := Text(PickupMessageKey(P, Player.Health < 25), PickupMessage(P, Player.Health < 25));
     case P of
       pkStimpack: Picked := GiveHealth(10, 100);
       pkMedikit: Picked := GiveHealth(25, 100);
@@ -3526,17 +3539,19 @@ end;
 
 function TDoomWorld.CheckKey(const Line: Integer; const Key: TDoomKey; const Skull: TDoomKey; const IsDoor: Boolean): Boolean;
 var
-  Color, What: String;
+  Color, What, KeyName: String;
 begin
   Result := (Key in Player.Keys) or (Skull in Player.Keys);
   if Result then Exit;
   case Key of
-    keyBlue: Color := 'blue';
-    keyYellow: Color := 'yellow';
-    else Color := 'red';
+    keyBlue: begin Color := 'blue'; KeyName := 'BLUE'; end;
+    keyYellow: begin Color := 'yellow'; KeyName := 'YELLOW'; end;
+    else begin Color := 'red'; KeyName := 'RED'; end;
   end;
   if IsDoor then What := 'open this door' else What := 'activate this object';
-  ShowMessage(Format('You need a %s key to %s', [Color, What]));
+  { PD_BLUEK (doors) / PD_BLUEO (switches) like vanilla. }
+  if IsDoor then KeyName := 'PD_' + KeyName + 'K' else KeyName := 'PD_' + KeyName + 'O';
+  ShowMessage(Text(KeyName, Format('You need a %s key to %s', [Color, What])));
   FSounds.Play('DSOOF');
 end;
 

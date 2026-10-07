@@ -10,7 +10,7 @@ interface
 
 uses Classes,
   CastleControls, CastleImages, CastleKeysMouse, CastleUIControls, CastleVectors,
-  DoomGraphics, DoomSound;
+  DoomGraphics, DoomSound, DoomDehacked;
 
 type
   TDoomMenuPage = (mpMain, mpEpisode, mpSkill, mpLoad);
@@ -25,7 +25,12 @@ type
     FPage: TDoomMenuPage;
     FItemOn: array [TDoomMenuPage] of Integer;
     FTic: Integer;
-    FConfirmNightmare: Boolean;
+    { M_StartMessage: a question over the menu (Nightmare, quit); Y does
+      FPromptAction. }
+    FPrompt: Boolean;
+    FPromptText: String;
+    FPromptAction: TDoomMenuAction;
+    FStrings: TDoomStrings;
     FEpisodes: Integer;
     FSlots: array [1..6] of String;
     FDirty: Boolean;
@@ -35,6 +40,8 @@ type
     function ItemPatch(const Page: TDoomMenuPage; const Index: Integer): String;
     procedure PageOrigin(const Page: TDoomMenuPage; out X, Y: Integer);
     procedure Activate;
+    procedure StartQuitPrompt;
+    procedure StartPrompt(const Text: String; const Action: TDoomMenuAction);
     procedure Move(const Delta: Integer);
     procedure Back;
     function DoomPoint(const ScreenPos: TVector2; out DX, DY: Single): Boolean;
@@ -50,7 +57,8 @@ type
     MouseEnabled: Boolean;
     constructor Create(AOwner: TComponent); override;
     { Set up for a WAD: graphics, sounds, how many episodes (0 = Doom 2). }
-    procedure Setup(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds; const AEpisodes: Integer);
+    procedure Setup(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds; const AEpisodes: Integer;
+      const AStrings: TDoomStrings);
     { Descriptions shown on the load page ('' = empty slot). }
     procedure SetSlot(const Index: Integer; const Description: String);
     procedure OpenPage(const Page: TDoomMenuPage);
@@ -61,7 +69,7 @@ type
     function Press(const Event: TInputPressRelease): Boolean; override;
     function Motion(const Event: TInputMotion): Boolean; override;
     property Page: TDoomMenuPage read FPage;
-    property ConfirmingNightmare: Boolean read FConfirmNightmare;
+    property Prompting: Boolean read FPrompt;
   end;
 
 const
@@ -76,6 +84,10 @@ uses SysUtils, Math,
 
 const
   LineHeight = 16;
+  { Used when the WAD has no DEHACKED strings. }
+  NightmarePrompt = 'Are you sure? This skill level' + #10 + 'isn''t even remotely fair.' + #10#10 + 'Press Y or N.';
+  QuitPrompt = 'Are you sure you want to quit?';
+  QuitPromptKey = '(Press Y to quit.)';
   SkullXOff = -32;
   SkullYOff = -5;
 
@@ -90,13 +102,15 @@ begin
   FDirty := true;
 end;
 
-procedure TDoomMenuScreen.Setup(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds; const AEpisodes: Integer);
+procedure TDoomMenuScreen.Setup(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds; const AEpisodes: Integer;
+  const AStrings: TDoomStrings);
 begin
+  FStrings := AStrings;
   FGraphics := AGraphics;
   FSounds := ASounds;
   FEpisodes := AEpisodes;
   FPage := mpMain;
-  FConfirmNightmare := false;
+  FPrompt := false;
   FDirty := true;
   Compose;
 end;
@@ -145,7 +159,7 @@ end;
 procedure TDoomMenuScreen.OpenPage(const Page: TDoomMenuPage);
 begin
   FPage := Page;
-  FConfirmNightmare := false;
+  FPrompt := false;
   { The skill page starts at the current skill (Hurt me plenty by default). }
   if Page = mpSkill then FItemOn[Page] := Skill;
   FItemOn[Page] := Clamped(FItemOn[Page], 0, ItemCount(Page) - 1);
@@ -191,7 +205,7 @@ begin
            end;
         1: if Assigned(OnAction) then OnAction(maOptions);
         2: OpenPage(mpLoad);
-        3: if Assigned(OnAction) then OnAction(maQuit);
+        3: StartQuitPrompt;
       end;
     mpEpisode:
       begin
@@ -204,9 +218,10 @@ begin
         if Item = 4 then
         begin
           { M_ChooseSkill: Nightmare asks first. }
-          FConfirmNightmare := true;
-          FDirty := true;
-          Compose;
+          if FStrings <> nil then
+            StartPrompt(FStrings.Get('NIGHTMARE', NightmarePrompt), maNewGame)
+          else
+            StartPrompt(NightmarePrompt, maNewGame);
         end else
         if Assigned(OnAction) then OnAction(maNewGame);
       end;
@@ -218,21 +233,55 @@ begin
   end;
 end;
 
+procedure TDoomMenuScreen.StartPrompt(const Text: String; const Action: TDoomMenuAction);
+begin
+  FPrompt := true;
+  FPromptText := Text;
+  FPromptAction := Action;
+  FDirty := true;
+  Compose;
+end;
+
+{ M_QuitDOOM: one of the quit messages plus DOSY, Y quits. }
+procedure TDoomMenuScreen.StartQuitPrompt;
+var
+  Msgs: TStringList;
+  I: Integer;
+  Key: String;
+begin
+  Msgs := TStringList.Create;
+  try
+    if FStrings <> nil then
+      for I := 0 to 30 do
+      begin
+        if I = 0 then Key := 'QUITMSG' else Key := 'QUITMSG' + IntToStr(I);
+        if FStrings.Has(Key) then Msgs.Add(FStrings.Get(Key));
+      end;
+    if Msgs.Count = 0 then Msgs.Add(QuitPrompt);
+    if FStrings <> nil then
+      StartPrompt(Msgs[Random(Msgs.Count)] + #10#10 + FStrings.Get('DOSY', QuitPromptKey), maQuit)
+    else
+      StartPrompt(Msgs[Random(Msgs.Count)] + #10#10 + QuitPromptKey, maQuit);
+  finally
+    FreeAndNil(Msgs);
+  end;
+end;
+
 function TDoomMenuScreen.HandleKey(const Event: TInputPressRelease): Boolean;
 begin
   Result := true;
-  if FConfirmNightmare then
+  if FPrompt then
   begin
     if Event.IsKey(keyY) or Event.IsKey(keyEnter) then
     begin
-      FConfirmNightmare := false;
+      FPrompt := false;
       FDirty := true;
       Compose;
-      if Assigned(OnAction) then OnAction(maNewGame);
+      if Assigned(OnAction) then OnAction(FPromptAction);
     end else
     if Event.IsKey(keyN) or Event.IsKey(keyEscape) or Event.IsKey(keyBackSpace) then
     begin
-      FConfirmNightmare := false;
+      FPrompt := false;
       if FSounds <> nil then FSounds.Play('DSSWTCHX');
       FDirty := true;
       Compose;
@@ -273,7 +322,7 @@ var
   Item: Integer;
 begin
   Result := inherited;
-  if Result or FConfirmNightmare or not MouseEnabled then Exit;
+  if Result or FPrompt or not MouseEnabled then Exit;
   if DoomPoint(Event.Position, DX, DY) then
   begin
     Item := ItemAt(DX, DY);
@@ -295,7 +344,7 @@ begin
   if Result or not MouseEnabled then Exit;
   if Event.IsMouseButton(buttonLeft) and DoomPoint(Event.Position, DX, DY) then
   begin
-    if FConfirmNightmare then Exit(true);
+    if FPrompt then Exit(true);
     Item := ItemAt(DX, DY);
     if Item >= 0 then
     begin
@@ -362,12 +411,12 @@ begin
   end;
   PageOrigin(FPage, X, Y);
 
-  if FConfirmNightmare then
+  if FPrompt then
   begin
-    { M_StartMessage(NIGHTMARE): only the message, centred, in the HU font. }
+    { M_StartMessage: only the message, centred line by line, in the HU font. }
     Lines := TStringList.Create;
     try
-      Lines.Text := 'ARE YOU SURE? THIS SKILL LEVEL' + #10 + 'ISN''T EVEN REMOTELY FAIR.' + #10 + '' + #10 + 'PRESS Y OR N.';
+      Lines.Text := UpperCase(FPromptText);
       LineY := 100 - (Lines.Count * 8) div 2;
       for I := 0 to Lines.Count - 1 do
       begin

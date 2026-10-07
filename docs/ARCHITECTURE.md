@@ -642,6 +642,17 @@ lump as Boom BEX strings (`E1TEXT`, `C1TEXT`, `BGFLATE1`, `BGFLAT06`,
 newlines. Without a text (an IWAD with no `DEHACKED`) the text stage is
 skipped; flats fall back to vanilla's, cast names to Doom's.
 
+The same `TDoomStrings` (one per WAD set, created by each view) feeds the
+other texts: `TDoomWorld.Text(Key, Default)` for pickup messages
+(`PickupMessageKey` maps every pickup to its `GOT*` name) and locked
+doors / switches (`PD_BLUEK` / `PD_BLUEO`...), `LevelName` for the title
+shown when a level starts and at the bottom left of the automap
+(`HUSTR_E1M1`, Doom 2's `HUSTR_1`), the automap's `AMSTR_GRIDON/OFF`, and in
+the title menu the `NIGHTMARE` question and the quit question (a random
+`QUITMSG`..`QUITMSG14` plus `DOSY`, `M_QuitDOOM`). Every call passes the
+vanilla text as the fallback. Player messages are also logged
+(`Message:`), which the tests use.
+
 The weapon sprite and muzzle flash are two more `TCastleImageControl`s placed
 with Doom's formula (`x1 = centerx + (1 - 160 - leftoffset) * scale`,
 `WEAPONTOP = 32`) and bobbed with the camera speed. A weapon change goes
@@ -860,7 +871,7 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 ## 18. Known gaps and ideas
 
 - Other DeHackEd sections (frames, things, weapons, code pointers) are
-  ignored; only BEX strings are read, and only the finale uses them so far.
+  ignored; only BEX strings are read.
 - Doom's "donut" (special 9) only lowers the pillar.
 - Sight is 2D (`SightClear` ignores opening heights and `REJECT`).
 - No demo playback; web saves live in one browser's `localStorage` (no

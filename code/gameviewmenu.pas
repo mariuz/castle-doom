@@ -9,7 +9,7 @@ interface
 
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
-  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu;
+  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked;
 
 type
   TViewMenu = class(TCastleView)
@@ -24,6 +24,7 @@ type
     FGraphics: TDoomGraphics;
     FSounds: TDoomSounds;
     FMusic: TDoomMusic;
+    FStrings: TDoomStrings;
     FIwadUrl: String;
     FPwads: TStringList;
     FWadsLabel: TCastleLabel;
@@ -74,7 +75,7 @@ type
 var
   ViewMenu: TViewMenu;
   { Set from the command line (--autotest MAP PREFIX): start this map at once.
-    MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENULOAD, MENUOPTIONS
+    MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENUQUIT, MENULOAD, MENUOPTIONS
     or MENUDOOM2 takes a screenshot of that menu page instead. }
   AutoTestMap: String;
   AutoTestPrefix: String;
@@ -320,6 +321,7 @@ destructor TViewMenu.Destroy;
 begin
   FreeAndNil(FPwads);
   FreeAndNil(FMenuKeys);
+  FreeAndNil(FStrings);
   inherited;
 end;
 
@@ -388,7 +390,9 @@ begin
   for E := 1 to 4 do
     if (FWad.MapNames.IndexOf(Format('E%dM1', [E])) >= 0) and (FGraphics.Patch(Format('M_EPI%d', [E])) <> nil) then
       Episodes := E;
-  FDoomMenu.Setup(FGraphics, FSounds, Episodes);
+  FreeAndNil(FStrings);
+  FStrings := TDoomStrings.Create(FWad);
+  FDoomMenu.Setup(FGraphics, FSounds, Episodes, FStrings);
   FDoomMenu.Skill := FSkill;
   RefreshSlots;
 end;
@@ -665,6 +669,12 @@ begin
     FDoomMenu.OpenPage(mpSkill);
     FDoomMenu.HandleKey(InputKey(TVector2.Zero, keyArrowDown, '', []));
     FDoomMenu.HandleKey(InputKey(TVector2.Zero, keyArrowDown, '', []));
+    FDoomMenu.HandleKey(InputKey(TVector2.Zero, keyEnter, '', []));
+  end
+  else if AutoTestMap = 'MENUQUIT' then
+  begin
+    { Up from New Game wraps to Quit Game, Enter: the quit question. }
+    FDoomMenu.HandleKey(InputKey(TVector2.Zero, keyArrowUp, '', []));
     FDoomMenu.HandleKey(InputKey(TVector2.Zero, keyEnter, '', []));
   end
   else if AutoTestMap = 'MENULOAD' then

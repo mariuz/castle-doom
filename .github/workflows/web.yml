@@ -33,10 +33,14 @@ jobs:
   build-web:
     name: Build WebAssembly
     runs-on: ubuntu-latest
+    # A cold toolchain build (FPC main + Pas2js) takes a while; a hung runner
+    # should still fail instead of sitting there for the 6 h default.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
       - name: Install bootstrap FPC and helpers
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install -y fpc binaryen make git unzip
@@ -135,6 +139,7 @@ jobs:
     name: Deploy to GitHub Pages
     needs: build-web
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

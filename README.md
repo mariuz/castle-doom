@@ -73,6 +73,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
 - Doom's text font for messages, and the real intermission screen (level names, FINISHED,
   animated kills/items/secrets/time with sounds, par times, ENTERING).
+- Freedoom's own wording from the WAD's `DEHACKED` strings: pickup and door messages, level
+  titles (also on the automap), the Nightmare and quit questions.
 - Finales: Freedoom's story texts (read from the WAD's `DEHACKED` strings), the end
   pictures, the bunny scroller after E3M8 and the Doom 2 cast call after MAP30.
 - Doom's own menu from the WAD's graphics: New Game, episode and skill select (all five

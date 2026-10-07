@@ -24,7 +24,7 @@ type
     FWeaponImageName, FFlashImageName: String;
     FDamageFlash, FBonusFlash: TCastleRectangleControl;
     FInfoLabel, FHelpLabel: TCastleLabel;
-    FMessageText, FLoadingText: TDoomFontText;
+    FMessageText, FLoadingText, FAutomapTitle: TDoomFontText;
     FIntermissionBack: TCastleRectangleControl;
     FIntermissionScreen: TDoomIntermission;
     FFinaleScreen: TDoomFinale;
@@ -231,6 +231,13 @@ begin
   FMessageText.Exists := false;
   InsertFront(FMessageText);
 
+  { The level title at the bottom left of the automap (AM_drawTitle). }
+  FAutomapTitle := TDoomFontText.Create(FreeAtStop);
+  FAutomapTitle.Graphics := Graphics;
+  FAutomapTitle.Anchor(hpLeft, 8);
+  FAutomapTitle.Exists := false;
+  InsertFront(FAutomapTitle);
+
   FInfoLabel := TCastleLabel.Create(FreeAtStop);
   FInfoLabel.Color := Vector4(1, 1, 0.6, 0.9);
   FInfoLabel.FontSize := 18;
@@ -347,6 +354,9 @@ begin
   CreateUi;
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
   FWorld.Skill := Skill;
+  FreeAndNil(FStrings);
+  FStrings := TDoomStrings.Create(Wad);
+  FWorld.Strings := FStrings;
   WritelnLog('Skill', 'Skill %d', [Skill + 1]);
   FAutomap.World := FWorld;
   if StartMapName = '' then
@@ -575,7 +585,7 @@ begin
   if Restored then
     FWorld.ShowMessage('Game loaded.')
   else
-    FWorld.ShowMessage(Format('%s  (%s)', [MapName, Wad.Description]));
+    FWorld.ShowMessage(FStrings.LevelName(MapName, Wad.IsDoom2));
   if Music <> nil then
     Music.Play(Music.LumpForMap(MapName));
 end;
@@ -771,7 +781,7 @@ begin
 
   SpriteName := FWorld.WeaponSprite(P.Weapon) + P.WeaponFrame + '0';
   Img := Graphics.Patch(SpriteName);
-  if (Img <> nil) and not P.Dead then
+  if (Img <> nil) and not P.Dead and not FAutomap.Exists then
   begin
     if SpriteName <> FWeaponImageName then
     begin
@@ -794,7 +804,7 @@ begin
     FlashName := FWorld.FlashSprite(P.Weapon) + P.FlashFrame + '0';
   Img := nil;
   if FlashName <> '' then Img := Graphics.Patch(FlashName);
-  if (Img <> nil) and not P.Dead then
+  if (Img <> nil) and not P.Dead and not FAutomap.Exists then
   begin
     if FlashName <> FFlashImageName then
     begin
@@ -847,8 +857,6 @@ end;
 
 function TViewPlay.StartFinale: Boolean;
 begin
-  if FStrings = nil then
-    FStrings := TDoomStrings.Create(Wad);
   if not HasFinale(FMapName, Wad.IsDoom2, FWorld.SecretExit) then Exit(false);
   BeginWipe;
   Result := FFinaleScreen.Start(Graphics, Sounds, Music, FStrings, Wad.IsDoom2, FMapName, FWorld.SecretExit);
@@ -1056,6 +1064,13 @@ begin
   FDamageFlash.Color := Vector4(1, 0, 0, P.DamageFlash * 0.55);
   FBonusFlash.Color := Vector4(1, 0.9, 0.3, P.BonusFlash * 0.25);
   FMessageText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
+  FAutomapTitle.Exists := FAutomap.Exists;
+  if FAutomap.Exists then
+  begin
+    FAutomapTitle.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
+    FAutomapTitle.SetText(UpperCase(FStrings.LevelName(FMapName, Wad.IsDoom2)));
+    FAutomapTitle.Anchor(vpBottom, FStatusBar.Height + 4);
+  end;
   if P.MessageTics > 0 then FMessageText.SetText(UpperCase(P.Message)) else FMessageText.SetText('');
   FInfoLabel.Caption := Format('%s   FPS %s   %d things   fog %s', [
     FMapName, Container.Fps.ToString, FWorld.Actors.Count, BoolToStr(FFogEnabled, 'on', 'off')]);
@@ -1198,6 +1213,10 @@ begin
     if Event.IsKey(keyG) then
     begin
       FAutomap.Grid := not FAutomap.Grid;
+      if FAutomap.Grid then
+        FWorld.ShowMessage(FWorld.Text('AMSTR_GRIDON', 'Grid ON'))
+      else
+        FWorld.ShowMessage(FWorld.Text('AMSTR_GRIDOFF', 'Grid OFF'));
       Exit(true);
     end;
     if Event.IsKey(keyI) then

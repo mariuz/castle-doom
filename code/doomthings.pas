@@ -65,6 +65,8 @@ function FindThingInfo(const Num: Integer): PThingInfo;
 
 { Doom's pickup messages. }
 function PickupMessage(const Pickup: TPickupKind; const LowHealth: Boolean): String;
+{ The BEX string name of that message (GOTSTIM, GOTMEDINEED...), '' if none. }
+function PickupMessageKey(const Pickup: TPickupKind; const LowHealth: Boolean): String;
 
 implementation
 
@@ -355,6 +357,49 @@ begin
     pkPlasma: Result := 'You got the plasma gun!';
     pkBFG: Result := 'You got the BFG9000!  Oh, yes.';
     pkChainsaw: Result := 'A chainsaw!  Find some meat!';
+    else Result := '';
+  end;
+end;
+
+function PickupMessageKey(const Pickup: TPickupKind; const LowHealth: Boolean): String;
+begin
+  case Pickup of
+    pkStimpack: Result := 'GOTSTIM';
+    pkMedikit: if LowHealth then Result := 'GOTMEDINEED' else Result := 'GOTMEDIKIT';
+    pkHealthBonus: Result := 'GOTHTHBONUS';
+    pkArmorBonus: Result := 'GOTARMBONUS';
+    pkArmorGreen: Result := 'GOTARMOR';
+    pkArmorBlue: Result := 'GOTMEGA';
+    pkSoulsphere: Result := 'GOTSUPER';
+    pkMegasphere: Result := 'GOTMSPHERE';
+    pkBerserk: Result := 'GOTBERSERK';
+    pkInvulnerability: Result := 'GOTINVUL';
+    pkInvisibility: Result := 'GOTINVIS';
+    pkRadSuit: Result := 'GOTSUIT';
+    pkComputerMap: Result := 'GOTMAP';
+    pkLightAmp: Result := 'GOTVISOR';
+    pkKeyBlue: Result := 'GOTBLUECARD';
+    pkKeyYellow: Result := 'GOTYELWCARD';
+    pkKeyRed: Result := 'GOTREDCARD';
+    pkSkullBlue: Result := 'GOTBLUESKUL';
+    pkSkullYellow: Result := 'GOTYELWSKUL';
+    pkSkullRed: Result := 'GOTREDSKULL';
+    pkClip: Result := 'GOTCLIP';
+    pkClipBox: Result := 'GOTCLIPBOX';
+    pkShells: Result := 'GOTSHELLS';
+    pkShellBox: Result := 'GOTSHELLBOX';
+    pkRocket: Result := 'GOTROCKET';
+    pkRocketBox: Result := 'GOTROCKBOX';
+    pkCell: Result := 'GOTCELL';
+    pkCellPack: Result := 'GOTCELLBOX';
+    pkBackpack: Result := 'GOTBACKPACK';
+    pkShotgun: Result := 'GOTSHOTGUN';
+    pkSuperShotgun: Result := 'GOTSHOTGUN2';
+    pkChaingun: Result := 'GOTCHAINGUN';
+    pkRocketLauncher: Result := 'GOTLAUNCHER';
+    pkPlasma: Result := 'GOTPLASMA';
+    pkBFG: Result := 'GOTBFG9000';
+    pkChainsaw: Result := 'GOTCHAINSAW';
     else Result := '';
   end;
 end;

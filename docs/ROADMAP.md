@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- BEX strings everywhere: pickup messages (`GOT*`), locked door / switch
+  messages (`PD_*K` / `PD_*O`), the level title on entering a map and at the
+  bottom of the automap (`HUSTR_E1M1`, `HUSTR_1`), the automap grid toggle
+  (`AMSTR_GRIDON/OFF`), the Nightmare question (`NIGHTMARE`) and a quit
+  question with a random quit message (`QUITMSG*` + `DOSY`, new in the
+  title menu) come from the WAD's `DEHACKED`, so Freedoom's own wording is
+  used; vanilla texts remain the fallback. The weapon is hidden on the
+  automap. CI jobs have timeouts (a hung runner sat 2.5 hours once).
 - Weapon raise / lower and the screen melt: switching weapons (keys,
   running out of ammo, a new weapon picked up, berserk) lowers the old one
   6 pixels per tic, swaps it out of view and raises the new one (`A_Lower` /
@@ -121,7 +129,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **More BEX strings**: pickup and door messages, level names on the automap, the quit / Nightmare prompts from `DEHACKED` (`TDoomStrings` already parses them), and `.deh` / `.bex` files given with `-deh`. | Freedoom's own wording everywhere, PWADs with text changes. | `DoomThings.PickupMessage`, `DoomWorld`, `DoomMenu` | S |
+| **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
@@ -161,9 +169,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. More BEX strings (S): Freedoom's own pickup messages and prompts, now
-   that `DoomDehacked` reads them.
-2. Spectre fuzz (S): spectres are drawn like plain demons; a translucent
+1. Spectre fuzz (S): spectres are drawn like plain demons; a translucent
    or shader "fuzz" look.
-3. 3D sight checks (S-M): opening heights and `REJECT` in `SightClear`, so
+2. 3D sight checks (S-M): opening heights and `REJECT` in `SightClear`, so
    monsters stop seeing (and shooting) over ledges they could not in Doom.
+3. Palette flashes through `PLAYPAL` (S): the red / gold / green screen
+   tints the way Doom does them.
