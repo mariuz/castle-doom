@@ -139,7 +139,8 @@ end;
 
 procedure WriteSaveFile(const Url: String; const J: TJSONObject);
 begin
-  SaveStorageWrite(Url, J.AsJSON);
+  { Without whitespace: about 15% smaller (matters for localStorage). }
+  SaveStorageWrite(Url, J.FormatJSON(AsCompressedJSON));
 end;
 
 constructor TViewPlay.Create(AOwner: TComponent);
