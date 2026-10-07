@@ -19,7 +19,8 @@ L = several days). Items inside a section are in suggested order.
   6 pixels per tic, swaps it out of view and raises the new one (`A_Lower` /
   `A_Raise`); no firing meanwhile; every level starts with the weapon coming
   up. Level → intermission, intermission → next level and the finales melt
-  the old screen down in 160 columns like `f_wipe.c` (`DoomWipe`).
+  the old screen down in 160 columns like `f_wipe.c` (`DoomWipe`); desktop
+  only for now.
 - Monsters use teleporters and walk-over lines like in Doom
   (`P_CrossSpecialLine` for non-players): crossing a 39 / 97 teleporter or a
   monster-only 125 / 126 from the front teleports them with fog at both
@@ -133,6 +134,7 @@ L = several days). Items inside a section are in suggested order.
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
+| **Screen melt on the web**: capture the old frame with a render-to-texture pass (`TGLRenderToTexture` / a viewport rendered into an image) instead of `SaveScreen`, which reads black under WebGL. | Same transitions in the browser. | `GameViewPlay.CaptureScreen` | S |
 | **Palette flashes** done through the real `PLAYPAL` palettes (red/yellow/green tints) instead of a translucent rectangle. | Fidelity. | `GameViewPlay` | S |
 | **Hanging/floating things** bob (cacodemons hover), **gibs** for excessive damage (`XDEATH` frames). | Fidelity. | `DoomThings` frames, `KillActor` | S |
 

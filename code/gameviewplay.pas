@@ -893,6 +893,12 @@ end;
 
 function TViewPlay.CaptureScreen: TCastleImage;
 begin
+  {$ifdef WASI}
+  { In the browser SaveScreen reads back a black image (WebGL), and the
+    first frames of a new level run at about 1 FPS there, so the melt
+    would cover the level with black for seconds: no melt on the web. }
+  Exit(nil);
+  {$endif}
   try
     Result := Container.SaveScreen;
   except

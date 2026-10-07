@@ -675,7 +675,10 @@ Melts start at level → intermission (`StartIntermission`), into a finale
 (`StartFinale`) and at a new map: `StartMap` captures the intermission or
 finale screen before the "LOADING" frame and `LoadPendingMap` starts the
 melt once the level is in. The wipe advances at most two tics per frame,
-because the first frame after a level load is long. Screen flashes are
+because the first frame after a level load is long. The web build has no
+melt: `SaveScreen` reads back a black image under WebGL, and the first frames
+of a new level run at about 1 FPS in the browser, so `CaptureScreen` returns
+nil there (`{$ifdef WASI}`). Screen flashes are
 full-size `TCastleRectangleControl`s with animated alpha; messages and the
 help panel are `TCastleLabel`s.
 
