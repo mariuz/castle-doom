@@ -598,16 +598,22 @@ recreates that pipeline in software:
    four OPL waveforms, ADSR envelopes with YM3812 timings and rate scaling,
    key-scale level, total level, feedback (up to 2 cycles of phase), FM
    modulation (up to 4 cycles), vibrato and tremolo LFOs updated every 32
-   samples. Output is 22050 Hz mono, normalized to -1 dBFS, written as WAV.
+   samples. Output is 22050 Hz mono with one fixed gain for every song
+   (Freedoom's tracks peak at 3.4 .. 8 in synth units; 5.5 maps to 0.89)
+   and a soft limiter above 0.7, written as WAV.
 4. The `doommus:` protocol serves `doommus:/D_E1M1.wav`; a `TCastleSound` with
    that URL is assigned to `SoundEngine.LoopingChannel[0]`, the engine's
    music channel, which loops it.
 
 Rendering a 2-minute track takes about a second natively and a few seconds in
-WebAssembly, so it is not done in one go: `TDoomMusic.Play` queues the song
-and stays silent, and `TDoomMusic.Update` (called every frame by both views)
-renders it 2048 samples at a time for at most `RenderBudget` (12 ms) per
-frame, then starts it on the looping channel. When a song is queued, the
+WebAssembly, so it is not done in one go: `TDoomMusic.Play` renders the
+first 8 seconds at once (a fraction of a second of work), plays that as
+`D_XXX_INTRO.wav`, and `TDoomMusic.Update` (called every frame by both views)
+renders the rest 2048 samples at a time for at most `RenderBudget` (12 ms)
+per frame; the finished song then takes over at the same position
+(`TCastlePlayingSound.InitialOffset` = time since the intro started, looping,
+priority 1). The fixed gain is what makes the two identical where they
+overlap; per-song normalization would need the whole song first. When a song is queued, the
 intermission track is queued after it, so it is ready at the level's exit; a
 prefetch in progress gives way to a song that is needed now. Finished songs
 stay in memory (`FReady`, served by `ReadMusic`). Set the environment variable

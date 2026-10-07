@@ -13,7 +13,7 @@ unit DoomMusic;
 interface
 
 uses SysUtils, Classes, Generics.Collections,
-  CastleSoundEngine,
+  CastleSoundEngine, CastleTimeUtils,
   DoomWad;
 
 type
@@ -32,6 +32,15 @@ type
     FCurrent: String;
     FEnabled: Boolean;
     FVolume: Single;
+    { The music playing now, and the quick-start part of a song still being
+      rendered (its lump and when it started). }
+    FPlaying: TCastlePlayingSound;
+    FIntroSound: TCastleSound;
+    FIntroOf: String;
+    FIntroStart: TTimerResult;
+    procedure PlaySound(const Sound: TCastleSound; const Loop: Boolean; const Offset: Single);
+    procedure StopSound;
+    procedure StartIntro(const LumpName: String);
     function ReadMusic(const Url: String; out MimeType: String): TStream;
     procedure SetEnabled(const Value: Boolean);
     procedure SetVolume(const Value: Single);
@@ -39,7 +48,7 @@ type
     procedure Prepare(const LumpName: String; const First: Boolean);
     procedure StartNextRender;
     procedure FinishRender;
-    procedure StartPlaying(const LumpName: String);
+    procedure StartPlaying(const LumpName: String; const Offset: Single);
   public
     { Seconds of synthesis per Update call (one per frame). }
     RenderBudget: Single;
@@ -66,7 +75,7 @@ function RenderDoomSong(const Wad: TDoomWad; const SongData: PByte; const SongSi
 
 implementation
 
-uses Math, CastleDownload, CastleLog, CastleUriUtils, CastleUtils, CastleTimeUtils;
+uses Math, CastleDownload, CastleLog, CastleUriUtils, CastleUtils;
 
 const
   SampleRate = 22050;
@@ -657,9 +666,13 @@ type
     { Render up to Count more samples; true when the song is complete. }
     function Step(const Count: Integer): Boolean;
     function Done: Boolean;
-    { The finished song as a normalized 16-bit mono WAV (caller owns it). }
-    function MakeWav: TMemoryStream;
+    { The first Count rendered samples (all of them by default) as a 16-bit
+      mono WAV (caller owns it). }
+    function MakeWav(const Count: Integer = -1): TMemoryStream;
+    { Samples rendered so far. }
+    function Rendered: Integer;
     function Seconds: Double;
+    property SongPeak: Double read Peak;
   end;
 
 destructor TSongRenderer.Destroy;
@@ -918,11 +931,23 @@ begin
   Result := TotalSamples / SampleRate;
 end;
 
-function TSongRenderer.MakeWav: TMemoryStream;
+function TSongRenderer.Rendered: Integer;
+begin
+  Result := SampleIndex;
+end;
+
+function TSongRenderer.MakeWav(const Count: Integer): TMemoryStream;
+const
+  { One gain for every song (the OPL had no normalization either): Freedoom's
+    tracks peak at 3.4 .. 8 here, 5.5 maps to 0.89. A fixed gain also makes
+    the first seconds rendered for a quick start (TDoomMusic.Play) identical
+    to the same part of the finished song, so switching is seamless. }
+  Gain = 0.89 / 5.5;
+  Knee = 0.7;
 var
   Samples: array of SmallInt;
-  I: Integer;
-  Norm: Double;
+  I, N: Integer;
+  X, A: Double;
 
   procedure WriteU32(const S: TStream; const X: UInt32);
   begin
@@ -940,16 +965,24 @@ var
   end;
 
 begin
-  { Normalize the whole song to -1 dBFS (the OPL had no master limiter,
-    but songs were authored for it; this keeps every track at a sane level). }
-  if Peak < 0.01 then Peak := 0.01;
-  Norm := 0.89 / Peak;
-  SetLength(Samples, TotalSamples);
-  for I := 0 to TotalSamples - 1 do
-    Samples[I] := Round(Float[I] * Norm * 32767);
+  if (Count < 0) or (Count > SampleIndex) then N := SampleIndex else N := Count;
+  if N < 1 then N := 1;
+  SetLength(Samples, N);
+  for I := 0 to N - 1 do
+  begin
+    X := Float[I] * Gain;
+    { Soft limiter above the knee: smooth, never past full scale. }
+    A := Abs(X);
+    if A > Knee then
+    begin
+      A := Knee + (1 - Knee) * Tanh((A - Knee) / (1 - Knee));
+      if X < 0 then X := -A else X := A;
+    end;
+    Samples[I] := Round(X * 32767);
+  end;
   Result := TMemoryStream.Create;
   WriteTag(Result, 'RIFF');
-  WriteU32(Result, 36 + TotalSamples * 2);
+  WriteU32(Result, 36 + N * 2);
   WriteTag(Result, 'WAVE');
   WriteTag(Result, 'fmt ');
   WriteU32(Result, 16);
@@ -960,8 +993,8 @@ begin
   WriteU16(Result, 2);
   WriteU16(Result, 16);
   WriteTag(Result, 'data');
-  WriteU32(Result, TotalSamples * 2);
-  Result.WriteBuffer(Samples[0], TotalSamples * 2);
+  WriteU32(Result, N * 2);
+  Result.WriteBuffer(Samples[0], N * 2);
   Result.Position := 0;
 end;
 
@@ -1075,12 +1108,13 @@ var
   Wav: TMemoryStream;
   R: TSongRenderer;
   Name: String;
+  Offset, Len: Single;
 begin
   R := FRenderer as TSongRenderer;
   Name := FRendering;
   Wav := R.MakeWav;
-  WritelnLog('Music', 'Rendered %s with the FM synthesizer: %.1f s of audio in %d ms (in slices)', [
-    Name, R.Seconds, Round(FRenderTime * 1000)]);
+  WritelnLog('Music', 'Rendered %s with the FM synthesizer: %.1f s of audio in %d ms (in slices), peak %.2f', [
+    Name, R.Seconds, Round(FRenderTime * 1000), R.SongPeak * 0.89 / 5.5]);
   FreeAndNil(FRenderer);
   FRendering := '';
   FReady.AddOrSetValue(Name, Wav);
@@ -1091,7 +1125,26 @@ begin
     Wav.Position := 0;
   end;
   if FEnabled and (FCurrent = Name) then
-    StartPlaying(Name);
+  begin
+    { Take over from the quick-start part at the same point of the song. }
+    if FIntroOf = Name then
+      Offset := TimerSeconds(Timer, FIntroStart)
+    else
+      Offset := 0;
+    Len := Wav.Size / (SampleRate * 2);
+    if Len > 1 then
+      Offset := Offset - Trunc(Offset / Len) * Len
+    else
+      Offset := 0;
+    StartPlaying(Name, Offset);
+    if FIntroOf = Name then
+      WritelnLog('Music', 'Switched %s to the full song at %.2f s', [Name, Offset]);
+  end;
+  if FIntroOf = Name then
+  begin
+    FIntroOf := '';
+    FReady.Remove(Name + '_INTRO');
+  end;
 end;
 
 procedure TDoomMusic.Update;
@@ -1114,7 +1167,29 @@ begin
   FRenderTime := FRenderTime + Spent;
 end;
 
-procedure TDoomMusic.StartPlaying(const LumpName: String);
+procedure TDoomMusic.PlaySound(const Sound: TCastleSound; const Loop: Boolean; const Offset: Single);
+begin
+  StopSound;
+  FPlaying := TCastlePlayingSound.Create(nil);
+  FPlaying.Sound := Sound;
+  FPlaying.Loop := Loop;
+  FPlaying.Volume := FVolume;
+  FPlaying.Priority := 1; { sound effects must not take the music's source }
+  FPlaying.InitialOffset := Offset;
+  SoundEngine.Play(FPlaying);
+end;
+
+procedure TDoomMusic.StopSound;
+begin
+  if FPlaying <> nil then
+  begin
+    FPlaying.Stop;
+    FreeAndNil(FPlaying);
+  end;
+  FreeAndNil(FIntroSound);
+end;
+
+procedure TDoomMusic.StartPlaying(const LumpName: String; const Offset: Single);
 var
   S: TCastleSound;
 begin
@@ -1124,8 +1199,33 @@ begin
     S.Url := 'doommus:/' + LumpName + '.wav';
     FSounds.Add(LumpName, S);
   end;
-  SoundEngine.LoopingChannel[0].Volume := FVolume;
-  SoundEngine.LoopingChannel[0].Sound := S;
+  PlaySound(S, true, Offset);
+end;
+
+{ Render the first IntroSeconds of the song at once (a fraction of a second
+  of work) and play that while Update renders the rest. }
+procedure TDoomMusic.StartIntro(const LumpName: String);
+const
+  IntroSeconds = 8;
+var
+  R: TSongRenderer;
+begin
+  StartNextRender;
+  if (FRenderer = nil) or (FRendering <> LumpName) then Exit;
+  R := FRenderer as TSongRenderer;
+  if R.Step(IntroSeconds * SampleRate) then
+  begin
+    FinishRender; { a short song: done already }
+    Exit;
+  end;
+  FReady.AddOrSetValue(LumpName + '_INTRO', R.MakeWav(R.Rendered));
+  StopSound;
+  FIntroSound := TCastleSound.Create(nil);
+  FIntroSound.Url := 'doommus:/' + LumpName + '_INTRO.wav';
+  PlaySound(FIntroSound, false, 0);
+  FIntroOf := LumpName;
+  FIntroStart := Timer;
+  WritelnLog('Music', 'Playing the first %.1f s of %s while the rest renders', [R.Rendered / SampleRate, LumpName]);
 end;
 
 procedure TDoomMusic.Play(const LumpName: String);
@@ -1144,16 +1244,16 @@ begin
   if FWad.FindLump(U) < 0 then
   begin
     WritelnWarning('Music', 'Missing music lump %s', [U]);
-    SoundEngine.LoopingChannel[0].Sound := nil;
+    StopSound;
     Exit;
   end;
   if FReady.ContainsKey(U) then
-    StartPlaying(U)
+    StartPlaying(U, 0)
   else
   begin
-    { Silence until the song is rendered (Update, a slice per frame); then
-      prepare the intermission track too, it is the next one needed. }
-    SoundEngine.LoopingChannel[0].Sound := nil;
+    { The first seconds now, the rest a slice per frame (Update); then the
+      intermission track, the next one needed. }
+    StopSound;
     if FRendering <> U then
     begin
       if FRenderer <> nil then
@@ -1165,14 +1265,15 @@ begin
       end;
       Prepare(U, true);
     end;
+    StartIntro(U);
     Prepare(IntermissionLump, false);
   end;
 end;
 
 procedure TDoomMusic.Stop;
 begin
-  if SoundEngine.LoopingChannel[0] <> nil then
-    SoundEngine.LoopingChannel[0].Sound := nil;
+  StopSound;
+  FIntroOf := '';
   FCurrent := '';
 end;
 
@@ -1196,7 +1297,7 @@ end;
 procedure TDoomMusic.SetVolume(const Value: Single);
 begin
   FVolume := Value;
-  SoundEngine.LoopingChannel[0].Volume := FVolume;
+  if FPlaying <> nil then FPlaying.Volume := FVolume;
 end;
 
 function TDoomMusic.LumpForMap(const MapName: String): String;

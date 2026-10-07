@@ -2,10 +2,12 @@
 
 ## v0.2.2 (2026-10-08)
 
-- No more freeze at a level start while the music is synthesized: songs
-  are rendered a slice per frame and start when ready (in the browser E1M1
-  used to block for 4 seconds), and the intermission track is prepared in
-  the background.
+- No more freeze at a level start while the music is synthesized (in the
+  browser E1M1 used to block for 4 seconds): the first seconds of a song are
+  rendered at once and play while the rest is rendered a slice per frame,
+  then the full song takes over seamlessly; the intermission track is
+  prepared in the background. All songs share one gain with a soft limiter
+  (like the original OPL, louder and quieter tracks keep their character).
 
 ## v0.2.1 (2026-10-08)
 
