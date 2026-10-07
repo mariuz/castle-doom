@@ -39,6 +39,10 @@ is mapped onto a Castle Game Engine feature.
 | Weapon sprites, flashes, screen flashes, messages | `TCastleImageControl`, `TCastleRectangleControl`, `TCastleLabel` |
 | Title / intermission | `TCastleView`s |
 
+**Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for a unit-by-unit explanation of how
+the port works and which engine APIs each part uses; [CLAUDE.md](CLAUDE.md) has build, test and
+contribution notes.
+
 ## What works
 
 - Freedoom Phase 1 (36 ExMy maps) and Phase 2 (32 MAPxx maps), map selection in the menu.
