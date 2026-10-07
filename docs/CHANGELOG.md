@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.1 (2026-10-08)
+
+- The screen melt between levels now works in the browser too (the old
+  screen is rendered off-screen into an FBO instead of read back from the
+  window, which gave black under WebGL), and keeps its pace when the first
+  frames of a level are slow.
+
 ## v0.2.0 (2026-10-08)
 
 The first release that plays all of Freedoom Phase 1 and Phase 2 from the

@@ -675,8 +675,12 @@ it back to 0 (`A_Lower` / `A_Raise`); `FireWeapon` refuses meanwhile and the
 bob stops. Every level starts at 96 (raising).
 
 The screen melt (`doomwipe.pas`, `f_wipe.c`): `TViewPlay.BeginWipe` grabs
-the old screen with `Container.SaveScreen` (a `TRGBImage` read back from the
-frame buffer) and hands it to `TDoomWipe`, a full-size control in front of
+the old screen off-screen, the way CGE's `render_3d_to_texture_and_use_as_quad`
+example does: a `TGLRenderToTexture` with `Buffer = tbNone` (an FBO with
+colour and depth renderbuffers), `Container.RenderControl(Self, ...)` renders
+the whole view into it, and `SaveScreen_NoFlush(..., ColorBuffer)` reads the
+`TRGBImage` back from the FBO (reading the window's back buffer with
+`Container.SaveScreen` gives black under WebGL). The image goes to `TDoomWipe`, a full-size control in front of
 everything whose `Render` draws it as 160 vertical strips with
 `TDrawableImage.Draw(ScreenRect, ImageRect)`, each strip shifted down by its
 own offset on the 200-line grid. `wipe_initMelt` gives every column a start
@@ -686,11 +690,10 @@ takes about a second. The level keeps running underneath (Doom freezes it).
 Melts start at level → intermission (`StartIntermission`), into a finale
 (`StartFinale`) and at a new map: `StartMap` captures the intermission or
 finale screen before the "LOADING" frame and `LoadPendingMap` starts the
-melt once the level is in. The wipe advances at most two tics per frame,
-because the first frame after a level load is long. The web build has no
-melt: `SaveScreen` reads back a black image under WebGL, and the first frames
-of a new level run at about 1 FPS in the browser, so `CaptureScreen` returns
-nil there (`{$ifdef WASI}`). The screen tints follow
+melt once the level is in. The frame that starts a melt does not advance it
+(it can contain a whole level load), later frames follow real time with at
+most 8 tics per frame, so a slow first second in the browser gives a short
+melt rather than a long one. The screen tints follow
 `ST_doPaletteStuff`: `TDoomWorld.PaletteIndex` picks PLAYPAL palette 1..8
 (red, from `DamageCount` or the fading berserk), 9..12 (gold, `BonusCount`)
 or 13 (radiation suit), and one full-size `TCastleRectangleControl` draws it.
@@ -937,5 +940,5 @@ Where each engine feature is used, as a map for learning the engine:
 | FPC `fpjson` / `jsonparser` (`TJSONObject`, `GetJSON`) | doomworld_save.inc, GameViewPlay | save game format |
 | `TCastleUserInterface.Render`, `DrawPrimitive2D`, `DrawRectangle`, `RenderRect` | DoomAutomap | immediate-mode 2D drawing |
 | `Container.Fps`, `WritelnLog`, `WritelnWarning`, `Application.MainWindow.SaveScreen` | GameViewPlay, everywhere | diagnostics and screenshots |
-| `Container.SaveScreen`, `TDrawableImage.Draw(ScreenRect, ImageRect)`, `TCastleUserInterface.Render` / `RenderRect` | GameViewPlay, DoomWipe | the screen melt |
+| `TGLRenderToTexture` (`tbNone`), `Container.RenderControl`, `SaveScreen_NoFlush`, `TDrawableImage.Draw(ScreenRect, ImageRect)`, `TCastleUserInterface.Render` / `RenderRect` | GameViewPlay, DoomWipe | the screen melt (off-screen capture works under WebGL) |
 | `castle-engine compile/package/generate-program`, `--target=web` | CI | builds |

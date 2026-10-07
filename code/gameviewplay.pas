@@ -32,6 +32,9 @@ type
     FFinaleScreen: TDoomFinale;
     FWipe: TDoomWipe;
     FWipeTicAccum: Single;
+    { The first frame after a melt starts (the level load, or a slow first
+      frame in the browser) does not advance it. }
+    FWipeSkipFrame: Boolean;
     { Old screen captured by StartMap, melted once the new map is in. }
     FPendingWipe: TCastleImage;
     FStrings: TDoomStrings;
@@ -115,7 +118,7 @@ implementation
 uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
   CastleDownload,
-  CastleUriUtils, X3DNodes,
+  CastleUriUtils, X3DNodes, CastleGLImages, CastleRectangles,
   DoomGeometry, DoomMap,
   GameViewMenu, GameSaveStorage;
 
@@ -593,6 +596,7 @@ begin
     FWipe.Start(FPendingWipe); { the wipe owns it now }
     FPendingWipe := nil;
     FWipeTicAccum := 0;
+    FWipeSkipFrame := true;
   end;
   if Restored then
     FWorld.ShowMessage('Game loaded.')
@@ -915,21 +919,35 @@ begin
   end;
 end;
 
+{ Render the whole view off-screen (an FBO with colour and depth
+  renderbuffers, like CGE's render_3d_to_texture example) and read it back
+  from that FBO. Reading the window's back buffer (Container.SaveScreen)
+  gives black under WebGL; reading an FBO works there too. }
 function TViewPlay.CaptureScreen: TCastleImage;
+var
+  RenderToTexture: TGLRenderToTexture;
+  R: TRectangle;
 begin
-  {$ifdef WASI}
-  { In the browser SaveScreen reads back a black image (WebGL), and the
-    first frames of a new level run at about 1 FPS there, so the melt
-    would cover the level with black for seconds: no melt on the web. }
-  Exit(nil);
-  {$endif}
+  Result := nil;
+  R := Container.PixelsRect;
+  if (R.Width <= 0) or (R.Height <= 0) then Exit;
   try
-    Result := Container.SaveScreen;
+    RenderToTexture := TGLRenderToTexture.Create(R.Width, R.Height);
+    try
+      RenderToTexture.Buffer := tbNone;
+      RenderToTexture.GLContextOpen;
+      RenderToTexture.RenderBegin;
+      Container.RenderControl(Self, Rectangle(0, 0, R.Width, R.Height));
+      Result := SaveScreen_NoFlush(TRGBImage, Rectangle(0, 0, R.Width, R.Height), RenderToTexture.ColorBuffer);
+      RenderToTexture.RenderEnd;
+    finally
+      FreeAndNil(RenderToTexture);
+    end;
   except
     on E: Exception do
     begin
       WritelnWarning('Wipe', 'Cannot capture the screen: %s', [E.Message]);
-      Result := nil;
+      FreeAndNil(Result);
     end;
   end;
 end;
@@ -938,6 +956,7 @@ procedure TViewPlay.BeginWipe;
 begin
   FWipe.Start(CaptureScreen);
   FWipeTicAccum := 0;
+  FWipeSkipFrame := true;
 end;
 
 procedure TViewPlay.AccelerateScreen;
@@ -967,9 +986,12 @@ begin
 
   if FWipe.Active then
   begin
-    { At most two tics per frame: the frame after a level load is long and
-      would otherwise finish the melt before it is ever drawn. }
-    FWipeTicAccum := Min(FWipeTicAccum + SecondsPassed, 2 * TicSeconds);
+    { Skip the frame that started it (it may contain a whole level load),
+      then follow real time, at most 8 tics per frame. }
+    if FWipeSkipFrame then
+      FWipeSkipFrame := false
+    else
+      FWipeTicAccum := Min(FWipeTicAccum + SecondsPassed, 8 * TicSeconds);
     while FWipe.Active and (FWipeTicAccum >= TicSeconds) do
     begin
       FWipeTicAccum := FWipeTicAccum - TicSeconds;

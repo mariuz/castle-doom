@@ -6,6 +6,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Screen melt in the browser too: the old screen is rendered off-screen into
+  an FBO (`TGLRenderToTexture`, `Container.RenderControl`) and read back from
+  there, which works under WebGL; the melt skips the frame that started it
+  and then follows real time.
 - Palette flashes from `PLAYPAL` (`ST_doPaletteStuff`): `damagecount` /
   `bonuscount` like Doom, berserk red fading out, the radiation suit green.
   Each palette is palette 0 blended towards one colour, so
@@ -35,8 +39,7 @@ L = several days). Items inside a section are in suggested order.
   6 pixels per tic, swaps it out of view and raises the new one (`A_Lower` /
   `A_Raise`); no firing meanwhile; every level starts with the weapon coming
   up. Level → intermission, intermission → next level and the finales melt
-  the old screen down in 160 columns like `f_wipe.c` (`DoomWipe`); desktop
-  only for now.
+  the old screen down in 160 columns like `f_wipe.c` (`DoomWipe`).
 - Monsters use teleporters and walk-over lines like in Doom
   (`P_CrossSpecialLine` for non-players): crossing a 39 / 97 teleporter or a
   monster-only 125 / 126 from the front teleports them with fog at both
@@ -149,7 +152,6 @@ L = several days). Items inside a section are in suggested order.
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
-| **Screen melt on the web**: capture the old frame with a render-to-texture pass (`TGLRenderToTexture` / a viewport rendered into an image) instead of `SaveScreen`, which reads black under WebGL. | Same transitions in the browser. | `GameViewPlay.CaptureScreen` | S |
 | **Hanging/floating things** bob (cacodemons hover), **gibs** for excessive damage (`XDEATH` frames). | Fidelity. | `DoomThings` frames, `KillActor` | S |
 
 ## 3. Audio
@@ -185,10 +187,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Screen melt on the web (S): capture the old frame by rendering to a
-   texture, since `SaveScreen` reads black under WebGL.
-2. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
+1. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
    slopes (S-M): monster bullets currently hit by chance once the monster
    decided it sees you; aim height and blocking ledges are not traced.
-3. Light diminishing as a shader (`COLORMAP`) instead of fog (M): the
+2. Light diminishing as a shader (`COLORMAP`) instead of fog (M): the
    authentic look of Doom's lighting.
+3. Sky (S): Doom's vertical sky stretch and the per-episode skies, the
+   sky-floor hack for pits.
