@@ -6,6 +6,11 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Doom's text font (`DoomFont`: STCFN patches composed into an image) for the
+  player messages and the loading screen; the real intermission screen
+  (`DoomIntermission`): WIMAP/INTERPIC background, WILV/CWILV level names,
+  FINISHED, kills/items/secrets/time/par with Doom's count-up and sounds, the
+  ENTERING screen, skip with use/fire.
 - Monster infighting: monsters keep a `Target` (nil = player); damage from
   another monster retargets them, monster missiles hit other monsters (passing
   through the shooter's own species like Doom), zombie hitscans hit whoever
@@ -46,8 +51,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Doom text font** (`STCFN*` patches) for messages and the intermission instead of the engine's default font; CGE `TCastleFont` from an image, or compose labels from patches like the status bar. | Looks right. | `DoomHud` | S |
-| **Intermission screen** with the `WIMAP0`/`INTERPIC` background and animated level-stats count-up and sound; **title/credits cycle**, **episode/skill menu** using `M_*` graphics. | Polish, menus look like Doom. | `GameViewMenu`, `GameViewPlay` | M |
+| **Title/credits cycle** and an **episode/skill menu** using the `M_*` graphics instead of engine buttons. | Menus look like Doom. | `GameViewMenu` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
 | **Weapon sprite bobbing and raise/lower animation** when switching weapons; **screen melt** wipe between levels. | Doom feel. | `GameViewPlay` | S |
@@ -87,9 +91,8 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Doom text font and intermission graphics (S + M): the most visible
-   presentation gap.
-2. Extended node formats (M): many community PWADs now loadable through
+1. Extended node formats (M): many community PWADs now loadable through
    `-file` use ZDoom nodes.
-3. Pain Elemental lost souls and Arch-vile behaviour (M each): the last two
+2. Pain Elemental lost souls and Arch-vile behaviour (M each): the last two
    Doom 2 monsters that are still approximations.
+3. Save / load game (M): the biggest remaining usability gap.

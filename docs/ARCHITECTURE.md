@@ -81,7 +81,9 @@ Sizes, for orientation (lines of Pascal):
 | `doommap.pas` | 677 | map lumps, BSP queries, subsector polygons |
 | `doomthings.pas` | 363 | thing type table (info.c reduced) |
 | `gameviewmenu.pas` | 279 | title screen |
+| `doomintermission.pas` | 330 | intermission screen |
 | `doomautomap.pas` | 210 | automap drawn with 2D primitives |
+| `doomfont.pas` | 130 | STCFN text |
 | `doomactors.pas` | 248 | sprite billboards with animation |
 | `doomwad.pas` | 225 | WAD directory and palette |
 | `doomhud.pas` | 193 | status bar composition |
@@ -472,6 +474,17 @@ digits `STYSNUM*` and grey `STGNUM*` for the arms panel, the key icons
 big hits, `STFEVL*` grin, `STFGOD0`, `STFDEAD0`), at the pixel positions from
 `st_stuff.c`. The image is rebuilt only when a signature string of the shown
 values changes. The view stretches it to the viewport width (10:1).
+
+Player messages use Doom's own font: `TDoomFontText` (`doomfont.pas`)
+composes the `STCFN033..095` glyph patches (upper case, 4-pixel spaces,
+8-pixel lines) into an image and shows it scaled to the viewport's 200-line
+grid. The intermission (`doomintermission.pas`) is the same idea at full
+screen: a 320x200 image rebuilt every tic from `WIMAP0..2` or `INTERPIC`, the
+`WILVxx`/`CWILVxx` level-name graphics, `WIF`/`WIENTER`, `WIOSTK`/`WIOSTI`/
+`WIOSTS`/`WITIME`/`WIPAR` and the `WINUM` digits at `wi_stuff.c` positions,
+with Doom's count-up (2% per tic, pistol click every 4 tics, explosion at the
+end, one-second pauses), par times, the ENTERING screen, and use/fire to skip.
+The control is kept 4:3 and centred on the viewport.
 
 The weapon sprite and muzzle flash are two more `TCastleImageControl`s placed
 with Doom's formula (`x1 = centerx + (1 - 160 - leftoffset) * scale`,

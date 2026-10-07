@@ -8,7 +8,8 @@ interface
 uses Classes, SysUtils,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors,
-  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap;
+  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
+  DoomIntermission;
 
 type
   TViewPlay = class(TCastleView)
@@ -22,8 +23,11 @@ type
     FWeaponImage, FFlashImage: TCastleImageControl;
     FWeaponImageName, FFlashImageName: String;
     FDamageFlash, FBonusFlash: TCastleRectangleControl;
-    FMessageLabel, FInfoLabel, FHelpLabel, FIntermissionLabel: TCastleLabel;
+    FInfoLabel, FHelpLabel: TCastleLabel;
+    FMessageText, FLoadingText: TDoomFontText;
     FIntermissionBack: TCastleRectangleControl;
+    FIntermissionScreen: TDoomIntermission;
+    FIntermissionTicAccum: Single;
     FCrosshair: TCastleCrosshair;
     FAutomap: TDoomAutomap;
     FMapName: String;
@@ -71,6 +75,7 @@ implementation
 
 uses Math,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
+  CastleImages,
   CastleUriUtils, X3DNodes,
   DoomGeometry, DoomMap,
   GameViewMenu;
@@ -141,13 +146,13 @@ begin
   FCrosshair := TCastleCrosshair.Create(FreeAtStop);
   InsertFront(FCrosshair);
 
-  FMessageLabel := TCastleLabel.Create(FreeAtStop);
-  FMessageLabel.Color := Vector4(1, 0.25, 0.1, 1);
-  FMessageLabel.FontSize := 28;
-  FMessageLabel.Anchor(hpLeft, 16);
-  FMessageLabel.Anchor(vpTop, -12);
-  FMessageLabel.Caption := '';
-  InsertFront(FMessageLabel);
+  { Player messages in Doom's own STCFN font. }
+  FMessageText := TDoomFontText.Create(FreeAtStop);
+  FMessageText.Graphics := Graphics;
+  FMessageText.Anchor(hpLeft, 8);
+  FMessageText.Anchor(vpTop, -8);
+  FMessageText.Exists := false;
+  InsertFront(FMessageText);
 
   FInfoLabel := TCastleLabel.Create(FreeAtStop);
   FInfoLabel.Color := Vector4(1, 1, 0.6, 0.9);
@@ -178,17 +183,21 @@ begin
 
   FIntermissionBack := TCastleRectangleControl.Create(FreeAtStop);
   FIntermissionBack.FullSize := true;
-  FIntermissionBack.Color := Vector4(0, 0, 0, 0.75);
+  FIntermissionBack.Color := Vector4(0, 0, 0, 1);
   FIntermissionBack.Exists := false;
   InsertFront(FIntermissionBack);
-  FIntermissionLabel := TCastleLabel.Create(FreeAtStop);
-  FIntermissionLabel.Color := Vector4(1, 0.3, 0.15, 1);
-  FIntermissionLabel.FontSize := 36;
-  FIntermissionLabel.Alignment := hpMiddle;
-  FIntermissionLabel.Anchor(hpMiddle);
-  FIntermissionLabel.Anchor(vpMiddle);
-  FIntermissionLabel.Exists := false;
-  InsertFront(FIntermissionLabel);
+  { The real Doom intermission screen (320x200, kept 4:3 and centred). }
+  FIntermissionScreen := TDoomIntermission.Create(FreeAtStop);
+  FIntermissionScreen.Anchor(hpMiddle);
+  FIntermissionScreen.Anchor(vpMiddle);
+  FIntermissionScreen.Exists := false;
+  InsertFront(FIntermissionScreen);
+  FLoadingText := TDoomFontText.Create(FreeAtStop);
+  FLoadingText.Graphics := Graphics;
+  FLoadingText.Anchor(hpMiddle);
+  FLoadingText.Anchor(vpMiddle);
+  FLoadingText.Exists := false;
+  InsertFront(FLoadingText);
 end;
 
 procedure TViewPlay.SetupNavigation;
@@ -355,7 +364,12 @@ begin
   end
   else if Cmd = 'U' then
   begin
-    if FIntermission then FinishIntermission else FWorld.UseInFront;
+    if FIntermission then
+    begin
+      FIntermissionScreen.Accelerate;
+      if FIntermissionScreen.Done then FinishIntermission;
+    end else
+      FWorld.UseInFront;
   end
   else if Cmd = 'E' then
     FWorld.ExitRequested := true
@@ -386,8 +400,9 @@ begin
   FPendingKeepInventory := KeepInventory;
   FIntermission := true; { pauses Update until the map is in }
   FIntermissionBack.Exists := true;
-  FIntermissionLabel.Exists := true;
-  FIntermissionLabel.Caption := 'Loading ' + MapName + '...';
+  FIntermissionScreen.Exists := false;
+  FLoadingText.SetScale(Max(1, EffectiveHeight / 200));
+  FLoadingText.SetText('LOADING ' + MapName + '...');
   if Music <> nil then Music.Stop;
   WaitForRenderAndCall({$ifdef FPC}@{$endif} LoadPendingMap);
 end;
@@ -405,7 +420,8 @@ begin
   PlacePlayer(FWorld.StartX, FWorld.StartY, FWorld.Player.Z, FWorld.StartAngle);
   FIntermission := false;
   FIntermissionBack.Exists := false;
-  FIntermissionLabel.Exists := false;
+  FIntermissionScreen.Exists := false;
+  FLoadingText.Exists := false;
   FLevelTime := 0;
   FWorld.ShowMessage(Format('%s  (%s)', [MapName, Wad.Description]));
   if Music <> nil then
@@ -502,23 +518,19 @@ end;
 procedure TViewPlay.StartIntermission;
 var
   P: TPlayerState;
+  Next: String;
 begin
   FIntermission := true;
   FIntermissionTime := 0;
+  FIntermissionTicAccum := 0;
   P := FWorld.Player;
+  Next := NextMapName(FMapName, FWorld.SecretExit, Wad.IsDoom2);
   FIntermissionBack.Exists := true;
-  FIntermissionLabel.Exists := true;
+  FLoadingText.Exists := false;
   if Music <> nil then
     Music.Play(Music.IntermissionLump);
-  FIntermissionLabel.Caption := Format(
-    '%s FINISHED' + NL + NL +
-    'KILLS  %d / %d' + NL +
-    'ITEMS  %d / %d' + NL +
-    'SECRETS  %d / %d' + NL +
-    'TIME  %d:%2.2d' + NL + NL +
-    'Press USE or fire to continue', [
-    FMapName, P.Kills, P.TotalKills, P.Items, P.TotalItems, P.Secrets, P.TotalSecrets,
-    Trunc(FLevelTime) div 60, Trunc(FLevelTime) mod 60]);
+  FIntermissionScreen.Start(Graphics, Sounds, Wad.IsDoom2, FMapName, Next,
+    P.Kills, P.TotalKills, P.Items, P.TotalItems, P.Secrets, P.TotalSecrets, Trunc(FLevelTime));
   FWorld.ExitRequested := false;
 end;
 
@@ -551,8 +563,28 @@ begin
   begin
     FIntermissionTime := FIntermissionTime + SecondsPassed;
     FNavigation.Exists := false;
+    FStatusBar.Exists := false;
+    FWeaponImage.Exists := false;
+    FFlashImage.Exists := false;
+    FCrosshair.Exists := false;
+    FMessageText.Exists := false;
+    if FIntermissionScreen.Exists then
+    begin
+      { 320x200 shown 4:3, as tall as the viewport. }
+      FIntermissionScreen.Height := EffectiveHeight;
+      FIntermissionScreen.Width := EffectiveHeight * 4 / 3;
+      FIntermissionTicAccum := FIntermissionTicAccum + SecondsPassed;
+      while FIntermissionTicAccum >= TicSeconds do
+      begin
+        FIntermissionTicAccum := FIntermissionTicAccum - TicSeconds;
+        FIntermissionScreen.Tic;
+      end;
+      if FIntermissionScreen.Done then
+        FinishIntermission;
+    end;
     Exit;
   end;
+  FStatusBar.Exists := true;
   FNavigation.Exists := not FWorld.Player.Dead;
   FLevelTime := FLevelTime + SecondsPassed;
 
@@ -601,7 +633,8 @@ begin
   P := FWorld.Player;
   FDamageFlash.Color := Vector4(1, 0, 0, P.DamageFlash * 0.55);
   FBonusFlash.Color := Vector4(1, 0.9, 0.3, P.BonusFlash * 0.25);
-  if P.MessageTics > 0 then FMessageLabel.Caption := P.Message else FMessageLabel.Caption := '';
+  FMessageText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
+  if P.MessageTics > 0 then FMessageText.SetText(UpperCase(P.Message)) else FMessageText.SetText('');
   FInfoLabel.Caption := Format('%s   FPS %s   %d things   fog %s', [
     FMapName, Container.Fps.ToString, FWorld.Actors.Count, BoolToStr(FFogEnabled, 'on', 'off')]);
   FStatusBar.Width := FViewport.EffectiveWidth;
@@ -626,10 +659,11 @@ begin
   if FIntermission then
   begin
     if FPendingMap <> '' then Exit;
-    if (FIntermissionTime > 1) and (Event.IsKey(keyE) or Event.IsKey(keySpace) or
-       Event.IsKey(keyEnter) or Event.IsMouseButton(buttonLeft)) then
+    if (FIntermissionTime > 0.3) and (Event.IsKey(keyE) or Event.IsKey(keySpace) or
+       Event.IsKey(keyEnter) or Event.IsMouseButton(buttonLeft) or Event.IsKey(keyCtrl)) then
     begin
-      FinishIntermission;
+      FIntermissionScreen.Accelerate;
+      if FIntermissionScreen.Done then FinishIntermission;
       Exit(true);
     end;
     if Event.IsKey(keyEscape) then

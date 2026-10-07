@@ -66,6 +66,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   for the rocket launcher (splash damage), plasma gun and BFG (charge, ball, tracer spray).
 - Status bar with face, keys, arms, ammo table; weapon bobbing; damage and bonus flashes.
 - Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
+- Doom's text font for messages, and the real intermission screen (level names, FINISHED,
+  animated kills/items/secrets/time with sounds, par times, ENTERING).
 - External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-warp`), PWAD lumps
   overriding the IWAD's like in Doom.
 - Music: MUS and MIDI lumps played through an FM synthesizer driven by the WAD's GENMIDI
@@ -125,6 +127,8 @@ code/doomsound.pas      DMX -> WAV, doomsfx: protocol
 code/doommusic.pas      MUS/MIDI parsing, GENMIDI FM synthesizer, doommus: protocol
 code/doomhud.pas        status bar composition
 code/doomautomap.pas    automap (DrawPrimitive2D)
+code/doomfont.pas       STCFN text
+code/doomintermission.pas  intermission screen
 code/gameviewmenu.pas   title screen
 code/gameviewplay.pas   viewport, navigation, HUD, input
 ```
