@@ -468,6 +468,8 @@ begin
     FAutomap.ShowAll := not FAutomap.ShowAll
   else if Cmd = 'Z' then
     FAutomap.ZoomBy(Arg)
+  else if Cmd = 'SIGHT' then
+    FWorld.DebugSight
   else if Cmd = 'INVIS' then
     FWorld.Player.InvisibleTics := 60 * 35
   else if Cmd = 'K' then

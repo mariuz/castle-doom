@@ -77,6 +77,8 @@ Player messages are logged as `Message:`; E1M1 pickups for a quick check:
 shells." and "Blue passcard secured!" (Freedoom's BEX strings). Menu
 screenshots also take `MENUQUIT` (the quit question).
 
+`SIGHT` in a demo logs, for every monster within 2500 units, the 2D and
+3D line of sight to the player and the REJECT bit (`Sight:` lines).
 `INVIS` in a demo gives partial invisibility (the weapon turns to fuzz);
 `P:58:180` spawns a spectre to look at.
 

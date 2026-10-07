@@ -118,6 +118,9 @@ type
     Sidedefs: array of TDoomSidedef;
     Sectors: array of TDoomSector;
     Things: array of TDoomThing;
+    { REJECT: one bit per sector pair, set when no line of sight can exist
+      (empty when the lump is missing or has the wrong size). }
+    Reject: TBytes;
     Segs: array of TDoomSeg;
     Subsectors: array of TDoomSubsector;
     Nodes: array of TDoomNode;
@@ -131,6 +134,8 @@ type
     function PointOnLineSide(const X, Y: Single; const LineIndex: Integer): Integer;
     function SubsectorAt(const X, Y: Single): Integer;
     function SectorAt(const X, Y: Single): Integer;
+    { The REJECT table says sector S1 can never see S2. }
+    function RejectBlocks(const S1, S2: Integer): Boolean;
     { The sector across the line from Sector, -1 when one-sided. }
     function OtherSector(const LineIndex, Sector: Integer): Integer;
 
@@ -296,6 +301,16 @@ begin
     Sectors[I].Special := PInt16(P + I * 26 + 22)^;
     Sectors[I].Tag := PInt16(P + I * 26 + 24)^;
   end;
+
+  { REJECT (optional; a wrong size means a bad or placeholder table) }
+  SetLength(Reject, 0);
+  for I := MarkerIndex + 1 to Min(MarkerIndex + 11, FWad.LumpCount - 1) do
+    if FWad.LumpName(I) = 'REJECT' then
+    begin
+      if FWad.LumpSize(I) = (Int64(Length(Sectors)) * Length(Sectors) + 7) div 8 then
+        Reject := FWad.LumpBytes(I);
+      Break;
+    end;
 
   { SIDEDEFS }
   L := MapLump('SIDEDEFS');
@@ -837,6 +852,17 @@ begin
   end;
   Result := Child and NodeIndexMask;
   if Result > High(Subsectors) then Result := 0;
+end;
+
+function TDoomMap.RejectBlocks(const S1, S2: Integer): Boolean;
+var
+  Bit: Integer;
+begin
+  Result := false;
+  if (Length(Reject) = 0) or (S1 < 0) or (S2 < 0) then Exit;
+  Bit := S1 * Length(Sectors) + S2;
+  if (Bit shr 3) >= Length(Reject) then Exit;
+  Result := (Reject[Bit shr 3] and (1 shl (Bit and 7))) <> 0;
 end;
 
 function TDoomMap.SectorAt(const X, Y: Single): Integer;

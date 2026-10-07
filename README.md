@@ -94,8 +94,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: sight checks are 2D, no spectre fuzz,
-no glBSP `GL_` lumps or UDMF maps, the music synth approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no glBSP `GL_` lumps or UDMF maps, no
+`-deh` files, the music synth approximates the OPL2.
 
 ## Build and run
 

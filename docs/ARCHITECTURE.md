@@ -465,8 +465,13 @@ set without deep recursion. Idle monsters run `MonsterLook` (`A_Look`)
 every 10 tics: a flagged sector wakes them at once, but an `MTF_AMBUSH`
 monster also needs a line of sight; otherwise `P_LookForPlayers` applies:
 the player must be within 90 degrees of the monster's facing (or within 64
-units) and visible (`SightClear`: a 2D line-of-sight test against
-one-sided lines and closed two-sided lines). Awake, they chase with Doom-style 2D movement (`TryMove2D`:
+units) and visible (`CheckSight`, `P_CheckSight`: the `REJECT` bit for
+the two sectors, then every line crossed by the 2D segment: a one-sided or
+closed line blocks, and a two-sided one narrows the vertical window seen
+from the eye at 3/4 of the viewer's height, top and bottom slopes being
+height differences per whole distance, until they meet; the lines can be
+taken in any order, so there is no BSP walk). `SightClear` (2D only)
+remains for the Pain Elemental's spawn spot. Awake, they chase with Doom-style 2D movement (`TryMove2D`:
 one-sided and blocking lines, openings too low, steps higher than 24, drop-offs
 unless floating, other solid things, the player), try other directions when
 blocked, open doors in their way, set off the walk-over lines Doom allows
@@ -883,7 +888,6 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 - Other DeHackEd sections (frames, things, weapons, code pointers) are
   ignored; only BEX strings are read.
 - Doom's "donut" (special 9) only lowers the pillar.
-- Sight is 2D (`SightClear` ignores opening heights and `REJECT`).
 - No demo playback; web saves live in one browser's `localStorage` (no
   export / import). The in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
   `DoomMenu`.

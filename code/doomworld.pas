@@ -165,6 +165,14 @@ type
     function TryMove2D(const A: TDoomActor; const NX, NY: Single; out BlockedByLine: Integer): Boolean;
     function LineBlocksMissile(const Line: Integer; const X, Y, Z: Single): Boolean;
     function SightClear(const X1, Y1, X2, Y2: Single): Boolean;
+    { P_CheckSight: REJECT, then the 2D line plus the vertical window through
+      every opening on the way, from an eye at EyeZ to a target from Z2 to
+      Z2 + H2. }
+    function CheckSight(const X1, Y1, EyeZ: Single; const S1: Integer;
+      const X2, Y2, Z2, H2: Single; const S2: Integer): Boolean;
+    { Monster A can see the player / its current target. }
+    function SightToPlayer(const A: TDoomActor): Boolean;
+    function SightToTarget(const A: TDoomActor): Boolean;
     { A_Look: True when an idle monster notices the player. }
     function MonsterLook(const A: TDoomActor; out Reason: String): Boolean;
     procedure MonsterAttack(const A: TDoomActor);
@@ -277,6 +285,9 @@ type
     procedure DebugInfight;
     { Debug: kill every monster (exercises boss-death triggers). }
     procedure DebugKillAll;
+    { Debug: log the 2D and 3D line of sight from every monster within 2500
+      units to the player. }
+    procedure DebugSight;
     { Debug: make the player invulnerable for an hour. }
     procedure DebugGod;
     { Debug: spawn an awake monster of this THINGS type Distance units in
@@ -1497,6 +1508,86 @@ begin
   end;
 end;
 
+{ Doom keeps two slopes (height difference per whole distance, seen from
+  the eye at sightzstart = z + 3/4 height): initially the target's top and
+  bottom. Every two-sided line crossed at fraction T of the way narrows them
+  to its opening (bottom = higher floor, top = lower ceiling, only where the
+  floors / ceilings differ); a one-sided line, a closed opening or slopes
+  that meet block the view. Lines may come in any order: min / max do not
+  care, so no BSP walk is needed. }
+function TDoomWorld.CheckSight(const X1, Y1, EyeZ: Single; const S1: Integer;
+  const X2, Y2, Z2, H2: Single; const S2: Integer): Boolean;
+var
+  I, F, B: Integer;
+  L: TDoomLinedef;
+  V1, V2: TDoomVertex;
+  T, TopSlope, BottomSlope, OpenTop, OpenBottom, Slope: Single;
+  MinX, MaxX, MinY, MaxY: Single;
+begin
+  if FMap.RejectBlocks(S1, S2) then Exit(false);
+  TopSlope := (Z2 + H2) - EyeZ;
+  BottomSlope := Z2 - EyeZ;
+  MinX := Min(X1, X2); MaxX := Max(X1, X2);
+  MinY := Min(Y1, Y2); MaxY := Max(Y1, Y2);
+  for I := 0 to High(FMap.Linedefs) do
+  begin
+    L := FMap.Linedefs[I];
+    V1 := FMap.Vertices[L.V1];
+    V2 := FMap.Vertices[L.V2];
+    if (Max(V1.X, V2.X) < MinX) or (Min(V1.X, V2.X) > MaxX) or
+       (Max(V1.Y, V2.Y) < MinY) or (Min(V1.Y, V2.Y) > MaxY) then Continue;
+    if not SegmentsIntersect(X1, Y1, X2, Y2, V1.X, V1.Y, V2.X, V2.Y, T) then Continue;
+    F := L.FrontSector;
+    B := L.BackSector;
+    if (F < 0) or (B < 0) then Exit(false);
+    OpenTop := Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight);
+    OpenBottom := Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight);
+    if OpenTop <= OpenBottom then Exit(false);
+    if T < 1e-4 then Continue; { the line under the viewer's feet }
+    if FMap.Sectors[F].FloorHeight <> FMap.Sectors[B].FloorHeight then
+    begin
+      Slope := (OpenBottom - EyeZ) / T;
+      if Slope > BottomSlope then BottomSlope := Slope;
+    end;
+    if FMap.Sectors[F].CeilingHeight <> FMap.Sectors[B].CeilingHeight then
+    begin
+      Slope := (OpenTop - EyeZ) / T;
+      if Slope < TopSlope then TopSlope := Slope;
+    end;
+    if TopSlope <= BottomSlope then Exit(false);
+  end;
+  Result := true;
+end;
+
+procedure TDoomWorld.DebugSight;
+var
+  A: TDoomActor;
+begin
+  for A in FActors do
+    if (A.Info^.Kind = tkMonster) and (A.State <> asDead) and
+       (Sqr(A.DoomX - Player.X) + Sqr(A.DoomY - Player.Y) < Sqr(2500)) then
+      WritelnLog('Sight', '%s at (%.0f, %.0f, z %.0f) sector %d: 2D %s, 3D %s, reject %s', [A.Info^.Sprite,
+        A.DoomX, A.DoomY, A.DoomZ, A.Sector,
+        BoolToStr(SightClear(A.DoomX, A.DoomY, Player.X, Player.Y), true),
+        BoolToStr(SightToPlayer(A), true),
+        BoolToStr(FMap.RejectBlocks(A.Sector, Player.Sector), true)]);
+end;
+
+function TDoomWorld.SightToPlayer(const A: TDoomActor): Boolean;
+begin
+  Result := CheckSight(A.DoomX, A.DoomY, A.DoomZ + A.Info^.Height * 0.75, A.Sector,
+    Player.X, Player.Y, Player.Z, PlayerHeight, Player.Sector);
+end;
+
+function TDoomWorld.SightToTarget(const A: TDoomActor): Boolean;
+begin
+  if A.Target = nil then
+    Result := SightToPlayer(A)
+  else
+    Result := CheckSight(A.DoomX, A.DoomY, A.DoomZ + A.Info^.Height * 0.75, A.Sector,
+      A.Target.DoomX, A.Target.DoomY, A.Target.DoomZ, A.Target.Info^.Height, A.Target.Sector);
+end;
+
 function TDoomWorld.SightClear(const X1, Y1, X2, Y2: Single): Boolean;
 var
   I, F, B: Integer;
@@ -1708,7 +1799,7 @@ begin
       Reason := 'heard';
       Exit(true);
     end;
-    if SightClear(A.DoomX, A.DoomY, Player.X, Player.Y) then
+    if SightToPlayer(A) then
     begin
       Reason := 'heard and saw (ambush)';
       Exit(true);
@@ -1722,7 +1813,7 @@ begin
     Diff := Diff - 360 * Round(Diff / 360);
     if Abs(Diff) > 90 then Exit; { behind it }
   end;
-  if SightClear(A.DoomX, A.DoomY, Player.X, Player.Y) then
+  if SightToPlayer(A) then
   begin
     Reason := 'saw';
     Result := true;
@@ -1822,7 +1913,7 @@ begin
         MonsterAttack(A);
         Exit;
       end;
-    end else if SightClear(A.DoomX, A.DoomY, TX, TY) then
+    end else if SightToTarget(A) then
     begin
       { Doom's P_CheckMissileRange: more likely to shoot when close; lost
         souls, cyberdemons and spiders count half the distance; Arch-viles
@@ -2077,8 +2168,7 @@ begin
   if not A.Awake then
   begin
     { A_Look: sight wakes it too. }
-    if ((FTic + 5) mod 10 = 0) and not Player.Dead and
-       SightClear(A.DoomX, A.DoomY, Player.X, Player.Y) then
+    if ((FTic + 5) mod 10 = 0) and not Player.Dead and SightToPlayer(A) then
       BrainAwake(A);
     Exit;
   end;
@@ -2408,7 +2498,7 @@ var
 begin
   if not TargetAlive(A) then Exit;
   TargetPosition(A, TX, TY, TZ, TR);
-  if not SightClear(A.DoomX, A.DoomY, TX, TY) then Exit;
+  if not SightToTarget(A) then Exit;
   FSounds.PlayAt('DSBAREXP', A);
   if A.Target = nil then
   begin
@@ -2800,7 +2890,8 @@ begin
           Best := Dist;
         end;
       end;
-    if (Target <> nil) and SightClear(Player.X, Player.Y, Target.DoomX, Target.DoomY) then
+    if (Target <> nil) and CheckSight(Player.X, Player.Y, Player.Z + PlayerHeight * 0.75, Player.Sector,
+       Target.DoomX, Target.DoomY, Target.DoomZ, Target.Info^.Height, Target.Sector) then
     begin
       DamageActor(Target, Dice(15, 7), Target.DoomX, Target.DoomY, Target.DoomZ + Target.Info^.Height / 2);
       { The green BFG "hit" flash on each sprayed target. }

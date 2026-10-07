@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- 3D sight checks (`CheckSight`, Doom's `P_CheckSight`): the `REJECT` table
+  first, then the line from the viewer's eye (3/4 of its height) to the
+  target with the vertical window narrowed at every opening crossed (higher
+  floor, lower ceiling); monsters no longer see or shoot over ledges and
+  out of pits. Used for waking (`MonsterLook`, ambush), attack decisions,
+  the Arch-vile, the Icon of Sin shooter and the player's autoaim. On E1M1
+  the two zombies in the pit below the start room no longer wake by sight.
 - Fuzz: spectres are drawn as a dark translucent silhouette whose opacity
   changes every tic (`TDoomActor.Fuzz`: `AlphaMode = amBlend`, black
   unlit material, random `Transparency`), and with partial invisibility the
@@ -125,7 +132,6 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **Donut (special 9)**, **perpetual platforms stop/start**, **raise by shortest lower texture (30/96 are approximated as +64)**, **crusher return speed when blocked**. | Correctness of a few maps. | `ApplySpecial`, `TSectorMover` | S each |
 | **Column fuzz shader**: Doom's fuzz also shifts columns up and down by a pixel (`fuzzoffset`); a `TEffectNode` fragment shader could add that wobble to spectres and the invisible weapon. | Closer look. | `DoomActors` appearance | S |
-| **3D sight checks**: `SightClear` is 2D (one-sided and closed two-sided lines block); Doom's `P_CheckSight` also uses the heights of openings and the `REJECT` table, so a monster below a high ledge can "see" too much here. | Fewer early wake-ups and shots through ledges. | `SightClear`, `DoomMap` (`REJECT`) | S-M |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
 | **Falling damage / knockback**: hitscans and explosions should push things. | Feel. | `DamageActor`, `DamagePlayer` | S |
 | **Item respawn / deathmatch starts**: not applicable to single player, but the flags are parsed. | Only if multiplayer ever happens. | - | - |
@@ -175,9 +181,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. 3D sight checks (S-M): opening heights and `REJECT` in `SightClear`, so
-   monsters stop seeing (and shooting) over ledges they could not in Doom.
-2. Palette flashes through `PLAYPAL` (S): the red / gold / green screen
+1. Palette flashes through `PLAYPAL` (S): the red / gold / green screen
    tints the way Doom does them.
-3. Screen melt on the web (S): capture the old frame by rendering to a
+2. Screen melt on the web (S): capture the old frame by rendering to a
    texture, since `SaveScreen` reads black under WebGL.
+3. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
+   slopes (S-M): monster bullets currently hit by chance once the monster
+   decided it sees you; aim height and blocking ledges are not traced.
