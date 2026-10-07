@@ -6,6 +6,15 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Doom menu and skill levels: the title screen is Doom's own menu drawn from
+  the WAD's `M_*` graphics over a dimmed `TITLEPIC` (`DoomMenu`): New Game,
+  episode select (Doom 1 WADs), skill select with the Nightmare confirmation,
+  Load Game with the six save slots, skull cursor, menu sounds, keyboard and
+  mouse. The old engine-button screen is now the Options page (WADs, map,
+  skill). Skills follow vanilla: thing flags (`MTF_EASY` / `NORMAL` / `HARD`),
+  double ammo on 1 and 5, half damage on 1, and Nightmare's fast projectiles,
+  fast demons, no reaction delay, attacks back to back and monster respawn
+  (12 s, teleport fog). `-skill 1..5`; the skill is saved with the game.
 - Save / load: F2 / F3 slot menus (6 slots, Doom font), F6 / F9 quick save /
   load, "Continue (quick save)" on the title screen, `-loadgame N`. The whole
   level state is JSON (`TDoomWorld.SaveState` / `LoadState` in
@@ -61,7 +70,7 @@ L = several days). Items inside a section are in suggested order.
 | **Donut (special 9)**, **perpetual platforms stop/start**, **raise by shortest lower texture (30/96 are approximated as +64)**, **crusher return speed when blocked**. | Correctness of a few maps. | `ApplySpecial`, `TSectorMover` | S each |
 | **Spectres** are drawn like demons; add the fuzz/translucency effect (shader or `AlphaMode = amBlend` with low alpha). | Visual fidelity. | `DoomActors` material | S |
 | **Icon of Sin** (MAP30): the boss brain (shoot through the wall to win), the shooter that spits cubes at `BOSSTARGET` spots, cubes that spawn random monsters. | MAP30 cannot be finished without it. | `DoomWorld` (types 87, 88, 89), `DoomThings` | M |
-| **Difficulty selection** (currently "Hurt me plenty" thing flags only) and the **`MTF_AMBUSH`** (deaf) flag. | Replayability. | `SpawnThings`, menu | S |
+| **`MTF_AMBUSH`** (deaf) flag: ambush monsters should ignore noise and wake only on sight in front of them. | Map authors rely on it for traps. | `TicMonster`, `NoiseAlert` | S |
 | **Sector sound propagation**: monsters currently wake on a 2D line-of-sight or any shot within 1200 units; Doom floods sound through sector neighbours with `ML_SOUNDBLOCK`. | Monsters wake more faithfully. | `NoiseAlert` | M |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
 | **Teleport monsters** (specials 125/126) and monsters using teleporters. | Some Doom 2 maps rely on it. | `DoTeleport` for actors | S |
@@ -72,7 +81,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Title/credits cycle** and an **episode/skill menu** using the `M_*` graphics instead of engine buttons. | Menus look like Doom. | `GameViewMenu` | M |
+| **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
 | **Weapon sprite bobbing and raise/lower animation** when switching weapons; **screen melt** wipe between levels. | Doom feel. | `GameViewPlay` | S |
@@ -112,8 +121,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Difficulty selection with a Doom-style menu (`M_*` graphics) (S + M).
-2. Icon of Sin (MAP30 boss brain, cube spawner) (M): the last Doom 2 boss
+1. Icon of Sin (MAP30 boss brain, cube spawner) (M): the last Doom 2 boss
    that does not work yet.
-3. Persistent web saves (S-M): saves on the Pages site currently last only
+2. Persistent web saves (S-M): saves on the Pages site currently last only
    until the page reloads.
+3. Sector sound propagation and the `MTF_AMBUSH` flag (M): monsters wake like
+   in Doom, which matters more now that the harder skills spawn more of them.

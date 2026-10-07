@@ -1,19 +1,24 @@
-{ Title screen: pick a WAD (Freedoom Phase 1 = Doom 1 style episodes,
-  Freedoom Phase 2 = Doom 2 style MAPxx) and a starting map. }
+{ Title screen: Doom's own menu (New Game, episode, skill, Load Game) drawn
+  from the WAD's M_* graphics by TDoomMenuScreen, and an Options panel made of
+  CGE buttons to pick a WAD (Freedoom Phase 1 = Doom 1 style episodes,
+  Freedoom Phase 2 = Doom 2 style MAPxx, or your own IWAD / PWADs), a
+  starting map and the skill. }
 unit GameViewMenu;
 
 interface
 
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
-  DoomWad, DoomGraphics, DoomSound, DoomMusic;
+  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu;
 
 type
   TViewMenu = class(TCastleView)
   strict private
-    FTitle: TCastleImageControl;
+    FDoomMenu: TDoomMenuScreen;
+    FOptions: TCastleRectangleControl;
     FButtons: TCastleVerticalGroup;
     FMapLabel: TCastleLabel;
+    FSkillLabel: TCastleLabel;
     FStatus: TCastleLabel;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
@@ -22,12 +27,23 @@ type
     FIwadUrl: String;
     FPwads: TStringList;
     FWadsLabel: TCastleLabel;
+    FContinueButton: TCastleButton;
     FMapIndex: Integer;
+    FSkill: Integer;
+    FTicAccum: Single;
+    FAutoTestTics: Integer;
+    FMenuKeys: TStringList;
+    FMenuKeyTics, FMenuShots: Integer;
     procedure LoadWads(const Iwad: String; const Pwads: TStrings);
+    procedure SetupDoomMenu;
+    procedure RefreshSlots;
+    procedure DoomMenuAction(const Action: TDoomMenuAction);
+    procedure ShowOptions(const Value: Boolean);
     procedure ClickOpenIwad(Sender: TObject);
     procedure ClickAddPwad(Sender: TObject);
     procedure ClickLastWads(Sender: TObject);
     procedure ClickContinue(Sender: TObject);
+    procedure ClickBack(Sender: TObject);
     procedure ContinueFromSlot(const Slot: Integer);
     procedure AutoContinue(Sender: TObject);
     procedure UpdateWadsLabel;
@@ -37,30 +53,44 @@ type
     procedure ClickStart(Sender: TObject);
     procedure ClickPrevMap(Sender: TObject);
     procedure ClickNextMap(Sender: TObject);
+    procedure ClickPrevSkill(Sender: TObject);
+    procedure ClickNextSkill(Sender: TObject);
     procedure UpdateMapLabel;
+    procedure UpdateSkillLabel;
     procedure StartGame;
     procedure AutoStart(Sender: TObject);
-    procedure AutoScreenshot(Sender: TObject);
+    procedure AutoTestMenu;
+    procedure AutoScreenshot;
+    procedure NextMenuKey;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Start; override;
     procedure Stop; override;
+    procedure Update(const SecondsPassed: Single; var HandleInput: Boolean); override;
     function Press(const Event: TInputPressRelease): Boolean; override;
   end;
 
 var
   ViewMenu: TViewMenu;
-  { Set from the command line (--autotest MAP PREFIX): start this map at once. }
+  { Set from the command line (--autotest MAP PREFIX): start this map at once.
+    MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENULOAD, MENUOPTIONS
+    or MENUDOOM2 takes a screenshot of that menu page instead. }
   AutoTestMap: String;
   AutoTestPrefix: String;
   AutoTestDemo: String;
+  { --autotest MENUKEYS PREFIX --menukeys "D,D,E,...": drive the Doom menu
+    (U up, D down, E enter, X escape, Y / N, S screenshot); a started game
+    then runs --demo. }
+  AutoTestMenuKeys: String;
   { Set from the command line: -iwad FILE, -file PWAD..., -warp MAP. }
   CmdIwad: String;
   CmdPwads: TStringList;
   CmdWarp: String;
   { -loadgame N: start from saved game slot N (0 = quick save). }
   CmdLoadSlot: Integer = -1;
+  { -skill N (Doom's 1..5) stored as 0..4; -1 when not given. }
+  CmdSkill: Integer = -1;
 
 implementation
 
@@ -71,11 +101,14 @@ uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, Cas
 const
   Freedoom1 = 'castle-data:/wads/freedoom1.wad';
   Freedoom2 = 'castle-data:/wads/freedoom2.wad';
+  TicSeconds = 1 / 35;
 
 constructor TViewMenu.Create(AOwner: TComponent);
 begin
   inherited;
   FPwads := TStringList.Create;
+  FMenuKeys := TStringList.Create;
+  FSkill := 2;
 end;
 
 procedure TViewMenu.Start;
@@ -84,37 +117,41 @@ var
   B: TCastleButton;
   Row: TCastleHorizontalGroup;
   Header: TCastleLabel;
-  Save: TJSONObject;
 begin
   inherited;
+  if CmdSkill >= 0 then FSkill := CmdSkill;
+
   Back := TCastleRectangleControl.Create(FreeAtStop);
   Back.FullSize := true;
-  Back.Color := Vector4(0.05, 0.02, 0.02, 1);
+  Back.Color := Black;
   InsertFront(Back);
 
-  FTitle := TCastleImageControl.Create(FreeAtStop);
-  FTitle.SmoothScaling := false;
-  FTitle.Stretch := true;
-  FTitle.Anchor(hpMiddle);
-  FTitle.Anchor(vpTop, -20);
-  FTitle.Width := 640;
-  FTitle.Height := 400;
-  InsertFront(FTitle);
+  { Doom's menu over TITLEPIC, 320x200 shown 4:3 (sized in Update). }
+  FDoomMenu := TDoomMenuScreen.Create(FreeAtStop);
+  FDoomMenu.Anchor(hpMiddle);
+  FDoomMenu.Anchor(vpMiddle);
+  FDoomMenu.OnAction := {$ifdef FPC}@{$endif} DoomMenuAction;
+  InsertFront(FDoomMenu);
+
+  { Options: the WAD / map / skill picker. }
+  FOptions := TCastleRectangleControl.Create(FreeAtStop);
+  FOptions.FullSize := true;
+  FOptions.Color := Vector4(0.05, 0.02, 0.02, 0.92);
+  FOptions.Exists := false;
+  InsertFront(FOptions);
+
+  FButtons := TCastleVerticalGroup.Create(FreeAtStop);
+  FButtons.Anchor(hpMiddle);
+  FButtons.Anchor(vpMiddle);
+  FButtons.Spacing := 10;
+  FButtons.Alignment := hpMiddle;
+  FOptions.InsertFront(FButtons);
 
   Header := TCastleLabel.Create(FreeAtStop);
   Header.Caption := 'CASTLE DOOM  -  Doom levels in Castle Game Engine';
   Header.Color := Vector4(1, 0.3, 0.15, 1);
   Header.FontSize := 30;
-  Header.Anchor(hpMiddle);
-  Header.Anchor(vpTop, -430);
-  InsertFront(Header);
-
-  FButtons := TCastleVerticalGroup.Create(FreeAtStop);
-  FButtons.Anchor(hpMiddle);
-  FButtons.Anchor(vpTop, -480);
-  FButtons.Spacing := 10;
-  FButtons.Alignment := hpMiddle;
-  InsertFront(FButtons);
+  FButtons.InsertFront(Header);
 
   Row := TCastleHorizontalGroup.Create(FreeAtStop);
   Row.Spacing := 10;
@@ -150,11 +187,37 @@ begin
   B.OnClick := {$ifdef FPC}@{$endif} ClickNextMap;
   Row.InsertFront(B);
 
+  Row := TCastleHorizontalGroup.Create(FreeAtStop);
+  Row.Spacing := 10;
+  FButtons.InsertFront(Row);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := '<';
+  B.FontSize := 22;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickPrevSkill;
+  Row.InsertFront(B);
+  FSkillLabel := TCastleLabel.Create(FreeAtStop);
+  FSkillLabel.Color := White;
+  FSkillLabel.FontSize := 22;
+  Row.InsertFront(FSkillLabel);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := '>';
+  B.FontSize := 22;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickNextSkill;
+  Row.InsertFront(B);
+
+  Row := TCastleHorizontalGroup.Create(FreeAtStop);
+  Row.Spacing := 10;
+  FButtons.InsertFront(Row);
   B := TCastleButton.Create(FreeAtStop);
   B.Caption := 'START  (Enter)';
   B.FontSize := 26;
   B.OnClick := {$ifdef FPC}@{$endif} ClickStart;
-  FButtons.InsertFront(B);
+  Row.InsertFront(B);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := 'Back  (Esc)';
+  B.FontSize := 26;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickBack;
+  Row.InsertFront(B);
 
   { Your own WADs (desktop only: needs a native file dialog). }
   Row := TCastleHorizontalGroup.Create(FreeAtStop);
@@ -176,14 +239,11 @@ begin
   B.OnClick := {$ifdef FPC}@{$endif} ClickLastWads;
   B.Exists := UserConfig.GetValue('wads/iwad', '') <> '';
   Row.InsertFront(B);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'Continue (quick save)';
-  B.FontSize := 18;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickContinue;
-  Save := ReadSaveFile(SaveSlotUrl(0));
-  B.Exists := Save <> nil;
-  FreeAndNil(Save);
-  Row.InsertFront(B);
+  FContinueButton := TCastleButton.Create(FreeAtStop);
+  FContinueButton.Caption := 'Continue (quick save)';
+  FContinueButton.FontSize := 18;
+  FContinueButton.OnClick := {$ifdef FPC}@{$endif} ClickContinue;
+  Row.InsertFront(FContinueButton);
 
   FWadsLabel := TCastleLabel.Create(FreeAtStop);
   FWadsLabel.Color := Vector4(0.8, 0.8, 0.8, 1);
@@ -198,7 +258,8 @@ begin
   FStatus.Anchor(vpBottom, 16);
   FStatus.Alignment := hpMiddle;
   FStatus.Caption := 'Freedoom (BSD licence) by the Freedoom project. Castle Game Engine https://castle-engine.io';
-  InsertFront(FStatus);
+  FOptions.InsertFront(FStatus);
+  UpdateSkillLabel;
 
   if CmdLoadSlot >= 0 then
   begin
@@ -206,10 +267,13 @@ begin
     WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoContinue);
     Exit;
   end;
-  if AutoTestMap = 'MENU' then
+  if Copy(AutoTestMap, 1, 4) = 'MENU' then
   begin
-    LoadWads(Freedoom1, nil);
-    WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoScreenshot);
+    if AutoTestMap = 'MENUDOOM2' then
+      LoadWads(Freedoom2, nil)
+    else
+      LoadWads(Freedoom1, nil);
+    AutoTestMenu;
     Exit;
   end;
   if (AutoTestMap <> '') or (CmdIwad <> '') or (CmdPwads.Count > 0) or (CmdWarp <> '') then
@@ -240,6 +304,7 @@ begin
     LoadWads(Freedoom1, nil)
   else
   begin
+    SetupDoomMenu;
     UpdateMapLabel;
     UpdateWadsLabel;
     FMusic.Play(FMusic.TitleLump);
@@ -254,12 +319,12 @@ end;
 destructor TViewMenu.Destroy;
 begin
   FreeAndNil(FPwads);
+  FreeAndNil(FMenuKeys);
   inherited;
 end;
 
 procedure TViewMenu.LoadWads(const Iwad: String; const Pwads: TStrings);
 var
-  Img: TDoomImage;
   I: Integer;
   NewPwads: TStringList;
 begin
@@ -302,15 +367,96 @@ begin
     if (AutoTestMap = '') and (CmdWarp = '') then
       FMusic.Play(FMusic.TitleLump);
     FMapIndex := 0;
-    Img := FGraphics.Patch('TITLEPIC');
-    if Img <> nil then
-      FTitle.Image := Img.Image.MakeCopy;
+    SetupDoomMenu;
     UpdateMapLabel;
     UpdateWadsLabel;
     RememberWads;
   finally
     FreeAndNil(NewPwads);
   end;
+end;
+
+{ Hand the current WAD to the Doom menu: episodes are offered for ExMy WADs
+  that have both the map and its M_EPIn graphic (Doom 2 goes straight from
+  New Game to the skill page). }
+procedure TViewMenu.SetupDoomMenu;
+var
+  Episodes, E: Integer;
+begin
+  if (FDoomMenu = nil) or (FWad = nil) then Exit;
+  Episodes := 0;
+  for E := 1 to 4 do
+    if (FWad.MapNames.IndexOf(Format('E%dM1', [E])) >= 0) and (FGraphics.Patch(Format('M_EPI%d', [E])) <> nil) then
+      Episodes := E;
+  FDoomMenu.Setup(FGraphics, FSounds, Episodes);
+  FDoomMenu.Skill := FSkill;
+  RefreshSlots;
+end;
+
+procedure TViewMenu.RefreshSlots;
+var
+  I: Integer;
+  Save: TJSONObject;
+begin
+  if FDoomMenu = nil then Exit;
+  for I := 1 to 6 do
+  begin
+    Save := ReadSaveFile(SaveSlotUrl(I));
+    if Save <> nil then
+      FDoomMenu.SetSlot(I, Save.Get('description', '?'))
+    else
+      FDoomMenu.SetSlot(I, '');
+    FreeAndNil(Save);
+  end;
+  if FContinueButton <> nil then
+  begin
+    Save := ReadSaveFile(SaveSlotUrl(0));
+    FContinueButton.Exists := Save <> nil;
+    FreeAndNil(Save);
+  end;
+end;
+
+procedure TViewMenu.DoomMenuAction(const Action: TDoomMenuAction);
+var
+  MapName: String;
+  I: Integer;
+begin
+  case Action of
+    maNewGame:
+      begin
+        FSkill := FDoomMenu.Skill;
+        UpdateSkillLabel;
+        { G_DeferedInitNew: ExM1 for the chosen episode, else the first map. }
+        if FDoomMenu.Episode > 0 then
+          MapName := Format('E%dM1', [FDoomMenu.Episode])
+        else
+          MapName := 'MAP01';
+        I := FWad.MapNames.IndexOf(MapName);
+        if I < 0 then I := 0;
+        FMapIndex := I;
+        StartGame;
+      end;
+    maLoadSlot: ContinueFromSlot(FDoomMenu.Slot);
+    maOptions: ShowOptions(true);
+    maQuit: Application.Terminate;
+  end;
+end;
+
+procedure TViewMenu.ShowOptions(const Value: Boolean);
+begin
+  FOptions.Exists := Value;
+  FDoomMenu.Exists := not Value;
+  if Value then
+  begin
+    UpdateMapLabel;
+    UpdateSkillLabel;
+    UpdateWadsLabel;
+  end;
+end;
+
+procedure TViewMenu.ClickBack(Sender: TObject);
+begin
+  ShowOptions(false);
 end;
 
 procedure TViewMenu.UpdateWadsLabel;
@@ -431,12 +577,19 @@ end;
 
 procedure TViewMenu.UpdateMapLabel;
 begin
+  if FMapLabel = nil then Exit;
   if (FWad <> nil) and (FWad.MapNames.Count > 0) then
   begin
     FMapIndex := Clamped(FMapIndex, 0, FWad.MapNames.Count - 1);
     FMapLabel.Caption := Format('  %s  (%d/%d)  ', [FWad.MapNames[FMapIndex], FMapIndex + 1, FWad.MapNames.Count]);
   end else
     FMapLabel.Caption := '  no maps  ';
+end;
+
+procedure TViewMenu.UpdateSkillLabel;
+begin
+  if FSkillLabel <> nil then
+    FSkillLabel.Caption := Format('  Skill %d: %s  ', [FSkill + 1, SkillNames[FSkill]]);
 end;
 
 procedure TViewMenu.ClickPhase1(Sender: TObject);
@@ -451,6 +604,7 @@ end;
 
 procedure TViewMenu.ClickPrevMap(Sender: TObject);
 begin
+  if FWad = nil then Exit;
   Dec(FMapIndex);
   if FMapIndex < 0 then FMapIndex := FWad.MapNames.Count - 1;
   UpdateMapLabel;
@@ -458,9 +612,24 @@ end;
 
 procedure TViewMenu.ClickNextMap(Sender: TObject);
 begin
+  if FWad = nil then Exit;
   Inc(FMapIndex);
   if FMapIndex >= FWad.MapNames.Count then FMapIndex := 0;
   UpdateMapLabel;
+end;
+
+procedure TViewMenu.ClickPrevSkill(Sender: TObject);
+begin
+  FSkill := (FSkill + 4) mod 5;
+  FDoomMenu.Skill := FSkill;
+  UpdateSkillLabel;
+end;
+
+procedure TViewMenu.ClickNextSkill(Sender: TObject);
+begin
+  FSkill := (FSkill + 1) mod 5;
+  FDoomMenu.Skill := FSkill;
+  UpdateSkillLabel;
 end;
 
 procedure TViewMenu.StartGame;
@@ -471,6 +640,7 @@ begin
   ViewPlay.Sounds := FSounds;
   ViewPlay.Music := FMusic;
   ViewPlay.StartMapName := FWad.MapNames[FMapIndex];
+  ViewPlay.Skill := FSkill;
   Container.View := ViewPlay;
 end;
 
@@ -479,10 +649,102 @@ begin
   StartGame;
 end;
 
-procedure TViewMenu.AutoScreenshot(Sender: TObject);
+{ --autotest MENU... : open the requested page, then screenshot a few tics
+  later (from Update, so the image is composed and rendered). }
+procedure TViewMenu.AutoTestMenu;
 begin
-  Application.MainWindow.SaveScreen(AutoTestPrefix + '_menu.png');
+  FDoomMenu.MouseEnabled := false;
+  if (AutoTestMap = 'MENUEPISODE') then
+    FDoomMenu.OpenPage(mpEpisode)
+  else if (AutoTestMap = 'MENUSKILL') or (AutoTestMap = 'MENUDOOM2') then
+    FDoomMenu.OpenPage(mpSkill)
+  else if AutoTestMap = 'MENUNIGHTMARE' then
+  begin
+    { Hurt me plenty, down twice to Nightmare!, Enter: the confirmation. }
+    FDoomMenu.Skill := 2;
+    FDoomMenu.OpenPage(mpSkill);
+    FDoomMenu.HandleKey(InputKey(TVector2.Zero, keyArrowDown, '', []));
+    FDoomMenu.HandleKey(InputKey(TVector2.Zero, keyArrowDown, '', []));
+    FDoomMenu.HandleKey(InputKey(TVector2.Zero, keyEnter, '', []));
+  end
+  else if AutoTestMap = 'MENULOAD' then
+    FDoomMenu.OpenPage(mpLoad)
+  else if AutoTestMap = 'MENUOPTIONS' then
+    ShowOptions(true)
+  else if AutoTestMap = 'MENUKEYS' then
+  begin
+    FMenuKeys.DelimitedText := AutoTestMenuKeys;
+    FMenuKeyTics := 10;
+    Exit;
+  end;
+  FAutoTestTics := 10;
+end;
+
+procedure TViewMenu.NextMenuKey;
+var
+  K: String;
+  Key: TKey;
+begin
+  if FMenuKeys.Count = 0 then Exit;
+  K := UpperCase(FMenuKeys[0]);
+  FMenuKeys.Delete(0);
+  FMenuKeyTics := 6;
+  WritelnLog('AutoTest', 'Menu key %s', [K]);
+  if K = 'S' then
+  begin
+    Inc(FMenuShots);
+    Application.MainWindow.SaveScreen(Format('%s_menu%d.png', [AutoTestPrefix, FMenuShots]));
+    Exit;
+  end;
+  if K = 'U' then Key := keyArrowUp
+  else if K = 'D' then Key := keyArrowDown
+  else if K = 'E' then Key := keyEnter
+  else if K = 'X' then Key := keyEscape
+  else if K = 'Y' then Key := keyY
+  else if K = 'N' then Key := keyN
+  else Exit;
+  Press(InputKey(TVector2.Zero, Key, '', []));
+end;
+
+procedure TViewMenu.AutoScreenshot;
+begin
+  Application.MainWindow.SaveScreen(AutoTestPrefix + '_' + LowerCase(AutoTestMap) + '.png');
+  WritelnLog('AutoTest', 'Menu screenshot %s', [AutoTestMap]);
   Application.Terminate;
+end;
+
+procedure TViewMenu.Update(const SecondsPassed: Single; var HandleInput: Boolean);
+begin
+  inherited;
+  if FDoomMenu = nil then Exit;
+  { 320x200 shown 4:3, as tall as the window (or as wide, if narrower). }
+  FDoomMenu.Height := Min(EffectiveHeight, EffectiveWidth * 3 / 4);
+  FDoomMenu.Width := FDoomMenu.Height * 4 / 3;
+  FTicAccum := FTicAccum + SecondsPassed;
+  while FTicAccum >= TicSeconds do
+  begin
+    FTicAccum := FTicAccum - TicSeconds;
+    FDoomMenu.Tic;
+    if FMenuKeyTics > 0 then
+    begin
+      Dec(FMenuKeyTics);
+      if FMenuKeyTics = 0 then
+      begin
+        NextMenuKey;
+        { The menu may have started the game (this view is stopped). }
+        if Application.MainWindow.Container.View <> Self then Exit;
+      end;
+    end;
+    if FAutoTestTics > 0 then
+    begin
+      Dec(FAutoTestTics);
+      if FAutoTestTics = 0 then
+      begin
+        AutoScreenshot;
+        Exit;
+      end;
+    end;
+  end;
 end;
 
 procedure TViewMenu.ClickStart(Sender: TObject);
@@ -494,18 +756,24 @@ function TViewMenu.Press(const Event: TInputPressRelease): Boolean;
 begin
   Result := inherited;
   if Result then Exit;
-  if Event.IsKey(keyEnter) then
+  if FOptions.Exists then
   begin
-    StartGame;
-    Exit(true);
+    if Event.IsKey(keyEnter) then
+    begin
+      StartGame;
+      Exit(true);
+    end;
+    if Event.IsKey(keyArrowLeft) then begin ClickPrevMap(nil); Exit(true); end;
+    if Event.IsKey(keyArrowRight) then begin ClickNextMap(nil); Exit(true); end;
+    if Event.IsKey(keyEscape) then
+    begin
+      ShowOptions(false);
+      Exit(true);
+    end;
+    Exit;
   end;
-  if Event.IsKey(keyArrowLeft) then begin ClickPrevMap(nil); Exit(true); end;
-  if Event.IsKey(keyArrowRight) then begin ClickNextMap(nil); Exit(true); end;
-  if Event.IsKey(keyEscape) then
-  begin
-    Application.Terminate;
+  if FDoomMenu.HandleKey(Event) then
     Exit(true);
-  end;
 end;
 
 initialization

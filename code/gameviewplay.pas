@@ -75,6 +75,8 @@ type
     { Set by the menu: load this saved game instead of StartMapName. }
     PendingSaveUrl: String;
     StartMapName: String;
+    { Skill for a new game, 0..4 (Doom's sk_baby .. sk_nightmare). }
+    Skill: Integer;
     constructor Create(AOwner: TComponent); override;
     procedure Start; override;
     procedure Stop; override;
@@ -169,6 +171,7 @@ constructor TViewPlay.Create(AOwner: TComponent);
 begin
   inherited;
   FFogEnabled := true;
+  Skill := 2;
 end;
 
 procedure TViewPlay.CreateUi;
@@ -343,6 +346,8 @@ begin
   inherited;
   CreateUi;
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
+  FWorld.Skill := Skill;
+  WritelnLog('Skill', 'Skill %d', [Skill + 1]);
   FAutomap.World := FWorld;
   if StartMapName = '' then
   begin

@@ -50,7 +50,7 @@ freedoom1.wad ──► DoomWad ──► DoomGraphics ────────�
                              weapons)
                                   ▲
                  GameViewPlay ────┘ (TCastleView: navigation, HUD, input)
-                 GameViewMenu       (TCastleView: title screen, WAD/map choice)
+                 GameViewMenu       (TCastleView: Doom menu (DoomMenu), options)
 ```
 
 Three ideas carry the whole design:
@@ -80,7 +80,8 @@ Sizes, for orientation (lines of Pascal):
 | `gameviewplay.pas` | 688 | viewport, navigation, HUD, input, test harness |
 | `doommap.pas` | 677 | map lumps, BSP queries, subsector polygons |
 | `doomthings.pas` | 363 | thing type table (info.c reduced) |
-| `gameviewmenu.pas` | 279 | title screen |
+| `gameviewmenu.pas` | 780 | title screen: Doom menu and options |
+| `doommenu.pas` | 420 | Doom's menu from `M_*` graphics |
 | `doomintermission.pas` | 330 | intermission screen |
 | `doomautomap.pas` | 210 | automap drawn with 2D primitives |
 | `doomfont.pas` | 130 | STCFN text |
@@ -599,12 +600,38 @@ container. `GameInitialize` creates the window (`TCastleWindow`), parses the
 command line, creates both views and shows the menu.
 
 `TViewMenu` loads a WAD set (`TDoomWad`, `TDoomGraphics`, `TDoomSounds`,
-`TDoomMusic`), shows `TITLEPIC` in an image control, buttons
-(`TCastleButton` in `TCastleHorizontalGroup`/`TCastleVerticalGroup`) to pick
-Freedoom Phase 1 or 2 and the map, "Open IWAD..." and "Add PWAD..." using the
-window's native `FileDialog` (desktop only), a "Last WADs" shortcut backed by
-`UserConfig` (`castle-config:`), and plays the title track. The command line
-accepts Doom's `-iwad FILE`, `-file PWAD...` and `-warp MAP`. Starting hands
+`TDoomMusic`), plays the title track and shows Doom's menu,
+`TDoomMenuScreen` (`doommenu.pas`). Like the status bar and the intermission
+it composes a 320x200 `TRGBAlphaImage` (dimmed `TITLEPIC`, then `M_*`
+patches drawn with their offsets like `V_DrawPatch`) and shows it 4:3 with
+`SmoothScaling := false`; it is recomposed only when something changes (the
+skull blinks every 8 tics). Pages and positions are `m_menu.c`'s: main
+(`M_NGAME`, `M_OPTION`, `M_LOADG`, `M_QUITG` at 97,64), episodes (only for
+ExMy WADs that have `M_EPIn`), skill (`M_JKILL`..`M_NMARE`, Nightmare asks
+"are you sure" in the STCFN font), and Load Game (the `M_LS*` border and
+each save's description). Keys come from the view (`HandleKey`: arrows,
+Enter, Escape / Backspace, Y / N); the control handles mouse hover and click
+itself by mapping the pointer through its `RenderRect` into Doom pixels.
+Chosen actions come back through `OnAction` (new game with episode and
+skill, load slot, options, quit).
+
+"Options" shows the CGE part: buttons (`TCastleButton` in
+`TCastleHorizontalGroup`/`TCastleVerticalGroup` on a `TCastleRectangleControl`)
+to pick Freedoom Phase 1 or 2, the map and the skill, "Open IWAD..." and "Add
+PWAD..." using the window's native `FileDialog` (desktop only), a "Last WADs"
+shortcut backed by `UserConfig` (`castle-config:`) and "Continue (quick
+save)". The command line accepts Doom's `-iwad FILE`, `-file PWAD...`,
+`-warp MAP` and `-skill 1..5`.
+
+The skill reaches `TDoomWorld.Skill` (0..4 like `gameskill`) through
+`TViewPlay.Skill`. `SpawnThings` picks the `MTF_EASY` / `MTF_NORMAL` /
+`MTF_HARD` flag from it; `GiveAmmo` doubles ammo on skills 0 and 4,
+`DamagePlayer` halves damage on 0; Nightmare makes imp / cacodemon / baron
+balls fly at 20, demons walk twice as fast, removes the wake-up reaction
+delay and the pause after an attack, and `NightmareRespawn` brings corpses
+back at their map spot (`SpawnX`/`SpawnY` in `TDoomActor`) after 12 seconds
+with a 4/256 chance every 32 tics, with teleport fog at both ends. The skill
+and the spawn spots are part of the save. Starting hands
 the WAD objects to `TViewPlay` and sets `Container.View`. (A view cannot
 change the container's view from inside its own `Start`; the autotest path
 uses `WaitForRenderAndCall` for that.)
@@ -743,8 +770,9 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 
 - No Icon of Sin (MAP30 boss brain and cube spawner).
 - Doom's "donut" (special 9) only lowers the pillar.
-- No demo playback, no difficulty selection (things are spawned for "Hurt me
-  plenty"); web saves are not persistent across page reloads.
+- No demo playback; web saves are not persistent across page reloads. The
+  in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
+  `DoomMenu`.
 - Vanilla node format only. A blockmap-free design means all 2D queries scan
   all lines.
 - The FM synth approximates the OPL2 (envelope shapes and the modulation index
@@ -777,7 +805,8 @@ Where each engine feature is used, as a map for learning the engine:
 | `TCastleWalkNavigation` and its properties, `Input_*.Assign/MakeClear` | GameViewPlay | player movement |
 | `Items.WorldRay`, `TRayCollision.Distance` | DoomWorld | shooting |
 | `TCastleSound`, `SoundEngine.Play`, `TCastleSoundSource`, `SoundEngine.LoopingChannel[0]` | DoomSound, DoomMusic | effects and music |
-| `TCastleImageControl` (`Image`, `SmoothScaling`, `Stretch`), `TCastleLabel`, `TCastleRectangleControl`, `TCastleCrosshair`, `TCastleButton`, layout groups, `Anchor` | DoomHud, GameViewPlay, GameViewMenu | 2D UI |
+| `TCastleImageControl` (`Image`, `SmoothScaling`, `Stretch`), `TCastleLabel`, `TCastleRectangleControl`, `TCastleCrosshair`, `TCastleButton`, layout groups, `Anchor` | DoomHud, DoomMenu, GameViewPlay, GameViewMenu | 2D UI |
+| `TCastleUserInterface.Press` / `Motion` overrides, `RenderRect`, `InputKey` | DoomMenu, GameViewMenu | menu mouse input, scripted menu keys |
 | `Container.Pressed`, `Container.MousePressed`, `TInputPressRelease.IsKey/IsMouseButton/MouseWheelScroll` | GameViewPlay | input |
 | `UrlSaveStream`, `Download`, `castle-config:` | GameViewPlay | writing and reading save games |
 | FPC `fpjson` / `jsonparser` (`TJSONObject`, `GetJSON`) | doomworld_save.inc, GameViewPlay | save game format |

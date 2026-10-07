@@ -69,6 +69,10 @@ type
     AttackFired: Boolean;
     { Arch-vile: its fire on the target during the attack. }
     Fire: TDoomActor;
+    { Monsters: where they were spawned (Nightmare respawn) and how long the
+      corpse has lain there. }
+    SpawnX, SpawnY, SpawnAngle: Single;
+    DeadTics: Integer;
     { Fullbright sprite (explosions, projectiles, some items). }
     Bright: Boolean;
 

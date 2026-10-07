@@ -7,6 +7,7 @@ implementation
 
 uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
+  CastleUtils,
   GameViewMenu, GameViewPlay;
 
 var
@@ -40,6 +41,17 @@ begin
     if ((Parameters[I] = '-loadgame') or (Parameters[I] = '--loadgame')) and (I + 1 <= Parameters.High) then
     begin
       CmdLoadSlot := StrToIntDef(Parameters[I + 1], 0);
+      Inc(I);
+    end else
+    if (Parameters[I] = '--menukeys') and (I + 1 <= Parameters.High) then
+    begin
+      AutoTestMenuKeys := Parameters[I + 1];
+      Inc(I);
+    end else
+    if ((Parameters[I] = '-skill') or (Parameters[I] = '--skill')) and (I + 1 <= Parameters.High) then
+    begin
+      { Doom numbering: 1 "I'm too young to die" .. 5 "Nightmare!". }
+      CmdSkill := Clamped(StrToIntDef(Parameters[I + 1], 3), 1, 5) - 1;
       Inc(I);
     end else
     if ((Parameters[I] = '-warp') or (Parameters[I] = '--warp')) and (I + 1 <= Parameters.High) then

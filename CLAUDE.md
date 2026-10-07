@@ -44,7 +44,17 @@ The autotest harness is the main verification tool; use it after every change:
 .\castle-doom.exe --autotest E1M1 C:\TMP\sp\shot --demo "G:480:712,A:0,U,W:1.5,F:1.5,S,T:180,S,X,S,Q"
 .\castle-doom.exe --autotest MAP01 C:\TMP\sp\d2 --demo "W:0.5,S,E,W:1,S,U,W:1,S,N,W:1,S,Q"
 .\castle-doom.exe --autotest MENU C:\TMP\sp\m          # title screen screenshot
+.\castle-doom.exe --autotest MENUKEYS C:\TMP\sp\k --menukeys "E,E,D,E" --demo "W:1,S,Q"
+.\castle-doom.exe --autotest E1M1 C:\TMP\sp\n -skill 5 --demo "Y,D,W:25,Q"   # grep Respawn:
 ```
+
+Menu screenshots: `MENU`, `MENUEPISODE`, `MENUSKILL`, `MENUNIGHTMARE`,
+`MENULOAD`, `MENUOPTIONS`, `MENUDOOM2` save `<prefix>_<name>.png`.
+`MENUKEYS` drives the Doom menu with `--menukeys` (U up, D down, E enter,
+X escape, Y / N, S screenshot); the game it starts then runs `--demo`. Mouse
+hover is disabled in menu autotests (the real cursor over the window would
+move the selection). `-skill N` is Doom's 1..5; the log prints `Skill: Skill N`
+and `Things: ... N monsters` (E1M1: 17 / 29 / 46 for skills 1-2 / 3 / 4-5).
 
 Script commands: `F/B/L/R:sec` move, `T:deg` turn, `A:deg` absolute angle,
 `G:x:y` go to Doom coordinates, `U` use, `X` fire, `E` exit level, `N` next

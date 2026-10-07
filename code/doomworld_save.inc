@@ -91,6 +91,7 @@ begin
   Result.Add('map', FMap.Name);
   Result.Add('tic', FTic);
   Result.Add('bfgCountdown', FBfgCountdown);
+  Result.Add('skill', Skill);
   Result.Add('startX', Double(FDoomStartX));
   Result.Add('startY', Double(FDoomStartY));
   Result.Add('startAngle', Double(FDoomStartAngle));
@@ -260,6 +261,11 @@ begin
       AJ.Add('charging', A.Charging);
       AJ.Add('chargeTics', A.ChargeTics);
       AJ.Add('attackFired', A.AttackFired);
+      if A.Info^.Kind = tkMonster then
+      begin
+        AJ.Add('spawn', JsonFloatArray([A.SpawnX, A.SpawnY, A.SpawnAngle]));
+        AJ.Add('deadTics', A.DeadTics);
+      end;
       AJ.Add('collides', A.Collides);
       AJ.Add('pickable', A.Pickable);
       A.GetAnimation(SeqFrames, SeqIndex, SeqTics, SeqTicsLeft, SeqLoop);
@@ -351,6 +357,7 @@ var
 begin
   FTic := State.Get('tic', Int64(0));
   FBfgCountdown := State.Get('bfgCountdown', 0);
+  Skill := State.Get('skill', 2);
   FDoomStartX := State.Get('startX', Double(FDoomStartX));
   FDoomStartY := State.Get('startY', Double(FDoomStartY));
   FDoomStartAngle := State.Get('startAngle', Double(FDoomStartAngle));
@@ -494,6 +501,10 @@ begin
             A.Charging := AJ.Get('charging', false);
             A.ChargeTics := AJ.Get('chargeTics', 0);
             A.AttackFired := AJ.Get('attackFired', false);
+            A.SpawnX := ArrayItemFloat(ObjArray(AJ, 'spawn'), 0, A.DoomX);
+            A.SpawnY := ArrayItemFloat(ObjArray(AJ, 'spawn'), 1, A.DoomY);
+            A.SpawnAngle := ArrayItemFloat(ObjArray(AJ, 'spawn'), 2, A.Angle);
+            A.DeadTics := AJ.Get('deadTics', 0);
             A.Collides := AJ.Get('collides', Info^.Solid);
             A.Pickable := AJ.Get('pickable', false);
             A.SetAnimation(AJ.Get('frames', Info^.IdleFrames), AJ.Get('frameIndex', 0),

@@ -155,6 +155,8 @@ type
     procedure ExplodeMissile(const A: TDoomActor; const X, Y, Z: Single);
     procedure KillActor(const A: TDoomActor; const Killer: TDoomActor = nil; const ByPlayer: Boolean = true);
     procedure BossDeath(const A: TDoomActor);
+    procedure NightmareRespawn(const A: TDoomActor);
+    function SpawnFog(const X, Y, Z: Single; const Sec: Integer): TDoomActor;
     function SpawnMonster(const TypeNum: Integer; const X, Y, Z: Single): TDoomActor;
     procedure StartSkullCharge(const A: TDoomActor);
     procedure StopSkullCharge(const A: TDoomActor);
@@ -202,6 +204,9 @@ type
     { Upward distance the player still has to be thrown (Arch-vile blast);
       the view consumes it, gravity brings the player down. }
     PlayerKnockUp: Single;
+    { Skill level, Doom's gameskill: 0 "I'm too young to die" .. 4 "Nightmare!".
+      Set before LoadMap (things are spawned by it); saved with the game. }
+    Skill: Integer;
 
     constructor Create(const AWad: TDoomWad; const AGraphics: TDoomGraphics;
       const ASounds: TDoomSounds; const AItems: TCastleRootTransform);
@@ -575,6 +580,7 @@ begin
   FActors := TDoomActorList.Create(true);
   FMovers := TSectorMoverList.Create(true);
   FPlayerEmitter := TCastleTransform.Create(nil);
+  Skill := 2;
   ResetPlayer;
 end;
 
@@ -744,9 +750,16 @@ var
   Info: PThingInfo;
   A: TDoomActor;
   Sec: Integer;
+  SkillFlag: Integer;
 begin
   FHaveStart := false;
   N := 0;
+  { G_InitNew / P_SpawnMapThing: which THINGS flag the skill uses. }
+  case Skill of
+    0, 1: SkillFlag := MTF_EASY;
+    2: SkillFlag := MTF_NORMAL;
+    else SkillFlag := MTF_HARD;
+  end;
   Player.TotalKills := 0;
   Player.TotalItems := 0;
   Player.TotalSecrets := 0;
@@ -756,8 +769,7 @@ begin
   begin
     T := FMap.Things[I];
     if (T.Flags and MTF_NOTSINGLE) <> 0 then Continue;
-    { Skill "hurt me plenty". }
-    if (T.Flags and MTF_NORMAL) = 0 then Continue;
+    if (T.Flags and SkillFlag) = 0 then Continue;
     Info := FindThingInfo(T.TypeNum);
     if Info = nil then
     begin
@@ -782,6 +794,9 @@ begin
     A.DoomX := T.X;
     A.DoomY := T.Y;
     A.Angle := T.Angle;
+    A.SpawnX := T.X;
+    A.SpawnY := T.Y;
+    A.SpawnAngle := T.Angle;
     A.Sector := Sec;
     A.MapFlags := T.Flags;
     if Info^.Hanging then
@@ -1323,7 +1338,9 @@ begin
               end;
               A.State := asChase;
               A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
-              A.ReactionTics := 20 + Random1(35);
+              { A_Chase: on Nightmare monsters may attack again right away
+                (MF_JUSTATTACKED does not make them walk first). }
+              if Skill = 4 then A.ReactionTics := Random1(8) else A.ReactionTics := 20 + Random1(35);
             end;
           end;
         end;
@@ -1333,6 +1350,10 @@ begin
       FollowVileFire(A);
     if (A.Info^.Kind = tkMonster) and (A.State in [asIdle, asChase, asAttack]) then
       TicMonster(A);
+    if (A.Info^.Kind = tkMonster) and (A.State = asDead) and not A.Removed then
+      NightmareRespawn(A)
+    else
+      A.DeadTics := 0;
 
     { Follow moving floors. }
     if not A.Removed then
@@ -1561,7 +1582,8 @@ begin
         { Ambush monsters wait until they see you move into view; others also
           react to being in front. Keep it simple: sight wakes everyone. }
         A.Awake := true;
-        A.ReactionTics := Random1(8);
+        { P_SpawnMobj: no reaction time on Nightmare. }
+        if Skill = 4 then A.ReactionTics := 0 else A.ReactionTics := Random1(8);
       end else
         Exit;
     end;
@@ -1622,6 +1644,9 @@ begin
   Step := A.Info^.Speed / MoveFrameTics(A.Info^.Num);
   if A.Info^.Floats then
     Step := Step * 1.2;
+  { Nightmare halves the demons' walking frame tics: twice as fast. }
+  if (Skill = 4) and ((A.Info^.Num = 3002) or (A.Info^.Num = 58)) then
+    Step := Step * 2;
   Moved := false;
   Tries := 0;
   while (not Moved) and (Tries < 4) do
@@ -1663,6 +1688,8 @@ begin
   Result.DoomX := X;
   Result.DoomY := Y;
   Result.DoomZ := Z;
+  Result.SpawnX := X;
+  Result.SpawnY := Y;
   Result.Sector := Sec;
   Result.Awake := true;
   Result.SetLight(FMap.Sectors[Sec].LightLevel);
@@ -1804,6 +1831,67 @@ begin
   S.DoomZ := A.DoomZ + 8;
   WritelnLog('PainSkull', 'Pain Elemental spits a lost soul (%d alive)', [Count + 1]);
   StartSkullCharge(S);
+end;
+
+function TDoomWorld.SpawnFog(const X, Y, Z: Single; const Sec: Integer): TDoomActor;
+begin
+  Result := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekTeleFog]);
+  Result.State := asEffect;
+  Result.Bright := true;
+  Result.DoomX := X; Result.DoomY := Y; Result.DoomZ := Z;
+  Result.Sector := Sec;
+  Result.Collides := false; Result.Pickable := false;
+  Result.SetLight(255);
+  Result.PlaySequence('ABABCDEFGHIJ', 6, false);
+  Result.UpdateTransform;
+  FActors.Add(Result);
+  FItems.Add(Result);
+  FSounds.PlayAt('DSTELEPT', Result);
+end;
+
+{ P_MobjThinker / P_NightmareRespawn: on Nightmare a corpse that has lain for
+  12 seconds may come back at its map spot (teleport fog at both places),
+  checked every 32 tics with a 4/256 chance. }
+procedure TDoomWorld.NightmareRespawn(const A: TDoomActor);
+var
+  O, M: TDoomActor;
+  Sec: Integer;
+  Info: PThingInfo;
+begin
+  if Skill <> 4 then Exit;
+  Inc(A.DeadTics);
+  if A.DeadTics < 12 * TicRate then Exit;
+  if (FTic and 31) <> 0 then Exit;
+  if Random(256) > 4 then Exit;
+  { Lost souls and Pain Elementals leave no corpse, the boss brain stays dead. }
+  if (A.Info^.Num = 3006) or (A.Info^.Num = 71) or (A.Info^.Num = 88) then Exit;
+  Info := A.Info;
+  Sec := FMap.SectorAt(A.SpawnX, A.SpawnY);
+  if Sec < 0 then Exit;
+  { P_CheckPosition at the spawn spot. }
+  for O in FActors do
+    if (O <> A) and (not O.Removed) and O.Collides and
+       (O.Info^.Kind in [tkMonster, tkDecoration]) and
+       (Abs(O.DoomX - A.SpawnX) < O.Info^.Radius + Info^.Radius) and
+       (Abs(O.DoomY - A.SpawnY) < O.Info^.Radius + Info^.Radius) then
+      Exit;
+  if (not Player.Dead) and (Abs(Player.X - A.SpawnX) < PlayerRadius + Info^.Radius) and
+     (Abs(Player.Y - A.SpawnY) < PlayerRadius + Info^.Radius) then
+    Exit;
+
+  SpawnFog(A.DoomX, A.DoomY, A.DoomZ, A.Sector);
+  SpawnFog(A.SpawnX, A.SpawnY, FMap.Sectors[Sec].FloorHeight, Sec);
+  M := SpawnMonster(Info^.Num, A.SpawnX, A.SpawnY, FMap.Sectors[Sec].FloorHeight);
+  if M = nil then Exit;
+  M.Angle := A.SpawnAngle;
+  M.SpawnAngle := A.SpawnAngle;
+  M.MapFlags := A.MapFlags;
+  { Like a freshly spawned monster: asleep until it sees the player. }
+  M.Awake := false;
+  M.ReactionTics := 0;
+  M.UpdateTransform;
+  A.Removed := true;
+  WritelnLog('Respawn', '%s respawned at (%f, %f)', [Info^.Sprite, A.SpawnX, A.SpawnY]);
 end;
 
 function TDoomWorld.CanRaise(const Num: Integer): Boolean;
@@ -2094,6 +2182,8 @@ begin
   Len := Sqrt(DX * DX + DY * DY + DZ * DZ);
   if Len < 1 then Len := 1;
   Speed := EffectInfos[K].Speed;
+  { Nightmare / -fast: imp, cacodemon and baron balls fly at 20. }
+  if (Skill = 4) and (K in [ekBal1, ekBal2, ekBal7]) then Speed := 20;
   M.VelX := DX / Len * Speed;
   M.VelY := DY / Len * Speed;
   M.VelZ := DZ / Len * Speed;
@@ -2339,6 +2429,8 @@ begin
   if Player.Dead or (Damage <= 0) then Exit;
   if Player.InvulnerableTics > 0 then Exit;
   Dmg := Damage;
+  { P_DamageMobj: half damage for "I'm too young to die". }
+  if Skill = 0 then Dmg := Max(1, Dmg div 2);
   if Player.Armor > 0 then
   begin
     if Player.ArmorType = 2 then Saved := Dmg div 2 else Saved := Dmg div 3;
@@ -2848,7 +2940,11 @@ var
   function GiveAmmo(const T: TAmmoType; const Amount: Integer): Boolean;
   begin
     if Player.Ammo[T] >= Player.MaxAmmo[T] then Exit(false);
-    Player.Ammo[T] := Min(Player.MaxAmmo[T], Player.Ammo[T] + Amount);
+    { P_GiveAmmo: double ammo on the easiest and the Nightmare skill. }
+    if Skill in [0, 4] then
+      Player.Ammo[T] := Min(Player.MaxAmmo[T], Player.Ammo[T] + Amount * 2)
+    else
+      Player.Ammo[T] := Min(Player.MaxAmmo[T], Player.Ammo[T] + Amount);
     Result := true;
   end;
 

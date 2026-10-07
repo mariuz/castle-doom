@@ -69,6 +69,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
 - Doom's text font for messages, and the real intermission screen (level names, FINISHED,
   animated kills/items/secrets/time with sounds, par times, ENTERING).
+- Doom's own menu from the WAD's graphics: New Game, episode and skill select (all five
+  skills, with Nightmare's fast monsters and respawning), Load Game; `-skill 1..5`.
+  The Options page picks WADs, map and skill.
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used
   switches, corpses, monsters mid-fight, inventory and the automap.
@@ -81,7 +84,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no difficulty menu, no Icon of Sin, web
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no Icon of Sin, web
 saves last only until the page reloads, no glBSP `GL_` lumps or UDMF maps, the music synth
 approximates the OPL2.
 
@@ -135,7 +138,8 @@ code/doomhud.pas        status bar composition
 code/doomautomap.pas    automap (DrawPrimitive2D)
 code/doomfont.pas       STCFN text
 code/doomintermission.pas  intermission screen
-code/gameviewmenu.pas   title screen
+code/doommenu.pas       Doom's menu (M_* graphics): main, episode, skill, load
+code/gameviewmenu.pas   title screen: Doom menu and options
 code/gameviewplay.pas   viewport, navigation, HUD, input
 ```
 
