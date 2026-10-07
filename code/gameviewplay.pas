@@ -89,7 +89,7 @@ var
 
 { Saved game location: slot 0 is the quick save, 1..6 the F2/F3 slots.
   castle-config: is the user config directory on desktop (next to the log);
-  in the browser it is an in-memory store that lasts until the page reloads. }
+  in the browser GameSaveStorage keeps the text in localStorage under this URL. }
 function SaveSlotUrl(const Slot: Integer): String;
 { Read a saved game, nil when missing or unreadable. Caller owns the result. }
 function ReadSaveFile(const Url: String): TJSONObject;
@@ -102,7 +102,7 @@ uses Math, JsonParser,
   CastleImages,
   CastleUriUtils, X3DNodes,
   DoomGeometry, DoomMap,
-  GameViewMenu;
+  GameViewMenu, GameSaveStorage;
 
 const
   SlotMenuNone = 0;
@@ -120,51 +120,26 @@ end;
 
 function ReadSaveFile(const Url: String): TJSONObject;
 var
-  S: TStream;
-  Text: TStringStream;
+  Text: String;
   D: TJSONData;
 begin
   Result := nil;
+  if not SaveStorageRead(Url, Text) then Exit; { no such save }
   try
-    S := Download(Url);
+    D := GetJSON(Text);
+    if D is TJSONObject then
+      Result := TJSONObject(D)
+    else
+      FreeAndNil(D);
   except
-    Exit; { no such save }
-  end;
-  try
-    try
-      Text := TStringStream.Create('');
-      try
-        Text.CopyFrom(S, 0);
-        D := GetJSON(Text.DataString);
-        if D is TJSONObject then
-          Result := TJSONObject(D)
-        else
-          FreeAndNil(D);
-      finally
-        FreeAndNil(Text);
-      end;
-    except
-      on E: Exception do
-        WritelnWarning('Save', 'Cannot read %s: %s', [Url, E.Message]);
-    end;
-  finally
-    FreeAndNil(S);
+    on E: Exception do
+      WritelnWarning('Save', 'Cannot read %s: %s', [Url, E.Message]);
   end;
 end;
 
 procedure WriteSaveFile(const Url: String; const J: TJSONObject);
-var
-  S: TStream;
-  Text: String;
 begin
-  Text := J.AsJSON;
-  S := UrlSaveStream(Url);
-  try
-    if Text <> '' then
-      S.WriteBuffer(Text[1], Length(Text));
-  finally
-    FreeAndNil(S);
-  end;
+  SaveStorageWrite(Url, J.AsJSON);
 end;
 
 constructor TViewPlay.Create(AOwner: TComponent);
@@ -619,7 +594,7 @@ begin
     J.Add('saved', FormatDateTime('yyyy-mm-dd hh:nn', Now));
     try
       WriteSaveFile(SaveSlotUrl(Slot), J);
-      WritelnLog('Save', 'Saved %s to %s', [FMapName, SaveSlotUrl(Slot)]);
+      WritelnLog('Save', 'Saved %s to %s (%s)', [FMapName, SaveSlotUrl(Slot), SaveStorageName]);
       FWorld.ShowMessage('Game saved.');
     except
       on E: Exception do

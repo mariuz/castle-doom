@@ -506,15 +506,25 @@ flats and switch textures come out right), `SpawnThings` is skipped, and
 `RestoreDynamicState` recreates the player, movers, timers and actors and
 then resolves the actor references. The view adds the camera (position,
 direction including pitch, up), level time, the WAD list and a description,
-and writes compact JSON with `UrlSaveStream` to `castle-config:/save1..6.json`
-or `quicksave.json`; `ReadSaveFile` reads with `Download` and `GetJSON`.
+and writes compact JSON through `GameSaveStorage` to `castle-config:/save1..6.json`
+or `quicksave.json`; `ReadSaveFile` reads it back and parses with `GetJSON`.
 Loading refuses a save made with a different IWAD / PWAD set. The title
 screen's "Continue (quick save)" and `-loadgame N` load the save's WADs
 first, then hand the URL to the play view (`PendingSaveUrl`).
 
 On the desktop `castle-config:` is the user config directory (next to the
-log); in the browser CGE maps it to an in-memory file system, so web saves
-last only until the page reloads.
+log) and `GameSaveStorage` uses `UrlSaveStream` / `Download`. In the browser
+CGE maps `castle-config:` to an in-memory file system that disappears on
+reload, so under `{$ifdef WASI}` the unit talks to JavaScript instead: JOB
+(FPC's `job.js` WebAssembly-to-JS object bridge, which CGE's web target
+already uses for WebGL and the DOM) gives `JSWindow` from
+`CastleInternalJobWeb`; `ReadJSPropertyObject('localStorage', TJSObject)`
+returns the `Storage`, `setItem` stores the JSON under
+`castle-doom:` + the URL, and `getItem` is read with `InvokeJSValueResult`
+because it returns `null` for a missing key (the typed string call raises
+on `null`). If `localStorage` throws (blocked storage) the code falls back
+to the in-memory `castle-config:` and logs a warning. Six slots plus the
+quick save are under 1 MB, well inside the usual 5 MB per origin.
 
 ## 9. DoomSound: DMX sound effects
 
@@ -790,8 +800,8 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 - No finale screens: after E1M8 / MAP30 the game continues with the next
   map (MAP30 wraps to MAP01).
 - Doom's "donut" (special 9) only lowers the pillar.
-- No demo playback; web saves are not persistent across page reloads. The
-  in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
+- No demo playback; web saves live in one browser's `localStorage` (no
+  export / import). The in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
   `DoomMenu`.
 - Vanilla node format only. A blockmap-free design means all 2D queries scan
   all lines.
@@ -828,7 +838,8 @@ Where each engine feature is used, as a map for learning the engine:
 | `TCastleImageControl` (`Image`, `SmoothScaling`, `Stretch`), `TCastleLabel`, `TCastleRectangleControl`, `TCastleCrosshair`, `TCastleButton`, layout groups, `Anchor` | DoomHud, DoomMenu, GameViewPlay, GameViewMenu | 2D UI |
 | `TCastleUserInterface.Press` / `Motion` overrides, `RenderRect`, `InputKey` | DoomMenu, GameViewMenu | menu mouse input, scripted menu keys |
 | `Container.Pressed`, `Container.MousePressed`, `TInputPressRelease.IsKey/IsMouseButton/MouseWheelScroll` | GameViewPlay | input |
-| `UrlSaveStream`, `Download`, `castle-config:` | GameViewPlay | writing and reading save games |
+| `UrlSaveStream`, `Download`, `castle-config:` | GameSaveStorage | writing and reading save games (desktop) |
+| JOB (`Job.Js`, `CastleInternalJobWeb.JSWindow`, `ReadJSPropertyObject`, `InvokeJSValueResult`, `InvokeJSNoResult`) | GameSaveStorage | `localStorage` saves on the web |
 | FPC `fpjson` / `jsonparser` (`TJSONObject`, `GetJSON`) | doomworld_save.inc, GameViewPlay | save game format |
 | `TCastleUserInterface.Render`, `DrawPrimitive2D`, `DrawRectangle`, `RenderRect` | DoomAutomap | immediate-mode 2D drawing |
 | `Container.Fps`, `WritelnLog`, `WritelnWarning`, `Application.MainWindow.SaveScreen` | GameViewPlay, everywhere | diagnostics and screenshots |

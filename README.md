@@ -75,7 +75,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   The Options page picks WADs, map and skill.
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used
-  switches, corpses, monsters mid-fight, inventory and the automap.
+  switches, corpses, monsters mid-fight, inventory and the automap. In the browser saves
+  are kept in the page's `localStorage`, so they survive reloads.
 - External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-warp`), PWAD lumps
   overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
   `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`), so maps built with ZDBSP load too.
@@ -85,9 +86,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no finale screens, web
-saves last only until the page reloads, no glBSP `GL_` lumps or UDMF maps, the music synth
-approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no finale screens, no sound propagation
+or ambush flag, no glBSP `GL_` lumps or UDMF maps, the music synth approximates the OPL2.
 
 ## Build and run
 

@@ -138,6 +138,13 @@ Goertzel on semitone vs quarter-tone frequencies).
   `python tools/make_znodes.py C:\TMP\sp` and load each generated
   `e1m1_*.wad` with `-file`; the log must show "682 subsector polygons, total
   area 6712683" for every format. glBSP `GL_*` lumps and UDMF are not supported.
+- **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
+  installed here). Keep such blocks small, read FPC's
+  `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,
+  and check the Web workflow log after pushing. JOB's typed calls raise on a
+  JS `null` (use `InvokeJSValueResult` for `localStorage.getItem`). To test
+  the deployed page, open https://mariuz.github.io/castle-doom/play/ in the
+  browser pane; the browser console shows the CGE log.
 - **FPC on wasm32**: loop counters must be 32-bit (`Int64` loop variables do
   not compile there).
 - CGE log goes to `%LOCALAPPDATA%\castle-doom\castle-doom.log`; `WritelnLog`

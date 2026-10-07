@@ -6,6 +6,11 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Persistent web saves: in the browser the save JSON goes to the page's
+  `localStorage` (`GameSaveStorage`, through the JOB JavaScript bridge that
+  CGE's web target already uses), keyed `castle-doom:castle-config:/saveN.json`,
+  so saves on the Pages site survive reloads; the desktop still writes
+  `castle-config:` files.
 - Icon of Sin (MAP30): the boss shooter (89) wakes on sight or any shot,
   says `DSBOSSIT`, and after 181 tics spits a cube every 150 tics (every
   other one on the two easy skills) at the spawn spots (87) in turn; cubes
@@ -112,7 +117,7 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **glBSP `GL_` lumps** (`GL_VERT`, `GL_SEGS`, `GL_SSECT`, `GL_NODES` after a `GL_MAPxx` marker) and **UDMF** (`TEXTMAP`) maps. | Remaining community map formats. | `DoomMap` | M (glBSP), L (UDMF) |
 | **Boom/MBF specials** (generalized linedefs, scrolling floors, friction, translucency) and **DeHackEd** patches. | Big community map support; large job. | `DoomWorld.ApplySpecial`, `DoomThings` | L |
-| **Persistent web saves**: in the browser `castle-config:` is an in-memory store, so saves vanish on reload; store the JSON in `localStorage` (a small Pas2js/JS bridge) or offer download/upload of the save file. | Saves that survive on the Pages site. | `GameViewPlay` save I/O, web glue | S-M |
+| **Export / import saves on the web** (download the JSON, upload it back) so a save can move between browsers or to the desktop build. | Saves are tied to one browser profile. | `GameSaveStorage`, a file input via JOB | S |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -129,9 +134,9 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Persistent web saves (S-M): saves on the Pages site currently last only
-   until the page reloads.
-2. Sector sound propagation and the `MTF_AMBUSH` flag (M): monsters wake like
+1. Sector sound propagation and the `MTF_AMBUSH` flag (M): monsters wake like
    in Doom, which matters more now that the harder skills spawn more of them.
-3. Finales (M): end-of-episode text screens and the Doom 2 cast call, now
+2. Finales (M): end-of-episode text screens and the Doom 2 cast call, now
    that every boss level can be finished.
+3. Teleporting monsters (specials 125/126, monsters walking over
+   teleporters) (S): several Doom 2 maps send monsters through teleporters.
