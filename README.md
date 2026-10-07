@@ -55,8 +55,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Monsters wake up on sight or noise, chase (2D Doom-style movement with step/drop-off
   rules, they open doors), attack with melee, hitscan or projectiles, take pain, die,
   drop items. Barrels explode with splash damage.
-- Weapons: fist, chainsaw, pistol, shotgun, super shotgun, chaingun, rocket launcher,
-  plasma, BFG (projectile weapons are approximated as instant hits with splash).
+- Weapons: fist, chainsaw, pistol, shotgun, super shotgun, chaingun, and real projectiles
+  for the rocket launcher (splash damage), plasma gun and BFG (charge, ball, tracer spray).
 - Status bar with face, keys, arms, ammo table; weapon bobbing; damage and bonus flashes.
 - Music: MUS and MIDI lumps played through an FM synthesizer driven by the WAD's GENMIDI
   instrument bank (the AdLib / Sound Blaster sound of the original), title, level and
@@ -64,9 +64,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: player projectiles are approximated as
-instant hits, no monster infighting, no boss triggers, no automap, no save games, vanilla
-node format only, the music synth approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no monster infighting, no boss triggers,
+no automap, no save games, vanilla node format only, the music synth approximates the OPL2.
 
 ## Build and run
 

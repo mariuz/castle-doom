@@ -365,12 +365,18 @@ rockets. Damage applies pain (chance from the table) or death (death
 sequence, then a corpse that no longer collides); zombies drop ammo; barrels
 explode with radius damage.
 
-**Weapons** fire from the view's camera ray. `HitscanAttack` uses
-`Items.WorldRay`, which returns the first `TCastleTransform` hit and the
+**Weapons** fire from the view's camera ray. Hitscan weapons (`HitscanAttack`)
+use `Items.WorldRay`, which returns the first `TCastleTransform` hit and the
 distance; a hit `TDoomActor` takes damage and bleeds, a wall gets a bullet
 puff and may trigger a gun-activated line. The shotgun fires 7 pellets with
-horizontal spread, the super shotgun 20 with vertical spread too; rockets and
-the BFG are hitscans with splash damage (a simplification). Weapon animation
+horizontal spread, the super shotgun 20 with vertical spread too. The rocket
+launcher, plasma gun and BFG spawn real projectile actors
+(`SpawnPlayerMissile`: `MISL`, `PLSS`, `BFS1` sprites) that fly along the
+camera ray including its pitch, hit monsters and barrels (`FromPlayer`
+missiles never hit the player), and explode on walls, floors and ceilings;
+rockets add 128-unit splash damage, the BFG ball launches after Doom's 40-tic
+charge and on impact sprays 40 tracers over 90° from the player (`BfgSpray`,
+15d7 each, with the green `BFE2` flash on every target). Weapon animation
 frames and muzzle flashes are small per-weapon state tables in
 `UpdateWeaponAnimation`.
 
@@ -537,7 +543,8 @@ and quits. `--demo` runs a comma-separated script: `F:sec`/`B:sec`/`L:sec`/
 `R:sec` hold a movement key (through `Container.Pressed.KeyDown`, so the real
 navigation and collisions are exercised), `T:deg` turn, `A:deg` absolute
 angle, `G:x:y` teleport to Doom coordinates, `U` use, `X` fire, `E` exit the
-level, `N` next map, `S` screenshot (`PREFIX_n.png`), `W:sec` wait, `Q` quit.
+level, `N` next map, `K` give all weapons/ammo/keys, `C:n` select weapon n,
+`S` screenshot (`PREFIX_n.png`), `W:sec` wait, `Q` quit.
 The log (`%LOCALAPPDATA%\castle-doom\castle-doom.log` on Windows) records
 map/geometry/thing load times, music render times, and every screenshot with
 the player position.
@@ -590,8 +597,6 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 
 ## 18. Known gaps and ideas
 
-- Player projectiles (rockets, plasma, BFG) are hitscans with splash damage;
-  monster projectiles are real.
 - No monster infighting, no Arch-vile resurrection, Pain Elemental shoots
   cacodemon fireballs instead of spawning lost souls, no boss-death triggers
   (E1M8 doors, MAP07, Keen), no Icon of Sin.

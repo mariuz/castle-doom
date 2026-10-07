@@ -56,6 +56,8 @@ type
     SequenceDone: Boolean;
     { Set when the actor should be removed from the world. }
     Removed: Boolean;
+    { Missiles: fired by the player (hits monsters, never the player). }
+    FromPlayer: Boolean;
     { Fullbright sprite (explosions, projectiles, some items). }
     Bright: Boolean;
 

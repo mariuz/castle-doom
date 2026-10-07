@@ -4,11 +4,16 @@ Status as of October 2026. Each item says what is missing, why it matters,
 where it would go in the code, and a rough size (S = hours, M = a day,
 L = several days). Items inside a section are in suggested order.
 
+## Done since the first release
+
+- Player projectiles: rockets, plasma balls and the BFG ball (40-tic charge,
+  100d8 direct hit, 40-tracer spray over 90°) are real `TDoomActor` missiles
+  (`SpawnPlayerMissile`, `BfgSpray`); rockets keep their splash damage.
+
 ## 1. Gameplay fidelity (vanilla behaviour not yet reproduced)
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Player projectiles**: rocket launcher, plasma gun and BFG are instant hits with splash damage. Make them real `TDoomActor` missiles like the monsters' (`ekRocket` already exists), with the BFG's tracer spray. | Rockets you can dodge and see fly are a big part of the feel. | `DoomWorld.FireWeapon`, reuse `SpawnMissile`/`TicMissile` with the player as source | M |
 | **Monster infighting**: monsters hit by another monster's projectile or hitscan should retarget it. | Classic Doom tactic. | `DamageActor` needs an attacker parameter; `TicMonster` needs a target other than the player | M |
 | **Boss triggers**: E1M8 (barons dead opens tag 666 floor), E2M8/E3M8 level end, MAP07 (mancubi 666, arachnotrons 667), Keen (MAP32 doors). | Those levels cannot be finished properly without them. | `KillActor` counts per type; a per-map check in `TicActors` | S |
 | **Pain Elemental** should spawn lost souls instead of firing fireballs; lost souls should charge. | Doom 2 levels play differently without it. | `MonsterAttack`, a charge state in `TicMonster` | M |
@@ -69,8 +74,8 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Real player projectiles (M): most visible gameplay gap, small code since the
-   missile machinery exists.
-2. Automap (M): expected by everyone who plays Doom, and a nice CGE 2D demo.
-3. External WAD loading (M): turns the demo into something people can use with
+1. Automap (M): expected by everyone who plays Doom, and a nice CGE 2D demo.
+2. External WAD loading (M): turns the demo into something people can use with
    their own IWADs and PWADs.
+3. Monster infighting and boss triggers (M + S): the remaining big behaviour
+   gaps on the original levels.

@@ -58,6 +58,11 @@ type
 
   TDoomWorld = class;
 
+  { Projectiles and visual effects spawned by the world (not in THINGS). }
+  TEffectKind = (ekPuff, ekBlood, ekTeleFog, ekBarrelExplosion,
+    ekBal1, ekBal2, ekBal7, ekRocket, ekRevenantRocket, ekFatShot, ekArachPlasma,
+    ekPlasmaBall, ekBfgBall);
+
   TMoverKind = (mkDoor, mkLift, mkFloor, mkCeiling, mkCrusher);
   TMoverPhase = (mpMoving, mpWaiting, mpDone);
 
@@ -120,6 +125,7 @@ type
     FHaveRay: Boolean;
     FDoomStartX, FDoomStartY, FDoomStartAngle: Single;
     FHaveStart: Boolean;
+    FBfgCountdown: Integer;
     FDynamic: array of Boolean;
     procedure ComputeDynamicSectors;
     procedure SpawnThings;
@@ -139,6 +145,9 @@ type
     procedure MonsterAttack(const A: TDoomActor);
     procedure MonsterHitscan(const A: TDoomActor);
     procedure SpawnMissile(const A: TDoomActor);
+    procedure SpawnPlayerMissile(const Kind: TEffectKind);
+    procedure BfgSpray(const X, Y: Single);
+    procedure ExplodeMissile(const A: TDoomActor; const X, Y, Z: Single);
     procedure KillActor(const A: TDoomActor);
     procedure ExplodeBarrel(const A: TDoomActor);
     procedure RadiusDamage(const X, Y, Z: Single; const Radius, Damage: Integer; const Source: TDoomActor);
@@ -192,6 +201,8 @@ type
     procedure DamagePlayer(const Damage: Integer; const FromActor: TDoomActor);
     procedure DamageActor(const A: TDoomActor; const Damage: Integer; const HitX, HitY, HitZ: Single);
     procedure ResetPlayer;
+    { Cheat for testing: all weapons, full ammo, keys. }
+    procedure GiveAll;
     function AmmoFor(const W: TWeapon): TAmmoType;
     function WeaponSprite(const W: TWeapon): String;
     function FlashSprite(const W: TWeapon): String;
@@ -225,10 +236,6 @@ const
   FloorSpeed = 1;
   CeilSpeed = 1;
   ManualDoorSpecials: array [0..9] of Integer = (1, 26, 27, 28, 31, 32, 33, 34, 117, 118);
-
-type
-  TEffectKind = (ekPuff, ekBlood, ekTeleFog, ekBarrelExplosion,
-    ekBal1, ekBal2, ekBal7, ekRocket, ekRevenantRocket, ekFatShot, ekArachPlasma);
 
 var
   EffectInfos: array [TEffectKind] of TThingInfo;
@@ -276,6 +283,9 @@ begin
   Missile(ekRevenantRocket, 'FATB', 11, 10, 10, 8, 'AB', 'ABC', 'FBXP', 'DSSKEATK', 'DSBAREXP');
   Missile(ekFatShot, 'MANF', 6, 20, 8, 8, 'AB', 'BCD', 'MISL', 'DSFIRSHT', 'DSFIRXPL');
   Missile(ekArachPlasma, 'APLS', 13, 25, 5, 8, 'AB', 'ABCDE', 'APBX', 'DSPLASMA', 'DSFIRXPL');
+  { The player's projectiles (info.c: MT_PLASMA, MT_BFG). }
+  Missile(ekPlasmaBall, 'PLSS', 13, 25, 5, 8, 'AB', 'ABCDE', 'PLSE', 'DSPLASMA', 'DSFIRXPL');
+  Missile(ekBfgBall, 'BFS1', 13, 25, 100, 8, 'AB', 'ABCDEF', 'BFE1', 'DSBFG', 'DSRXPLOD');
 end;
 
 function NextMapName(const Current: String; const Secret: Boolean; const IsDoom2: Boolean): String;
@@ -554,6 +564,20 @@ begin
   Player.FlashFrame := #0;
 end;
 
+procedure TDoomWorld.GiveAll;
+var
+  A: TAmmoType;
+begin
+  Player.Weapons := [wpFist, wpChainsaw, wpPistol, wpShotgun, wpSuperShotgun, wpChaingun, wpMissile, wpPlasma, wpBfg];
+  Player.MaxAmmo[amClip] := 400; Player.MaxAmmo[amShell] := 100;
+  Player.MaxAmmo[amCell] := 600; Player.MaxAmmo[amMisl] := 100;
+  for A := amClip to amMisl do Player.Ammo[A] := Player.MaxAmmo[A];
+  Player.Keys := [keyBlue, keyYellow, keyRed, skullBlue, skullYellow, skullRed];
+  Player.Health := 200;
+  Player.Armor := 200;
+  Player.ArmorType := 2;
+end;
+
 function TDoomWorld.MapLoaded: Boolean;
 begin
   Result := FMap <> nil;
@@ -794,6 +818,7 @@ begin
   FOldPlayerY := Player.Y;
   FExitRequested := false;
   FSecretExit := false;
+  FBfgCountdown := 0;
   FTic := 0;
   FTicAccum := 0;
   { Light effect sectors. }
@@ -1079,6 +1104,12 @@ begin
   if Player.RadSuitTics > 0 then Dec(Player.RadSuitTics);
   if Player.LightAmpTics > 0 then Dec(Player.LightAmpTics);
   UpdateWeaponAnimation;
+  if FBfgCountdown > 0 then
+  begin
+    Dec(FBfgCountdown);
+    if (FBfgCountdown = 0) and not Player.Dead then
+      SpawnPlayerMissile(ekBfgBall);
+  end;
   if Player.Dead then Exit;
 
   Sec := Player.Sector;
@@ -1579,7 +1610,7 @@ var
   L: TDoomLinedef;
   V1, V2: TDoomVertex;
   Hit: Boolean;
-  DeathSprite: String;
+  O: TDoomActor;
 begin
   if A.State <> asMissile then Exit;
   NX := A.DoomX + A.VelX;
@@ -1587,6 +1618,21 @@ begin
   NZ := A.DoomZ + A.VelZ;
   Hit := false;
 
+  if A.FromPlayer then
+  begin
+    { Monsters and barrels in the way. }
+    for O in FActors do
+      if (O <> A) and (not O.Removed) and O.Pickable and (O.State in [asIdle, asChase, asAttack, asPain]) and
+         ((O.Info^.Kind = tkMonster) or (O.Info^.Num = 2035)) and
+         (Abs(O.DoomX - NX) < O.Info^.Radius + A.Info^.Radius) and
+         (Abs(O.DoomY - NY) < O.Info^.Radius + A.Info^.Radius) and
+         (NZ > O.DoomZ - 8) and (NZ < O.DoomZ + O.Info^.Height + 8) then
+      begin
+        DamageActor(O, Dice(A.MissileDamageDice, A.MissileDamageFaces), NX, NY, NZ);
+        Hit := true;
+        Break;
+      end;
+  end else
   { The player? }
   if (not Player.Dead) and (Abs(Player.X - NX) < PlayerRadius + A.Info^.Radius) and
      (Abs(Player.Y - NY) < PlayerRadius + A.Info^.Radius) and
@@ -1638,15 +1684,114 @@ begin
   A.DoomY := NY;
   A.DoomZ := NZ;
   if Hit then
+    ExplodeMissile(A, NX, NY, NZ);
+end;
+
+procedure TDoomWorld.ExplodeMissile(const A: TDoomActor; const X, Y, Z: Single);
+var
+  DeathSprite: String;
+begin
+  A.State := asDying;
+  DeathSprite := A.Info^.MoveFrames;
+  if DeathSprite <> '' then A.SpritePrefix := DeathSprite;
+  A.PlaySequence(A.Info^.DeathFrames, 6, false);
+  if A.Info^.DeathSound <> '' then FSounds.PlayAt(A.Info^.DeathSound, A);
+  if A.Info^.Sprite = 'MISL' then
+    RadiusDamage(X, Y, Z, 128, 128, A);
+  if A.Info = @EffectInfos[ekBfgBall] then
+    BfgSpray(X, Y);
+  A.VelX := 0; A.VelY := 0; A.VelZ := 0;
+end;
+
+procedure TDoomWorld.SpawnPlayerMissile(const Kind: TEffectKind);
+var
+  M: TDoomActor;
+  Dir, Origin: TVector3;
+  D, O: TVector3;
+  Speed: Single;
+begin
+  if not FHaveRay then Exit;
+  Dir := FRayDir.Normalize;
+  { Launch a little in front of the eyes, slightly below the view line like Doom's missiles. }
+  Origin := FRayOrigin + Dir * 20;
+  D := CgeToDoom(Dir);
+  O := CgeToDoom(Origin);
+  M := TDoomActor.Create(nil, FGraphics, @EffectInfos[Kind]);
+  M.State := asMissile;
+  M.FromPlayer := true;
+  M.Bright := true;
+  M.DoomX := O.X;
+  M.DoomY := O.Y;
+  M.DoomZ := O.Z - 8;
+  M.Sector := FMap.SectorAt(O.X, O.Y);
+  Speed := EffectInfos[Kind].Speed;
+  M.VelX := D.X * Speed;
+  M.VelY := D.Y * Speed;
+  M.VelZ := D.Z * Speed;
+  M.MissileDamageDice := EffectInfos[Kind].DamageDice;
+  M.MissileDamageFaces := EffectInfos[Kind].DamageFaces;
+  M.Angle := RadToDeg(ArcTan2(D.Y, D.X));
+  M.Collides := false;
+  M.Pickable := false;
+  M.SetLight(255);
+  M.UpdateTransform;
+  FActors.Add(M);
+  FItems.Add(M);
+  if EffectInfos[Kind].AttackSound <> '' then
+    FSounds.Play(EffectInfos[Kind].AttackSound);
+end;
+
+procedure TDoomWorld.BfgSpray(const X, Y: Single);
+const
+  Tracers = 40;
+  ConeDeg = 90;
+var
+  I: Integer;
+  BaseAngle, Ang, Best, Dist, AngTo, Half: Single;
+  O, Target: TDoomActor;
+  Fx: TDoomActor;
+begin
+  { A_BFGSpray: 40 tracers fanned over 90 degrees from the player towards the
+    explosion; each hits the first monster on its ray and deals 15d7. }
+  BaseAngle := RadToDeg(ArcTan2(Y - Player.Y, X - Player.X));
+  for I := 0 to Tracers - 1 do
   begin
-    A.State := asDying;
-    DeathSprite := A.Info^.MoveFrames;
-    if DeathSprite <> '' then A.SpritePrefix := DeathSprite;
-    A.PlaySequence(A.Info^.DeathFrames, 6, false);
-    if A.Info^.DeathSound <> '' then FSounds.PlayAt(A.Info^.DeathSound, A);
-    if A.Info^.Sprite = 'MISL' then
-      RadiusDamage(NX, NY, NZ, 128, 128, A);
-    A.VelX := 0; A.VelY := 0; A.VelZ := 0;
+    Ang := BaseAngle - ConeDeg / 2 + ConeDeg * I / (Tracers - 1);
+    Target := nil;
+    Best := 1024;
+    for O in FActors do
+      if (not O.Removed) and O.Pickable and (O.State in [asIdle, asChase, asAttack, asPain]) and
+         ((O.Info^.Kind = tkMonster) or (O.Info^.Num = 2035)) then
+      begin
+        Dist := Sqrt(Sqr(O.DoomX - Player.X) + Sqr(O.DoomY - Player.Y));
+        if (Dist >= Best) or (Dist < 1) then Continue;
+        AngTo := RadToDeg(ArcTan2(O.DoomY - Player.Y, O.DoomX - Player.X));
+        Half := RadToDeg(ArcTan2(O.Info^.Radius, Dist));
+        AngTo := AngTo - Ang;
+        AngTo := AngTo - 360 * Round(AngTo / 360);
+        if Abs(AngTo) <= Half then
+        begin
+          Target := O;
+          Best := Dist;
+        end;
+      end;
+    if (Target <> nil) and SightClear(Player.X, Player.Y, Target.DoomX, Target.DoomY) then
+    begin
+      DamageActor(Target, Dice(15, 7), Target.DoomX, Target.DoomY, Target.DoomZ + Target.Info^.Height / 2);
+      { The green BFG "hit" flash on each sprayed target. }
+      Fx := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekBarrelExplosion]);
+      Fx.SpritePrefix := 'BFE2';
+      Fx.State := asEffect;
+      Fx.Bright := true;
+      Fx.DoomX := Target.DoomX; Fx.DoomY := Target.DoomY; Fx.DoomZ := Target.DoomZ + Target.Info^.Height / 4;
+      Fx.Sector := Target.Sector;
+      Fx.Collides := false; Fx.Pickable := false;
+      Fx.SetLight(255);
+      Fx.PlaySequence('ABCD', 4, false);
+      Fx.UpdateTransform;
+      FActors.Add(Fx);
+      FItems.Add(Fx);
+    end;
   end;
 end;
 
@@ -1986,22 +2131,20 @@ begin
     wpMissile:
       begin
         Player.AttackTics := 32;
-        FSounds.Play('DSRLAUNC');
-        FSounds.Play('DSBAREXP');
-        HitscanAttack(FRayOrigin, Dir, Dice(20, 8), 128);
+        SpawnPlayerMissile(ekRocket);
       end;
     wpPlasma:
       begin
         Player.AttackTics := 8;
-        FSounds.Play('DSPLASMA');
-        HitscanAttack(FRayOrigin, Dir, Dice(5, 8), 0);
+        SpawnPlayerMissile(ekPlasmaBall);
       end;
     wpBfg:
       begin
+        { Doom charges the BFG for 40 tics (sound at the trigger pull),
+          then launches the ball. }
         Player.AttackTics := 60;
         FSounds.Play('DSBFG');
-        FSounds.Play('DSRXPLOD');
-        HitscanAttack(FRayOrigin, Dir, Dice(100, 8), 300);
+        FBfgCountdown := 40;
       end;
   end;
   Player.Refire := true;

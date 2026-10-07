@@ -243,7 +243,8 @@ end;
 { Scripted actions for automated testing (--demo "F:2,T:90,U,X,S,W:1").
   F:sec forward, B:sec backward, L:sec strafe left, R:sec strafe right,
   T:deg turn, A:deg absolute angle, G:x:y go to Doom map position,
-  U use, X fire, S screenshot, W:sec wait, Q quit. }
+  U use, X fire, S screenshot, W:sec wait, Q quit, E exit level, N next map,
+  K give all weapons/ammo/keys, C:n select weapon n (1-9). }
 procedure TViewPlay.RunDemo(const SecondsPassed: Single);
 var
   Step, Cmd, Rest, KeyStr: String;
@@ -317,6 +318,22 @@ begin
     Sec := FWorld.Map.SectorAt(Arg, Arg2);
     if Sec >= 0 then
       PlacePlayer(Arg, Arg2, FWorld.Map.Sectors[Sec].FloorHeight, DoomAngleFromCamera);
+  end
+  else if Cmd = 'K' then
+    FWorld.GiveAll
+  else if Cmd = 'C' then
+  begin
+    case Round(Arg) of
+      1: FWorld.SelectWeapon(wpFist);
+      2: FWorld.SelectWeapon(wpPistol);
+      3: FWorld.SelectWeapon(wpShotgun);
+      4: FWorld.SelectWeapon(wpChaingun);
+      5: FWorld.SelectWeapon(wpMissile);
+      6: FWorld.SelectWeapon(wpPlasma);
+      7: FWorld.SelectWeapon(wpBfg);
+      8: FWorld.SelectWeapon(wpChainsaw);
+      9: FWorld.SelectWeapon(wpSuperShotgun);
+    end;
   end
   else if Cmd = 'U' then
   begin
