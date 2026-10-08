@@ -176,11 +176,20 @@ Goertzel on semitone vs quarter-tone frequencies).
   JS `null` (use `InvokeJSValueResult` for `localStorage.getItem`). To test
   the deployed page, open https://mariuz.github.io/castle-doom/play/ in the
   browser pane; the browser console shows the CGE log.
-- **No pixel read-back under WebGL in CGE**: `SaveScreen_NoFlush` has a
-  "TODO: web" where `glReadPixels` would be, so `Container.SaveScreen` gives an
-  empty image in the browser. Keep screen captures on the GPU
+- **No pixel read-back under WebGL in CGE** (until castle-engine/castle-engine
+  PR #738, "Implement SaveScreen_NoFlush (glReadPixels) for WebGL", is merged
+  and reaches the snapshot): `SaveScreen_NoFlush` has a "TODO: web" where
+  `glReadPixels` would be, so `Container.SaveScreen` gives an empty image in
+  the browser. Keep screen captures on the GPU
   (`TDrawableImage.RenderToImageBegin` + `Container.RenderControl`, as the
   melt does). `TGLRenderToTexture` with `tbNone` raised an exception there.
+- **Testing an engine patch on the web**: a throwaway branch whose
+  `web.yml` copies the patched CGE file over the snapshot, uploads
+  `castle-engine-output/web/dist` as an artifact (no deploy job), run with
+  `gh workflow run web.yml --ref <branch>`; `gh run download` it and serve it
+  with `python -m http.server` (a `.claude/launch.json` entry) to open in the
+  browser pane. The console filter of the browser tools is a plain substring,
+  not a regex.
 - **Exceptions abort the WebAssembly program**: FPC's wasm32 target has no
   setjmp/longjmp, so any raised exception (even inside `try`/`except`)
   stops the web build ("Runtime error 217", "LONGJMP not supported"). Code
