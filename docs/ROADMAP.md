@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Monster bullets are traced like Doom (`P_AimLineAttack` / `P_LineAttack`):
+  the monster faces its target, aims at its middle when in sight, and every
+  pellet gets Doom's +-22.4 degree spread (+-45 degrees more against an
+  invisible player); `TraceLineAttack` finds the first wall (one-sided, or
+  above / below an opening) or body (monster, barrel, player) on the line,
+  in Doom units. Monsters in the line of fire take the shot and fight back,
+  misses leave puffs on the walls, and ledges block shots. Melee attacks also
+  need a line of sight.
 - The screen melt captures the old screen off-screen (an FBO via
   `TGLRenderToTexture`, `Container.RenderControl`) and skips the frame that
   started it, then follows real time. In the browser this capture raised an
@@ -199,10 +207,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Monster hitscan and melee through `CheckSight` and Doom's `P_AimLineAttack`
-   slopes (S-M): monster bullets currently hit by chance once the monster
-   decided it sees you; aim height and blocking ledges are not traced.
-2. Screen melt on the web (S): find the failing capture step without
+1. Screen melt on the web (S): find the failing capture step without
    exceptions.
-3. Light diminishing as a shader (`COLORMAP`) instead of fog (M): the
+2. Light diminishing as a shader (`COLORMAP`) instead of fog (M): the
    authentic look of Doom's lighting.
+3. The player's hitscan through `TraceLineAttack` with Doom's autoaim (S):
+   it still uses CGE's ray against the rendered quads, which face the
+   camera and can miss a monster seen edge-on in another monster's shot.

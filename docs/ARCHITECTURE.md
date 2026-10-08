@@ -482,7 +482,11 @@ and 97 and the monster-only 125 / 126, checked against a per-map list of
 such lines after every step; `TeleportActor` moves them to the tagged
 sector's teleport destination with fog at both ends and refuses while the
 spot is occupied, except on MAP30 where monsters telefrag), and attack when close (melee), when they
-have line of sight (hitscan with a distance-based hit chance), or by spawning
+have line of sight (hitscan: `MonsterHitscan` turns to the target, takes
+the slope to its middle when `SightToTarget` passes, and traces every pellet
+with Doom's random spread through `TraceLineAttack`, a Doom-units line
+attack that stops at the first wall, opening edge or body, so monsters in
+the way are hit and walls get puffs), or by spawning
 a projectile actor (`SpawnMissile`: imp, cacodemon, baron, cyberdemon,
 revenant, mancubus, arachnotron). Projectiles fly as actors (`TicMissile`),
 explode on walls, floors, ceilings or the player, with splash damage for

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.3 (2026-10-08)
+
+- Monster bullets are traced like Doom: aimed at you, with Doom's random
+  spread per pellet, stopped by the first wall or body on the way. Monsters
+  standing in the line of fire take the hit (and start fights), misses
+  leave puffs on the walls, and ledges block shots. Partial invisibility
+  throws their aim off like in Doom. Melee needs a line of sight.
+
 ## v0.2.2 (2026-10-08)
 
 - No more freeze at a level start while the music is synthesized (in the

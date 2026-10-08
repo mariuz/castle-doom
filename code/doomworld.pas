@@ -183,6 +183,13 @@ type
     function MonsterLook(const A: TDoomActor; out Reason: String): Boolean;
     procedure MonsterAttack(const A: TDoomActor);
     procedure MonsterHitscan(const A: TDoomActor);
+    { P_LineAttack in Doom units: from (X, Y, Z) along Angle (degrees) with
+      Slope (height per unit of distance) up to Range. Returns the nearest
+      body hit (a shootable actor, or the player when HitPlayer) or, when
+      none comes first, the wall point (HitWall). Shooter is never hit. }
+    procedure TraceLineAttack(const Shooter: TDoomActor; const X, Y, Z, Angle, Slope, Range: Single;
+      out HitActor: TDoomActor; out HitPlayer, HitWall: Boolean; out HX, HY, HZ: Single);
+    procedure SpawnPuff(const X, Y, Z: Single);
     procedure SpawnMissile(const A: TDoomActor);
     procedure SpawnPlayerMissile(const Kind: TEffectKind);
     procedure BfgSpray(const X, Y: Single);
@@ -2655,7 +2662,7 @@ begin
       begin
         if A.Info^.AttackSound <> '' then FSounds.PlayAt(A.Info^.AttackSound, A);
         TargetPosition(A, TX, TY, TZ, TR);
-        if Sqrt(Sqr(TX - A.DoomX) + Sqr(TY - A.DoomY)) < 64 + A.Info^.Radius then
+        if (Sqrt(Sqr(TX - A.DoomX) + Sqr(TY - A.DoomY)) < 64 + A.Info^.Radius) and SightToTarget(A) then
         begin
           if A.Target = nil then
             DamagePlayer(Dice(A.Info^.DamageDice, A.Info^.DamageFaces), A)
@@ -2669,53 +2676,132 @@ begin
   end;
 end;
 
+{ A_PosAttack / A_SPosAttack / A_CPosAttack: face the target (an invisible
+  player makes the aim wander by up to 45 degrees), take the slope to it
+  (P_AimLineAttack: to its middle when it is in sight, level otherwise),
+  then every pellet is fired with Doom's +-22.4 degree spread and traced
+  (P_LineAttack): the first wall or body on the way takes it, so a monster
+  standing in the line of fire gets hit and fights back. }
 procedure TDoomWorld.MonsterHitscan(const A: TDoomActor);
+const
+  Range = 2048; { MISSILERANGE }
 var
-  Dist, Chance, TX, TY, TZ, TR, Len, T, PX, PY, D: Single;
-  Shots, I: Integer;
-  O, Blocker: TDoomActor;
-  BlockerT: Single;
+  TX, TY, TZ, TR, TH, Dist, ShootZ, Slope, Aim, Ang, HX, HY, HZ: Single;
+  Shots, I, Damage: Integer;
+  HitActor: TDoomActor;
+  HitPlayer, HitWall: Boolean;
 begin
   if A.Info^.AttackSound <> '' then FSounds.PlayAt(A.Info^.AttackSound, A);
   TargetPosition(A, TX, TY, TZ, TR);
-  Dist := Sqrt(Sqr(TX - A.DoomX) + Sqr(TY - A.DoomY));
-  Chance := Clamped(0.55 - Dist / 2000, 0.1, 0.55);
-  if (A.Target = nil) and (Player.InvisibleTics > 0) then Chance := Chance * 0.4;
+  if A.Target = nil then TH := PlayerHeight else TH := A.Target.Info^.Height;
+  Aim := RadToDeg(ArcTan2(TY - A.DoomY, TX - A.DoomX));
+  if (A.Target = nil) and (Player.InvisibleTics > 0) then
+    Aim := Aim + (Random(256) - Random(256)) * 44.8 / 255;
+  A.Angle := Aim;
+  ShootZ := A.DoomZ + A.Info^.Height / 2 + 8;
+  Dist := Max(1, Sqrt(Sqr(TX - A.DoomX) + Sqr(TY - A.DoomY)));
+  if SightToTarget(A) then
+    Slope := (TZ + TH / 2 - ShootZ) / Dist
+  else
+    Slope := 0;
   Shots := 1;
   if A.Info^.Num in [9, 7] then Shots := 3;
-
-  { Another monster standing in the line of fire takes the bullets instead
-    (that is how zombies start fights in Doom). }
-  Blocker := nil;
-  BlockerT := 1;
-  if Dist > 1 then
-    for O in FActors do
-      if (O <> A) and (O <> A.Target) and (not O.Removed) and (O.Info^.Kind = tkMonster) and
-         (O.State in [asIdle, asChase, asAttack, asPain]) then
-      begin
-        T := ((O.DoomX - A.DoomX) * (TX - A.DoomX) + (O.DoomY - A.DoomY) * (TY - A.DoomY)) / Sqr(Dist);
-        if (T <= 0.05) or (T >= BlockerT) then Continue;
-        PX := A.DoomX + (TX - A.DoomX) * T;
-        PY := A.DoomY + (TY - A.DoomY) * T;
-        D := Sqrt(Sqr(O.DoomX - PX) + Sqr(O.DoomY - PY));
-        if D < O.Info^.Radius then
-        begin
-          Blocker := O;
-          BlockerT := T;
-        end;
-      end;
-
   for I := 1 to Shots do
-    if Random < Chance then
+  begin
+    Ang := Aim + (Random(256) - Random(256)) * 22.4 / 255;
+    TraceLineAttack(A, A.DoomX, A.DoomY, ShootZ, Ang, Slope, Range, HitActor, HitPlayer, HitWall, HX, HY, HZ);
+    Damage := Dice(A.Info^.DamageDice, A.Info^.DamageFaces);
+    if HitPlayer then
+      DamagePlayer(Damage, A)
+    else if HitActor <> nil then
+      DamageActor(HitActor, Damage, HX, HY, HZ, A, false)
+    else if HitWall then
+      SpawnPuff(HX, HY, HZ);
+  end;
+end;
+
+procedure TDoomWorld.TraceLineAttack(const Shooter: TDoomActor; const X, Y, Z, Angle, Slope, Range: Single;
+  out HitActor: TDoomActor; out HitPlayer, HitWall: Boolean; out HX, HY, HZ: Single);
+var
+  DX, DY, EX, EY, T, Best, Along, Side, Zh, OpenTop, OpenBottom: Single;
+  I, F, B: Integer;
+  L: TDoomLinedef;
+  V1, V2: TDoomVertex;
+  O: TDoomActor;
+  MinX, MaxX, MinY, MaxY: Single;
+begin
+  HitActor := nil;
+  HitPlayer := false;
+  HitWall := false;
+  DX := Cos(DegToRad(Angle));
+  DY := Sin(DegToRad(Angle));
+  EX := X + DX * Range;
+  EY := Y + DY * Range;
+  Best := Range; { distance to the nearest hit so far }
+
+  { Walls: a one-sided line, or a two-sided one passed above or below its
+    opening (PTR_ShootTraverse). }
+  MinX := Min(X, EX); MaxX := Max(X, EX);
+  MinY := Min(Y, EY); MaxY := Max(Y, EY);
+  for I := 0 to High(FMap.Linedefs) do
+  begin
+    L := FMap.Linedefs[I];
+    V1 := FMap.Vertices[L.V1];
+    V2 := FMap.Vertices[L.V2];
+    if (Max(V1.X, V2.X) < MinX) or (Min(V1.X, V2.X) > MaxX) or
+       (Max(V1.Y, V2.Y) < MinY) or (Min(V1.Y, V2.Y) > MaxY) then Continue;
+    if not SegmentsIntersect(X, Y, EX, EY, V1.X, V1.Y, V2.X, V2.Y, T) then Continue;
+    Along := T * Range;
+    if Along >= Best then Continue;
+    Zh := Z + Slope * Along;
+    F := L.FrontSector;
+    B := L.BackSector;
+    if (F >= 0) and (B >= 0) then
     begin
-      if Blocker <> nil then
-        DamageActor(Blocker, Dice(A.Info^.DamageDice, A.Info^.DamageFaces),
-          Blocker.DoomX, Blocker.DoomY, Blocker.DoomZ + 32, A, false)
-      else if A.Target = nil then
-        DamagePlayer(Dice(A.Info^.DamageDice, A.Info^.DamageFaces), A)
-      else
-        DamageActor(A.Target, Dice(A.Info^.DamageDice, A.Info^.DamageFaces), TX, TY, TZ + 32, A, false);
+      OpenTop := Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight);
+      OpenBottom := Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight);
+      if (Zh > OpenBottom) and (Zh < OpenTop) then Continue; { through the opening }
     end;
+    Best := Along;
+    HitWall := true;
+  end;
+
+  { Bodies: the nearest one whose box the 2D line crosses at a height
+    inside it (PTR_ShootTraverse for things). }
+  for O in FActors do
+  begin
+    if (O = Shooter) or O.Removed or not O.Pickable then Continue;
+    if not (O.State in [asIdle, asChase, asAttack, asPain]) then Continue;
+    Along := (O.DoomX - X) * DX + (O.DoomY - Y) * DY;
+    if (Along <= 0) or (Along >= Best) then Continue;
+    Side := Abs((O.DoomX - X) * DY - (O.DoomY - Y) * DX);
+    if Side > O.Info^.Radius then Continue;
+    Zh := Z + Slope * Along;
+    if (Zh < O.DoomZ) or (Zh > O.DoomZ + O.Info^.Height) then Continue;
+    Best := Along;
+    HitActor := O;
+    HitWall := false;
+  end;
+  if (Shooter <> nil) and not Player.Dead then
+  begin
+    Along := (Player.X - X) * DX + (Player.Y - Y) * DY;
+    Side := Abs((Player.X - X) * DY - (Player.Y - Y) * DX);
+    Zh := Z + Slope * Along;
+    if (Along > 0) and (Along < Best) and (Side <= PlayerRadius) and
+       (Zh >= Player.Z) and (Zh <= Player.Z + PlayerHeight) then
+    begin
+      Best := Along;
+      HitPlayer := true;
+      HitActor := nil;
+      HitWall := false;
+    end;
+  end;
+
+  { The hit point; a wall puff a little in front of the wall. }
+  if HitWall then Best := Max(0, Best - 4);
+  HX := X + DX * Best;
+  HY := Y + DY * Best;
+  HZ := Z + Slope * Best;
 end;
 
 procedure TDoomWorld.SpawnMissile(const A: TDoomActor);
@@ -3342,10 +3428,27 @@ begin
   end;
 end;
 
+procedure TDoomWorld.SpawnPuff(const X, Y, Z: Single);
+var
+  Puff: TDoomActor;
+begin
+  Puff := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekPuff]);
+  Puff.State := asEffect;
+  Puff.Bright := true;
+  Puff.DoomX := X; Puff.DoomY := Y; Puff.DoomZ := Z - 4;
+  Puff.Sector := FMap.SectorAt(X, Y);
+  Puff.Collides := false; Puff.Pickable := false;
+  Puff.SetLight(255);
+  Puff.PlaySequence('ABCD', 4, false);
+  Puff.UpdateTransform;
+  FActors.Add(Puff);
+  FItems.Add(Puff);
+end;
+
 procedure TDoomWorld.HitscanAttack(const Origin, Dir: TVector3; const Damage: Integer; const Splash: Integer);
 var
   HitPoint, Back: TVector3;
-  Actor, Puff: TDoomActor;
+  Actor: TDoomActor;
   Dist: Single;
   D: TVector3;
   I: Integer;
@@ -3364,18 +3467,8 @@ begin
   begin
     { Bullet puff slightly in front of the wall. }
     Back := HitPoint - Dir.Normalize * 4;
-    Puff := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekPuff]);
-    Puff.State := asEffect;
-    Puff.Bright := true;
     D := CgeToDoom(Back);
-    Puff.DoomX := D.X; Puff.DoomY := D.Y; Puff.DoomZ := D.Z - 4;
-    Puff.Sector := FMap.SectorAt(D.X, D.Y);
-    Puff.Collides := false; Puff.Pickable := false;
-    Puff.SetLight(255);
-    Puff.PlaySequence('ABCD', 4, false);
-    Puff.UpdateTransform;
-    FActors.Add(Puff);
-    FItems.Add(Puff);
+    SpawnPuff(D.X, D.Y, D.Z);
 
     { Gun-activated lines near the hit point. }
     PX := D.X; PY := D.Y;
