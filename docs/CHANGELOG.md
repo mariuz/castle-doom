@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.3.0 (2026-10-08)
+
+- Doom's lighting instead of fog: every wall, floor, ceiling and sprite is
+  darkened by distance with the original colormap arithmetic (walls and
+  sprites by their projected size, floors and ceilings by distance, in
+  Doom's 32 steps), so the light bands of the original are back. Brighter
+  sectors fade less than dark ones, and walls keep Doom's fake contrast.
+- Firing lights up the room for a moment, like Doom's gun flash.
+- Invulnerability turns the view into inverted greys; the light
+  amplification visor makes everything full bright, and now actually lasts
+  its 120 seconds. Both blink before running out.
+- The weapon is lit by the sector you stand in.
+- `F` now switches light diminishing off and on (it used to toggle the fog).
+- You shoot like in Doom: autoaim finds monsters above and below you (and a
+  little to the side), hidden ones behind ledges are not aimed at; bullets
+  and pellets are traced through the map with Doom's spreads, the pistol and
+  chaingun are accurate on the first shot, the fist and chainsaw reach 64
+  units, and rockets, plasma and the BFG are autoaimed too. Every
+  shoot-activated line a bullet crosses is triggered.
+- The status bar face is centred in its box.
+
 ## v0.2.4 (2026-10-08)
 
 - The screen melt between levels works in the browser too: the old screen is
