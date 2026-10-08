@@ -32,8 +32,8 @@ is mapped onto a Castle Game Engine feature.
 | Walls, floors, ceilings | X3D nodes built in code: `TIndexedTriangleSetNode`, `TUnlitMaterialNode`, per-vertex `TColorNode` for sector light, one `TCastleScene` per movable sector |
 | Textures (`TEXTURE1` + `PNAMES` patch composition, flats, sprites) | decoded to `TRGBAlphaImage`, served through a custom URL protocol `doomgfx:/tex/STARTAN3.png` (`RegisterUrlProtocol`) so the engine's texture cache shares them between scenes |
 | Animated flats/walls (NUKAGE, BFALL...) | `TImageTextureNode.SetUrl` swapped every 8 tics |
-| Sky | a textured cylinder scene that follows the camera, with `LocalFog.enabled=false` so the fog never touches it |
-| Light diminishing | `TCastleFog` on the viewport (toggle with `F`) |
+| Sky | a textured cylinder scene that follows the camera |
+| Light diminishing | Doom's colormap arithmetic as a GLSL shader effect (`TEffectNode`, a `FloatVertexAttribute` with the sector light), with the gun flash light, invulnerability and light amplification colormaps (toggle with `F`) |
 | Player | `TCastleWalkNavigation`: gravity, `PreferredHeight` 41, `ClimbHeight` 24 (stairs), `Radius`, mouse look, head bobbing; collisions via `PreciseCollisions` on the map scenes |
 | Things / monsters | one `TCastleTransform` per thing with a `TCastleBillboard` behavior and a quad `TCastleScene`; sprite rotations picked like `R_ProjectSprite` |
 | Shooting | `Items.WorldRay` ray casts against walls and sprite billboards |
@@ -112,7 +112,7 @@ castle-engine run
 or open `CastleEngineManifest.xml` in the Castle Game Engine editor.
 
 Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
-`E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` fog, `M` mouse look on/off,
+`E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` light diminishing, `M` mouse look on/off,
 `J` music on/off, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
 `F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `N`/`P` next/previous map,
 `F5` screenshot, `F8` engine inspector, `H` help, `Esc` menu.

@@ -16,8 +16,6 @@ type
   strict private
     FViewport: TCastleViewport;
     FNavigation: TCastleWalkNavigation;
-    FFog: TCastleFog;
-    FFogEnabled: Boolean;
     FWorld: TDoomWorld;
     FStatusBar: TDoomStatusBar;
     FWeaponImage, FFlashImage: TCastleImageControl;
@@ -123,7 +121,7 @@ uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
   CastleDownload,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleTimeUtils, CastleRenderContext,
-  DoomGeometry, DoomMap,
+  DoomGeometry, DoomMap, DoomLighting,
   GameViewMenu, GameSaveStorage;
 
 const
@@ -168,7 +166,6 @@ end;
 constructor TViewPlay.Create(AOwner: TComponent);
 begin
   inherited;
-  FFogEnabled := true;
   Skill := 2;
 end;
 
@@ -192,13 +189,6 @@ begin
   { Many small sector scenes: let CGE merge them into fewer draw calls. }
   FViewport.DynamicBatching := true;
   InsertFront(FViewport);
-
-  { Doom's "light diminishing": things fade to black with distance. }
-  FFog := TCastleFog.Create(FreeAtStop);
-  FFog.Color := Vector3(0, 0, 0);
-  FFog.FogType := ftExponential;
-  FFog.VisibilityRange := 4500;
-  FViewport.Fog := FFog;
 
   FNavigation := TCastleWalkNavigation.Create(FreeAtStop);
   FViewport.InsertFront(FNavigation);
@@ -272,7 +262,7 @@ begin
     'E / Space: use (doors, switches)' + NL +
     '1-7, wheel: weapons' + NL +
     'Tab: automap   + / -: zoom   G: grid   I: reveal map' + NL +
-    'F: fog (light diminishing)   M: mouse look' + NL +
+    'F: light diminishing on/off   M: mouse look' + NL +
     'N / P: next / previous map   J: music on/off' + NL +
     'F2 / F3: save / load   F6 / F9: quick save / load' + NL +
     'F5: screenshot' + NL +
@@ -487,6 +477,12 @@ begin
     FWorld.DebugSight
   else if Cmd = 'INVIS' then
     FWorld.Player.InvisibleTics := 60 * 35
+  else if Cmd = 'INVUL' then
+    FWorld.Player.InvulnerableTics := Iff(Arg > 0, Round(Arg), 30 * 35)
+  else if Cmd = 'AMP' then
+    FWorld.Player.LightAmpTics := Iff(Arg > 0, Round(Arg), 120 * 35)
+  else if Cmd = 'DIM' then
+    DoomLightingInstance.Diminish := not DoomLightingInstance.Diminish
   else if Cmd = 'K' then
     FWorld.GiveAll
   else if Cmd = 'MENU' then
@@ -778,8 +774,9 @@ var
   SpriteName, FlashName: String;
   Img: TDoomImage;
   S, Speed, Bob, BobX, BobY: Single;
-  W, H: Single;
+  W, H, Bright: Single;
   CamPos: TVector3;
+  Sec, Light: Integer;
 begin
   P := FWorld.Player;
   W := FViewport.EffectiveWidth;
@@ -807,8 +804,26 @@ begin
     FFlashImage.Color := Vector4(0, 0, 0, 0.3 + Random * 0.25);
   end else
   begin
-    FWeaponImage.Color := White;
-    FFlashImage.Color := White;
+    { R_DrawPSprite: the weapon is lit like a sprite at the nearest scale
+      (spritelights[MAXLIGHTSCALE - 1]) of the player's sector, the flash
+      is full bright; a fixed colormap applies to both (the inverted
+      invulnerability colormap cannot be done with a colour multiplier,
+      the weapon stays normal then). }
+    Sec := FWorld.Map.SectorAt(P.X, P.Y);
+    if Sec >= 0 then
+      Light := FWorld.Map.Sectors[Sec].LightLevel
+    else
+      Light := 255;
+    if FWorld.FixedColormap = InverseColormap then
+      Bright := 1
+    else
+      Bright := TDoomLighting.ColormapBrightness(DoomLightingInstance.WeaponColormap(Light));
+    FWeaponImage.Color := Vector4(Bright, Bright, Bright, 1);
+    if (FWorld.FixedColormap >= 0) and (FWorld.FixedColormap < InverseColormap) then
+      Bright := TDoomLighting.ColormapBrightness(FWorld.FixedColormap)
+    else
+      Bright := 1;
+    FFlashImage.Color := Vector4(Bright, Bright, Bright, 1);
   end;
 
   SpriteName := FWorld.WeaponSprite(P.Weapon) + P.WeaponFrame + '0';
@@ -1115,6 +1130,10 @@ begin
 
   P := FWorld.Player;
   FPaletteFlash.Color := FPaletteTints[FWorld.PaletteIndex];
+  { Doom's colormaps: the gun flash lights the room, invulnerability and
+    the light amplification visor fix the colormap (DoomLighting). }
+  DoomLightingInstance.ExtraLight := FWorld.Player.ExtraLight;
+  DoomLightingInstance.FixedColormap := FWorld.FixedColormap;
   FMessageText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
   FAutomapTitle.Exists := FAutomap.Exists;
   if FAutomap.Exists then
@@ -1124,8 +1143,8 @@ begin
     FAutomapTitle.Anchor(vpBottom, FStatusBar.Height + 4);
   end;
   if P.MessageTics > 0 then FMessageText.SetText(UpperCase(P.Message)) else FMessageText.SetText('');
-  FInfoLabel.Caption := Format('%s   FPS %s   %d things   fog %s', [
-    FMapName, Container.Fps.ToString, FWorld.Actors.Count, BoolToStr(FFogEnabled, 'on', 'off')]);
+  FInfoLabel.Caption := Format('%s   FPS %s   %d things   light diminishing %s', [
+    FMapName, Container.Fps.ToString, FWorld.Actors.Count, BoolToStr(DoomLightingInstance.Diminish, 'on', 'off')]);
   FStatusBar.Width := FViewport.EffectiveWidth;
   FStatusBar.Height := FViewport.EffectiveWidth / 10;
   PerfT := Timer;
@@ -1297,8 +1316,7 @@ begin
   end;
   if Event.IsKey(keyF) then
   begin
-    FFogEnabled := not FFogEnabled;
-    if FFogEnabled then FViewport.Fog := FFog else FViewport.Fog := nil;
+    DoomLightingInstance.Diminish := not DoomLightingInstance.Diminish;
     Exit(true);
   end;
   if Event.IsKey(keyM) then

@@ -6,7 +6,7 @@ unit DoomActors;
 interface
 
 uses SysUtils, Classes, Generics.Collections,
-  CastleVectors, CastleTransform, CastleScene, CastleBehaviors, X3DNodes,
+  CastleVectors, CastleTransform, CastleScene, CastleBehaviors, X3DNodes, X3DFields,
   DoomThings, DoomGraphics;
 
 type
@@ -21,6 +21,8 @@ type
     FAppearance: TAppearanceNode;
     FMaterial: TUnlitMaterialNode;
     FTexture: TImageTextureNode;
+    { The doom_sprite uniform of the light effect (DoomLighting). }
+    FLightField: TSFVec2f;
     FCurrentImage: TDoomImage;
     FCurrentMirror: Boolean;
     FFrame: Char;
@@ -103,7 +105,7 @@ type
 implementation
 
 uses Math, CastleUtils, CastleLog, CastleRenderOptions,
-  DoomGeometry;
+  DoomGeometry, DoomLighting;
 
 constructor TDoomActor.Create(AOwner: TComponent; const AGraphics: TDoomGraphics;
   const AInfo: PThingInfo);
@@ -176,6 +178,10 @@ begin
   Shape.Appearance := FAppearance;
   Shape.Geometry := Geometry;
   Root := TX3DRootNode.Create;
+  { The light effect in the root, not in the appearance: CGE's dynamic
+    batching compares group effects but not appearance effects, so sprites
+    with different lights must not share an appearance-level effect. }
+  Root.AddChildren(DoomLightingInstance.SpriteEffect(FLightField));
   Root.AddChildren(Shape);
   FScene := TCastleScene.Create(Self);
   FScene.Load(Root, true);
@@ -308,14 +314,21 @@ begin
 end;
 
 procedure TDoomActor.SetLight(const Light: Integer);
+var
+  V: TVector2;
 begin
+  { The colour itself comes from the light effect (Doom's colormaps by
+    distance); spectres stay black (their fuzz), full-bright things use
+    colormap 0. }
   if Fuzz then
-    FMaterial.EmissiveColor := Vector3(0, 0, 0)
+    V := Vector2(Light, DoomLightFuzz)
   else
   if Bright then
-    FMaterial.EmissiveColor := Vector3(1, 1, 1)
+    V := Vector2(Light, DoomLightFullBright)
   else
-    FMaterial.EmissiveColor := LightColor(Light);
+    V := Vector2(Light, DoomLightWall);
+  if not TVector2.PerfectlyEquals(FLightField.Value, V) then
+    FLightField.Send(V);
 end;
 
 end.

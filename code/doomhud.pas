@@ -100,7 +100,7 @@ var
   Level: Integer;
 begin
   if Player.Dead then Exit('STFDEAD0');
-  if Player.InvulnerableTics > 0 then Exit('STFGOD0');
+  if (Player.InvulnerableTics > 0) or Player.GodMode then Exit('STFGOD0');
   Level := Clamped((100 - Player.Health) div 20, 0, 4);
   case Player.FaceState of
     1: Result := Format('STFKILL%d', [Level]);

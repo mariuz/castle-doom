@@ -140,6 +140,7 @@ begin
   PJ.Add('invisible', Player.InvisibleTics);
   PJ.Add('radSuit', Player.RadSuitTics);
   PJ.Add('lightAmp', Player.LightAmpTics);
+  PJ.Add('god', Player.GodMode);
   PJ.Add('x', Double(Player.X));
   PJ.Add('y', Double(Player.Y));
   PJ.Add('z', Double(Player.Z));
@@ -425,6 +426,7 @@ begin
     Player.InvisibleTics := PJ.Get('invisible', 0);
     Player.RadSuitTics := PJ.Get('radSuit', 0);
     Player.LightAmpTics := PJ.Get('lightAmp', 0);
+    Player.GodMode := PJ.Get('god', false);
     Player.X := PJ.Get('x', Double(FDoomStartX));
     Player.Y := PJ.Get('y', Double(FDoomStartY));
     Player.Z := PJ.Get('z', 0.0);

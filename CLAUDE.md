@@ -77,6 +77,13 @@ Player messages are logged as `Message:`; E1M1 pickups for a quick check:
 shells." and "Blue passcard secured!" (Freedoom's BEX strings). Menu
 screenshots also take `MENUQUIT` (the quit question).
 
+Lighting (`DoomLighting`): `DIM` toggles light diminishing (the `F` key),
+`INVUL[:tics]` gives invulnerability (inverted greys), `AMP[:tics]` the
+light amplification visor (colormap 1); `INVUL:1` / `AMP:1` end them. `Y`
+is a separate god mode flag now, so god-mode screenshots keep normal
+colours. Fire (`X`) and screenshot after `W:0.03` to see the flash light.
+Comparing several screenshots is easier as one grid image (PIL in Python).
+
 `SIGHT` in a demo logs, for every monster within 2500 units, the 2D and
 3D line of sight to the player and the REJECT bit (`Sight:` lines).
 `INVIS` in a demo gives partial invisibility (the weapon turns to fuzz);

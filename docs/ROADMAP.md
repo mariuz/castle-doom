@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Doom's light diminishing as a shader instead of fog (`DoomLighting`):
+  r_main.c's colormap arithmetic per pixel (walls and sprites by projected
+  scale, floors and ceilings by distance, fake contrast, 32 integer
+  colormap steps, so the light bands of the original show), the gun
+  flash's extra light, the inverted colormap of invulnerability and the
+  light amplification visor (which now lasts its 120 s). The weapon sprite
+  is lit by the player's sector. `F` turns diminishing off (flat sector
+  light).
 - Monster bullets are traced like Doom (`P_AimLineAttack` / `P_LineAttack`):
   the monster faces its target, aims at its middle when in sight, and every
   pellet gets Doom's +-22.4 degree spread (+-45 degrees more against an
@@ -170,7 +178,7 @@ L = several days). Items inside a section are in suggested order.
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
-| **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
+| **Palette-mapped rendering** for the real 8-bit look: quantize each texel to the palette and look it up in the real `COLORMAP` rows (a 32x32x32 RGB-to-index texture and a 256x34 colormap texture in the `DoomLighting` effect), instead of multiplying by (32 - level) / 32. Also the inverted colormap on the weapon sprite during invulnerability. | Exact Doom colours, banding of the palette. | `DoomLighting` | M |
 | **Hanging/floating things** bob (cacodemons hover), **gibs** for excessive damage (`XDEATH` frames). | Fidelity. | `DoomThings` frames, `KillActor` | S |
 
 ## 3. Audio
@@ -206,10 +214,11 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Light diminishing as a shader (`COLORMAP`) instead of fog (M): the
-   authentic look of Doom's lighting.
-2. The player's hitscan through `TraceLineAttack` with Doom's autoaim (S):
+1. The player's hitscan through `TraceLineAttack` with Doom's autoaim (S):
    it still uses CGE's ray against the rendered quads, which face the
    camera and can miss a monster seen edge-on in another monster's shot.
-3. Browser frame rate (M): profile rendering in a normal browser and batch
-   the sprite scenes if draw calls dominate.
+2. Browser frame rate (M): profile rendering in a normal browser and batch
+   the sprite scenes if draw calls dominate (each sprite now has its own
+   light effect, which CGE's dynamic batching does not merge).
+3. Hanging/floating things bob and gibs for excessive damage (S): the
+   cacodemons' hover and the `XDEATH` frames.

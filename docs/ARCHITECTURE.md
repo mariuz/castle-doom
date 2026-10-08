@@ -301,18 +301,61 @@ plus the sidedef's x/y offsets. Horizontal u runs from the side's start vertex
 Dynamic chunks always emit upper and lower parts even when their height is
 zero, so the vertex count never changes while a door moves.
 
-Light: the sector's light level becomes a grey vertex colour
-(`LightColor`), with Doom's "fake contrast" (north-south walls +16, east-west
--16). Light diminishing with distance is approximated by a `TCastleFog` on the
-viewport (exponential, 4500 units, toggle with F).
+Light: every vertex carries a `doom_light` vertex attribute (an X3D
+`FloatVertexAttribute`, two floats): the sector's light level and a kind,
+`DoomLightWall` plus Doom's "fake contrast" (-1 for east-west walls, +1 for
+north-south ones), `DoomLightPlane` for floors and ceilings, or
+`DoomLightFullBright` (the sky). The colour comes from `DoomLighting`, see
+"Light diminishing" below.
 
 ### Sky, collisions, switches
 
 The sky is a textured cylinder scene that follows the camera (updated every
 frame in `Update`). Doom maps 1024 sky columns around a full turn, so the
-256-wide texture repeats 4 times; row 100 of 128 sits at the horizon. A
-`TLocalFogNode` with `Enabled = false` in that scene keeps the viewport fog
-from darkening it. Sky ceilings are simply not drawn.
+256-wide texture repeats 4 times; row 100 of 128 sits at the horizon. It is
+full bright (only the invulnerability colormap changes it). Sky ceilings are
+simply not drawn.
+
+### Light diminishing (`DoomLighting`)
+
+Doom lights a pixel by choosing one of 32 colormaps from `COLORMAP`
+(r_main.c): the sector light gives `lightnum = light / 16` (+1 / -1 fake
+contrast on walls, + the gun flash's `extralight`), the start colormap is
+`(15 - lightnum) * 4`, and the nearer the pixel the brighter the colormap:
+
+- walls and sprites by their projected scale: index `min(2560 / depth, 47)`
+  (2560 = 160, the projection of a 320-pixel view, << 4), colormap
+  `start - index / 2`;
+- floors and ceilings by distance: index `min(depth / 16, 127)`, colormap
+  `start - (160 / (index + 1)) / 2`;
+- full-bright frames and the sky: colormap 0.
+
+`DoomLighting` does this per pixel as a CGE shader effect (`TEffectNode` with
+a vertex and a fragment `TEffectPartNode`). The vertex part writes the eye
+depth (`-vertex_eye.z`, in Doom units since the world is not scaled; the
+camera's 90 degree horizontal field of view is Doom's) and the light into a
+varying; `PLUG_fragment_modify` computes the colormap with Doom's integer
+steps and multiplies the colour by `(32 - colormap) / 32`, which is how the
+colormaps were made from the palette (the real lump is not sampled, see the
+roadmap). Map geometry gets a `GeometryEffect` in each scene root and reads
+the `doom_light` attribute; each actor's scene root gets a `SpriteEffect`
+whose `doom_sprite` uniform `TDoomActor.SetLight` updates (kind normal, full
+bright, or fuzz, which leaves the spectre's black alone). The effect is in
+the root and not in the appearance because CGE's dynamic batching compares
+group effects but not appearance effects, and merged sprites must not share
+one light.
+
+Uniforms shared by all effects (`doom_extra_light`, `doom_fixed_colormap`,
+`doom_diminish`) live on every effect node; `DoomLightingInstance` keeps a
+list of them (removed again through `AddDestructionNotification`) and sends
+a changed value to all. `TViewPlay.Update` sets `ExtraLight` from
+`Player.ExtraLight` (A_Light1 / A_Light2 of the flash frames) and
+`FixedColormap` from `TDoomWorld.FixedColormap` (R_SetupFrame: the inverted
+greys of invulnerability, colormap 1 for the light amplification visor, both
+blinking in the last 4 seconds). `F` switches diminishing off (each sector
+then gets colormap `start / 2`). The player's weapon is a 2D image control,
+lit with `WeaponColormap` (`spritelights[MAXLIGHTSCALE - 1]` of the player's
+sector) through its colour; the flash image is full bright.
 
 Two-sided lines flagged impassable (fences, ledges) get invisible quads in a
 dedicated collision scene (`Visible = false`, `Pickable = false`,
@@ -786,8 +829,8 @@ uses `WaitForRenderAndCall` for that.)
 
 `TViewPlay.Start` builds the UI in code (no `.castle-user-interface` design
 file, to keep everything visible in Pascal): `TCastleViewport` with a
-`TCastleCamera` (90° horizontal field of view, near plane 4 units) and
-`TCastleFog`, the `TCastleWalkNavigation`, the HUD controls and a
+`TCastleCamera` (90° horizontal field of view, near plane 4 units), the
+`TCastleWalkNavigation`, the HUD controls and a
 `TCastleCrosshair`. It then calls `StartMap`, which shows a "Loading" overlay
 for one frame (`WaitForRenderAndCall`) before the synchronous
 `DoomWorld.LoadMap`, places the camera at the player start, and starts the
@@ -943,14 +986,14 @@ Where each engine feature is used, as a map for learning the engine:
 | `RegisterUrlProtocol`, `TUrlReadEvent` | DoomGraphics, DoomSound, DoomMusic | in-memory assets |
 | `TRGBAlphaImage`, `PixelPtr`, `RawPixels` | DoomGraphics, DoomHud | decoding and composing pictures |
 | `TImageTextureNode`, `TTexturePropertiesNode`, `magNearest`, `bmClampToEdge` | DoomGraphics | texture nodes |
-| `TX3DRootNode`, `TShapeNode`, `TAppearanceNode`, `TUnlitMaterialNode`, `TIndexedTriangleSetNode`, `TCoordinateNode`, `TTextureCoordinateNode`, `TColorNode`, `TTextureTransformNode`, `TLocalFogNode`, `AlphaMode` | DoomGeometry, DoomActors | building geometry in code |
+| `TX3DRootNode`, `TShapeNode`, `TAppearanceNode`, `TUnlitMaterialNode`, `TIndexedTriangleSetNode`, `TCoordinateNode`, `TTextureCoordinateNode`, `TTextureTransformNode`, `AlphaMode` | DoomGeometry, DoomActors | building geometry in code |
 | `TCastleScene.Load(RootNode, true)`, `PreciseCollisions`, `Collides`, `Pickable`, `Visible` | DoomGeometry, DoomActors | scenes and collision flags |
 | `SetPoint`/`SetColor` on coordinate/colour nodes | DoomGeometry | updating moving sectors in place |
 | `TCastleTransform`, `Translation`, `AddBehavior`, `FindBehavior` | DoomActors, DoomSound | things and sound emitters |
 | `TCastleBillboard` | DoomActors | sprites facing the camera |
-| `TCastleViewport`, `Items`, `Camera`, `Fog`, `DynamicBatching` | GameViewPlay | rendering |
+| `TCastleViewport`, `Items`, `Camera`, `DynamicBatching` | GameViewPlay | rendering |
 | `TCastleCamera.SetView`, `Direction`, `Perspective.FieldOfView/FieldOfViewAxis`, `ProjectionNear` | GameViewPlay | the player's eye |
-| `TCastleFog` (`ftExponential`, `VisibilityRange`) | GameViewPlay | light diminishing |
+| `TEffectNode`, `TEffectPartNode` (`PLUG_vertex_eye_space`, `PLUG_fragment_modify`), custom `TSFFloat` / `TSFVec2f` uniform fields, `TFloatVertexAttributeNode`, `AddDestructionNotification` | DoomLighting, DoomGeometry, DoomActors | light diminishing |
 | `TCastleWalkNavigation` and its properties, `Input_*.Assign/MakeClear` | GameViewPlay | player movement |
 | `Items.WorldRay`, `TRayCollision.Distance` | DoomWorld | shooting |
 | `TCastleSound`, `SoundEngine.Play`, `TCastleSoundSource`, `SoundEngine.LoopingChannel[0]` | DoomSound, DoomMusic | effects and music |

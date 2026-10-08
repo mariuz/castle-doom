@@ -12,7 +12,7 @@ interface
 
 uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
-  DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked;
+  DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting;
 
 const
   TicRate = 35;
@@ -44,6 +44,9 @@ type
     Kills, Items, Secrets: Integer;
     TotalKills, TotalItems, TotalSecrets: Integer;
     BerserkTics, InvulnerableTics, InvisibleTics, RadSuitTics, LightAmpTics: Integer;
+    { The god mode cheat (Doom's CF_GODMODE): no damage, but unlike the
+      invulnerability sphere no inverted colormap. }
+    GodMode: Boolean;
     { Feet position and facing (Doom coordinates / degrees). }
     X, Y, Z: Single;
     Angle: Single;
@@ -52,6 +55,8 @@ type
     AttackTics: Integer;
     WeaponFrame: Char;
     FlashFrame: Char;
+    { The gun flash's extra light (A_Light1 / A_Light2), 0..2 light steps. }
+    ExtraLight: Integer;
     Refire: Boolean;
     { Weapon change (A_Lower / A_Raise): 0 ready, 1 lowering, 2 raising;
       the offset below WEAPONTOP in Doom pixels (0 up .. 96 out of view);
@@ -314,6 +319,10 @@ type
     { ST_doPaletteStuff: which PLAYPAL palette the screen shows now (0 none,
       1..8 damage / berserk red, 9..12 bonus gold, 13 radiation suit). }
     function PaletteIndex: Integer;
+    { R_SetupFrame's fixedcolormap: InverseColormap during invulnerability,
+      colormap 1 with the light amplification visor (both blink in their
+      last 4 seconds), NoFixedColormap otherwise. }
+    function FixedColormap: Integer;
     function WeaponSprite(const W: TWeapon): String;
     function FlashSprite(const W: TWeapon): String;
 
@@ -1420,8 +1429,18 @@ procedure TDoomWorld.UpdateWeaponAnimation;
       T := T + Tics[I - 1];
     end;
     Player.FlashFrame := #0;
+    Player.ExtraLight := 0;
     if (FlashFrames <> '') and (Elapsed < FlashTics * Length(FlashFrames)) then
+    begin
       Player.FlashFrame := FlashFrames[1 + Elapsed div FlashTics];
+      { A_Light1 on the first flash frame, A_Light2 on the later ones
+        (the rocket launcher's second frame keeps A_Light1, the plasma
+        gun's flash is A_Light1 only). }
+      Player.ExtraLight := Min(2, 1 + Elapsed div FlashTics);
+      if (Player.Weapon = wpPlasma) or
+         ((Player.Weapon = wpMissile) and (Elapsed div FlashTics = 1)) then
+        Player.ExtraLight := 1;
+    end;
   end;
 
 var
@@ -1472,6 +1491,7 @@ begin
   begin
     Player.WeaponFrame := 'A';
     Player.FlashFrame := #0;
+    Player.ExtraLight := 0;
     if (Player.Weapon = wpChainsaw) and ((FTic div 4) mod 2 = 1) then
       Player.WeaponFrame := 'B';
     Exit;
@@ -2611,7 +2631,22 @@ end;
 
 procedure TDoomWorld.DebugGod;
 begin
-  Player.InvulnerableTics := 3600 * TicRate;
+  Player.GodMode := true;
+end;
+
+function TDoomWorld.FixedColormap: Integer;
+begin
+  Result := NoFixedColormap;
+  if Player.InvulnerableTics > 0 then
+  begin
+    if (Player.InvulnerableTics > 4 * 32) or ((Player.InvulnerableTics and 8) <> 0) then
+      Result := InverseColormap;
+  end else
+  if Player.LightAmpTics > 0 then
+  begin
+    if (Player.LightAmpTics > 4 * 32) or ((Player.LightAmpTics and 8) <> 0) then
+      Result := 1;
+  end;
 end;
 
 function TDoomWorld.DebugSpawn(const TypeNum: Integer; const Distance: Single): TDoomActor;
@@ -3081,7 +3116,7 @@ var
   Dmg, Saved: Integer;
 begin
   if Player.Dead or (Damage <= 0) then Exit;
-  if Player.InvulnerableTics > 0 then Exit;
+  if (Player.InvulnerableTics > 0) or Player.GodMode then Exit;
   Dmg := Damage;
   { P_DamageMobj: half damage for "I'm too young to die". }
   if Skill = 0 then Dmg := Max(1, Dmg div 2);
@@ -3667,7 +3702,8 @@ begin
       pkInvulnerability: begin Player.InvulnerableTics := 30 * TicRate; Sound := 'DSGETPOW'; end;
       pkInvisibility: begin Player.InvisibleTics := 60 * TicRate; Sound := 'DSGETPOW'; end;
       pkRadSuit: begin Player.RadSuitTics := 60 * TicRate; Sound := 'DSGETPOW'; end;
-      pkComputerMap, pkLightAmp: Sound := 'DSGETPOW';
+      pkComputerMap: Sound := 'DSGETPOW';
+      pkLightAmp: begin Player.LightAmpTics := 120 * TicRate; Sound := 'DSGETPOW'; end;
       pkKeyBlue: Include(Player.Keys, keyBlue);
       pkKeyYellow: Include(Player.Keys, keyYellow);
       pkKeyRed: Include(Player.Keys, keyRed);

@@ -13,13 +13,11 @@ interface
 
 uses SysUtils, Classes, Generics.Collections,
   CastleVectors, CastleScene, CastleTransform, X3DNodes, CastleUtils, CastleColors, CastleRenderOptions,
-  DoomMap, DoomGraphics;
+  DoomMap, DoomGraphics, DoomLighting;
 
 { Doom map coordinates to CGE world coordinates. }
 function DoomToCge(const X, Y, Z: Single): TVector3; inline;
 function CgeToDoom(const V: TVector3): TVector3; inline;
-{ Doom light level (0..255) to a color multiplier. }
-function LightColor(const Light: Integer): TVector3;
 
 type
   TDoomGeometry = class;
@@ -35,11 +33,13 @@ type
     Clamp: Boolean;
     Coords: TVector3List;
     TexCoords: TVector2List;
-    Colors: TVector3List;
+    { Per vertex: sector light level and kind (DoomLightWall + contrast,
+      DoomLightPlane, DoomLightFullBright), the doom_light attribute. }
+    Lights: TSingleList;
     Indices: TInt32List;
     CoordNode: TCoordinateNode;
     TexCoordNode: TTextureCoordinateNode;
-    ColorNode: TColorNode;
+    LightNode: TFloatVertexAttributeNode;
     Geometry: TIndexedTriangleSetNode;
     Shape: TShapeNode;
     TexTransform: TTextureTransformNode;
@@ -56,10 +56,10 @@ type
     procedure DropNodes;
     { Quad A B C D counter-clockwise as seen from the front. }
     procedure AddQuad(const A, B, C, D: TVector3; const TA, TB, TC, TD: TVector2;
-      const Color: TVector3);
+      const Light: TVector2);
     { Convex polygon (fan), counter-clockwise as seen from the front. }
     procedure AddPolygon(const Pts: array of TVector3; const Tex: array of TVector2;
-      const Color: TVector3);
+      const Light: TVector2);
     procedure CreateNodes;
     { Update node fields from the lists (nodes must exist). }
     procedure UpdateNodes;
@@ -83,7 +83,7 @@ type
     procedure EmitFlats(const Sub: Integer);
     procedure EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
       const ZBottom, ZTop: Single; const U0, U1: Single;
-      const TexTopZ: Single; const TexW, TexH: Integer; const Color: TVector3);
+      const TexTopZ: Single; const TexW, TexH: Integer; const Light: TVector2);
   public
     Name: String;
     SceneSolid, ScenePassable: TCastleScene;
@@ -159,17 +159,6 @@ begin
   Result.Z := V.Y;
 end;
 
-function LightColor(const Light: Integer): TVector3;
-var
-  B: Single;
-begin
-  { Doom's light levels look roughly linear; keep a floor so 0-light
-    sectors are not pitch black. }
-  B := Clamped(Light, 0, 255) / 255;
-  B := 0.04 + 0.96 * B;
-  Result := Vector3(B, B, B);
-end;
-
 { TGeomBatch ----------------------------------------------------------------- }
 
 constructor TGeomBatch.Create;
@@ -177,7 +166,7 @@ begin
   inherited;
   Coords := TVector3List.Create;
   TexCoords := TVector2List.Create;
-  Colors := TVector3List.Create;
+  Lights := TSingleList.Create;
   Indices := TInt32List.Create;
 end;
 
@@ -186,7 +175,7 @@ begin
   DropNodes;
   FreeAndNil(Coords);
   FreeAndNil(TexCoords);
-  FreeAndNil(Colors);
+  FreeAndNil(Lights);
   FreeAndNil(Indices);
   inherited;
 end;
@@ -198,7 +187,7 @@ begin
   TexNode := nil;
   CoordNode := nil;
   TexCoordNode := nil;
-  ColorNode := nil;
+  LightNode := nil;
   Geometry := nil;
   Shape := nil;
   TexTransform := nil;
@@ -209,25 +198,29 @@ procedure TGeomBatch.Reset;
 begin
   Coords.Count := 0;
   TexCoords.Count := 0;
-  Colors.Count := 0;
+  Lights.Count := 0;
   Indices.Count := 0;
 end;
 
 procedure TGeomBatch.AddQuad(const A, B, C, D: TVector3; const TA, TB, TC, TD: TVector2;
-  const Color: TVector3);
+  const Light: TVector2);
 var
-  Base: Integer;
+  Base, I: Integer;
 begin
   Base := Coords.Count;
   Coords.Add(A); Coords.Add(B); Coords.Add(C); Coords.Add(D);
   TexCoords.Add(TA); TexCoords.Add(TB); TexCoords.Add(TC); TexCoords.Add(TD);
-  Colors.Add(Color); Colors.Add(Color); Colors.Add(Color); Colors.Add(Color);
+  for I := 1 to 4 do
+  begin
+    Lights.Add(Light.X);
+    Lights.Add(Light.Y);
+  end;
   Indices.Add(Base); Indices.Add(Base + 1); Indices.Add(Base + 2);
   Indices.Add(Base); Indices.Add(Base + 2); Indices.Add(Base + 3);
 end;
 
 procedure TGeomBatch.AddPolygon(const Pts: array of TVector3; const Tex: array of TVector2;
-  const Color: TVector3);
+  const Light: TVector2);
 var
   Base, I: Integer;
 begin
@@ -236,7 +229,8 @@ begin
   begin
     Coords.Add(Pts[I]);
     TexCoords.Add(Tex[I]);
-    Colors.Add(Color);
+    Lights.Add(Light.X);
+    Lights.Add(Light.Y);
   end;
   for I := 1 to High(Pts) - 1 do
   begin
@@ -253,12 +247,11 @@ var
 begin
   CoordNode := TCoordinateNode.Create;
   TexCoordNode := TTextureCoordinateNode.Create;
-  ColorNode := TColorNode.Create;
+  LightNode := DoomLightingInstance.LightAttribute;
   Geometry := TIndexedTriangleSetNode.Create;
   Geometry.Coord := CoordNode;
   Geometry.TexCoord := TexCoordNode;
-  Geometry.Color := ColorNode;
-  Geometry.ColorPerVertex := true;
+  Geometry.SetAttrib([LightNode]);
   Geometry.Solid := true;
   Geometry.NormalPerVertex := false;
 
@@ -290,7 +283,7 @@ procedure TGeomBatch.UpdateNodes;
 begin
   CoordNode.SetPoint(Coords);
   TexCoordNode.SetPoint(TexCoords);
-  ColorNode.SetColor(Colors);
+  LightNode.SetValue(Lights);
   if CommittedVertices <> Coords.Count then
     Geometry.SetIndex(Indices);
   CommittedVertices := Coords.Count;
@@ -342,7 +335,7 @@ end;
 
 procedure TMapChunk.EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
   const ZBottom, ZTop: Single; const U0, U1: Single;
-  const TexTopZ: Single; const TexW, TexH: Integer; const Color: TVector3);
+  const TexTopZ: Single; const TexW, TexH: Integer; const Light: TVector2);
 var
   Top: Single;
   VBottom, VTop: Single;
@@ -356,7 +349,7 @@ begin
     DoomToCge(BX, BY, Top), DoomToCge(AX, AY, Top),
     Vector2(U0 / TexW, VBottom), Vector2(U1 / TexW, VBottom),
     Vector2(U1 / TexW, VTop), Vector2(U0 / TexW, VTop),
-    Color);
+    Light);
 end;
 
 procedure TMapChunk.EmitLineSide(const Line, Side: Integer);
@@ -366,8 +359,7 @@ var
   Sd: TDoomSidedef;
   Sec, Other: Integer;
   VA, VB: TDoomVertex;
-  Light: Integer;
-  Color: TVector3;
+  Light: TVector2;
   Img: TDoomImage;
   U0, U1: Single;
   SwitchLine: Integer;
@@ -392,11 +384,11 @@ begin
     Other := L.FrontSector;
   end;
 
-  { Doom's "fake contrast": north-south walls brighter, east-west darker. }
-  Light := Map.Sectors[Sec].LightLevel;
-  if VA.Y = VB.Y then Light := Light - 16
-  else if VA.X = VB.X then Light := Light + 16;
-  Color := LightColor(Light);
+  { Doom's "fake contrast": north-south walls a light step brighter,
+    east-west ones a step darker. }
+  Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightWall);
+  if VA.Y = VB.Y then Light.Y := DoomLightWall - 1
+  else if VA.X = VB.X then Light.Y := DoomLightWall + 1;
 
   U0 := Sd.XOffset;
   U1 := Sd.XOffset + L.Length;
@@ -420,7 +412,7 @@ begin
     else
       TexTopZ := CeilZ + Sd.YOffset;
     EmitWall(Batch(Img, false, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
-      FloorZ, CeilZ, U0, U1, TexTopZ, Img.Width, Img.Height, Color);
+      FloorZ, CeilZ, U0, U1, TexTopZ, Img.Width, Img.Height, Light);
     Exit;
   end;
 
@@ -438,7 +430,7 @@ begin
     ZB := FloorZ;
     ZT := Min(OFloorZ, CeilZ);
     EmitWall(Batch(Img, false, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
-      ZB, ZT, U0, U1, TexTopZ, Img.Width, Img.Height, Color);
+      ZB, ZT, U0, U1, TexTopZ, Img.Width, Img.Height, Light);
   end;
 
   { Upper wall: from the neighbour's (lower) ceiling up to our ceiling.
@@ -455,7 +447,7 @@ begin
       ZB := Max(OCeilZ, FloorZ);
       ZT := CeilZ;
       EmitWall(Batch(Img, false, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
-        ZB, ZT, U0, U1, TexTopZ, Img.Width, Img.Height, Color);
+        ZB, ZT, U0, U1, TexTopZ, Img.Width, Img.Height, Light);
     end;
   end;
 
@@ -474,7 +466,7 @@ begin
     ZT := Min(OpenTop, TexTopZ);
     Passable := (L.Flags and ML_BLOCKING) = 0;
     EmitWall(Batch(Img, Passable, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
-      ZB, ZT, U0, U1, TexTopZ, Img.Width, Img.Height, Color);
+      ZB, ZT, U0, U1, TexTopZ, Img.Width, Img.Height, Light);
   end;
 end;
 
@@ -483,7 +475,7 @@ var
   Map: TDoomMap;
   S: TDoomSubsector;
   Sec: Integer;
-  Color: TVector3;
+  Light: TVector2;
   Img: TDoomImage;
   Pts: array of TVector3;
   Tex: array of TVector2;
@@ -495,7 +487,7 @@ begin
   Sec := S.Sector;
   N := Length(S.Poly);
   if (Sec < 0) or (N < 3) then Exit;
-  Color := LightColor(Map.Sectors[Sec].LightLevel);
+  Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightPlane);
   SetLength(Pts, N);
   SetLength(Tex, N);
 
@@ -509,7 +501,7 @@ begin
       Pts[I] := DoomToCge(S.Poly[I].X, S.Poly[I].Y, Z);
       Tex[I] := Vector2(S.Poly[I].X / 64, S.Poly[I].Y / 64);
     end;
-    Batch(Img, false, false).AddPolygon(Pts, Tex, Color);
+    Batch(Img, false, false).AddPolygon(Pts, Tex, Light);
   end;
 
   { Ceiling: reversed order = facing down. Sky ceilings are not drawn. }
@@ -524,7 +516,7 @@ begin
         Pts[I] := DoomToCge(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y, Z);
         Tex[I] := Vector2(S.Poly[N - 1 - I].X / 64, S.Poly[N - 1 - I].Y / 64);
       end;
-      Batch(Img, false, false).AddPolygon(Pts, Tex, Color);
+      Batch(Img, false, false).AddPolygon(Pts, Tex, Light);
     end;
   end;
 end;
@@ -552,6 +544,8 @@ begin
   begin
     FRootSolid := TX3DRootNode.Create;
     FRootPassable := TX3DRootNode.Create;
+    FRootSolid.AddChildren(DoomLightingInstance.GeometryEffect);
+    FRootPassable.AddChildren(DoomLightingInstance.GeometryEffect);
     for B in FBatches.Values do
       B.DropNodes;
     for B in FBatches.Values do
@@ -775,7 +769,6 @@ var
   Img: TDoomImage;
   Root: TX3DRootNode;
   Batch: TGeomBatch;
-  Fog: TLocalFogNode;
   Q, I: Integer;
   A0, A1: Single;
   YTop, YBottom, YHorizonTop, YHorizonBottom: Single;
@@ -814,15 +807,13 @@ begin
           Vector2(I / Segments, (YBottom - YHorizonBottom) / (YHorizonTop - YHorizonBottom)),
           Vector2(I / Segments, (YTop - YHorizonBottom) / (YHorizonTop - YHorizonBottom)),
           Vector2((I + 1) / Segments, (YTop - YHorizonBottom) / (YHorizonTop - YHorizonBottom)),
-          Vector3(1, 1, 1));
+          Vector2(255, DoomLightFullBright));
       end;
     Batch.CreateNodes;
     Batch.Geometry.Solid := false;
     Root := TX3DRootNode.Create;
-    { The sky must not be darkened by the viewport fog ("light diminishing"). }
-    Fog := TLocalFogNode.Create;
-    Fog.Enabled := false;
-    Root.AddChildren(Fog);
+    { Full bright like Doom's sky, but the invulnerability colormap applies. }
+    Root.AddChildren(DoomLightingInstance.GeometryEffect);
     Root.AddChildren(Batch.Shape);
     FSkyScene.Load(Root, true);
     Batch.DropNodes;

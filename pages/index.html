@@ -70,7 +70,7 @@
     <p>
       <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows move, <kbd>Shift</kbd> run, mouse look,
       left mouse / <kbd>Ctrl</kbd> fire, <kbd>E</kbd> / <kbd>Space</kbd> use (doors, switches),
-      <kbd>1</kbd>-<kbd>7</kbd> and wheel weapons, <kbd>F</kbd> fog, <kbd>M</kbd> mouse look on/off,
+      <kbd>1</kbd>-<kbd>7</kbd> and wheel weapons, <kbd>F</kbd> light diminishing, <kbd>M</kbd> mouse look on/off,
       <kbd>J</kbd> music on/off, <kbd>Tab</kbd> automap (<kbd>+</kbd>/<kbd>-</kbd> zoom, <kbd>G</kbd> grid), <kbd>F2</kbd> / <kbd>F3</kbd> save / load (<kbd>F6</kbd> / <kbd>F9</kbd> quick), <kbd>N</kbd> / <kbd>P</kbd> next / previous map, <kbd>H</kbd> help, <kbd>Esc</kbd> menu.
       Title menu: arrows and <kbd>Enter</kbd> (or the mouse), <kbd>Esc</kbd> back; Options picks the WAD, map and skill.
       Saves are kept in your browser's local storage for this site.
@@ -84,7 +84,7 @@
       <tr><td>WAD lumps, BSP nodes, subsectors</td><td>Plain Pascal records; convex subsector polygons recovered by clipping against the BSP partition lines</td></tr>
       <tr><td>Walls, floors, ceilings, sector light</td><td>X3D nodes built in code: <code>IndexedTriangleSet</code>, <code>UnlitMaterial</code>, per-vertex <code>Color</code>; one scene per movable sector</td></tr>
       <tr><td>Textures, flats, sprites</td><td>Decoded from patches, served through a custom <code>doomgfx:</code> URL protocol so the engine's texture cache shares them</td></tr>
-      <tr><td>Sky, light diminishing</td><td>Camera-following textured cylinder with fog disabled; <code>TCastleFog</code> on the viewport</td></tr>
+      <tr><td>Sky, light diminishing</td><td>Camera-following textured cylinder; Doom's colormap arithmetic per pixel as a GLSL shader effect (<code>TEffectNode</code>, a <code>FloatVertexAttribute</code> with the sector light)</td></tr>
       <tr><td>Player</td><td><code>TCastleWalkNavigation</code> with gravity, step climbing and precise collisions</td></tr>
       <tr><td>Things, monsters</td><td><code>TCastleBillboard</code> sprites with Doom's 8-rotation selection; 2D Doom-style movement rules</td></tr>
       <tr><td>Shooting</td><td><code>WorldRay</code> ray casts against walls and sprites</td></tr>
