@@ -68,9 +68,12 @@ begin
   Anchor(vpBottom);
 end;
 
+{ V_DrawPatch: the patch's offsets move it (the faces have -5, -2 or -1,
+  which centres them in the box at x = 143). }
 procedure TDoomStatusBar.Blit(const Dest: TRGBAlphaImage; const Img: TDoomImage; const X, Y: Integer);
 begin
-  BlitDoomImage(Dest, Img, X, Y);
+  if Img = nil then Exit;
+  BlitDoomImage(Dest, Img, X - Img.LeftOffset, Y - Img.TopOffset);
 end;
 
 procedure TDoomStatusBar.DrawNumber(const Dest: TRGBAlphaImage; const Value, RightX, Y: Integer;
