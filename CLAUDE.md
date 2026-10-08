@@ -176,20 +176,34 @@ Goertzel on semitone vs quarter-tone frequencies).
   JS `null` (use `InvokeJSValueResult` for `localStorage.getItem`). To test
   the deployed page, open https://mariuz.github.io/castle-doom/play/ in the
   browser pane; the browser console shows the CGE log.
-- **No pixel read-back under WebGL in CGE** (until castle-engine/castle-engine
-  PR #738, "Implement SaveScreen_NoFlush (glReadPixels) for WebGL", is merged
-  and reaches the snapshot): `SaveScreen_NoFlush` has a "TODO: web" where
-  `glReadPixels` would be, so `Container.SaveScreen` gives an empty image in
-  the browser. Keep screen captures on the GPU
-  (`TDrawableImage.RenderToImageBegin` + `Container.RenderControl`, as the
-  melt does). `TGLRenderToTexture` with `tbNone` raised an exception there.
+- **WebGL read-back in CGE**: colour read-back (`SaveScreen_NoFlush`,
+  `Container.SaveScreen`) was a "TODO: web" that gave an empty image in the
+  browser. castle-engine/castle-engine PR #738 fixed it and is merged into
+  CGE `master` (merge commit a7c126b, 2026-10-08), but the web build uses the
+  `snapshot` **tag** (not a branch; `git ls-remote ... snapshot`), which
+  still points at c463cb6 from before the merge. Until the tag moves, keep
+  screen captures on the GPU (`TDrawableImage.RenderToImageBegin` +
+  `Container.RenderControl`, as the melt does). Depth read-back
+  (`SaveScreenDepth_NoFlush`) is PR #739 (open). `TGLRenderToTexture` with
+  `tbNone` raised an exception in the browser.
+- **JOB Variant casts can crash WebAssembly**: converting a non-null
+  `glGetParameter(GL_FRAMEBUFFER_BINDING)` result with
+  `TJSWebGLFramebuffer.Cast(Variant)` aborts the program with "function
+  signature mismatch" (a `null` result through `VarIsNull` is fine). Track
+  such state in Pascal instead of querying it back.
 - **Testing an engine patch on the web**: a throwaway branch whose
-  `web.yml` copies the patched CGE file over the snapshot, uploads
-  `castle-engine-output/web/dist` as an artifact (no deploy job), run with
-  `gh workflow run web.yml --ref <branch>`; `gh run download` it and serve it
-  with `python -m http.server` (a `.claude/launch.json` entry) to open in the
-  browser pane. The console filter of the browser tools is a plain substring,
-  not a regex.
+  `web.yml` curls the patched CGE files over the snapshot (pin the fork
+  commit SHA in the raw.githubusercontent.com URL: branch URLs are cached
+  for minutes; curl every file the patch touches), uploads
+  `castle-engine-output/web/dist` as an artifact (no deploy job, and a
+  different `concurrency` group so it cannot cancel the Pages deploy), and
+  runs on push to that branch; `gh run download` it and serve it with
+  `python -m http.server` (a `.claude/launch.json` entry) to open in the
+  browser pane. Focus the canvas with JS (`canvas.focus()`) instead of a
+  click, which can hit a menu item. The pane renders slowly (about 2 FPS), so
+  a hook that fires at frame N takes a while; read the result with the
+  console tool. Its filter is a plain substring, not a regex. Delete the
+  branch afterwards.
 - **Exceptions abort the WebAssembly program**: FPC's wasm32 target has no
   setjmp/longjmp, so any raised exception (even inside `try`/`except`)
   stops the web build ("Runtime error 217", "LONGJMP not supported"). Code
