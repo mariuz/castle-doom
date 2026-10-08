@@ -7,7 +7,7 @@ interface
 
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
-  CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages,
+  CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages, CastleGLImages,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
   DoomIntermission, DoomFinale, DoomDehacked, DoomWipe;
 
@@ -36,7 +36,7 @@ type
       frame in the browser) does not advance it. }
     FWipeSkipFrame: Boolean;
     { Old screen captured by StartMap, melted once the new map is in. }
-    FPendingWipe: TCastleImage;
+    FPendingWipe: TDrawableImage;
     { Frame time spent in the world update, the status bar and the weapon
       sprite, logged as "PerfView:" every 10 s (see also TDoomWorld "Perf:"). }
     FPerfWorld, FPerfStatusBar, FPerfWeapon, FPerfClock: Double;
@@ -86,7 +86,7 @@ type
     { The screen shown between levels (intermission or finale) was clicked. }
     procedure AccelerateScreen;
     { Capture what is on screen now (for the melt). }
-    function CaptureScreen: TCastleImage;
+    function CaptureScreen: TDrawableImage;
     procedure BeginWipe;
     function DoomAngleFromCamera: Single;
   public
@@ -122,7 +122,7 @@ implementation
 uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
   CastleDownload,
-  CastleUriUtils, X3DNodes, CastleGLImages, CastleRectangles, CastleTimeUtils,
+  CastleUriUtils, X3DNodes, CastleRectangles, CastleTimeUtils, CastleRenderContext,
   DoomGeometry, DoomMap,
   GameViewMenu, GameSaveStorage;
 
@@ -923,42 +923,28 @@ begin
   end;
 end;
 
-{ Render the whole view off-screen (an FBO with colour and depth
-  renderbuffers, like CGE's render_3d_to_texture example) and read it back
-  from that FBO. Reading the window's back buffer (Container.SaveScreen)
-  gives black under WebGL; reading an FBO works there too. }
-function TViewPlay.CaptureScreen: TCastleImage;
+{ Render the whole view into a GPU texture (TDrawableImage.RenderToImageBegin:
+  an FBO with the texture as colour and a depth renderbuffer, so the 3D view
+  renders correctly) and keep it there: the melt draws that texture, nothing
+  is read back. Reading pixels back is not implemented for WebGL in CGE
+  (SaveScreen_NoFlush gives an empty image there), and an FBO with a colour
+  renderbuffer raised an exception in the browser, which aborts the
+  WebAssembly program; this path is the one CGE's own screen effects use. }
+function TViewPlay.CaptureScreen: TDrawableImage;
 var
-  RenderToTexture: TGLRenderToTexture;
   R: TRectangle;
 begin
   Result := nil;
-  {$ifdef WASI}
-  { In the browser this raised an exception (FBO set-up or read-back under
-    WebGL), and exceptions cannot be caught in FPC's WebAssembly target:
-    the program stopped ("LONGJMP not supported"). No melt on the web. }
-  Exit;
-  {$endif}
   R := Container.PixelsRect;
   if (R.Width <= 0) or (R.Height <= 0) then Exit;
+  if FWipe.Active then FWipe.Stop; { do not capture a half-melted screen }
+  Result := TDrawableImage.Create(R.Width, R.Height, TRGBImage, false);
+  Result.RenderToImageBegin;
   try
-    RenderToTexture := TGLRenderToTexture.Create(R.Width, R.Height);
-    try
-      RenderToTexture.Buffer := tbNone;
-      RenderToTexture.GLContextOpen;
-      RenderToTexture.RenderBegin;
-      Container.RenderControl(Self, Rectangle(0, 0, R.Width, R.Height));
-      Result := SaveScreen_NoFlush(TRGBImage, Rectangle(0, 0, R.Width, R.Height), RenderToTexture.ColorBuffer);
-      RenderToTexture.RenderEnd;
-    finally
-      FreeAndNil(RenderToTexture);
-    end;
-  except
-    on E: Exception do
-    begin
-      WritelnWarning('Wipe', 'Cannot capture the screen: %s', [E.Message]);
-      FreeAndNil(Result);
-    end;
+    RenderContext.Clear([cbColor, cbDepth], Black);
+    Container.RenderControl(Self, Rectangle(0, 0, R.Width, R.Height));
+  finally
+    Result.RenderToImageEnd;
   end;
 end;
 

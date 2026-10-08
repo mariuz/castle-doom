@@ -1,5 +1,6 @@
 { Doom's screen melt (f_wipe.c wipe_initMelt / wipe_doMelt): the old screen
-  is captured as an image and drawn on top of the new one in 160 columns
+  is rendered into a GPU texture (TDrawableImage) and drawn on top of the new
+  one in 160 columns
   that slide down, each starting after a small random delay that differs by
   at most one tic from its neighbour. Columns move 1, 2, 3... pixels per tic
   for the first 16 lines, then 8 (on Doom's 200-line grid), so the whole
@@ -21,7 +22,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     { Begin melting this picture of the old screen (the wipe owns it). }
-    procedure Start(const OldScreen: TCastleImage);
+    procedure Start(const OldScreen: TDrawableImage);
     procedure Stop;
     { Advance one Doom tic. }
     procedure Tic;
@@ -49,13 +50,13 @@ begin
   inherited;
 end;
 
-procedure TDoomWipe.Start(const OldScreen: TCastleImage);
+procedure TDoomWipe.Start(const OldScreen: TDrawableImage);
 var
   I: Integer;
 begin
   FreeAndNil(FImage);
   if OldScreen = nil then Exit;
-  FImage := TDrawableImage.Create(OldScreen, false, true);
+  FImage := OldScreen;
   { wipe_initMelt }
   FY[0] := -Random(16);
   for I := 1 to High(FY) do
