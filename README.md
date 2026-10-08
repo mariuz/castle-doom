@@ -61,8 +61,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   sector (sound spreads through open doors, stops at closed ones and crosses at most one sound-blocking
   line; ambush monsters must also see you). They chase (2D Doom-style movement with step/drop-off
   rules, they open doors and use teleporters and monster-only teleport lines; spectres are
-  drawn as shimmering fuzz), attack with melee, hitscan or projectiles, take pain, die,
-  drop items, and fight each other when hit by another monster (infighting). Lost souls
+  drawn as shimmering fuzz; flyers rise and sink towards you like Doom's `P_ZMovement`
+  and their corpses fall), attack with melee, hitscan or projectiles, take pain, die
+  (or burst into gibs when overkilled), drop items, and fight each other when hit by another monster (infighting). Lost souls
   charge, Pain Elementals spit lost souls (three more when they die), Arch-viles raise
   the dead and burn you with their fire attack. Barrels explode with splash damage. Boss deaths trigger the special map events (E1M8, E2M8,
   E3M8, E4M6, E4M8, MAP07, Commander Keen). The Icon of Sin on MAP30 spits cubes that

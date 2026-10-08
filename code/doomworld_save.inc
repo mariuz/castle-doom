@@ -273,6 +273,7 @@ begin
       AJ.Add('fromPlayer', A.FromPlayer);
       AJ.Add('bright', A.Bright);
       AJ.Add('charging', A.Charging);
+      AJ.Add('inFloat', A.InFloat);
       AJ.Add('chargeTics', A.ChargeTics);
       AJ.Add('attackFired', A.AttackFired);
       if A.Info^.Kind = tkMonster then
@@ -529,6 +530,7 @@ begin
             A.FromPlayer := AJ.Get('fromPlayer', false);
             A.Bright := AJ.Get('bright', false);
             A.Charging := AJ.Get('charging', false);
+            A.InFloat := AJ.Get('inFloat', false);
             A.ChargeTics := AJ.Get('chargeTics', 0);
             A.AttackFired := AJ.Get('attackFired', false);
             A.SpawnX := ArrayItemFloat(ObjArray(AJ, 'spawn'), 0, A.DoomX);

@@ -66,6 +66,8 @@ type
     Target: TDoomActor;
     { Lost souls: flying at the target (A_SkullAttack / MF_SKULLFLY). }
     Charging: Boolean;
+    { Flyer that rose or sank towards an opening this tic (MF_INFLOAT). }
+    InFloat: Boolean;
     ChargeTics: Integer;
     { Arch-vile: the attack's damage already dealt this attack. }
     AttackFired: Boolean;

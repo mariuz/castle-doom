@@ -47,6 +47,9 @@ type
     AttackFrames: String;
     PainFrame: Char;
     DeathFrames: String;
+    { Gibbed death (XDEATH, A_XScream) when killed with health below
+      -Health; '' when the monster has none. }
+    XDeathFrames: String;
     Health: Integer;
     Speed: Integer;
     PainChance: Integer;
@@ -197,6 +200,12 @@ begin
   { Boss brain: its pain and death sounds play at full volume from DoomWorld. }
   Monster(88, 'BBRN', 16, 16, 250, 0, 255, 'A', 'A', '', 'B', 'A', akNone, 0, 0, '', '', '', '');
   Infos[High(Infos) - 1].Hanging := true; { Keen hangs from the ceiling }
+  { info.c's S_*_XDIE states. }
+  Infos[Index[3004]].XDeathFrames := 'MNOPQRSTU';
+  Infos[Index[9]].XDeathFrames := 'OPQRSTU';
+  Infos[Index[65]].XDeathFrames := 'OPQRST';
+  Infos[Index[3001]].XDeathFrames := 'NOPQRSTU';
+  Infos[Index[84]].XDeathFrames := 'NOPQRSTUV';
 
   { Weapons }
   Pickup(2001, 'SHOT', pkShotgun);

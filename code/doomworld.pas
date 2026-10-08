@@ -118,6 +118,10 @@ type
 
   TDoomWorld = class
   strict private
+    { Set by a failed TryMove2D when only the mover's height was wrong
+      (P_TryMove's floatok), with the floor height of the opening. }
+    FFloatOk: Boolean;
+    FFloatZ: Single;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
     FSounds: TDoomSounds;
@@ -165,6 +169,9 @@ type
     procedure RunTic;
     procedure TicActors;
     procedure TicMonster(const A: TDoomActor);
+    { Height of a flying monster: P_ZMovement's floating towards the target,
+      and its corpse falling (lost souls stay where they die). }
+    procedure TicFloat(const A: TDoomActor);
     procedure TicMissile(const A: TDoomActor);
     procedure TicMovers;
     procedure TicLights;
@@ -1607,9 +1614,8 @@ begin
       begin
         if A.Info^.Hanging then
           A.DoomZ := FMap.Sectors[Sec].CeilingHeight - A.Info^.Height
-        else if A.Info^.Floats and (A.State in [asChase, asAttack]) then
-          A.DoomZ := Clamped(A.DoomZ, FMap.Sectors[Sec].FloorHeight,
-            Max(FMap.Sectors[Sec].FloorHeight, FMap.Sectors[Sec].CeilingHeight - A.Info^.Height))
+        else if A.Info^.Floats and (A.Info^.Kind = tkMonster) then
+          TicFloat(A)
         else
           A.DoomZ := FMap.Sectors[Sec].FloorHeight;
         A.SetLight(FMap.Sectors[Sec].LightLevel);
@@ -1772,6 +1778,7 @@ var
 begin
   Result := false;
   BlockedByLine := -1;
+  FFloatOk := false;
   R := A.Info^.Radius;
   Z := A.DoomZ;
   H := A.Info^.Height;
@@ -1806,9 +1813,13 @@ begin
       BlockedByLine := I;
       Exit;
     end;
-    if OpenBottom - Z > 24 then
+    { P_TryMove's floatok: the opening fits, only the height is wrong;
+      P_Move then floats a flyer towards it. }
+    if (OpenBottom - Z > 24) or (A.Info^.Floats and (OpenTop - Z < H)) then
     begin
       BlockedByLine := I;
+      FFloatOk := true;
+      FFloatZ := Max(FloorZ, OpenBottom);
       Exit;
     end;
     if (not A.Info^.Floats) and (OpenBottom - LowFloor > 24) and (LowFloor < Z - 24) then
@@ -2075,6 +2086,17 @@ begin
       3: Ang := Ang + 180;
     end;
     Moved := TryMove2D(A, A.DoomX + Cos(DegToRad(Ang)) * Step, A.DoomY + Sin(DegToRad(Ang)) * Step, Blocked);
+    if (not Moved) and A.Info^.Floats and FFloatOk then
+    begin
+      { P_Move: a flyer rises or sinks to fit the opening ahead (MF_INFLOAT
+        keeps P_ZMovement from floating it back this tic). }
+      if A.DoomZ < FFloatZ then
+        A.DoomZ := A.DoomZ + 4
+      else
+        A.DoomZ := A.DoomZ - 4;
+      A.InFloat := true;
+      Break;
+    end;
     if (not Moved) and (Blocked >= 0) and (Tries = 0) then
     begin
       { Monsters open doors in their way. }
@@ -2085,12 +2107,50 @@ begin
   end;
   if Moved then
     MonsterCrossLines(A, OldX, OldY);
-  if A.Info^.Floats then
+end;
+
+procedure TDoomWorld.TicFloat(const A: TDoomActor);
+const
+  FloatSpeed = 4;
+  Gravity = 1;
+var
+  Sec: Integer;
+  TX, TY, TZ, TR, DX, DY, Dist, Delta, Floor, Top: Single;
+begin
+  Sec := A.Sector;
+  Floor := FMap.Sectors[Sec].FloorHeight;
+  Top := Max(Floor, FMap.Sectors[Sec].CeilingHeight - A.Info^.Height);
+  if A.State in [asDying, asDead] then
   begin
-    { Flyers drift towards the target's height. }
-    if TZ + 32 > A.DoomZ + 8 then A.DoomZ := A.DoomZ + 2
-    else if TZ + 32 < A.DoomZ - 8 then A.DoomZ := A.DoomZ - 2;
+    { P_KillMobj clears MF_NOGRAVITY except for lost souls: the corpse
+      falls (P_ZMovement: -2 on the first tic, then 1 more per tic). }
+    if A.Info^.Num <> 3006 then
+    begin
+      if A.VelZ = 0 then A.VelZ := -2 * Gravity else A.VelZ := A.VelZ - Gravity;
+      A.DoomZ := A.DoomZ + A.VelZ;
+      if A.DoomZ <= Floor then
+        A.VelZ := 0;
+    end;
+  end else
+  if A.InFloat then
+    A.InFloat := false
+  else
+  if (A.State in [asChase, asAttack, asPain]) and not A.Charging and
+     ((A.Target <> nil) or not Player.Dead) then
+  begin
+    { P_ZMovement: float towards the target's height only when it is
+      steeper than 1:3 away, so far flyers keep their altitude. }
+    TargetPosition(A, TX, TY, TZ, TR);
+    DX := Abs(TX - A.DoomX);
+    DY := Abs(TY - A.DoomY);
+    Dist := DX + DY - Min(DX, DY) / 2; { P_AproxDistance }
+    Delta := TZ + A.Info^.Height / 2 - A.DoomZ;
+    if (Delta < 0) and (Dist < -Delta * 3) then
+      A.DoomZ := A.DoomZ - FloatSpeed
+    else if (Delta > 0) and (Dist < Delta * 3) then
+      A.DoomZ := A.DoomZ + FloatSpeed;
   end;
+  A.DoomZ := Clamped(A.DoomZ, Floor, Top);
 end;
 
 function TDoomWorld.SpawnMonster(const TypeNum: Integer; const X, Y, Z: Single): TDoomActor;
@@ -3252,8 +3312,17 @@ begin
   A.State := asDying;
   A.Collides := false;
   A.Pickable := false;
-  A.PlaySequence(A.Info^.DeathFrames, 5, false);
-  if A.Info^.DeathSound <> '' then FSounds.PlayAt(A.Info^.DeathSound, A);
+  { P_KillMobj: overkill below -spawnhealth gibs (XDEATH, A_XScream). }
+  if (A.Info^.XDeathFrames <> '') and (A.Health < -A.Info^.Health) then
+  begin
+    WritelnLog('Gib', '%s at (%.0f, %.0f), health %d', [A.Info^.Sprite, A.DoomX, A.DoomY, A.Health]);
+    A.PlaySequence(A.Info^.XDeathFrames, 5, false);
+    FSounds.PlayAt('DSSLOP', A);
+  end else
+  begin
+    A.PlaySequence(A.Info^.DeathFrames, 5, false);
+    if A.Info^.DeathSound <> '' then FSounds.PlayAt(A.Info^.DeathSound, A);
+  end;
   if A.Info^.Num = 88 then
     StartBrainDeath(A)
   else

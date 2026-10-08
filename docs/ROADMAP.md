@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Gibs and flying like Doom: a zombieman, shotgun guy, chaingunner, imp or
+  SS killed with its health below minus its spawn health bursts
+  (`XDEATH` frames, `DSSLOP`, `Gib:` log lines). Flyers follow
+  `P_ZMovement`: they float 4 units a tic towards the target's height only
+  when it is steeper than 1:3 away (far cacodemons keep their altitude),
+  `P_Move`'s `floatok` lifts them over steps and under low ceilings in
+  their way (`MF_INFLOAT`), they keep their height while in pain instead of
+  dropping to the floor, and dead cacodemons and pain elementals fall under
+  gravity (lost souls stay where they die). Hanging things do not bob in
+  vanilla, so nothing to do there.
 - The player shoots like Doom: `P_AimLineAttack` autoaim (straight ahead,
   then 5.625 degrees to each side, the slope window narrowed by the
   openings on the way), bullets and pellets traced in Doom units through
@@ -187,7 +197,6 @@ L = several days). Items inside a section are in suggested order.
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
 | **Palette-mapped rendering** for the real 8-bit look: quantize each texel to the palette and look it up in the real `COLORMAP` rows (a 32x32x32 RGB-to-index texture and a 256x34 colormap texture in the `DoomLighting` effect), instead of multiplying by (32 - level) / 32. Also the inverted colormap on the weapon sprite during invulnerability. | Exact Doom colours, banding of the palette. | `DoomLighting` | M |
-| **Hanging/floating things** bob (cacodemons hover), **gibs** for excessive damage (`XDEATH` frames). | Fidelity. | `DoomThings` frames, `KillActor` | S |
 
 ## 3. Audio
 
@@ -225,8 +234,9 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Hanging/floating things bob and gibs for excessive damage (S): the
-   cacodemons' hover and the `XDEATH` frames.
-3. Melee turns the player to the target (A_Punch / A_Saw) and the
+2. Melee turns the player to the target (A_Punch / A_Saw) and the
    inverted invulnerability colormap on the weapon sprite (S): small
    fidelity gaps left from the hitscan and lighting work.
+3. Crushers turn corpses into gibs (`P_ChangeSector`: `S_GIBS`, `POL5`)
+   and knockback from hits and explosions (S): the next physical
+   details after the gibs.
