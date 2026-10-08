@@ -302,7 +302,6 @@ begin
   SceneSolid.PreciseCollisions := true;
   ScenePassable := TCastleScene.Create(nil);
   ScenePassable.Collides := false;
-  ScenePassable.PreciseCollisions := true; { still needed for accurate ray casts (shooting) }
 end;
 
 destructor TMapChunk.Destroy;

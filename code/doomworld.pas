@@ -227,8 +227,24 @@ type
     function FloorRaiseToTexture(const Sec: Integer): Single;
     procedure ExplodeBarrel(const A: TDoomActor);
     procedure RadiusDamage(const X, Y, Z: Single; const Radius, Damage: Integer; const Source: TDoomActor);
-    procedure HitscanAttack(const Origin, Dir: TVector3; const Damage: Integer; const Splash: Integer);
-    function RayHit(const Origin, Dir: TVector3; out HitPoint: TVector3; out Actor: TDoomActor; out Dist: Single): Boolean;
+    { A body bullets and autoaim can hit (MF_SHOOTABLE and alive). }
+    function Shootable(const O: TDoomActor): Boolean;
+    { P_AimLineAttack: from (X, Y, Z) along Angle up to Range, the first
+      shootable body seen through the openings on the way, within the
+      player's vertical view (slopes -100/160 .. 100/160). Returns the slope
+      to the middle of its visible part; Target nil (and 0) if none. }
+    function AimLineAttack(const Shooter: TDoomActor; const X, Y, Z, Angle, Range: Single;
+      out Target: TDoomActor): Single;
+    { The player's angle (degrees) and the camera's pitch as a slope. }
+    procedure PlayerLook(out Angle, Slope: Single);
+    { P_BulletSlope / P_SpawnPlayerMissile: autoaim straight ahead, then
+      5.625 degrees to each side. Angle is the angle that found a target
+      (the player's angle if none); without a target Slope follows the
+      camera's pitch (0 without mouse look, like Doom). }
+    function PlayerAim(const Range: Single; out Angle, Slope: Single): Boolean;
+    { P_LineAttack for the player: trace, damage or puff, and shoot the
+      gun-activated lines the shot crossed. Returns the body hit. }
+    function PlayerLineAttack(const Angle, Slope, Range: Single; const Damage: Integer): TDoomActor;
     procedure UpdateWeaponAnimation;
     function Random1(const N: Integer): Integer;
     function Dice(const Count, Faces: Integer): Integer;
@@ -253,6 +269,8 @@ type
     function CheckKey(const Line: Integer; const Key: TDoomKey; const Skull: TDoomKey; const IsDoor: Boolean): Boolean;
     procedure ChangeLineButton(const Line: Integer; const Repeatable: Boolean);
   public
+    { Log every player shot (aim, slope, what it hit): "Shot:" lines. }
+    DebugShots: Boolean;
     Player: TPlayerState;
     { Set when the player should be moved by the view (teleport / spawn). }
     PlayerTeleported: Boolean;
@@ -307,7 +325,7 @@ type
     { Debug: log the 2D and 3D line of sight from every monster within 2500
       units to the player. }
     procedure DebugSight;
-    { Debug: make the player invulnerable for an hour. }
+    { Debug: god mode (no damage, Player.GodMode). }
     procedure DebugGod;
     { Debug: spawn an awake monster of this THINGS type Distance units in
       front of the player. }
@@ -2805,8 +2823,7 @@ begin
     inside it (PTR_ShootTraverse for things). }
   for O in FActors do
   begin
-    if (O = Shooter) or O.Removed or not O.Pickable then Continue;
-    if not (O.State in [asIdle, asChase, asAttack, asPain]) then Continue;
+    if (O = Shooter) or not Shootable(O) then Continue;
     Along := (O.DoomX - X) * DX + (O.DoomY - Y) * DY;
     if (Along <= 0) or (Along >= Best) then Continue;
     Side := Abs((O.DoomX - X) * DY - (O.DoomY - Y) * DX);
@@ -3021,31 +3038,31 @@ end;
 procedure TDoomWorld.SpawnPlayerMissile(const Kind: TEffectKind);
 var
   M: TDoomActor;
-  Dir, Origin: TVector3;
-  D, O: TVector3;
-  Speed: Single;
+  Angle, Slope, CA, SA, Speed: Single;
 begin
   if not FHaveRay then Exit;
-  Dir := FRayDir.Normalize;
-  { Launch a little in front of the eyes, slightly below the view line like Doom's missiles. }
-  Origin := FRayOrigin + Dir * 20;
-  D := CgeToDoom(Dir);
-  O := CgeToDoom(Origin);
+  { P_SpawnPlayerMissile: autoaim (the missile turns to the angle that
+    found a target), 32 units above the feet; the horizontal speed is the
+    full speed and the slope adds the vertical one. Spawned 20 units ahead
+    so it starts outside the player. }
+  PlayerAim(1024, Angle, Slope);
+  CA := Cos(DegToRad(Angle));
+  SA := Sin(DegToRad(Angle));
   M := TDoomActor.Create(nil, FGraphics, @EffectInfos[Kind]);
   M.State := asMissile;
   M.FromPlayer := true;
   M.Bright := true;
-  M.DoomX := O.X;
-  M.DoomY := O.Y;
-  M.DoomZ := O.Z - 8;
-  M.Sector := FMap.SectorAt(O.X, O.Y);
+  M.DoomX := Player.X + CA * 20;
+  M.DoomY := Player.Y + SA * 20;
+  M.DoomZ := Player.Z + 32 + Slope * 20;
+  M.Sector := FMap.SectorAt(M.DoomX, M.DoomY);
   Speed := EffectInfos[Kind].Speed;
-  M.VelX := D.X * Speed;
-  M.VelY := D.Y * Speed;
-  M.VelZ := D.Z * Speed;
+  M.VelX := CA * Speed;
+  M.VelY := SA * Speed;
+  M.VelZ := Slope * Speed;
   M.MissileDamageDice := EffectInfos[Kind].DamageDice;
   M.MissileDamageFaces := EffectInfos[Kind].DamageFaces;
-  M.Angle := RadToDeg(ArcTan2(D.Y, D.X));
+  M.Angle := Angle;
   M.Collides := false;
   M.Pickable := false;
   M.SetLight(255);
@@ -3436,33 +3453,6 @@ begin
     DamagePlayer(Damage - Trunc(D), Source);
 end;
 
-function TDoomWorld.RayHit(const Origin, Dir: TVector3; out HitPoint: TVector3;
-  out Actor: TDoomActor; out Dist: Single): Boolean;
-var
-  RC: TRayCollision;
-  I: Integer;
-begin
-  Result := false;
-  Actor := nil;
-  HitPoint := Origin;
-  Dist := 0;
-  RC := FItems.WorldRay(Origin, Dir);
-  if RC = nil then Exit;
-  try
-    Dist := RC.Distance;
-    HitPoint := Origin + Dir.Normalize * Dist;
-    for I := 0 to RC.Count - 1 do
-      if RC[I].Item is TDoomActor then
-      begin
-        Actor := TDoomActor(RC[I].Item);
-        Break;
-      end;
-    Result := true;
-  finally
-    FreeAndNil(RC);
-  end;
-end;
-
 procedure TDoomWorld.SpawnPuff(const X, Y, Z: Single);
 var
   Puff: TDoomActor;
@@ -3480,67 +3470,252 @@ begin
   FItems.Add(Puff);
 end;
 
-procedure TDoomWorld.HitscanAttack(const Origin, Dir: TVector3; const Damage: Integer; const Splash: Integer);
+function TDoomWorld.Shootable(const O: TDoomActor): Boolean;
+begin
+  Result := (not O.Removed) and O.Pickable and
+    (O.State in [asIdle, asChase, asAttack, asPain]);
+end;
+
+function TDoomWorld.AimLineAttack(const Shooter: TDoomActor; const X, Y, Z, Angle, Range: Single;
+  out Target: TDoomActor): Single;
+type
+  TIntercept = record
+    Along: Single;
+    Line: Integer;      { -1 for a body }
+    Actor: TDoomActor;
+  end;
 var
-  HitPoint, Back: TVector3;
-  Actor: TDoomActor;
-  Dist: Single;
+  Intercepts: array of TIntercept;
+  Count: Integer;
+
+  procedure Add(const Along: Single; const Line: Integer; const Actor: TDoomActor);
+  begin
+    if Count = Length(Intercepts) then
+      SetLength(Intercepts, Count * 2 + 16);
+    Intercepts[Count].Along := Along;
+    Intercepts[Count].Line := Line;
+    Intercepts[Count].Actor := Actor;
+    Inc(Count);
+  end;
+
+var
+  DX, DY, EX, EY, T, Along, Side, TopSlope, BottomSlope, Slope,
+    OpenTop, OpenBottom, ThingTop, ThingBottom: Single;
+  MinX, MaxX, MinY, MaxY: Single;
+  I, J, F, B: Integer;
+  L: TDoomLinedef;
+  V1, V2: TDoomVertex;
+  O: TDoomActor;
+  Tmp: TIntercept;
+begin
+  Result := 0;
+  Target := nil;
+  DX := Cos(DegToRad(Angle));
+  DY := Sin(DegToRad(Angle));
+  EX := X + DX * Range;
+  EY := Y + DY * Range;
+  MinX := Min(X, EX); MaxX := Max(X, EX);
+  MinY := Min(Y, EY); MaxY := Max(Y, EY);
+  Count := 0;
+  for I := 0 to High(FMap.Linedefs) do
+  begin
+    L := FMap.Linedefs[I];
+    V1 := FMap.Vertices[L.V1];
+    V2 := FMap.Vertices[L.V2];
+    if (Max(V1.X, V2.X) < MinX) or (Min(V1.X, V2.X) > MaxX) or
+       (Max(V1.Y, V2.Y) < MinY) or (Min(V1.Y, V2.Y) > MaxY) then Continue;
+    if SegmentsIntersect(X, Y, EX, EY, V1.X, V1.Y, V2.X, V2.Y, T) then
+      Add(T * Range, I, nil);
+  end;
+  for O in FActors do
+  begin
+    if (O = Shooter) or not Shootable(O) then Continue;
+    Along := (O.DoomX - X) * DX + (O.DoomY - Y) * DY;
+    if (Along <= 0) or (Along >= Range) then Continue;
+    Side := Abs((O.DoomX - X) * DY - (O.DoomY - Y) * DX);
+    if Side > O.Info^.Radius then Continue;
+    Add(Along, -1, O);
+  end;
+  { Nearest first (insertion sort: a few dozen intercepts). }
+  for I := 1 to Count - 1 do
+  begin
+    Tmp := Intercepts[I];
+    J := I - 1;
+    while (J >= 0) and (Intercepts[J].Along > Tmp.Along) do
+    begin
+      Intercepts[J + 1] := Intercepts[J];
+      Dec(J);
+    end;
+    Intercepts[J + 1] := Tmp;
+  end;
+
+  { PTR_AimTraverse. }
+  TopSlope := 100 / 160;
+  BottomSlope := -100 / 160;
+  for I := 0 to Count - 1 do
+  begin
+    Along := Max(1, Intercepts[I].Along);
+    if Intercepts[I].Line >= 0 then
+    begin
+      L := FMap.Linedefs[Intercepts[I].Line];
+      F := L.FrontSector;
+      B := L.BackSector;
+      if (F < 0) or (B < 0) then Exit; { one-sided: stop }
+      OpenTop := Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight);
+      OpenBottom := Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight);
+      if OpenBottom >= OpenTop then Exit; { closed door }
+      if FMap.Sectors[F].FloorHeight <> FMap.Sectors[B].FloorHeight then
+      begin
+        Slope := (OpenBottom - Z) / Along;
+        if Slope > BottomSlope then BottomSlope := Slope;
+      end;
+      if FMap.Sectors[F].CeilingHeight <> FMap.Sectors[B].CeilingHeight then
+      begin
+        Slope := (OpenTop - Z) / Along;
+        if Slope < TopSlope then TopSlope := Slope;
+      end;
+      if TopSlope <= BottomSlope then Exit; { no view through }
+    end else
+    begin
+      O := Intercepts[I].Actor;
+      ThingTop := (O.DoomZ + O.Info^.Height - Z) / Along;
+      if ThingTop < BottomSlope then Continue; { shot over the thing }
+      ThingBottom := (O.DoomZ - Z) / Along;
+      if ThingBottom > TopSlope then Continue; { shot under the thing }
+      if ThingTop > TopSlope then ThingTop := TopSlope;
+      if ThingBottom < BottomSlope then ThingBottom := BottomSlope;
+      Target := O;
+      Exit((ThingTop + ThingBottom) / 2);
+    end;
+  end;
+end;
+
+procedure TDoomWorld.PlayerLook(out Angle, Slope: Single);
+var
   D: TVector3;
+  H: Single;
+begin
+  D := CgeToDoom(FRayDir.Normalize);
+  H := Sqrt(Sqr(D.X) + Sqr(D.Y));
+  if H < 0.001 then
+  begin
+    Angle := Player.Angle;
+    Slope := 0;
+  end else
+  begin
+    Angle := RadToDeg(ArcTan2(D.Y, D.X));
+    Slope := D.Z / H;
+  end;
+end;
+
+function TDoomWorld.PlayerAim(const Range: Single; out Angle, Slope: Single): Boolean;
+const
+  AimStep = 5.625; { 1 << 26 of Doom's angle units }
+var
+  Base, CameraSlope, ShootZ: Single;
+  Target: TDoomActor;
+begin
+  PlayerLook(Base, CameraSlope);
+  ShootZ := Player.Z + PlayerHeight / 2 + 8;
+  Angle := Base;
+  Slope := AimLineAttack(nil, Player.X, Player.Y, ShootZ, Angle, Range, Target);
+  if Target = nil then
+  begin
+    Angle := Base + AimStep;
+    Slope := AimLineAttack(nil, Player.X, Player.Y, ShootZ, Angle, Range, Target);
+  end;
+  if Target = nil then
+  begin
+    Angle := Base - AimStep;
+    Slope := AimLineAttack(nil, Player.X, Player.Y, ShootZ, Angle, Range, Target);
+  end;
+  Result := Target <> nil;
+  if not Result then
+  begin
+    Angle := Base;
+    Slope := CameraSlope;
+  end;
+end;
+
+function TDoomWorld.PlayerLineAttack(const Angle, Slope, Range: Single; const Damage: Integer): TDoomActor;
+var
+  ShootZ, HX, HY, HZ, Dist, EX, EY, T: Single;
+  HitPlayer, HitWall: Boolean;
   I: Integer;
   L: TDoomLinedef;
   V1, V2: TDoomVertex;
-  PX, PY: Single;
-  Best, BestD, LineD: Single;
-  BestLine: Integer;
+  Shot: String;
 begin
-  if not RayHit(Origin, Dir, HitPoint, Actor, Dist) then Exit;
-  D := CgeToDoom(HitPoint);
-  if Actor <> nil then
-  begin
-    DamageActor(Actor, Damage, D.X, D.Y, D.Z);
-  end else
-  begin
-    { Bullet puff slightly in front of the wall. }
-    Back := HitPoint - Dir.Normalize * 4;
-    D := CgeToDoom(Back);
-    SpawnPuff(D.X, D.Y, D.Z);
+  ShootZ := Player.Z + PlayerHeight / 2 + 8;
+  TraceLineAttack(nil, Player.X, Player.Y, ShootZ, Angle, Slope, Range, Result, HitPlayer, HitWall, HX, HY, HZ);
 
-    { Gun-activated lines near the hit point. }
-    PX := D.X; PY := D.Y;
-    BestLine := -1;
-    BestD := 4;
-    for I := 0 to High(FMap.Linedefs) do
-    begin
-      L := FMap.Linedefs[I];
-      if not (L.Special in [24, 46, 47]) then Continue;
-      V1 := FMap.Vertices[L.V1];
-      V2 := FMap.Vertices[L.V2];
-      { Distance from point to segment. }
-      Best := ((PX - V1.X) * (V2.X - V1.X) + (PY - V1.Y) * (V2.Y - V1.Y)) / Max(1, Sqr(L.Length));
-      Best := Clamped(Best, 0, 1);
-      LineD := Sqrt(Sqr(PX - (V1.X + (V2.X - V1.X) * Best)) + Sqr(PY - (V1.Y + (V2.Y - V1.Y) * Best)));
-      if LineD < BestD then
-      begin
-        BestD := LineD;
-        BestLine := I;
-      end;
-    end;
-    if BestLine >= 0 then ShootSpecialLine(BestLine);
+  { PTR_ShootTraverse calls P_ShootSpecialLine for every line the shot
+    reaches, the wall that stops it included. }
+  Dist := Sqrt(Sqr(HX - Player.X) + Sqr(HY - Player.Y));
+  if HitWall then Dist := Dist + 5;
+  EX := Player.X + Cos(DegToRad(Angle)) * Dist;
+  EY := Player.Y + Sin(DegToRad(Angle)) * Dist;
+  for I := 0 to High(FMap.Linedefs) do
+  begin
+    L := FMap.Linedefs[I];
+    if not (L.Special in [24, 46, 47]) then Continue;
+    V1 := FMap.Vertices[L.V1];
+    V2 := FMap.Vertices[L.V2];
+    if SegmentsIntersect(Player.X, Player.Y, EX, EY, V1.X, V1.Y, V2.X, V2.Y, T) then
+      ShootSpecialLine(I);
   end;
-  if Splash > 0 then
-    RadiusDamage(D.X, D.Y, D.Z, Splash, Splash, nil);
+
+  if Result <> nil then
+    DamageActor(Result, Damage, HX, HY, HZ)
+  else if HitWall then
+    SpawnPuff(HX, HY, HZ);
+
+  if DebugShots then
+  begin
+    if Result <> nil then
+      Shot := Format('hit %s (%d health left)', [Result.Info^.Sprite, Result.Health])
+    else if HitWall then
+      Shot := Format('wall at (%.0f, %.0f, %.0f)', [HX, HY, HZ])
+    else
+      Shot := 'nothing';
+    WritelnLog('Shot', Format('angle %.1f slope %.3f range %.0f: %s', [Angle, Slope, Range, Shot]));
+  end;
 end;
 
 procedure TDoomWorld.FireWeapon;
 var
   Ammo: TAmmoType;
-  Cost, I, Pellets, Dmg: Integer;
-  Dir, Right, Up: TVector3;
-  Spread, SpreadV: Single;
-  HitPoint: TVector3;
-  Actor: TDoomActor;
-  Dist: Single;
-  D: TVector3;
+  Cost, I, Dmg: Integer;
+  Angle, Slope, LookAngle: Single;
+  Target: TDoomActor;
+
+  { P_Random() - P_Random() scaled to MaxDeg at the extremes. }
+  function Spread(const MaxDeg: Single): Single;
+  begin
+    Result := (Random(256) - Random(256)) * MaxDeg / 255;
+  end;
+
+  { P_BulletSlope: bullets keep the player's angle, the slope comes from
+    the autoaim (which may have found the target 5.625 degrees aside). }
+  procedure BulletSlope;
+  var
+    AimAngle, CameraSlope: Single;
+  begin
+    PlayerAim(1024, AimAngle, Slope);
+    PlayerLook(Angle, CameraSlope);
+  end;
+
+  { P_GunShot: 5, 10 or 15 damage; spread unless accurate (the first
+    shot of the pistol or chaingun). }
+  procedure GunShot(const Accurate: Boolean);
+  var
+    A: Single;
+  begin
+    A := Angle;
+    if not Accurate then A := A + Spread(5.6);
+    PlayerLineAttack(A, Slope, 2048, 5 * (Random(3) + 1));
+  end;
+
 begin
   if Player.Dead or (FMap = nil) or not FHaveRay then Exit;
   if Player.AttackTics > 0 then Exit;
@@ -3558,61 +3733,60 @@ begin
   if Ammo <> amNoAmmo then
     Player.Ammo[Ammo] := Player.Ammo[Ammo] - Cost;
 
-  Dir := FRayDir.Normalize;
-  Right := TVector3.CrossProduct(Dir, Vector3(0, 1, 0)).Normalize;
-  Up := TVector3.CrossProduct(Right, Dir).Normalize;
   NoiseAlert;
 
   case Player.Weapon of
     wpFist, wpChainsaw:
       begin
+        { A_Punch / A_Saw: 2..20 damage (punch x10 with berserk), aimed over
+          the melee range (64, the saw 65) with a little spread. }
         Player.AttackTics := IfThen(Player.Weapon = wpFist, 20, 8);
-        if Player.Weapon = wpChainsaw then FSounds.Play('DSSAWFUL');
-        if RayHit(FRayOrigin, Dir, HitPoint, Actor, Dist) and (Dist < 64 + 16) and (Actor <> nil) then
+        Dmg := 2 * (Random(10) + 1);
+        if (Player.Weapon = wpFist) and (Player.BerserkTics > 0) then Dmg := Dmg * 10;
+        PlayerLook(Angle, Slope);
+        Angle := Angle + Spread(5.6);
+        Slope := AimLineAttack(nil, Player.X, Player.Y, Player.Z + PlayerHeight / 2 + 8,
+          Angle, IfThen(Player.Weapon = wpFist, 64, 65), Target);
+        if Target = nil then PlayerLook(LookAngle, Slope);
+        Target := PlayerLineAttack(Angle, Slope, IfThen(Player.Weapon = wpFist, 64, 65), Dmg);
+        if Player.Weapon = wpChainsaw then
         begin
-          Dmg := Dice(2, 10);
-          if (Player.Weapon = wpFist) and (Player.BerserkTics > 0) then Dmg := Dmg * 10;
-          if Player.Weapon = wpChainsaw then FSounds.Play('DSSAWHIT') else FSounds.Play('DSPUNCH');
-          D := CgeToDoom(HitPoint);
-          DamageActor(Actor, Dmg, D.X, D.Y, D.Z);
-        end;
+          if Target <> nil then FSounds.Play('DSSAWHIT') else FSounds.Play('DSSAWFUL');
+        end else
+        if Target <> nil then
+          FSounds.Play('DSPUNCH');
       end;
     wpPistol:
       begin
         Player.AttackTics := 18;
         FSounds.Play('DSPISTOL');
-        Spread := 0;
-        if Player.Refire then Spread := (Random - 0.5) * 5.6;
-        HitscanAttack(FRayOrigin, (Dir + Right * Sin(DegToRad(Spread))).Normalize, Dice(5, 3), 0);
+        BulletSlope;
+        GunShot(not Player.Refire);
       end;
-    wpShotgun, wpSuperShotgun:
+    wpShotgun:
       begin
-        if Player.Weapon = wpShotgun then
-        begin
-          Player.AttackTics := 36;
-          Pellets := 7;
-          FSounds.Play('DSSHOTGN');
-        end else
-        begin
-          Player.AttackTics := 56;
-          Pellets := 20;
-          FSounds.Play('DSDSHTGN');
-        end;
-        for I := 1 to Pellets do
-        begin
-          Spread := (Random - 0.5) * 11.2;
-          SpreadV := 0;
-          if Player.Weapon = wpSuperShotgun then SpreadV := (Random - 0.5) * 7;
-          HitscanAttack(FRayOrigin,
-            (Dir + Right * Sin(DegToRad(Spread)) + Up * Sin(DegToRad(SpreadV))).Normalize, Dice(5, 3), 0);
-        end;
+        Player.AttackTics := 36;
+        FSounds.Play('DSSHOTGN');
+        BulletSlope;
+        for I := 1 to 7 do
+          GunShot(false);
+      end;
+    wpSuperShotgun:
+      begin
+        { A_FireShotgun2: 20 pellets, wider spread and a vertical one. }
+        Player.AttackTics := 56;
+        FSounds.Play('DSDSHTGN');
+        BulletSlope;
+        for I := 1 to 20 do
+          PlayerLineAttack(Angle + Spread(11.2),
+            Slope + (Random(256) - Random(256)) * 32 / 65536, 2048, 5 * (Random(3) + 1));
       end;
     wpChaingun:
       begin
         Player.AttackTics := 8;
         FSounds.Play('DSPISTOL');
-        Spread := (Random - 0.5) * 5.6;
-        HitscanAttack(FRayOrigin, (Dir + Right * Sin(DegToRad(Spread))).Normalize, Dice(5, 3), 0);
+        BulletSlope;
+        GunShot(not Player.Refire);
       end;
     wpMissile:
       begin

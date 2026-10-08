@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- The player shoots like Doom: `P_AimLineAttack` autoaim (straight ahead,
+  then 5.625 degrees to each side, the slope window narrowed by the
+  openings on the way), bullets and pellets traced in Doom units through
+  `TraceLineAttack` with Doom's spreads (pistol and chaingun accurate on the
+  first shot), melee over 64 units, missiles autoaimed too, and every
+  gun-activated line the shot crosses is triggered. No more ray casts
+  against the camera-facing sprite quads.
+- The status bar face sits where Doom draws it (patch offsets applied).
 - Doom's light diminishing as a shader instead of fog (`DoomLighting`):
   r_main.c's colormap arithmetic per pixel (walls and sprites by projected
   scale, floors and ceilings by distance, fake contrast, 32 integer
@@ -214,11 +222,11 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. The player's hitscan through `TraceLineAttack` with Doom's autoaim (S):
-   it still uses CGE's ray against the rendered quads, which face the
-   camera and can miss a monster seen edge-on in another monster's shot.
-2. Browser frame rate (M): profile rendering in a normal browser and batch
+1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-3. Hanging/floating things bob and gibs for excessive damage (S): the
+2. Hanging/floating things bob and gibs for excessive damage (S): the
    cacodemons' hover and the `XDEATH` frames.
+3. Melee turns the player to the target (A_Punch / A_Saw) and the
+   inverted invulnerability colormap on the weapon sprite (S): small
+   fidelity gaps left from the hitscan and lighting work.

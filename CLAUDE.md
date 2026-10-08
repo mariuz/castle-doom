@@ -84,6 +84,12 @@ is a separate god mode flag now, so god-mode screenshots keep normal
 colours. Fire (`X`) and screenshot after `W:0.03` to see the flash light.
 Comparing several screenshots is easier as one grid image (PIL in Python).
 
+`SHOTS` in a demo logs every player shot (`Shot:` angle, slope, range,
+what it hit). Autoaim checks on E1M1: `Y,SHOTS,P:3001:300,W:0.3,X` hits an
+imp ahead (slope about -0.025); from the lift, `Y,SHOTS,G:160:256,A:0,W:0.3,
+P:3001:300,W:0.1,X` aims down at slope -0.26; from (-200, 256) the same imp
+is hidden by the lift's edge and nothing is aimed at (Doom does the same).
+
 `SIGHT` in a demo logs, for every monster within 2500 units, the 2D and
 3D line of sight to the player and the REJECT bit (`Sight:` lines).
 `INVIS` in a demo gives partial invisibility (the weapon turns to fuzz);

@@ -537,15 +537,31 @@ rockets. Damage applies pain (chance from the table) or death (death
 sequence, then a corpse that no longer collides); zombies drop ammo; barrels
 explode with radius damage.
 
-**Weapons** fire from the view's camera ray. Hitscan weapons (`HitscanAttack`)
-use `Items.WorldRay`, which returns the first `TCastleTransform` hit and the
-distance; a hit `TDoomActor` takes damage and bleeds, a wall gets a bullet
-puff and may trigger a gun-activated line. The shotgun fires 7 pellets with
-horizontal spread, the super shotgun 20 with vertical spread too. The rocket
-launcher, plasma gun and BFG spawn real projectile actors
-(`SpawnPlayerMissile`: `MISL`, `PLSS`, `BFS1` sprites) that fly along the
-camera ray including its pitch, hit monsters and barrels (`FromPlayer`
-missiles never hit the player), and explode on walls, floors and ceilings;
+**Weapons** shoot like Doom's p_pspr.c, in Doom units, from 36 units above
+the player's feet (`P_LineAttack`'s `z + height / 2 + 8`). `PlayerAim` is
+`P_BulletSlope`: `AimLineAttack` (`P_AimLineAttack` / `PTR_AimTraverse`)
+collects the lines and shootable bodies along the player's angle over 1024
+units, sorts them by distance and walks them, narrowing the slope window
+(-100/160 .. 100/160, Doom's view) at every floor or ceiling step of an
+opening and stopping at one-sided lines and closed doors; the first body
+whose visible part is in the window gives the slope to its middle. Doom
+tries straight ahead, then 5.625 degrees to each side. Bullets keep the
+player's angle with that slope; without a target the slope follows the
+camera's pitch (0 without mouse look, as in Doom). `PlayerLineAttack` traces
+the shot with `TraceLineAttack` (shared with the monsters), damages the
+body or puffs the wall, and shoots every gun-activated line the shot
+crossed (`PTR_ShootTraverse`). Pistol and chaingun are accurate on the first
+shot and spread +-5.6 degrees when the trigger is held, the shotgun's 7
+pellets spread +-5.6 degrees, the super shotgun's 20 +-11.2 degrees and in
+slope; damage is 5, 10 or 15 per bullet. Fist and chainsaw aim and trace
+over 64 / 65 units (2..20 damage, the fist x10 with berserk; the saw plays
+its hit sound only when it hits). `DebugShots` (demo command `SHOTS`) logs
+every shot. The rocket launcher, plasma gun and BFG spawn real projectile
+actors (`SpawnPlayerMissile`: `MISL`, `PLSS`, `BFS1` sprites) with the same
+autoaim (`P_SpawnPlayerMissile` turns the missile to the angle that found
+the target), 32 units above the feet; they hit monsters and barrels
+(`FromPlayer` missiles never hit the player), and explode on walls, floors
+and ceilings;
 rockets add 128-unit splash damage, the BFG ball launches after Doom's 40-tic
 charge and on impact sprays 40 tracers over 90° from the player (`BfgSpray`,
 15d7 each, with the green `BFE2` flash on every target). Weapon animation
@@ -995,7 +1011,6 @@ Where each engine feature is used, as a map for learning the engine:
 | `TCastleCamera.SetView`, `Direction`, `Perspective.FieldOfView/FieldOfViewAxis`, `ProjectionNear` | GameViewPlay | the player's eye |
 | `TEffectNode`, `TEffectPartNode` (`PLUG_vertex_eye_space`, `PLUG_fragment_modify`), custom `TSFFloat` / `TSFVec2f` uniform fields, `TFloatVertexAttributeNode`, `AddDestructionNotification` | DoomLighting, DoomGeometry, DoomActors | light diminishing |
 | `TCastleWalkNavigation` and its properties, `Input_*.Assign/MakeClear` | GameViewPlay | player movement |
-| `Items.WorldRay`, `TRayCollision.Distance` | DoomWorld | shooting |
 | `TCastleSound`, `SoundEngine.Play`, `TCastleSoundSource`, `SoundEngine.LoopingChannel[0]` | DoomSound, DoomMusic | effects and music |
 | `TCastleImageControl` (`Image`, `SmoothScaling`, `Stretch`), `TCastleLabel`, `TCastleRectangleControl`, `TCastleCrosshair`, `TCastleButton`, layout groups, `Anchor` | DoomHud, DoomMenu, GameViewPlay, GameViewMenu | 2D UI |
 | `TCastleUserInterface.Press` / `Motion` overrides, `RenderRect`, `InputKey` | DoomMenu, GameViewMenu | menu mouse input, scripted menu keys |

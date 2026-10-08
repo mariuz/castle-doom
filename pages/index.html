@@ -87,7 +87,7 @@
       <tr><td>Sky, light diminishing</td><td>Camera-following textured cylinder; Doom's colormap arithmetic per pixel as a GLSL shader effect (<code>TEffectNode</code>, a <code>FloatVertexAttribute</code> with the sector light)</td></tr>
       <tr><td>Player</td><td><code>TCastleWalkNavigation</code> with gravity, step climbing and precise collisions</td></tr>
       <tr><td>Things, monsters</td><td><code>TCastleBillboard</code> sprites with Doom's 8-rotation selection; 2D Doom-style movement rules</td></tr>
-      <tr><td>Shooting</td><td><code>WorldRay</code> ray casts against walls and sprites</td></tr>
+      <tr><td>Shooting</td><td>Doom's autoaim and line attacks traced in Doom units against linedefs and thing boxes</td></tr>
       <tr><td>Doors, lifts, floors, crushers, stairs, teleporters</td><td>Sector heights change and the affected scenes are regenerated in place</td></tr>
       <tr><td>Sounds</td><td>DMX lumps converted to WAV on the fly (<code>doomsfx:</code> protocol), positional with <code>TCastleSoundSource</code></td></tr>
       <tr><td>Music</td><td>MUS / MIDI lumps played by an OPL2-style FM synthesizer using the WAD's <code>GENMIDI</code> patches, rendered to a looping WAV</td></tr>
