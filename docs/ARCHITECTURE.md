@@ -692,16 +692,17 @@ current attack has finished, swaps in `PendingWeapon` at 96, then 2 raises
 it back to 0 (`A_Lower` / `A_Raise`); `FireWeapon` refuses meanwhile and the
 bob stops. Every level starts at 96 (raising).
 
-The screen melt (`doomwipe.pas`, `f_wipe.c`): `TViewPlay.BeginWipe` grabs
-the old screen off-screen, the way CGE's `render_3d_to_texture_and_use_as_quad`
-example does: a `TGLRenderToTexture` with `Buffer = tbNone` (an FBO with
-colour and depth renderbuffers), `Container.RenderControl(Self, ...)` renders
-the whole view into it, and `SaveScreen_NoFlush(..., ColorBuffer)` reads the
-`TRGBImage` back from the FBO. The web build has no melt: reading the
-window's back buffer gives black under WebGL, and the FBO capture raised an
-exception there, which FPC's WebAssembly target cannot catch (the program
-stops with "LONGJMP not supported"), so `CaptureScreen` returns nil under
-`{$ifdef WASI}`. The image goes to `TDoomWipe`, a full-size control in front of
+The screen melt (`doomwipe.pas`, `f_wipe.c`): `TViewPlay.BeginWipe` renders
+the old screen into a GPU texture and keeps it there: a `TDrawableImage` of
+the window size, `RenderToImageBegin` (an FBO with the texture as colour and
+a depth renderbuffer, so the 3D view renders correctly), `RenderContext.Clear`,
+`Container.RenderControl(Self, ...)` for the whole view, `RenderToImageEnd`.
+Nothing is read back to the CPU. That matters in the browser: CGE does not
+implement pixel read-back for WebGL yet (`SaveScreen_NoFlush` has a "TODO:
+web" where `glReadPixels` would be, so `SaveScreen` gives an empty image), and
+an FBO with a colour renderbuffer (`TGLRenderToTexture.Buffer = tbNone`)
+raised an exception there, which FPC's WebAssembly target cannot catch.
+The texture goes to `TDoomWipe`, a full-size control in front of
 everything whose `Render` draws it as 160 vertical strips with
 `TDrawableImage.Draw(ScreenRect, ImageRect)`, each strip shifted down by its
 own offset on the 200-line grid. `wipe_initMelt` gives every column a start

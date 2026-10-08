@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.4 (2026-10-08)
+
+- The screen melt between levels works in the browser too: the old screen is
+  rendered into a GPU texture and drawn from there, instead of read back to
+  the CPU (Castle Game Engine has no WebGL pixel read-back yet).
+
 ## v0.2.3 (2026-10-08)
 
 - Monster bullets are traced like Doom: aimed at you, with Doom's random

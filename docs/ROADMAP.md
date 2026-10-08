@@ -14,11 +14,11 @@ L = several days). Items inside a section are in suggested order.
   in Doom units. Monsters in the line of fire take the shot and fight back,
   misses leave puffs on the walls, and ledges block shots. Melee attacks also
   need a line of sight.
-- The screen melt captures the old screen off-screen (an FBO via
-  `TGLRenderToTexture`, `Container.RenderControl`) and skips the frame that
-  started it, then follows real time. In the browser this capture raised an
-  exception, which FPC's WebAssembly target cannot catch (the program
-  stopped), so the web build still has no melt.
+- The screen melt renders the old screen into a GPU texture
+  (`TDrawableImage.RenderToImageBegin`, `Container.RenderControl`) and draws
+  that, with no pixel read-back, so it works in the browser too (CGE has no
+  WebGL `glReadPixels` yet); it skips the frame that started it, then follows
+  real time.
 - Music without the stall: the first 8 s of a song are rendered at once and
   played, the rest a slice per frame (12 ms budget, `TSongRenderer`), and the
   finished song takes over at the same position; the intermission track is
@@ -169,7 +169,6 @@ L = several days). Items inside a section are in suggested order.
 | **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
-| **Screen melt on the web**: find which step of the FBO capture fails under WebGL (log each step; check `GLFeatures` for FBO / read-back support before calling anything that can raise, since exceptions abort the WebAssembly program). | Same transitions in the browser. | `GameViewPlay.CaptureScreen` | S |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
 | **Light diminishing** as a shader (Doom's `COLORMAP`, darker with distance per light level) instead of fog; optional palette-mapped rendering for the real 8-bit look. | The authentic look; shows CGE shader effects (`TEffectNode`). | `DoomGeometry` appearance, a GLSL effect | M |
 | **Hanging/floating things** bob (cacodemons hover), **gibs** for excessive damage (`XDEATH` frames). | Fidelity. | `DoomThings` frames, `KillActor` | S |
@@ -207,10 +206,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Screen melt on the web (S): find the failing capture step without
-   exceptions.
-2. Light diminishing as a shader (`COLORMAP`) instead of fog (M): the
+1. Light diminishing as a shader (`COLORMAP`) instead of fog (M): the
    authentic look of Doom's lighting.
-3. The player's hitscan through `TraceLineAttack` with Doom's autoaim (S):
+2. The player's hitscan through `TraceLineAttack` with Doom's autoaim (S):
    it still uses CGE's ray against the rendered quads, which face the
    camera and can miss a monster seen edge-on in another monster's shot.
+3. Browser frame rate (M): profile rendering in a normal browser and batch
+   the sprite scenes if draw calls dominate.

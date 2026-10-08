@@ -176,6 +176,11 @@ Goertzel on semitone vs quarter-tone frequencies).
   JS `null` (use `InvokeJSValueResult` for `localStorage.getItem`). To test
   the deployed page, open https://mariuz.github.io/castle-doom/play/ in the
   browser pane; the browser console shows the CGE log.
+- **No pixel read-back under WebGL in CGE**: `SaveScreen_NoFlush` has a
+  "TODO: web" where `glReadPixels` would be, so `Container.SaveScreen` gives an
+  empty image in the browser. Keep screen captures on the GPU
+  (`TDrawableImage.RenderToImageBegin` + `Container.RenderControl`, as the
+  melt does). `TGLRenderToTexture` with `tbNone` raised an exception there.
 - **Exceptions abort the WebAssembly program**: FPC's wasm32 target has no
   setjmp/longjmp, so any raised exception (even inside `try`/`except`)
   stops the web build ("Runtime error 217", "LONGJMP not supported"). Code
