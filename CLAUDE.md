@@ -342,8 +342,11 @@ Goertzel on semitone vs quarter-tone frequencies).
 - Jobs have `timeout-minutes`; if a run still hangs, `gh run cancel <id>`
   then `gh run rerun <id>` once the cancel has gone through.
 - `main` is the only branch; every push builds Windows/Linux packages
-  (`build.yml`) and deploys the web build (`web.yml`). Tags `vX.Y.Z` create a
-  GitHub Release with the packages. Check runs with
+  (Docker) and macOS app bundles (macOS runners, x86_64 and aarch64) in
+  `build.yml` and deploys the web build (`web.yml`). Tags `vX.Y.Z` create a
+  GitHub Release with the packages; when a session cannot push tags, run
+  `Build` by hand (workflow_dispatch) with `release_tag=vX.Y.Z`, which
+  creates the tag and the release (notes from `docs/CHANGELOG.md`). Check runs with
   `gh run list --repo mariuz/castle-doom` and `gh run view <id> --log-failed`.
 - Commit messages: imperative summary, then what/why; end with the
   `Co-Authored-By` line when an agent wrote the change.

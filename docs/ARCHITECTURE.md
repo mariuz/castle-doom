@@ -366,7 +366,11 @@ greys of invulnerability, `COLORMAP` row 32, colormap 1 for the light amplificat
 blinking in the last 4 seconds). `F` switches diminishing off (each sector
 then gets colormap `start / 2`). The player's weapon is a 2D image control,
 lit with `WeaponColormap` (`spritelights[MAXLIGHTSCALE - 1]` of the player's
-sector) through its colour; the flash image is full bright.
+sector), or the fixed colormap: `TDoomGraphics.ColormapCopy` maps the patch
+through that `COLORMAP` row on the CPU (a new copy only when the frame or the
+level changes); the flash image uses row 0 (full bright) or the fixed one.
+Without the palette mapping (`PALMAP`) the image's colour is multiplied
+instead.
 
 Two-sided lines flagged impassable (fences, ledges) get invisible quads in a
 dedicated collision scene (`Visible = false`, `Pickable = false`,

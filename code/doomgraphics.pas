@@ -113,6 +113,11 @@ type
     function Flat(const Name: String): TDoomImage;
     { Any patch-format lump (sprite frame, STBAR, TITLEPIC...), nil when missing. }
     function Patch(const LumpName: String): TDoomImage;
+    { A copy of a palette image (a patch) lit through COLORMAP row Level
+      (0..31, 32 = invulnerability): every pixel back to its PLAYPAL index,
+      then that row's colour, like Doom draws the player's weapon. Alpha is
+      kept. }
+    function ColormapCopy(const Source: TCastleImage; const Level: Integer): TCastleImage;
     { Sprite frame: Prefix like 'POSS', Frame 'A'..'Z', Rot 1..8 (0 = any).
       Falls back to rotation 0 when a rotation is missing. }
     function Sprite(const Prefix: String; const Frame: Char; const Rot: Integer;
@@ -623,6 +628,35 @@ begin
     end;
   end;
   WritelnLog('Graphics', 'Palette lookup images made (PLAYPAL to index, COLORMAP)');
+end;
+
+function TDoomGraphics.ColormapCopy(const Source: TCastleImage; const Level: Integer): TCastleImage;
+var
+  X, Y, Row, Index: Integer;
+  C: TVector4Byte;
+  Pixel: PVector4Byte;
+  Copy: TRGBAlphaImage;
+begin
+  MakeLuts;
+  Row := Max(0, Min(Level, 33));
+  if Source is TRGBAlphaImage then
+    Copy := TRGBAlphaImage(Source.MakeCopy)
+  else
+  begin
+    Copy := TRGBAlphaImage.Create(Source.Width, Source.Height);
+    Copy.DrawFrom(Source, 0, 0, dmOverwrite);
+  end;
+  for Y := 0 to Copy.Height - 1 do
+    for X := 0 to Copy.Width - 1 do
+    begin
+      Pixel := PVector4Byte(Copy.PixelPtr(X, Y));
+      C := Pixel^;
+      Index := PVector4Byte(FIndexLut.PixelPtr(
+        (C.X shr 2) + 64 * ((C.Z shr 2) mod 8), (C.Y shr 2) + 64 * ((C.Z shr 2) div 8)))^.X;
+      Pixel^ := PVector4Byte(FColormapLut.PixelPtr(Index, Row))^;
+      Pixel^.W := C.W;
+    end;
+  Result := Copy;
 end;
 
 procedure TDoomGraphics.ResolveAnim(const Img: TDoomImage; const IsFlat: Boolean);

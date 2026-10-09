@@ -1060,8 +1060,9 @@ var
   Img: TDoomImage;
   S, Speed, Bob, BobX, BobY: Single;
   W, H, Bright: Single;
-  Inverted, Fuzzy: Boolean;
-  InvSuffix: String;
+  Inverted, Fuzzy, Mapped: Boolean;
+  WeaponSuffix, FlashSuffix: String;
+  WeaponLevel, FlashLevel: Integer;
   CamPos: TVector3;
   Sec, Light: Integer;
 begin
@@ -1086,56 +1087,81 @@ begin
   { Partial invisibility: the weapon is drawn as fuzz too, blinking back to
     normal in the last seconds (st_stuff / r_things: > 4*32 tics or bit 8). }
   Fuzzy := (P.InvisibleTics > 4 * 32) or ((P.InvisibleTics and 8) <> 0);
-  if Fuzzy then
+  { R_DrawPSprite: the weapon is lit like a sprite at the nearest scale
+    (spritelights[MAXLIGHTSCALE - 1]) of the player's sector, the flash is
+    full bright; a fixed colormap (invulnerability's inverted row 32, the
+    visor's row 1) applies to both. Fuzz wins over the fixed colormap. }
+  Sec := FWorld.Map.SectorAt(P.X, P.Y);
+  if Sec >= 0 then
+    Light := FWorld.Map.Sectors[Sec].LightLevel
+  else
+    Light := 255;
+  if FWorld.FixedColormap >= 0 then
   begin
+    WeaponLevel := FWorld.FixedColormap;
+    FlashLevel := FWorld.FixedColormap;
+  end else
+  begin
+    WeaponLevel := DoomLightingInstance.WeaponColormap(Light);
+    FlashLevel := 0;
+  end;
+  Mapped := DoomLightingInstance.PaletteMapped and not Fuzzy;
+  if Fuzzy or Mapped then
+  begin
+    { The colours are in the image (fuzz specks or COLORMAP rows). }
     FWeaponImage.Color := White;
     FFlashImage.Color := White;
   end else
   begin
-    { R_DrawPSprite: the weapon is lit like a sprite at the nearest scale
-      (spritelights[MAXLIGHTSCALE - 1]) of the player's sector, the flash
-      is full bright; a fixed colormap applies to both (the inverted
-      invulnerability colormap is not a colour multiplier: the images
-      are swapped for inverted copies below). }
-    Sec := FWorld.Map.SectorAt(P.X, P.Y);
-    if Sec >= 0 then
-      Light := FWorld.Map.Sectors[Sec].LightLevel
-    else
-      Light := 255;
-    if FWorld.FixedColormap = InverseColormap then
+    { Without the palette mapping: a colour multiplier, and inverted
+      copies for invulnerability (not a multiplier). }
+    if WeaponLevel = InverseColormap then
       Bright := 1
     else
-      Bright := TDoomLighting.ColormapBrightness(DoomLightingInstance.WeaponColormap(Light));
+      Bright := TDoomLighting.ColormapBrightness(WeaponLevel);
     FWeaponImage.Color := Vector4(Bright, Bright, Bright, 1);
-    if (FWorld.FixedColormap >= 0) and (FWorld.FixedColormap < InverseColormap) then
-      Bright := TDoomLighting.ColormapBrightness(FWorld.FixedColormap)
+    if FlashLevel = InverseColormap then
+      Bright := 1
     else
-      Bright := 1;
+      Bright := TDoomLighting.ColormapBrightness(FlashLevel);
     FFlashImage.Color := Vector4(Bright, Bright, Bright, 1);
   end;
-
-  { Fuzz wins over the fixed colormap, like in R_DrawPSprite. }
-  Inverted := (FWorld.FixedColormap = InverseColormap) and not Fuzzy;
+  Inverted := (FWorld.FixedColormap = InverseColormap) and not Fuzzy and not Mapped;
   if Fuzzy then
-    InvSuffix := '/fuzz' + IntToStr(FuzzPhaseOfTic(FWorld.Tic))
-  else if Inverted then
-    InvSuffix := '/inverse'
-  else
-    InvSuffix := '';
+  begin
+    WeaponSuffix := '/fuzz' + IntToStr(FuzzPhaseOfTic(FWorld.Tic));
+    FlashSuffix := WeaponSuffix;
+  end else
+  if Mapped then
+  begin
+    WeaponSuffix := '/colormap' + IntToStr(WeaponLevel);
+    FlashSuffix := '/colormap' + IntToStr(FlashLevel);
+  end else
+  if Inverted then
+  begin
+    WeaponSuffix := '/inverse';
+    FlashSuffix := WeaponSuffix;
+  end else
+  begin
+    WeaponSuffix := '';
+    FlashSuffix := '';
+  end;
 
   SpriteName := FWorld.WeaponSprite(P.Weapon) + P.WeaponFrame + '0';
   Img := Graphics.Patch(SpriteName);
   if (Img <> nil) and not P.Dead and not FAutomap.Exists then
   begin
-    if SpriteName + InvSuffix <> FWeaponImageName then
+    if SpriteName + WeaponSuffix <> FWeaponImageName then
     begin
       if Fuzzy then
         FWeaponImage.Image := FuzzCopy(Img.Image, FuzzPhaseOfTic(FWorld.Tic))
+      else if Mapped then
+        FWeaponImage.Image := Graphics.ColormapCopy(Img.Image, WeaponLevel)
       else if Inverted then
         FWeaponImage.Image := InvertedCopy(Img.Image)
       else
         FWeaponImage.Image := Img.Image.MakeCopy;
-      FWeaponImageName := SpriteName + InvSuffix;
+      FWeaponImageName := SpriteName + WeaponSuffix;
     end;
     FWeaponImage.Exists := true;
     FWeaponImage.Width := Img.Width * S;
@@ -1155,15 +1181,17 @@ begin
   if FlashName <> '' then Img := Graphics.Patch(FlashName);
   if (Img <> nil) and not P.Dead and not FAutomap.Exists then
   begin
-    if FlashName + InvSuffix <> FFlashImageName then
+    if FlashName + FlashSuffix <> FFlashImageName then
     begin
       if Fuzzy then
         FFlashImage.Image := FuzzCopy(Img.Image, FuzzPhaseOfTic(FWorld.Tic))
+      else if Mapped then
+        FFlashImage.Image := Graphics.ColormapCopy(Img.Image, FlashLevel)
       else if Inverted then
         FFlashImage.Image := InvertedCopy(Img.Image)
       else
         FFlashImage.Image := Img.Image.MakeCopy;
-      FFlashImageName := FlashName + InvSuffix;
+      FFlashImageName := FlashName + FlashSuffix;
     end;
     FFlashImage.Exists := true;
     FFlashImage.Width := Img.Width * S;

@@ -4,7 +4,7 @@
 [![Web](https://github.com/mariuz/castle-doom/actions/workflows/web.yml/badge.svg)](https://github.com/mariuz/castle-doom/actions/workflows/web.yml)
 
 **Play in the browser: https://mariuz.github.io/castle-doom/** (WebAssembly build)
-&middot; **Downloads: [Releases](https://github.com/mariuz/castle-doom/releases)** (Windows, Linux) &middot; [Changelog](docs/CHANGELOG.md)
+&middot; **Downloads: [Releases](https://github.com/mariuz/castle-doom/releases)** (Windows, Linux, macOS) &middot; [Changelog](docs/CHANGELOG.md)
 
 Doom levels, rendered and played with [Castle Game Engine](https://castle-engine.io/)
 (Object Pascal). It reads the original WAD format directly: Freedoom Phase 1 and
@@ -138,8 +138,10 @@ castle-doom --autotest E1M1 shots/e1m1 --demo "S,F:3,S,T:90,U,W:2,S,X,S,Q"
 ## Continuous integration
 
 - `.github/workflows/build.yml`: packages Windows x86_64 and Linux x86_64 builds on every
-  push using the [Castle Game Engine Docker image](https://castle-engine.io/docker); pushing a
-  tag `vX.Y.Z` attaches them to a GitHub Release.
+  push using the [Castle Game Engine Docker image](https://castle-engine.io/docker), and macOS
+  app bundles (x86_64 and aarch64, unsigned: right-click > Open the first time) on GitHub's
+  macOS runners; pushing a tag `vX.Y.Z`, or running the workflow by hand with `release_tag`,
+  attaches them to a GitHub Release.
 - `.github/workflows/web.yml`: builds the WebAssembly version (FPC main branch with the
   wasm32 cross-compiler and Pas2js are built from source and cached, since the Docker image
   does not ship them yet) and deploys `pages/` + the game to GitHub Pages.

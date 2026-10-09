@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- macOS packages: CI builds `Castle DOOM.app` for Intel (x86_64) and
+  Apple Silicon (aarch64) on GitHub's macOS runners and attaches both
+  zips to releases (not signed or notarized: the first start needs
+  right-click > Open).
+- Palette-mapped weapon: the player's weapon and its flash go through
+  the same `COLORMAP` rows as the world (`TDoomGraphics.ColormapCopy`,
+  one copy per sprite frame and light level), so the light level,
+  the visor and invulnerability's inverted row 32 match the walls exactly.
+  Textures were already unfiltered up close (nearest magnification); far
+  away they keep mipmaps, which Doom did not have, to avoid shimmer.
 - Column fuzz: spectres and the weapon under partial invisibility are
   drawn as black specks in `R_DrawFuzzColumn`'s `fuzzoffset` pattern
   (50 entries of +1 / -1, at Doom's 320x200 grain, starting elsewhere
@@ -325,7 +335,6 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
-| **Palette-mapped weapon and filtering**: the player's weapon (a 2D image control) is still lit by multiplying its colour, and textures are filtered before the palette lookup; Doom samples unfiltered texels. A nearest-filter option would complete the 8-bit look. | Fidelity of the palette look. | `GameViewPlay`, `DoomGraphics` | S |
 
 ## 3. Audio
 
@@ -360,9 +369,9 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Palette-mapped weapon and filtering (S): light the weapon through the
-   same `COLORMAP` lookup and offer unfiltered (nearest) textures, so the
-   whole view has the 8-bit look (see Presentation).
-3. `-deh` / `.bex` files (M-L): load DeHackEd patches given on the
+2. `-deh` / `.bex` files (M-L): load DeHackEd patches given on the
    command line and the other DeHackEd sections (things, frames,
    weapons, ammo), for classic PWADs that change monsters.
+3. Background rendering of music (M): synthesize the next track in a
+   thread on the desktop and in slices on the web, so a level start
+   never waits for the synth (see Audio).
