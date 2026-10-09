@@ -1,7 +1,8 @@
 # Native builds: Windows x86_64 and Linux x86_64 with the Castle Game Engine
 # Docker image (FPC with cross-compilers and the CGE build tool), macOS
 # x86_64 and aarch64 on GitHub's macOS runners (FPC and CGE set up by
-# castle-build-ci, like CGE's own template castle-game/.github/workflows/build.yml).
+# castle-build-ci, like CGE's own template castle-game/.github/workflows/build.yml),
+# and a Windows Installer (MSI) made with WiX from the Windows zip.
 #
 # - On every push / pull request: build and keep the packages as workflow artifacts.
 # - On a tag like v1.2.3: also attach the packages to a GitHub Release.
@@ -99,6 +100,43 @@ jobs:
           path: "*-darwin-*.zip"
           if-no-files-found: error
 
+  # A Windows Installer package from the Windows zip: WiX 5 (pinned) on a
+  # Windows runner, the .wxs written by tools/make_msi_wxs.py.
+  build-msi:
+    name: Package Windows installer (MSI)
+    needs: build-native
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: castle-doom-windows
+          path: windows-zip
+
+      - name: Install WiX
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix --version
+
+      - name: Build the MSI
+        run: |
+          VERSION=$(sed -n 's/.*<version value="\([^"]*\)".*/\1/p' CastleEngineManifest.xml)
+          python tools/make_msi_wxs.py windows-zip/*-win64-x86_64.zip "$VERSION" msi
+          wix build -arch x64 msi/castle-doom.wxs -o "castle-doom-$VERSION-win64-x86_64.msi"
+          ls -l *.msi
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: castle-doom-windows-msi
+          path: "*-win64-x86_64.msi"
+          if-no-files-found: error
+
   autotest:
     name: Autotests (Linux, Xvfb)
     runs-on: ubuntu-latest
@@ -142,7 +180,7 @@ jobs:
   release:
     name: GitHub Release
     if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.release_tag, 'v')
-    needs: [build-native, build-macos]
+    needs: [build-native, build-macos, build-msi]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -172,4 +210,5 @@ jobs:
           files: |
             packages/*.zip
             packages/*.tar.gz
+            packages/*.msi
           generate_release_notes: true
