@@ -56,6 +56,12 @@ its own `XDG_CONFIG_HOME`, failing on exceptions, missing log lines or
 wrong save contents. Add a test there when a feature gets a demo recipe
 below.
 
+Unit tests (FPCUnit, no window, about 3 s) cover the parsers:
+`castle-engine simple-compile tests/castle_doom_tests.lpr` then
+`tests/castle_doom_tests --all --format=plain` from the project root (exit
+code 1 on a failure; CI runs them before the autotests). Add a case there
+when changing `DoomWad`, `DoomMap`, `DoomMusic` or `DoomDehacked`.
+
 The autotest harness is the main verification tool; use it after every change:
 
 ```powershell

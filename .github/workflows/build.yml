@@ -162,6 +162,12 @@ jobs:
         run: |
           CASTLE_ENGINE_PATH="$HOME/castle-engine" "$HOME/castle-engine/tools/build-tool/castle-engine" compile --mode=release
 
+      - name: Unit tests (FPCUnit)
+        timeout-minutes: 5
+        run: |
+          CASTLE_ENGINE_PATH="$HOME/castle-engine" "$HOME/castle-engine/tools/build-tool/castle-engine" simple-compile tests/castle_doom_tests.lpr
+          tests/castle_doom_tests --all --format=plain
+
       - name: Run autotests
         timeout-minutes: 15
         run: |

@@ -4,4 +4,9 @@ castle-auto-generated-resources.res
 *.dll
 castle-doom.exe
 castle-doom
+# Unit test binary and compiler output (tests/castle_doom_tests.lpr)
+tests/castle_doom_tests
+tests/castle_doom_tests.exe
+tests/*.o
+tests/*.ppu
 *.lps

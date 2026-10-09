@@ -145,6 +145,8 @@ castle-doom --autotest E1M1 shots/e1m1 --demo "S,F:3,S,T:90,U,W:2,S,X,S,Q"
   macOS runners, and a Windows installer (MSI, WiX on a Windows runner, from the Windows zip
   by `tools/make_msi_wxs.py`); pushing a tag `vX.Y.Z`, or running the workflow by hand with
   `release_tag`, attaches them to a GitHub Release.
+- The `Autotests` job runs the FPCUnit unit tests (`tests/castle_doom_tests.lpr`: WADs, map
+  BSP, music rendering, DeHackEd) and then `tools/run_autotests.py` under Xvfb.
 - `.github/workflows/web.yml`: builds the WebAssembly version (FPC main branch with the
   wasm32 cross-compiler and Pas2js are built from source and cached, since the Docker image
   does not ship them yet) and deploys `pages/` + the game to GitHub Pages.

@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Unit tests: `tests/castle_doom_tests.lpr` (FPCUnit, console runner)
+  checks the parsers without a window: both Freedoom WADs and PLAYPAL,
+  E1M1's BSP (682 subsectors, polygon area 6712683, point-in-sector),
+  MAP01, MUS to WAV rendering (header, rate, length) and rejecting junk,
+  Freedoom's DEHACKED lump (par times, strings) and a `-deh` patch over
+  it. Built with `castle-engine simple-compile`, run in the CI autotest
+  job before the game autotests (about 3 s).
 - glBSP GL nodes: maps whose BSP is only in glBSP's `GL_VERT` /
   `GL_SEGS` / `GL_SSECT` / `GL_NODES` lumps (after `GL_<map>`, in the
   WAD or a `.gwa` loaded with `-file`) load in all of glBSP's versions
@@ -367,7 +374,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Register-accurate OPL3 emulation** (port Nuked OPL3 or DBOPL) instead of the approximate FM model; or at least tune envelope shapes against recordings. | The music is recognisable but not exact. | `DoomMusic` synth core (keep the MUS/MIDI/GENMIDI front end) | L |
+| **Register-accurate OPL3 emulation** instead of the approximate FM model; or at least tune envelope shapes against recordings. Licences: Nuked OPL3 is LGPL 2.1 and DOSBox's DBOPL GPL, while this project is MIT, so a port needs the owner's decision (relicensing the synth unit, or a clean-room emulator from the YMF262 documentation). | The music is recognisable but not exact. | `DoomMusic` synth core (keep the MUS/MIDI/GENMIDI front end) | L |
 | **Music for warps and loads**: the first level, `-warp`, a loaded game and the title still render an 8-second intro at once (115-230 ms natively); a desktop thread, or rendering the intro in slices behind a short silence, would remove the last stall. | Smoother first level start. | `DoomMusic` | S |
 | **Stereo panning** for positional sounds is done by the engine, but Doom's `S_CLIPPING_DIST` falloff curve could be matched more closely. | Minor. | `DoomSound` | S |
 | **PC speaker** sounds (`DP*`) are ignored on purpose; no change planned. | - | - | - |
@@ -386,7 +393,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Replace the in-code UI with editor designs** (`.castle-user-interface`) for the HUD and menu so they can be edited in the CGE editor; keep the generated map geometry in code. | Demonstrates the editor workflow. | `data/*.castle-user-interface`, views | M |
-| **Unit tests** (`castle-tester`/FPCUnit) for `DoomWad`, `DoomMap` polygon clipping, MUS/MIDI parsing, the synth envelope timings (the `--autotest` CI job covers gameplay; these would cover the parsers). | Catch regressions without a human. | `tests/`, `build.yml` | M |
+| **More unit tests**: MIDI (not only MUS) parsing, the synth's envelope timings, ZDoom / glBSP node formats from generated lumps (now only in the autotests), DoomGeometry's sector chunks. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
 | **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
 | **Web**: pointer-lock prompt, gamepad, a progress bar during the first data download. | Friendlier first play. | web build | S |
 | **Performance**: build a static-sector blockmap; merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
@@ -396,9 +403,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Register-accurate OPL3 emulation (L): port Nuked OPL3 or DBOPL for
-   the synth core so the music sounds exactly like the original (see
-   Audio).
-3. Unit tests (M): FPCUnit tests for `DoomWad`, `DoomMap` polygon
-   clipping, MUS/MIDI parsing and DeHackEd parsing, run in CI next to
-   the autotests (see Engine and tooling).
+2. Web friendliness (S): a progress bar during the first data download,
+   a "click to play" prompt for the pointer lock, gamepad input (see
+   Engine and tooling).
+3. Register-accurate OPL3 emulation (L): needs a licence decision first
+   (see Audio), then a port or a clean-room emulator.
