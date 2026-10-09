@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.4.0 (2026-10-09)
+
+- Doom's own colours: the lighting now looks every pixel up in the real
+  palette and colormap of the WAD, so light bands, dark areas and the
+  invulnerability greys look like the original.
+- Doom's menus: the title pages cycle like the original (title, credits,
+  help), F1 shows Read This!, and Esc opens Doom's main menu over the
+  paused game with New Game, Options, Load, Save and Quit. Options has End
+  Game, Messages on / off, Mouse Sensitivity and Sound Volume (also F4),
+  with Doom's thermometers. F2 / F3 open Doom's save and load pages, and
+  saves get typed names.
+- Settings are remembered: sound and music volume, music on / off, light
+  diminishing, mouse look and sensitivity, messages.
+- In the browser, Esc (which releases the mouse) pauses the game with the
+  menu; a click or Esc resumes and captures the mouse again.
+- Saves can be exported and imported (the home page's "Your saves", and
+  Options on the desktop), to move them between browsers and computers.
+- The browser version downloads Freedoom Phase 2 only when you pick it, so
+  the first start is faster.
+- Hits and explosions push the player and monsters back; overkill gibs
+  zombies, sergeants, imps and SS; crushers squash corpses into gibs;
+  melee attacks turn you onto the target; flying monsters keep Doom's
+  heights.
+- Donut floors, raise-to-shortest-texture floors, stopping and resuming
+  crushers and lifts, and slow crushers slowing down on things.
+- The sky has Doom's vertical scale and shows through sky floors.
+- Textures of levels left behind are freed, so long sessions use less
+  memory.
+
 ## v0.3.0 (2026-10-08)
 
 - Doom's lighting instead of fog: every wall, floor, ceiling and sprite is

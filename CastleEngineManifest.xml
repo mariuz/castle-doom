@@ -10,7 +10,7 @@
   author="castle-doom"
   screen_orientation="landscape"
 >
-  <version value="0.3.0" code="7" />
+  <version value="0.4.0" code="8" />
   <compiler_options>
     <search_paths>
       <path value="code/" />
