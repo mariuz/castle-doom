@@ -6,6 +6,18 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Knockback and crushed corpses like Doom: every hit with an inflictor
+  pushes by damage * 12.5 / mass (`P_DamageMobj`, info.c masses; a small
+  killing hit from 64+ units below sometimes throws the target forward);
+  monsters, corpses and barrels slide with `P_XYMovement`'s friction (none
+  in the air, so a shot cacodemon drifts to the wall) and corpses slide off
+  ledges; the player is pushed too (rocket blasts, demon bites; god mode
+  and invulnerability still push), through the view's collision-checked
+  move. The player's chainsaw and telefrags do not push. A ceiling coming
+  down turns corpses (a quarter of their height) into `POL5` gibs that do
+  not block doors, removes dropped items, and crushers hurt 10 every 4 tics
+  (they hurt every tic before). Barrels block doors and get crushed; the
+  Arch-vile does not raise crushed gibs (no "ghosts").
 - Melee turns the player like Doom: a punch that finds a target faces it
   (`A_Punch`), the chainsaw pulls the view towards it 4.5 degrees a tic or
   jumps to 4.29 degrees short of it (`A_Saw`, the familiar jitter); the
@@ -192,7 +204,6 @@ L = several days). Items inside a section are in suggested order.
 | **Donut (special 9)**, **perpetual platforms stop/start**, **raise by shortest lower texture (30/96 are approximated as +64)**, **crusher return speed when blocked**. | Correctness of a few maps. | `ApplySpecial`, `TSectorMover` | S each |
 | **Column fuzz shader**: Doom's fuzz also shifts columns up and down by a pixel (`fuzzoffset`); a `TEffectNode` fragment shader could add that wobble to spectres and the invisible weapon. | Closer look. | `DoomActors` appearance | S |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
-| **Falling damage / knockback**: hitscans and explosions should push things. | Feel. | `DamageActor`, `DamagePlayer` | S |
 | **Item respawn / deathmatch starts**: not applicable to single player, but the flags are parsed. | Only if multiplayer ever happens. | - | - |
 
 ## 2. Presentation
@@ -241,8 +252,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Crushers turn corpses into gibs (`P_ChangeSector`: `S_GIBS`, `POL5`)
-   and knockback from hits and explosions (S): the next physical
-   details after the gibs.
+2. Sector specials left in the gameplay table (S each): the donut (9),
+   perpetual platforms stopping and starting, raise by shortest lower
+   texture, crushers slowing to 1/8 speed when they hit something.
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

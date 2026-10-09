@@ -102,6 +102,10 @@ P:3001:300,W:0.1,X` aims down at slope -0.26; from (-200, 256) the same imp
 is hidden by the lift's edge and nothing is aimed at (Doom does the same).
 `SHOTS` also logs melee turns (`Turn:`): `Y,K,SHOTS,C:1,W:1,A:0,P:3001:55,T:12,X`
 punches an imp 12 degrees aside and turns onto it; `C:8` saws instead.
+It logs knockback too (`Push:`): `K,SHOTS,C:5,W:1,A:180,W:0.3,X,W:1.5,S`
+fires a rocket into the wall behind the start and the player ends near
+(-350, 256). Crushed corpses log `Crush:`; a zombie killed in the E1M1 door
+is squashed when it closes: `Y,G:480:712,A:0,U,W:1.5,P:3004:72,D,W:7,Q`.
 
 `SIGHT` in a demo logs, for every monster within 2500 units, the 2D and
 3D line of sight to the player and the REJECT bit (`Sight:` lines).

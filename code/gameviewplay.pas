@@ -124,6 +124,10 @@ uses Math, JsonParser,
   DoomGeometry, DoomMap, DoomLighting,
   GameViewMenu, GameSaveStorage;
 
+type
+  { Opens TCastleNavigation.Move (protected) to push the player. }
+  TWalkNavigationAccess = class(TCastleWalkNavigation);
+
 const
   SlotMenuNone = 0;
   SlotMenuSave = 1;
@@ -190,7 +194,8 @@ begin
   FViewport.DynamicBatching := true;
   InsertFront(FViewport);
 
-  FNavigation := TCastleWalkNavigation.Create(FreeAtStop);
+  { The subclass only opens Move for the knockback. }
+  FNavigation := TWalkNavigationAccess.Create(FreeAtStop);
   FViewport.InsertFront(FNavigation);
   SetupNavigation;
 
@@ -1136,6 +1141,20 @@ begin
   begin
     FWorld.PlayerTeleported := false;
     PlacePlayer(FWorld.PlayerTeleportX, FWorld.PlayerTeleportY, FWorld.PlayerTeleportZ, FWorld.PlayerTeleportAngle);
+  end;
+
+  { Knockback: move the camera by the world's push with the navigation's
+    collisions (walls slide it); stop the push when nothing moved. }
+  if (FWorld.PlayerPushDX <> 0) or (FWorld.PlayerPushDY <> 0) then
+  begin
+    if not TWalkNavigationAccess(FNavigation).Move(
+      DoomToCge(FWorld.PlayerPushDX, FWorld.PlayerPushDY, 0), false, true) then
+    begin
+      FWorld.PlayerPushVX := 0;
+      FWorld.PlayerPushVY := 0;
+    end;
+    FWorld.PlayerPushDX := 0;
+    FWorld.PlayerPushDY := 0;
   end;
 
   { Melee attacks turn the player (A_Punch / A_Saw): rotate the view

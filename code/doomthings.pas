@@ -51,6 +51,8 @@ type
       -Health; '' when the monster has none. }
     XDeathFrames: String;
     Health: Integer;
+    { info.c's mass: knockback is damage * 12.5 / Mass units a tic. }
+    Mass: Integer;
     Speed: Integer;
     PainChance: Integer;
     Attack: TAttackKind;
@@ -91,6 +93,7 @@ begin
   Result.IdleFrames := 'A';
   Result.IdleTics := 6;
   Result.PainFrame := #0;
+  Result.Mass := 100;
 end;
 
 procedure Add(const Info: TThingInfo);
@@ -200,6 +203,22 @@ begin
   { Boss brain: its pain and death sounds play at full volume from DoomWorld. }
   Monster(88, 'BBRN', 16, 16, 250, 0, 255, 'A', 'A', '', 'B', 'A', akNone, 0, 0, '', '', '', '');
   Infos[High(Infos) - 1].Hanging := true; { Keen hangs from the ceiling }
+  { info.c's masses (the rest weigh 100). }
+  Infos[Index[3002]].Mass := 400;
+  Infos[Index[58]].Mass := 400;
+  Infos[Index[3006]].Mass := 50;
+  Infos[Index[3005]].Mass := 400;
+  Infos[Index[3003]].Mass := 1000;
+  Infos[Index[69]].Mass := 1000;
+  Infos[Index[16]].Mass := 1000;
+  Infos[Index[7]].Mass := 1000;
+  Infos[Index[64]].Mass := 500;
+  Infos[Index[66]].Mass := 500;
+  Infos[Index[67]].Mass := 1000;
+  Infos[Index[68]].Mass := 600;
+  Infos[Index[71]].Mass := 400;
+  Infos[Index[72]].Mass := 10000000;
+  Infos[Index[88]].Mass := 10000000;
   { info.c's S_*_XDIE states. }
   Infos[Index[3004]].XDeathFrames := 'MNOPQRSTU';
   Infos[Index[9]].XDeathFrames := 'OPQRSTU';

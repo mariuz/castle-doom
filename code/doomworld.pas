@@ -172,6 +172,9 @@ type
     { Height of a flying monster: P_ZMovement's floating towards the target,
       and its corpse falling (lost souls stay where they die). }
     procedure TicFloat(const A: TDoomActor);
+    { P_XYMovement for knocked-back monsters, corpses and barrels. }
+    procedure TicPush(const A: TDoomActor);
+    procedure TicPlayerPush;
     procedure TicMissile(const A: TDoomActor);
     procedure TicMovers;
     procedure TicLights;
@@ -291,6 +294,10 @@ type
       melee attacks turn the player to the target. The view applies and
       clears it. }
     PlayerTurn: Single;
+    { Knockback of the player (Doom units a tic) and the distance it moved
+      the player since the view last applied it (PlayerPushDX/DY, which the
+      view moves the camera by with collisions, then clears). }
+    PlayerPushVX, PlayerPushVY, PlayerPushDX, PlayerPushDY: Single;
     { Skill level, Doom's gameskill: 0 "I'm too young to die" .. 4 "Nightmare!".
       Set before LoadMap (things are spawned by it); saved with the game. }
     Skill: Integer;
@@ -330,7 +337,10 @@ type
       the player); otherwise Attacker (a monster) becomes its new target,
       nil Attacker means environmental damage (crusher, barrel) with no retarget. }
     procedure DamageActor(const A: TDoomActor; const Damage: Integer; const HitX, HitY, HitZ: Single;
-      const Attacker: TDoomActor = nil; const ByPlayer: Boolean = true);
+      const Attacker: TDoomActor = nil; const ByPlayer: Boolean = true;
+      const Push: Boolean = false; const FromX: Single = 0; const FromY: Single = 0; const FromZ: Single = 0);
+    { PIT_ChangeSector: a corpse under a closing ceiling becomes gibs. }
+    procedure CrushCorpse(const A: TDoomActor);
     { Debug: every awake monster turns on the nearest other monster. }
     procedure DebugInfight;
     { Debug: kill every monster (exercises boss-death triggers). }
@@ -603,21 +613,38 @@ begin
         begin
           Blocked := false;
           Limit := World.Map.Sectors[Sector].FloorHeight;
+          { PIT_ChangeSector: crushers hurt 10 every 4 tics. }
           if (World.Player.Sector = Sector) and not World.Player.Dead then
             if NewH < World.Player.Z + PlayerHeight then
             begin
               Blocked := true;
-              if Kind = mkCrusher then
+              if (Kind = mkCrusher) and (World.Tic and 3 = 0) then
                 World.DamagePlayer(10, nil);
             end;
           for A in World.Actors do
-            if (A.Sector = Sector) and (A.Info^.Kind = tkMonster) and (A.State <> asDead) and
+          begin
+            if (A.Sector <> Sector) or A.Removed then Continue;
+            if (A.Info^.Kind = tkMonster) and (A.State in [asDying, asDead]) then
+            begin
+              { Corpses are a quarter of their height; squeezed, they turn
+                into gibs and never block. }
+              if (A.SpritePrefix <> 'POL5') and (NewH < A.DoomZ + A.Info^.Height / 4) then
+                World.CrushCorpse(A);
+            end else
+            if (A.Info^.Kind = tkPickup) and A.Dropped then
+            begin
+              if NewH < A.DoomZ + A.Info^.Height then
+                A.Removed := true;
+            end else
+            if ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) and
+               not (A.State in [asDying, asDead, asEffect, asMissile]) and
                (NewH < A.DoomZ + A.Info^.Height) then
             begin
               Blocked := true;
-              if Kind = mkCrusher then
+              if (Kind = mkCrusher) and (World.Tic and 3 = 0) then
                 World.DamageActor(A, 10, A.DoomX, A.DoomY, A.DoomZ + 32, nil, false);
             end;
+          end;
           if Blocked and (Kind = mkDoor) then
           begin
             { Reverse: reopen. }
@@ -1036,6 +1063,7 @@ begin
   end;
   PlayerTeleported := false;
   PlayerTurn := 0;
+  PlayerPushVX := 0; PlayerPushVY := 0; PlayerPushDX := 0; PlayerPushDY := 0;
   if State <> nil then
     RestoreDynamicState(State);
 end;
@@ -1248,6 +1276,7 @@ begin
   TicButtons;
   Lap(2);
   TicActors;
+  TicPlayerPush;
   if FBrainDeathTics > 0 then
     TicBrainDeath;
   Lap(3);
@@ -1613,6 +1642,12 @@ begin
     else
       A.DeadTics := 0;
 
+    { Knockback momentum. }
+    if (not A.Removed) and ((A.VelX <> 0) or (A.VelY <> 0)) and not A.Charging and
+       not (A.State in [asMissile, asEffect]) and
+       ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) then
+      TicPush(A);
+
     { Follow moving floors. }
     if not A.Removed then
     begin
@@ -1829,7 +1864,9 @@ begin
       FFloatZ := Max(FloorZ, OpenBottom);
       Exit;
     end;
-    if (not A.Info^.Floats) and (OpenBottom - LowFloor > 24) and (LowFloor < Z - 24) then
+    { Corpses have MF_DROPOFF: knocked off a ledge, they fall. }
+    if (not A.Info^.Floats) and not (A.State in [asDying, asDead]) and
+       (OpenBottom - LowFloor > 24) and (LowFloor < Z - 24) then
     begin
       BlockedByLine := I;
       Exit;
@@ -2160,6 +2197,88 @@ begin
   A.DoomZ := Clamped(A.DoomZ, Floor, Top);
 end;
 
+const
+  { P_XYMovement: MAXMOVE, STOPSPEED and FRICTION in Doom units a tic. }
+  MaxMove = 30;
+  StopSpeed = 1 / 16;
+  Friction = $E800 / $10000;
+
+{ P_DamageMobj's thrust: away from the inflictor by damage * 12.5 / mass,
+  and a small hit that kills a target standing over 64 units above the
+  inflictor sometimes throws it forward instead (four times as hard). }
+procedure AddThrust(const TX, TY, TZ: Single; const Mass, Damage, Health: Integer;
+  const FX, FY, FZ: Single; var VX, VY: Single);
+var
+  Ang, T: Single;
+begin
+  Ang := ArcTan2(TY - FY, TX - FX);
+  T := Damage * 12.5 / Max(1, Mass);
+  if (Damage < 40) and (Damage > Health) and (TZ - FZ > 64) and (Random(2) = 1) then
+  begin
+    Ang := Ang + Pi;
+    T := T * 4;
+  end;
+  VX := VX + T * Cos(Ang);
+  VY := VY + T * Sin(Ang);
+end;
+
+procedure TDoomWorld.TicPush(const A: TDoomActor);
+var
+  VX, VY, OldX, OldY: Single;
+  Steps, I, Blocked: Integer;
+begin
+  VX := Clamped(A.VelX, -MaxMove, MaxMove);
+  VY := Clamped(A.VelY, -MaxMove, MaxMove);
+  { Big moves go in two halves so thin walls still block them. }
+  if (Abs(VX) > MaxMove / 2) or (Abs(VY) > MaxMove / 2) then Steps := 2 else Steps := 1;
+  for I := 1 to Steps do
+  begin
+    OldX := A.DoomX;
+    OldY := A.DoomY;
+    if not TryMove2D(A, A.DoomX + VX / Steps, A.DoomY + VY / Steps, Blocked) then
+    begin
+      A.VelX := 0;
+      A.VelY := 0;
+      Exit;
+    end;
+    if (A.Info^.Kind = tkMonster) and not (A.State in [asDying, asDead]) then
+      MonsterCrossLines(A, OldX, OldY);
+  end;
+  { No friction in the air: a flyer knocked back drifts until it hits a wall. }
+  if (A.Sector >= 0) and (A.DoomZ > FMap.Sectors[A.Sector].FloorHeight) then Exit;
+  if (Abs(A.VelX) < StopSpeed) and (Abs(A.VelY) < StopSpeed) then
+  begin
+    A.VelX := 0;
+    A.VelY := 0;
+  end else
+  begin
+    A.VelX := A.VelX * Friction;
+    A.VelY := A.VelY * Friction;
+  end;
+end;
+
+procedure TDoomWorld.TicPlayerPush;
+var
+  Sec: Integer;
+begin
+  if (PlayerPushVX = 0) and (PlayerPushVY = 0) then Exit;
+  PlayerPushVX := Clamped(PlayerPushVX, -MaxMove, MaxMove);
+  PlayerPushVY := Clamped(PlayerPushVY, -MaxMove, MaxMove);
+  PlayerPushDX := PlayerPushDX + PlayerPushVX;
+  PlayerPushDY := PlayerPushDY + PlayerPushVY;
+  Sec := FMap.SectorAt(Player.X, Player.Y);
+  if (Sec >= 0) and (Player.Z > FMap.Sectors[Sec].FloorHeight + 1) then Exit;
+  if (Abs(PlayerPushVX) < StopSpeed) and (Abs(PlayerPushVY) < StopSpeed) then
+  begin
+    PlayerPushVX := 0;
+    PlayerPushVY := 0;
+  end else
+  begin
+    PlayerPushVX := PlayerPushVX * Friction;
+    PlayerPushVY := PlayerPushVY * Friction;
+  end;
+end;
+
 function TDoomWorld.SpawnMonster(const TypeNum: Integer; const X, Y, Z: Single): TDoomActor;
 var
   Info: PThingInfo;
@@ -2252,7 +2371,8 @@ begin
        (Abs(O.DoomX - NX) < O.Info^.Radius + R) and (Abs(O.DoomY - NY) < O.Info^.Radius + R) and
        (NZ < O.DoomZ + O.Info^.Height) and (NZ + A.Info^.Height > O.DoomZ) then
     begin
-      DamageActor(O, Dice(A.Info^.DamageDice, A.Info^.DamageFaces), NX, NY, NZ + 8, A, false);
+      DamageActor(O, Dice(A.Info^.DamageDice, A.Info^.DamageFaces), NX, NY, NZ + 8, A, false,
+        true, A.DoomX, A.DoomY, A.DoomZ);
       StopSkullCharge(A);
       Exit;
     end;
@@ -2596,6 +2716,8 @@ begin
   begin
     if (C.State <> asDead) or C.Removed or (C.Info^.Kind <> tkMonster) or not CanRaise(C.Info^.Num) then
       Continue;
+    { Crushed gibs stay dead (vanilla raised them as the "ghost" bug). }
+    if C.SpritePrefix = 'POL5' then Continue;
     Reach := C.Info^.Radius + A.Info^.Radius + A.Info^.Speed;
     if (Abs(C.DoomX - A.DoomX) > Reach) or (Abs(C.DoomY - A.DoomY) > Reach) then Continue;
     { The corpse must fit where it lies (P_CheckPosition). }
@@ -2697,7 +2819,7 @@ begin
     { momz = 1000 / mass: the player flies up about 50 units. }
     PlayerKnockUp := PlayerKnockUp + 50;
   end else
-    DamageActor(A.Target, 20, TX, TY, TZ + 32, A, false);
+    DamageActor(A.Target, 20, TX, TY, TZ + 32, A, false, true, A.DoomX, A.DoomY, A.DoomZ);
   { The fire moves between the vile and the target and explodes for 70. }
   FX := TX - Cos(DegToRad(A.Angle)) * 24;
   FY := TY - Sin(DegToRad(A.Angle)) * 24;
@@ -2788,7 +2910,7 @@ begin
             DamagePlayer(Dice(A.Info^.DamageDice, A.Info^.DamageFaces), A)
           else
             DamageActor(A.Target, Dice(A.Info^.DamageDice, A.Info^.DamageFaces),
-              TX, TY, TZ + 32, A, false);
+              TX, TY, TZ + 32, A, false, true, A.DoomX, A.DoomY, A.DoomZ);
         end;
       end;
     akHitscan: MonsterHitscan(A);
@@ -2834,7 +2956,7 @@ begin
     if HitPlayer then
       DamagePlayer(Damage, A)
     else if HitActor <> nil then
-      DamageActor(HitActor, Damage, HX, HY, HZ, A, false)
+      DamageActor(HitActor, Damage, HX, HY, HZ, A, false, true, A.DoomX, A.DoomY, A.DoomZ)
     else if HitWall then
       SpawnPuff(HX, HY, HZ);
   end;
@@ -3010,7 +3132,8 @@ begin
          (Abs(O.DoomY - NY) < O.Info^.Radius + A.Info^.Radius) and
          (NZ > O.DoomZ - 8) and (NZ < O.DoomZ + O.Info^.Height + 8) then
       begin
-        DamageActor(O, Dice(A.MissileDamageDice, A.MissileDamageFaces), NX, NY, NZ);
+        DamageActor(O, Dice(A.MissileDamageDice, A.MissileDamageFaces), NX, NY, NZ, nil, true,
+          true, A.DoomX, A.DoomY, A.DoomZ);
         Hit := true;
         Break;
       end;
@@ -3027,7 +3150,8 @@ begin
          (Abs(O.DoomY - NY) < O.Info^.Radius + A.Info^.Radius) and
          (NZ > O.DoomZ - 8) and (NZ < O.DoomZ + O.Info^.Height + 8) then
       begin
-        DamageActor(O, Dice(A.MissileDamageDice, A.MissileDamageFaces), NX, NY, NZ, A.Shooter, false);
+        DamageActor(O, Dice(A.MissileDamageDice, A.MissileDamageFaces), NX, NY, NZ, A.Shooter, false,
+          true, A.DoomX, A.DoomY, A.DoomZ);
         Hit := true;
         Break;
       end;
@@ -3177,7 +3301,8 @@ begin
     if (Target <> nil) and CheckSight(Player.X, Player.Y, Player.Z + PlayerHeight * 0.75, Player.Sector,
        Target.DoomX, Target.DoomY, Target.DoomZ, Target.Info^.Height, Target.Sector) then
     begin
-      DamageActor(Target, Dice(15, 7), Target.DoomX, Target.DoomY, Target.DoomZ + Target.Info^.Height / 2);
+      DamageActor(Target, Dice(15, 7), Target.DoomX, Target.DoomY, Target.DoomZ + Target.Info^.Height / 2,
+        nil, true, true, Player.X, Player.Y, Player.Z);
       { The green BFG "hit" flash on each sprayed target. }
       Fx := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekBarrelExplosion]);
       Fx.SpritePrefix := 'BFE2';
@@ -3200,6 +3325,14 @@ var
   Dmg, Saved: Integer;
 begin
   if Player.Dead or (Damage <= 0) then Exit;
+  { Knockback comes before invulnerability and god mode, like in Doom. }
+  if (FromActor <> nil) and (Damage < 10000) then
+  begin
+    AddThrust(Player.X, Player.Y, Player.Z, 100, Damage, Player.Health,
+      FromActor.DoomX, FromActor.DoomY, FromActor.DoomZ, PlayerPushVX, PlayerPushVY);
+    if DebugShots then
+      WritelnLog('Push', 'player by %d damage, momentum (%.1f, %.1f)', [Damage, PlayerPushVX, PlayerPushVY]);
+  end;
   if (Player.InvulnerableTics > 0) or Player.GodMode then Exit;
   Dmg := Damage;
   { P_DamageMobj: half damage for "I'm too young to die". }
@@ -3239,20 +3372,29 @@ begin
 end;
 
 procedure TDoomWorld.DamageActor(const A: TDoomActor; const Damage: Integer; const HitX, HitY, HitZ: Single;
-  const Attacker: TDoomActor; const ByPlayer: Boolean);
+  const Attacker: TDoomActor; const ByPlayer: Boolean;
+  const Push: Boolean; const FromX, FromY, FromZ: Single);
 var
   Blood: TDoomActor;
 begin
   if (A.State in [asDying, asDead, asEffect, asMissile]) or (Damage <= 0) then Exit;
   if not ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) then Exit;
   if (Attacker = A) then Exit;
-  A.Health := A.Health - Damage;
   if A.Charging then
   begin
     { P_DamageMobj: a hit stops a flying lost soul. }
     A.Charging := false;
     A.VelX := 0; A.VelY := 0; A.VelZ := 0;
   end;
+  { Knockback (not for telefrags, which only kill). }
+  if Push and (Damage < 10000) then
+  begin
+    AddThrust(A.DoomX, A.DoomY, A.DoomZ, A.Info^.Mass, Damage, A.Health,
+      FromX, FromY, FromZ, A.VelX, A.VelY);
+    if DebugShots then
+      WritelnLog('Push', '%s by %d damage, momentum (%.1f, %.1f)', [A.Info^.Sprite, Damage, A.VelX, A.VelY]);
+  end;
+  A.Health := A.Health - Damage;
   if A.Info^.Num <> 2035 then
   begin
     Blood := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekBlood]);
@@ -3302,6 +3444,16 @@ begin
       if A.Info^.PainSound <> '' then FSounds.PlayAt(A.Info^.PainSound, A);
     end;
   end;
+end;
+
+procedure TDoomWorld.CrushCorpse(const A: TDoomActor);
+begin
+  WritelnLog('Crush', '%s at (%.0f, %.0f) crushed to gibs', [A.Info^.Sprite, A.DoomX, A.DoomY]);
+  A.State := asDead;
+  A.SpritePrefix := 'POL5';
+  A.PlaySequence('A', 1, false);
+  A.VelX := 0;
+  A.VelY := 0;
 end;
 
 procedure TDoomWorld.KillActor(const A: TDoomActor; const Killer: TDoomActor; const ByPlayer: Boolean);
@@ -3358,6 +3510,7 @@ begin
       Drop := TDoomActor.Create(nil, FGraphics, Info);
       Drop.DoomX := A.DoomX; Drop.DoomY := A.DoomY; Drop.DoomZ := A.DoomZ;
       Drop.Sector := A.Sector;
+      Drop.Dropped := true;
       Drop.SetLight(FMap.Sectors[Max(0, A.Sector)].LightLevel);
       Drop.UpdateTransform;
       FActors.Add(Drop);
@@ -3521,7 +3674,7 @@ begin
     D := Max(Abs(O.DoomX - X), Abs(O.DoomY - Y)) - O.Info^.Radius;
     if D < 0 then D := 0;
     if D >= Radius then Continue;
-    DamageActor(O, Damage - Trunc(D), O.DoomX, O.DoomY, O.DoomZ + 24, Attacker, ByPlayer);
+    DamageActor(O, Damage - Trunc(D), O.DoomX, O.DoomY, O.DoomZ + 24, Attacker, ByPlayer, true, X, Y, Z);
   end;
   D := Max(Abs(Player.X - X), Abs(Player.Y - Y)) - PlayerRadius;
   if D < 0 then D := 0;
@@ -3741,8 +3894,10 @@ begin
       ShootSpecialLine(I);
   end;
 
+  { The player's own chainsaw does not push (P_DamageMobj). }
   if Result <> nil then
-    DamageActor(Result, Damage, HX, HY, HZ)
+    DamageActor(Result, Damage, HX, HY, HZ, nil, true,
+      Player.Weapon <> wpChainsaw, Player.X, Player.Y, Player.Z)
   else if HitWall then
     SpawnPuff(HX, HY, HZ);
 

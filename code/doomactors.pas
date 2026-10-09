@@ -68,6 +68,8 @@ type
     Charging: Boolean;
     { Flyer that rose or sank towards an opening this tic (MF_INFLOAT). }
     InFloat: Boolean;
+    { Items dropped by a dead monster (MF_DROPPED): a crusher destroys them. }
+    Dropped: Boolean;
     ChargeTics: Integer;
     { Arch-vile: the attack's damage already dealt this attack. }
     AttackFired: Boolean;
