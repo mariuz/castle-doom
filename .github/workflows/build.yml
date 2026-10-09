@@ -69,7 +69,8 @@ jobs:
         timeout-minutes: 10
         run: |
           git clone --depth 1 --branch snapshot https://github.com/castle-engine/castle-engine.git "$HOME/castle-engine"
-          "$HOME/castle-engine/tools/build-tool/castle-engine_compile.sh"
+          # The script expects to run from the engine's directory (castle-fpc.cfg).
+          cd "$HOME/castle-engine" && ./tools/build-tool/castle-engine_compile.sh
 
       - name: Compile
         timeout-minutes: 10

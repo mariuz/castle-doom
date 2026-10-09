@@ -41,7 +41,8 @@ Linux/macOS: install CGE, then the same `castle-engine compile`. Web:
 No CGE there by default, but it builds: `apt-get install -y fpc libgtk-3-dev
 libgtk2.0-dev libopenal1 libpng-dev xvfb`, `git clone --depth 1 --branch
 snapshot https://github.com/castle-engine/castle-engine.git <dir>` (keep it
-outside the repo, e.g. the scratchpad), `<dir>/tools/build-tool/castle-engine_compile.sh`,
+outside the repo, e.g. the scratchpad), then from inside `<dir>` run
+`./tools/build-tool/castle-engine_compile.sh` (it needs `castle-fpc.cfg` in the current directory),
 then from the project root `CASTLE_ENGINE_PATH=<dir> <dir>/tools/build-tool/castle-engine
 compile --mode=release` (delete the stray `link*.res` it leaves). Autotests
 run under `xvfb-run -a -s "-screen 0 1280x800x24" ./castle-doom --autotest ...`
