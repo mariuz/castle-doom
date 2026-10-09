@@ -145,10 +145,10 @@ castle-doom --autotest E1M1 shots/e1m1 --demo "S,F:3,S,T:90,U,W:2,S,X,S,Q"
 
 ## Continuous integration
 
-- `.github/workflows/build.yml`: packages Windows x86_64 and Linux x86_64 builds on every
-  push using the [Castle Game Engine Docker image](https://castle-engine.io/docker), and macOS
-  app bundles (x86_64 and aarch64, unsigned: right-click > Open the first time) on GitHub's
-  macOS runners, and a Windows installer (MSI, WiX on a Windows runner, from the Windows zip
+- `.github/workflows/build.yml`: packages Windows x86_64, Linux x86_64 and macOS
+  app bundles (x86_64 and aarch64, unsigned: right-click > Open the first time) on every
+  push, each on GitHub's runner for that system with FPC and the CGE snapshot set up by
+  [castle-build-ci](https://github.com/castle-engine/castle-build-ci), and a Windows installer (MSI, WiX on a Windows runner, from the Windows zip
   by `tools/make_msi_wxs.py`); pushing a tag `vX.Y.Z`, or running the workflow by hand with
   `release_tag`, attaches them to a GitHub Release.
 - The `Autotests` job runs the FPCUnit unit tests (`tests/castle_doom_tests.lpr`: WADs, map

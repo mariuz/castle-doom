@@ -379,9 +379,10 @@ Goertzel on semitone vs quarter-tone frequencies).
 
 - Jobs have `timeout-minutes`; if a run still hangs, `gh run cancel <id>`
   then `gh run rerun <id>` once the cancel has gone through.
-- `main` is the only branch; every push builds Windows/Linux packages
-  (Docker) and macOS app bundles (macOS runners, x86_64 and aarch64) in
-  `build.yml`, plus a Windows MSI (WiX 5 on `windows-latest`, source from
+- `main` is the only branch; every push builds Windows, Linux and macOS
+  (x86_64 and aarch64) packages in `build.yml`, each on its own runner
+  with FPC and the CGE snapshot from castle-build-ci (the CGE Docker image
+  was dropped: Docker Hub's pull rate limit failed every third run), plus a Windows MSI (WiX 5 on `windows-latest`, source from
   `tools/make_msi_wxs.py`; WiX does not run on Linux, so only CI tests it),
   and deploys the web build (`web.yml`). Tags `vX.Y.Z` create a
   GitHub Release with the packages; when a session cannot push tags, run

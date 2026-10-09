@@ -1,7 +1,6 @@
-# Native builds: Windows x86_64 and Linux x86_64 with the Castle Game Engine
-# Docker image (FPC with cross-compilers and the CGE build tool), macOS
-# x86_64 and aarch64 on GitHub's macOS runners (FPC and CGE set up by
-# castle-build-ci, like CGE's own template castle-game/.github/workflows/build.yml),
+# Native builds: Windows x86_64, Linux x86_64 and macOS x86_64 / aarch64 on
+# GitHub's runners (FPC and the CGE snapshot set up by castle-build-ci, like
+# CGE's own template castle-game/.github/workflows/build.yml),
 # and a Windows Installer (MSI) made with WiX from the Windows zip.
 #
 # - On every push / pull request: build and keep the packages as workflow artifacts.
@@ -29,37 +28,63 @@ permissions:
   contents: read
 
 jobs:
-  build-native:
-    name: Package Windows and Linux
+  # Windows and Linux packages on GitHub's runners with FPC and the CGE
+  # snapshot set up by castle-build-ci (like the macOS job and CGE's own CI).
+  # The CGE Docker image did the same, but Docker Hub's unauthenticated pull
+  # rate limit on the shared runner IPs failed every third run.
+  build-linux:
+    name: Package Linux
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    container: kambi/castle-engine-cloud-builds-tools:cge-unstable
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show versions
+      - name: Set up FPC and Castle Game Engine
+        timeout-minutes: 20
         run: |
-          castle-engine --version
-          fpc -iV
-
-      - name: Package Windows (x86_64)
-        run: castle-engine package --os=win64 --cpu=x86_64 --mode=release --verbose
+          cd /tmp/
+          git clone https://github.com/castle-engine/castle-build-ci.git \
+            --depth=1 --single-branch --branch=master
+          castle-build-ci/install_dependencies
+          castle-build-ci/setup_castle_engine
 
       - name: Package Linux (x86_64)
         run: castle-engine package --os=linux --cpu=x86_64 --mode=release --verbose
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: castle-doom-windows
-          path: "*-win64-x86_64.zip"
-          if-no-files-found: error
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: castle-doom-linux
           path: "*-linux-x86_64.tar.gz"
+          if-no-files-found: error
+
+  build-windows:
+    name: Package Windows
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up FPC and Castle Game Engine
+        timeout-minutes: 20
+        run: |
+          cd /tmp/
+          git clone https://github.com/castle-engine/castle-build-ci.git \
+            --depth=1 --single-branch --branch=master
+          castle-build-ci/install_dependencies
+          castle-build-ci/setup_castle_engine
+
+      - name: Package Windows (x86_64)
+        run: castle-engine package --os=win64 --cpu=x86_64 --mode=release --verbose
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: castle-doom-windows
+          path: "*-win64-x86_64.zip"
           if-no-files-found: error
 
   build-macos:
@@ -104,7 +129,7 @@ jobs:
   # Windows runner, the .wxs written by tools/make_msi_wxs.py.
   build-msi:
     name: Package Windows installer (MSI)
-    needs: build-native
+    needs: build-windows
     runs-on: windows-latest
     timeout-minutes: 20
     defaults:
@@ -186,7 +211,7 @@ jobs:
   release:
     name: GitHub Release
     if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.release_tag, 'v')
-    needs: [build-native, build-macos, build-msi]
+    needs: [build-linux, build-windows, build-macos, build-msi]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
