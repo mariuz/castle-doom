@@ -89,7 +89,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used
   switches, corpses, monsters mid-fight, inventory and the automap. In the browser saves
-  are kept in the page's `localStorage`, so they survive reloads.
+  are kept in the page's `localStorage`, so they survive reloads; the home page's "Your
+  saves" section exports them to a file and imports them back, and the desktop build reads
+  the same file (Options: Export / Import saves, `--export-saves` / `--import-saves`).
 - External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-warp`), PWAD lumps
   overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
   `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`), so maps built with ZDBSP load too.

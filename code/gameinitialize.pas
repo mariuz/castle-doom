@@ -8,15 +8,40 @@ implementation
 uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleUtils,
-  DoomLighting, GameViewMenu, GameViewPlay, GameSettings;
+  CastleFilesUtils, CastleUriUtils,
+  DoomLighting, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
 
 var
   Window: TCastleWindow;
 
+{ --export-saves FILE / --import-saves FILE: move the saves and settings
+  out of or into this installation as one bundle (the format of the web
+  page's "Your saves" export), then quit. }
+procedure TransferSaves(const ExportTo, ImportFrom: String);
+var
+  Count: Integer;
+begin
+  if ImportFrom <> '' then
+  begin
+    if ImportSaveBundle(FileToString(FilenameToUriSafe(ImportFrom)), Count) then
+      WritelnLog('Save', 'Imported %d files from %s', [Count, ImportFrom])
+    else
+      WritelnWarning('Save', '%s is not a Castle DOOM save bundle', [ImportFrom]);
+  end;
+  if ExportTo <> '' then
+  begin
+    StringToFile(FilenameToUriSafe(ExportTo), ExportSaveBundle(Count));
+    WritelnLog('Save', 'Exported %d files to %s', [Count, ExportTo]);
+  end;
+end;
+
 procedure ApplicationInitialize;
 var
   I: Integer;
+  ExportSaves, ImportSaves: String;
 begin
+  ExportSaves := '';
+  ImportSaves := '';
   { --autotest MAPNAME OUTPUT_PREFIX : load the map, save screenshots, quit. }
   { Doom-style options: -iwad FILE, -file PWAD [PWAD...], -warp MAP. }
   I := 1;
@@ -41,6 +66,16 @@ begin
     if ((Parameters[I] = '-loadgame') or (Parameters[I] = '--loadgame')) and (I + 1 <= Parameters.High) then
     begin
       CmdLoadSlot := StrToIntDef(Parameters[I + 1], 0);
+      Inc(I);
+    end else
+    if (Parameters[I] = '--export-saves') and (I + 1 <= Parameters.High) then
+    begin
+      ExportSaves := Parameters[I + 1];
+      Inc(I);
+    end else
+    if (Parameters[I] = '--import-saves') and (I + 1 <= Parameters.High) then
+    begin
+      ImportSaves := Parameters[I + 1];
       Inc(I);
     end else
     if (Parameters[I] = '--menukeys') and (I + 1 <= Parameters.High) then
@@ -72,6 +107,11 @@ begin
   Window.Container.LoadSettings('castle-data:/CastleSettings.xml');
   { Remembered WAD paths live in the user config (castle-config:/). }
   UserConfig.Load;
+  if (ExportSaves <> '') or (ImportSaves <> '') then
+  begin
+    TransferSaves(ExportSaves, ImportSaves);
+    Halt;
+  end;
   { Volumes and toggles from the last session. }
   LoadSettings;
   DoomLightingInstance.Diminish := Settings.Diminish;

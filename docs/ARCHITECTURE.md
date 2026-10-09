@@ -980,8 +980,7 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 
 - Other DeHackEd sections (frames, things, weapons, code pointers) are
   ignored; only BEX strings are read.
-- No demo playback; web saves live in one browser's `localStorage` (no
-  export / import). The in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
+- No demo playback. The in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
   `DoomMenu`.
 - Vanilla node format only. A blockmap-free design means all 2D queries scan
   all lines.

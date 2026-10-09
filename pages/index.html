@@ -44,6 +44,14 @@
     th { color: var(--muted); font-weight: 600; }
     code { background: var(--panel); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
     kbd { background: var(--panel); border: 1px solid #4a2c22; border-radius: 4px; padding: 1px 6px; font-family: inherit; }
+    .saves-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+    .saves-actions button, .saves-actions label {
+      background: var(--panel); border: 1px solid #4a2c22; color: var(--text); border-radius: 6px;
+      padding: 8px 16px; font: inherit; cursor: pointer;
+    }
+    .saves-actions button:hover, .saves-actions label:hover { border-color: var(--accent); }
+    .saves-actions input { display: none; }
+    #saves-status { color: var(--muted); min-height: 1.5em; }
     footer { margin-top: 48px; color: var(--muted); font-size: 0.9rem; text-align: center; }
     a { color: var(--accent-2); }
   </style>
@@ -77,6 +85,19 @@
     </p>
   </section>
 
+  <section id="saves">
+    <h2>Your saves</h2>
+    <p>The browser keeps your saves (and volume settings) in this site's local storage. Export them to a file
+      to move them to another browser or computer; the desktop build imports the same file
+      (Options &rarr; <em>Import saves...</em>, or <code>--import-saves FILE</code>) and exports one with <em>Export saves...</em>.</p>
+    <table id="saves-table"><tr><th>Slot</th><th>Game</th></tr></table>
+    <div class="saves-actions">
+      <button type="button" id="saves-export">Export saves</button>
+      <label>Import saves<input type="file" id="saves-import" accept=".json,application/json"></label>
+    </div>
+    <p id="saves-status"></p>
+  </section>
+
   <section>
     <h2>How Doom maps onto the engine</h2>
     <table>
@@ -98,5 +119,105 @@
     <p><a href="https://github.com/mariuz/castle-doom">Source code on GitHub</a> (MIT) &middot; <a href="https://github.com/mariuz/castle-doom/blob/main/docs/ARCHITECTURE.md">How it works</a> &middot; <a href="https://github.com/mariuz/castle-doom/blob/main/docs/ROADMAP.md">Roadmap</a>. Freedoom is BSD licensed by the Freedoom project. Built with Castle Game Engine, FPC for WebAssembly and Pas2js.</p>
   </footer>
 </main>
+<script>
+// Saves live in localStorage under "castle-doom:" + their castle-config: URL
+// (code/gamesavestorage.pas); the bundle format is code/gamesavebundle.pas.
+(function () {
+  const PREFIX = 'castle-doom:castle-config:/';
+  const FILES = ['quicksave.json', 'save1.json', 'save2.json', 'save3.json',
+    'save4.json', 'save5.json', 'save6.json', 'settings.json'];
+  const status = document.getElementById('saves-status');
+
+  function storage() {
+    try { return window.localStorage; } catch (e) { return null; }
+  }
+
+  function slotName(file) {
+    if (file === 'quicksave.json') return 'Quick save';
+    if (file === 'settings.json') return 'Settings';
+    return 'Slot ' + file.replace(/\D/g, '');
+  }
+
+  function describe(file, text) {
+    try {
+      const j = JSON.parse(text);
+      if (file === 'settings.json')
+        return 'sound ' + j.sfxVolume + ', music ' + j.musicVolume;
+      return (j.description || '?') + (j.saved ? ' (' + j.saved + ')' : '');
+    } catch (e) { return 'unreadable'; }
+  }
+
+  function refresh() {
+    const table = document.getElementById('saves-table');
+    while (table.rows.length > 1) table.deleteRow(1);
+    const ls = storage();
+    let count = 0;
+    for (const f of FILES) {
+      const text = ls ? ls.getItem(PREFIX + f) : null;
+      if (text === null) continue;
+      const row = table.insertRow();
+      row.insertCell().textContent = slotName(f);
+      row.insertCell().textContent = describe(f, text);
+      count++;
+    }
+    if (count === 0) {
+      const row = table.insertRow();
+      const cell = row.insertCell();
+      cell.colSpan = 2;
+      cell.textContent = ls ? 'No saves in this browser yet.' : 'Local storage is not available in this browser.';
+    }
+    return count;
+  }
+
+  document.getElementById('saves-export').addEventListener('click', function () {
+    const ls = storage();
+    const files = {};
+    let count = 0;
+    for (const f of FILES) {
+      const text = ls ? ls.getItem(PREFIX + f) : null;
+      if (text !== null) { files[f] = text; count++; }
+    }
+    if (count === 0) { status.textContent = 'Nothing to export yet.'; return; }
+    const blob = new Blob([JSON.stringify({ format: 'castle-doom-saves', version: 1, files: files }, null, 1)],
+      { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'castle-doom-saves.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    status.textContent = 'Exported ' + count + ' file(s).';
+  });
+
+  document.getElementById('saves-import').addEventListener('change', function (ev) {
+    const file = ev.target.files[0];
+    ev.target.value = '';
+    if (!file) return;
+    file.text().then(function (text) {
+      let bundle;
+      try { bundle = JSON.parse(text); } catch (e) { bundle = null; }
+      if (!bundle || bundle.format !== 'castle-doom-saves' || typeof bundle.files !== 'object') {
+        status.textContent = file.name + ' is not a Castle DOOM save file.';
+        return;
+      }
+      const ls = storage();
+      if (!ls) { status.textContent = 'Local storage is not available in this browser.'; return; }
+      const names = Object.keys(bundle.files).filter(function (f) {
+        return FILES.indexOf(f) >= 0 && typeof bundle.files[f] === 'string';
+      });
+      const replaced = names.filter(function (f) { return ls.getItem(PREFIX + f) !== null; });
+      if (replaced.length > 0 &&
+          !window.confirm('Replace ' + replaced.map(slotName).join(', ') + ' in this browser?'))
+        return;
+      for (const f of names) ls.setItem(PREFIX + f, bundle.files[f]);
+      refresh();
+      status.textContent = 'Imported ' + names.length + ' file(s) from ' + file.name + '.';
+    });
+  });
+
+  refresh();
+})();
+</script>
 </body>
 </html>

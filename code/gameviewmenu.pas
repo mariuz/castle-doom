@@ -45,6 +45,8 @@ type
     procedure ClickAddPwad(Sender: TObject);
     procedure ClickLastWads(Sender: TObject);
     procedure ClickContinue(Sender: TObject);
+    procedure ClickExportSaves(Sender: TObject);
+    procedure ClickImportSaves(Sender: TObject);
     procedure ClickBack(Sender: TObject);
     procedure ContinueFromSlot(const Slot: Integer);
     procedure AutoContinue(Sender: TObject);
@@ -105,7 +107,8 @@ implementation
 
 uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils,
   CastleStringUtils,
-  GameViewPlay, GameSettings;
+  CastleFilesUtils,
+  GameViewPlay, GameSettings, GameSaveBundle;
 
 const
   Freedoom1 = 'castle-data:/wads/freedoom1.wad';
@@ -287,6 +290,21 @@ begin
   FContinueButton.FontSize := 18;
   FContinueButton.OnClick := {$ifdef FPC}@{$endif} ClickContinue;
   Row.InsertFront(FContinueButton);
+
+  { Moving saves between computers / the web build (GameSaveBundle). }
+  Row := TCastleHorizontalGroup.Create(FreeAtStop);
+  Row.Spacing := 10;
+  FButtons.InsertFront(Row);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := 'Export saves...';
+  B.FontSize := 18;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickExportSaves;
+  Row.InsertFront(B);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := 'Import saves...';
+  B.FontSize := 18;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickImportSaves;
+  Row.InsertFront(B);
 
   FWadsLabel := TCastleLabel.Create(FreeAtStop);
   FWadsLabel.Color := Vector4(0.8, 0.8, 0.8, 1);
@@ -526,6 +544,47 @@ begin
     UserConfig.SetValue('wads/pwads', FPwads.DelimitedText);
     UserConfig.Save;
   end;
+end;
+
+const
+  NoDialogInBrowser = 'In the browser, export and import saves on the Castle DOOM home page ("Your saves")';
+
+procedure TViewMenu.ClickExportSaves(Sender: TObject);
+var
+  Url: String;
+  Count: Integer;
+begin
+  Url := 'castle-doom-saves.json';
+  if Application.MainWindow.FileDialog('Export saves', Url, false,
+      'Castle DOOM saves (*.json)|*.json|All files (*)|*') then
+  begin
+    StringToFile(Url, ExportSaveBundle(Count));
+    FWadsLabel.Caption := Format('Exported %d files to %s', [Count, UriDisplay(Url)]);
+  end else
+    FWadsLabel.Caption := NoDialogInBrowser;
+end;
+
+procedure TViewMenu.ClickImportSaves(Sender: TObject);
+var
+  Url: String;
+  Count: Integer;
+begin
+  Url := '';
+  if Application.MainWindow.FileDialog('Import saves', Url, true,
+      'Castle DOOM saves (*.json)|*.json|All files (*)|*') then
+  begin
+    if ImportSaveBundle(FileToString(Url), Count) then
+    begin
+      FWadsLabel.Caption := Format('Imported %d files from %s', [Count, UriDisplay(Url)]);
+      { The settings may have come along. }
+      LoadSettings;
+      UpdateVolumeLabels;
+      if FSounds <> nil then FSounds.Volume := SfxGain;
+      if FMusic <> nil then FMusic.Volume := MusicGain;
+    end else
+      FWadsLabel.Caption := UriDisplay(Url) + ' is not a Castle DOOM save bundle';
+  end else
+    FWadsLabel.Caption := NoDialogInBrowser;
 end;
 
 procedure TViewMenu.ClickOpenIwad(Sender: TObject);

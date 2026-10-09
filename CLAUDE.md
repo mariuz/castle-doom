@@ -122,6 +122,15 @@ like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a
 screenshot. Autotests load the settings too, so delete the file after
 testing volumes.
 
+Save transfer: `--export-saves FILE` / `--import-saves FILE` write or
+read the bundle and quit (they still open a window, so use `xvfb-run` in
+the cloud; `Save: Exported N files`). The home page's "Your saves" JS
+(`pages/index.html`) is tested with the preinstalled Playwright
+(`require($(npm root -g)/playwright)`, Chromium) against
+`python -m http.server` in `pages/`: seed localStorage with keys
+`castle-doom:castle-config:/save1.json`..., click export, `setInputFiles`
+the import.
+
 `LOOK:deg` pitches the view (negative looks down), for sky and floor
 screenshots.
 

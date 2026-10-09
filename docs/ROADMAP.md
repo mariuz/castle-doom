@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Saves move between browsers and computers: a "Your saves" section on
+  the home page lists the saves in this site's localStorage (same origin
+  as `/play/`), exports them with the settings as one JSON bundle and
+  imports one back (asking before it replaces slots); plain page
+  JavaScript, no WebAssembly code. The desktop build reads and writes the
+  same bundle (Options: *Export saves...* / *Import saves...*, or
+  `--export-saves FILE` / `--import-saves FILE`; `GameSaveBundle`). Only
+  the known file names are accepted.
 - Settings that stay: sound effect and music volume on Doom's 0..15
   scales (F4 in the game opens a Doom-style sound volume menu with
   thermometer bars; the title Options panel has the same two rows), music
@@ -254,7 +262,6 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **glBSP `GL_` lumps** (`GL_VERT`, `GL_SEGS`, `GL_SSECT`, `GL_NODES` after a `GL_MAPxx` marker) and **UDMF** (`TEXTMAP`) maps. | Remaining community map formats. | `DoomMap` | M (glBSP), L (UDMF) |
 | **Boom/MBF specials** (generalized linedefs, scrolling floors, friction, translucency) and **DeHackEd** patches. | Big community map support; large job. | `DoomWorld.ApplySpecial`, `DoomThings` | L |
-| **Export / import saves on the web** (download the JSON, upload it back) so a save can move between browsers or to the desktop build. | Saves are tied to one browser profile. | `GameSaveStorage`, a file input via JOB | S |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -274,8 +281,7 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Export / import saves on the web (S): download a save's JSON and
-   upload it back (a file input through JOB), so saves move between
-   browsers and to the desktop build.
+2. Memory (S): free the decoded textures of maps left behind; the
+   `TDoomGraphics` caches grow with every map visited in one session.
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.
