@@ -156,6 +156,7 @@ def write_pwad(path, nodes_data, segs_data, subs_data):
     print('wrote', path, len(out))
 
 outdir = (sys.argv[1] if len(sys.argv) > 1 else '.') + '/'
+os.makedirs(outdir, exist_ok=True)
 x = xnod()
 write_pwad(outdir + 'e1m1_xnod.wad', b'XNOD' + x, b'', b'')
 write_pwad(outdir + 'e1m1_znod.wad', b'ZNOD' + zlib.compress(x), b'', b'')
