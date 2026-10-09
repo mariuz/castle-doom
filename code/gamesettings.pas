@@ -36,7 +36,7 @@ function MouseLookSensitivity: Single;
 
 implementation
 
-uses SysUtils, FpJson, JsonParser, CastleLog, CastleUtils, GameSaveStorage;
+uses SysUtils, Math, FpJson, JsonParser, CastleLog, CastleUtils, GameSaveStorage;
 
 const
   SettingsUrl = 'castle-config:/settings.json';
@@ -114,9 +114,17 @@ begin
 end;
 
 function MouseLookSensitivity: Single;
+const
+  { G_BuildTiccmd: mousex = count * (sensitivity + 5) / 10, angleturn -=
+    mousex * 8, in 1/65536 of a turn: 0.044 degrees a count at Doom's
+    default 5. Twice that, about what Chocolate Doom's mouse acceleration
+    gives at normal speeds and CGE's own default (0.1 degrees): a full turn
+    is about 4000 pixels, 4 inches of a 1000 DPI mouse at Windows' default
+    pointer speed. }
+  DegreesPerCount = 2 * 8 * 360 / 65536;
 begin
-  { 5 (Doom's default) is the 0.15 this port always used. }
-  Result := 0.15 * (Settings.MouseSensitivity + 1) / 6;
+  { Radians per pixel, the unit of MouseLook*Sensitivity. }
+  Result := DegToRad(DegreesPerCount * (Settings.MouseSensitivity + 5) / 10);
 end;
 
 function MusicGain: Single;

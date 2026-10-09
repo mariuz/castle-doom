@@ -365,6 +365,8 @@ begin
   FNavigation.MouseLook := Settings.MouseLook;
   FNavigation.MouseLookHorizontalSensitivity := MouseLookSensitivity;
   FNavigation.MouseLookVerticalSensitivity := MouseLookSensitivity;
+  WritelnLog('MouseLook', 'Sensitivity %d: %.4f degrees a pixel', [
+    Settings.MouseSensitivity, RadToDeg(MouseLookSensitivity)]);
   FNavigation.MinAngleFromGravityUp := DegToRad(20);
   { No jumping / crouching / flying in Doom. }
   FNavigation.Input_Jump.MakeClear;
