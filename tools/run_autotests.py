@@ -73,6 +73,13 @@ TESTS = [
     ('crusher', 'MAP04',
      'Y,G:704:1792,W:0.2,LINE:269,W:2,SAVE:3,LINE:269:74,W:2,SAVE:4,LINE:269,W:2,SAVE:5,Q',
      [r'Line: line 269 special 74'], [], check_crusher),
+    ('title-pages', 'MENUTITLE', None, [r'Menu screenshot MENUTITLE'], [], None),
+    ('read-this', 'MENUREADTHIS', None, [r'Menu screenshot MENUREADTHIS'], [], None),
+    ('ingame-save-load', 'E1M1',
+     'W:0.3,KEY:F2,W:0.3,S,KEY:DOWN,KEY:DOWN,KEY:ENTER,W:0.5,KEY:F3,W:0.3,S,KEY:ESCAPE,'
+     'KEY:F3,KEY:DOWN,KEY:DOWN,KEY:ENTER,W:1,Q',
+     [r'Save: Saved E1M1 to castle-config:/save3\.json', r'Save: Loading castle-config:/save3\.json',
+      r'Save: E1M1: restored'], [], None),
     ('pointer-lock-pause', 'E1M1', 'W:0.5,SAVE:1,UNLOCK,W:2,S,SAVE:2,RESUME,W:1,SAVE:3,Q',
      [r'PointerLock: Cancelled by the user, pausing'], [], check_pause),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',

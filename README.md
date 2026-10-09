@@ -83,8 +83,10 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   titles (also on the automap), the Nightmare and quit questions.
 - Finales: Freedoom's story texts (read from the WAD's `DEHACKED` strings), the end
   pictures, the bunny scroller after E3M8 and the Doom 2 cast call after MAP30.
-- Doom's own menu from the WAD's graphics: New Game, episode and skill select (all five
-  skills, with Nightmare's fast monsters and respawning), Load Game; `-skill 1..5`.
+- Doom's own menu from the WAD's graphics: the title pages cycle (TITLEPIC, CREDIT, HELP2)
+  until a key opens the menu; New Game, episode and skill select (all five skills, with
+  Nightmare's fast monsters and respawning), Load Game, Read This! (`F1`); `-skill 1..5`.
+  The in-game F2 / F3 save and load pages use Doom's `M_SAVEG` / `M_LOADG` slot graphics.
   The Options page picks WADs, map and skill.
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used
@@ -159,7 +161,7 @@ code/doomintermission.pas  intermission screen
 code/doomfinale.pas     finale text, end pictures, bunny scroller, cast call
 code/doomdehacked.pas   BEX strings from DEHACKED lumps
 code/doomwipe.pas       the screen melt
-code/doommenu.pas       Doom's menu (M_* graphics): main, episode, skill, load
+code/doommenu.pas       Doom's menu (M_* graphics): title pages, main, episode, skill, load / save, Read This
 code/gameviewmenu.pas   title screen: Doom menu and options
 code/gameviewplay.pas   viewport, navigation, HUD, input
 ```

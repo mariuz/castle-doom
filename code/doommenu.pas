@@ -1,6 +1,9 @@
-{ Doom's menu (m_menu.c) drawn from the WAD's own graphics over TITLEPIC:
-  main menu, episode select (Doom 1), skill select with the Nightmare
-  confirmation, and the load-game slots. The 320x200 screen is composed into
+{ Doom's menu (m_menu.c) drawn from the WAD's own graphics over the title
+  pages: main menu, episode select (Doom 1), skill select with the Nightmare
+  confirmation, the load-game slots and Read This! (HELP pages). Behind it
+  runs Doom's attract loop without the demos (D_PageTicker / D_DoAdvanceDemo:
+  TITLEPIC, CREDIT, HELP2 or TITLEPIC again); the menu itself appears with
+  the first key, like Doom's. The 320x200 screen is composed into
   one image (like the status bar and the intermission) and shown
   pixel-perfect by a TCastleImageControl. Keyboard input is passed in by the
   owning view (HandleKey); the mouse is handled here (hover and click). }
@@ -13,8 +16,9 @@ uses Classes,
   DoomGraphics, DoomSound, DoomDehacked;
 
 type
-  TDoomMenuPage = (mpMain, mpEpisode, mpSkill, mpLoad);
-  TDoomMenuAction = (maNone, maNewGame, maLoadSlot, maOptions, maQuit);
+  TDoomMenuPage = (mpMain, mpEpisode, mpSkill, mpLoad, mpReadThis1, mpReadThis2, mpSave);
+  { maClose: an overlay's page was left with Esc (the game takes over). }
+  TDoomMenuAction = (maNone, maNewGame, maLoadSlot, maOptions, maQuit, maSaveSlot, maClose);
 
   TDoomMenuEvent = procedure (const Action: TDoomMenuAction) of object;
 
@@ -35,6 +39,16 @@ type
     FSlots: array [1..6] of String;
     FDirty: Boolean;
     FLastSkull: Integer;
+    { Main menu items (M_RDTHIS only in Doom 1, like m_menu.c). }
+    FMainItems: array of String;
+    { The menu is on screen (menuactive); otherwise only the pages show. }
+    FMenuActive: Boolean;
+    { Attract loop: the pages, how long each stays, the one shown now. }
+    FPages: array of String;
+    FPageTics: array of Integer;
+    FPageIndex, FPageLeft: Integer;
+    { Read This! pages: HELP1 / HELP2 in Doom 1, HELP in Doom 2. }
+    FHelp1, FHelp2: String;
     procedure Compose;
     function ItemCount(const Page: TDoomMenuPage): Integer;
     function ItemPatch(const Page: TDoomMenuPage; const Index: Integer): String;
@@ -55,6 +69,9 @@ type
     { Mouse hover and clicks (off for scripted tests: the real cursor over
       the window would move the selection). }
     MouseEnabled: Boolean;
+    { Drawn over the running game (the in-game F2 / F3 save and load
+      pages): no title page behind, transparent elsewhere, Esc closes. }
+    Overlay: Boolean;
     constructor Create(AOwner: TComponent); override;
     { Set up for a WAD: graphics, sounds, how many episodes (0 = Doom 2). }
     procedure Setup(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds; const AEpisodes: Integer;
@@ -62,6 +79,11 @@ type
     { Descriptions shown on the load page ('' = empty slot). }
     procedure SetSlot(const Index: Integer; const Description: String);
     procedure OpenPage(const Page: TDoomMenuPage);
+    { Show or hide the menu over the title pages. }
+    procedure SetMenuActive(const Value: Boolean);
+    property MenuActive: Boolean read FMenuActive;
+    { The attract loop's page shown now (TITLEPIC, CREDIT...). }
+    function CurrentTitlePage: String;
     { Arrow keys, Enter, Escape, Y / N. True when used. }
     function HandleKey(const Event: TInputPressRelease): Boolean;
     { Advance one Doom tic (skull blinking). }
@@ -111,6 +133,52 @@ begin
   FEpisodes := AEpisodes;
   FPage := mpMain;
   FPrompt := false;
+  { m_menu.c: Doom 2 has no Read This! in the main menu (F1 still works). }
+  FMainItems := nil;
+  SetLength(FMainItems, 3);
+  FMainItems[0] := 'M_NGAME';
+  FMainItems[1] := 'M_OPTION';
+  FMainItems[2] := 'M_LOADG';
+  if (AEpisodes > 0) and (FGraphics.Patch('M_RDTHIS') <> nil) then
+  begin
+    SetLength(FMainItems, Length(FMainItems) + 1);
+    FMainItems[High(FMainItems)] := 'M_RDTHIS';
+  end;
+  SetLength(FMainItems, Length(FMainItems) + 1);
+  FMainItems[High(FMainItems)] := 'M_QUITG';
+  { D_DoAdvanceDemo without the demos: Doom 2 shows TITLEPIC for 11 s,
+    Doom 1 for 170 tics and then HELP2 too. }
+  if AEpisodes > 0 then
+  begin
+    FPages := ['TITLEPIC', 'CREDIT', 'HELP2'];
+    FPageTics := [170, 200, 200];
+    FHelp1 := 'HELP1';
+    FHelp2 := 'HELP2';
+  end else
+  begin
+    FPages := ['TITLEPIC', 'CREDIT'];
+    FPageTics := [35 * 11, 200];
+    FHelp1 := 'HELP';
+    FHelp2 := '';
+  end;
+  FPageIndex := 0;
+  FPageLeft := FPageTics[0];
+  FDirty := true;
+  Compose;
+end;
+
+function TDoomMenuScreen.CurrentTitlePage: String;
+begin
+  if Length(FPages) = 0 then Exit('TITLEPIC');
+  Result := FPages[FPageIndex];
+end;
+
+procedure TDoomMenuScreen.SetMenuActive(const Value: Boolean);
+begin
+  if FMenuActive = Value then Exit;
+  FMenuActive := Value;
+  FPrompt := false;
+  if Value then FPage := mpMain;
   FDirty := true;
   Compose;
 end;
@@ -125,21 +193,21 @@ end;
 function TDoomMenuScreen.ItemCount(const Page: TDoomMenuPage): Integer;
 begin
   case Page of
-    mpMain: Result := 4;
+    mpMain: Result := Length(FMainItems);
+    mpReadThis1, mpReadThis2: Result := 1;
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
-    mpLoad: Result := 6;
+    mpLoad, mpSave: Result := 6;
     else Result := 0;
   end;
 end;
 
 function TDoomMenuScreen.ItemPatch(const Page: TDoomMenuPage; const Index: Integer): String;
 const
-  MainItems: array [0..3] of String = ('M_NGAME', 'M_OPTION', 'M_LOADG', 'M_QUITG');
   SkillItems: array [0..4] of String = ('M_JKILL', 'M_ROUGH', 'M_HURT', 'M_ULTRA', 'M_NMARE');
 begin
   case Page of
-    mpMain: Result := MainItems[Index];
+    mpMain: Result := FMainItems[Index];
     mpEpisode: Result := 'M_EPI' + IntToStr(Index + 1);
     mpSkill: Result := SkillItems[Index];
     else Result := '';
@@ -152,7 +220,9 @@ begin
   case Page of
     mpMain: begin X := 97; Y := 64; end;
     mpEpisode, mpSkill: begin X := 48; Y := 63; end;
-    mpLoad: begin X := 80; Y := 54; end;
+    mpLoad, mpSave: begin X := 80; Y := 54; end;
+    { m_menu.c puts the Read This! skull off the 320x200 screen. }
+    mpReadThis1, mpReadThis2: begin X := 330; Y := 165; end;
   end;
 end;
 
@@ -182,10 +252,17 @@ procedure TDoomMenuScreen.Back;
 begin
   if FSounds <> nil then FSounds.Play('DSSWTCHX');
   case FPage of
-    mpEpisode, mpLoad: OpenPage(mpMain);
+    mpLoad, mpSave:
+      if Overlay then
+      begin
+        if Assigned(OnAction) then OnAction(maClose);
+      end else
+        OpenPage(mpMain);
+    mpEpisode, mpReadThis1, mpReadThis2: OpenPage(mpMain);
     mpSkill:
       if FEpisodes > 0 then OpenPage(mpEpisode) else OpenPage(mpMain);
-    mpMain: ;
+    { M_ClearMenus: Esc on the main menu shows the title pages again. }
+    mpMain: SetMenuActive(false);
   end;
 end;
 
@@ -197,16 +274,32 @@ begin
   if FSounds <> nil then FSounds.Play('DSPISTOL');
   case FPage of
     mpMain:
-      case Item of
-        0: if FEpisodes > 0 then OpenPage(mpEpisode) else
-           begin
-             Episode := 0;
-             OpenPage(mpSkill);
-           end;
-        1: if Assigned(OnAction) then OnAction(maOptions);
-        2: OpenPage(mpLoad);
-        3: StartQuitPrompt;
-      end;
+      if FMainItems[Item] = 'M_NGAME' then
+      begin
+        if FEpisodes > 0 then OpenPage(mpEpisode) else
+        begin
+          Episode := 0;
+          OpenPage(mpSkill);
+        end;
+      end else
+      if FMainItems[Item] = 'M_OPTION' then
+      begin
+        if Assigned(OnAction) then OnAction(maOptions);
+      end else
+      if FMainItems[Item] = 'M_LOADG' then
+        OpenPage(mpLoad)
+      else if FMainItems[Item] = 'M_RDTHIS' then
+        OpenPage(mpReadThis1)
+      else if FMainItems[Item] = 'M_QUITG' then
+        StartQuitPrompt;
+    { M_ReadThis / M_ReadThis2 / M_FinishReadThis: any key turns the page. }
+    mpReadThis1:
+      if (FHelp2 <> '') and (FGraphics.Patch(FHelp2) <> nil) then
+        OpenPage(mpReadThis2)
+      else
+        OpenPage(mpMain);
+    mpReadThis2:
+      OpenPage(mpMain);
     mpEpisode:
       begin
         Episode := Item + 1;
@@ -229,6 +322,11 @@ begin
       begin
         Slot := Item + 1;
         if (FSlots[Slot] <> '') and Assigned(OnAction) then OnAction(maLoadSlot);
+      end;
+    mpSave:
+      begin
+        Slot := Item + 1;
+        if Assigned(OnAction) then OnAction(maSaveSlot);
       end;
   end;
 end;
@@ -288,6 +386,30 @@ begin
     end;
     Exit;
   end;
+  if Event.IsKey(keyF1) then
+  begin
+    { Doom's help key works with or without the menu. }
+    if not FMenuActive then
+    begin
+      FMenuActive := true;
+      if FSounds <> nil then FSounds.Play('DSSWTCHN');
+    end;
+    OpenPage(mpReadThis1);
+    Exit;
+  end;
+  if not FMenuActive then
+  begin
+    { The title pages: any key brings the menu (G_Responder during demos). }
+    if Event.EventType <> itKey then Exit(false);
+    if FSounds <> nil then FSounds.Play('DSSWTCHN');
+    SetMenuActive(true);
+    Exit;
+  end;
+  if (FPage in [mpReadThis1, mpReadThis2]) and not (Event.IsKey(keyEscape) or Event.IsKey(keyBackSpace)) then
+  begin
+    Activate;
+    Exit;
+  end;
   if Event.IsKey(keyArrowUp) then Move(-1)
   else if Event.IsKey(keyArrowDown) then Move(1)
   else if Event.IsKey(keyEnter) or Event.IsKey(keySpace) then Activate
@@ -322,7 +444,8 @@ var
   Item: Integer;
 begin
   Result := inherited;
-  if Result or FPrompt or not MouseEnabled then Exit;
+  if Result or FPrompt or not MouseEnabled or not FMenuActive then Exit;
+  if FPage in [mpReadThis1, mpReadThis2] then Exit;
   if DoomPoint(Event.Position, DX, DY) then
   begin
     Item := ItemAt(DX, DY);
@@ -342,6 +465,21 @@ var
 begin
   Result := inherited;
   if Result or not MouseEnabled then Exit;
+  if not FMenuActive then
+  begin
+    if Event.IsMouseButton(buttonLeft) then
+    begin
+      if FSounds <> nil then FSounds.Play('DSSWTCHN');
+      SetMenuActive(true);
+      Exit(true);
+    end;
+    Exit;
+  end;
+  if Event.IsMouseButton(buttonLeft) and (FPage in [mpReadThis1, mpReadThis2]) then
+  begin
+    Activate;
+    Exit(true);
+  end;
   if Event.IsMouseButton(buttonLeft) and DoomPoint(Event.Position, DX, DY) then
   begin
     if FPrompt then Exit(true);
@@ -365,6 +503,18 @@ var
   Skull: Integer;
 begin
   Inc(FTic);
+  { D_PageTicker: the next title page when this one's time is up. }
+  if Length(FPages) > 0 then
+  begin
+    Dec(FPageLeft);
+    if FPageLeft <= 0 then
+    begin
+      FPageIndex := (FPageIndex + 1) mod Length(FPages);
+      FPageLeft := FPageTics[FPageIndex];
+      if FGraphics.Patch(FPages[FPageIndex]) = nil then FPageLeft := 1; { missing: skip }
+      FDirty := true;
+    end;
+  end;
   { The skull blinks every 8 tics. }
   Skull := (FTic div 8) mod 2;
   if Skull <> FLastSkull then
@@ -397,17 +547,43 @@ begin
   if FGraphics = nil then Exit;
   FDirty := false;
   Img := TRGBAlphaImage.Create(320, 200);
-  Img.Clear(Vector4Byte(0, 0, 0, 255));
-  BlitDoomImage(Img, FGraphics.Patch('TITLEPIC'), 0, 0);
-  { Dim the title picture so the menu reads well over it (Freedoom's
-    TITLEPIC has its own logo where M_DOOM goes). }
-  Pix := PVector4Byte(Img.RawPixels);
-  for I := 0 to 320 * 200 - 1 do
+  if Overlay then
+    Img.Clear(Vector4Byte(0, 0, 0, 0))
+  else
+    Img.Clear(Vector4Byte(0, 0, 0, 255));
+  if FMenuActive and (FPage in [mpReadThis1, mpReadThis2]) and not FPrompt then
   begin
-    Pix^.X := Pix^.X div 2;
-    Pix^.Y := Pix^.Y div 2;
-    Pix^.Z := Pix^.Z div 2;
-    Inc(Pix);
+    { M_DrawReadThis1 / 2: the help page over the whole screen. }
+    if FPage = mpReadThis1 then Text := FHelp1 else Text := FHelp2;
+    if FGraphics.Patch(Text) <> nil then
+      BlitDoomImage(Img, FGraphics.Patch(Text), 0, 0);
+    Image := Img;
+    Exit;
+  end;
+  if not Overlay then
+  begin
+    if FGraphics.Patch(CurrentTitlePage) <> nil then
+      BlitDoomImage(Img, FGraphics.Patch(CurrentTitlePage), 0, 0)
+    else
+      BlitDoomImage(Img, FGraphics.Patch('TITLEPIC'), 0, 0);
+  end;
+  if not FMenuActive then
+  begin
+    Image := Img;
+    Exit;
+  end;
+  { Dim the page so the menu reads well over it (Freedoom's TITLEPIC has
+    its own logo where M_DOOM goes). }
+  if not Overlay then
+  begin
+    Pix := PVector4Byte(Img.RawPixels);
+    for I := 0 to 320 * 200 - 1 do
+    begin
+      Pix^.X := Pix^.X div 2;
+      Pix^.Y := Pix^.Y div 2;
+      Pix^.Z := Pix^.Z div 2;
+      Inc(Pix);
+    end;
   end;
   PageOrigin(FPage, X, Y);
 
@@ -442,9 +618,11 @@ begin
       end;
     mpLoad:
       DrawPatch('M_LOADG', 72, 28);
+    mpSave:
+      DrawPatch('M_SAVEG', 72, 28);
   end;
 
-  if FPage = mpLoad then
+  if FPage in [mpLoad, mpSave] then
   begin
     { M_DrawSaveLoadBorder + M_WriteText of each slot. }
     for I := 0 to 5 do
@@ -455,7 +633,8 @@ begin
         DrawPatch('M_LSCNTR', X + K * 8, LineY + 7);
       DrawPatch('M_LSRGHT', X + 24 * 8, LineY + 7);
       if FSlots[I + 1] <> '' then Text := FSlots[I + 1] else Text := 'EMPTY SLOT';
-      DrawDoomText(FGraphics, Img, X, LineY, UpperCase(Text));
+      { SAVESTRINGSIZE: the border holds 24 characters. }
+      DrawDoomText(FGraphics, Img, X, LineY, UpperCase(Copy(Text, 1, 24)));
     end;
   end else
     for I := 0 to ItemCount(FPage) - 1 do

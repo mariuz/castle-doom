@@ -6,6 +6,17 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Doom's title loop and menus: the title pages cycle like
+  `D_DoAdvanceDemo` without the demos (Phase 1: TITLEPIC 170 tics,
+  CREDIT 200, HELP2 200; Phase 2: TITLEPIC 11 s, CREDIT) and the menu
+  appears with the first key or click, over the current page (Esc on the
+  main menu closes it again; back from a game it is open at once). Read
+  This! in the Phase 1 main menu and `F1` everywhere show HELP1 / HELP2
+  (Phase 2: HELP). The in-game F2 / F3 menus are Doom's save and load
+  pages (`M_SAVEG` / `M_LOADG`, slot borders, skull, arrows / Enter /
+  Esc / mouse) drawn over the game by the same `TDoomMenuScreen` in
+  overlay mode. Demo command `KEY:name`; autotests `title-pages`,
+  `read-this`, `ingame-save-load`.
 - Smaller first download on the web: the web workflow takes
   `freedoom2.wad` out of the data zip and publishes it as
   `play/freedoom2.zip` (10 MB instead of 28 MB uncompressed); choosing
@@ -280,7 +291,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
-| **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
+| **Options and sound volume pages in Doom's graphics** (`M_OPTTTL`, `M_SVOL`, the `M_THERML/M/R/O` thermometer) instead of the CGE Options panel and the text pause / volume overlays; demo playback for the attract loop needs tic-exact player physics (see Content). | Menus look like Doom everywhere. | `DoomMenu`, `GameViewMenu`, `GameViewPlay` | M |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
 | **Palette-mapped rendering** for the real 8-bit look: quantize each texel to the palette and look it up in the real `COLORMAP` rows (a 32x32x32 RGB-to-index texture and a 256x34 colormap texture in the `DoomLighting` effect), instead of multiplying by (32 - level) / 32. | Exact Doom colours, banding of the palette. | `DoomLighting` | M |
 
@@ -317,8 +328,9 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Title / credits cycle and the rest of Doom's menu (M): `TITLEPIC`,
-   `CREDIT` and `HELP` pages cycling on the title screen, Read This, and
-   the in-game save / load menus drawn by `DoomMenu` in `M_*` graphics.
+2. Options and sound volume pages in Doom's graphics (M): `M_OPTTTL`,
+   `M_SVOL` with the `M_THERM*` thermometer for the F4 menu, and the
+   pause screen, replacing the text overlays and (in the title menu) the
+   CGE Options panel for what Doom's options page has.
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

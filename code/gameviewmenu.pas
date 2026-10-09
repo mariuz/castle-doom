@@ -104,8 +104,9 @@ type
 var
   ViewMenu: TViewMenu;
   { Set from the command line (--autotest MAP PREFIX): start this map at once.
-    MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENUQUIT, MENULOAD, MENUOPTIONS
-    or MENUDOOM2 takes a screenshot of that menu page instead. }
+    MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENUQUIT, MENULOAD, MENUOPTIONS,
+    MENUDOOM2, MENUTITLE (title pages, menu closed) or MENUREADTHIS takes a
+    screenshot of that menu page instead. }
   AutoTestMap: String;
   AutoTestPrefix: String;
   AutoTestDemo: String;
@@ -392,7 +393,9 @@ begin
     LoadWads(Freedoom1, nil)
   else
   begin
+    { Back from a game: the menu is open already (no attract pages first). }
     SetupDoomMenu;
+    FDoomMenu.SetMenuActive(true);
     UpdateMapLabel;
     UpdateWadsLabel;
     FMusic.Play(FMusic.TitleLump);
@@ -942,7 +945,13 @@ end;
 procedure TViewMenu.AutoTestMenu;
 begin
   FDoomMenu.MouseEnabled := false;
-  if (AutoTestMap = 'MENUEPISODE') then
+  { The title pages alone (MENUTITLE), otherwise the menu is open like
+    after the first key. }
+  if AutoTestMap <> 'MENUTITLE' then
+    FDoomMenu.SetMenuActive(true);
+  if AutoTestMap = 'MENUREADTHIS' then
+    FDoomMenu.HandleKey(InputKey(TVector2.Zero, keyF1, '', []))
+  else if (AutoTestMap = 'MENUEPISODE') then
     FDoomMenu.OpenPage(mpEpisode)
   else if (AutoTestMap = 'MENUSKILL') or (AutoTestMap = 'MENUDOOM2') then
     FDoomMenu.OpenPage(mpSkill)

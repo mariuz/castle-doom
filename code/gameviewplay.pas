@@ -9,7 +9,7 @@ uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages, CastleGLImages,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
-  DoomIntermission, DoomFinale, DoomDehacked, DoomWipe;
+  DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu;
 
 type
   TViewPlay = class(TCastleView)
@@ -67,6 +67,11 @@ type
     FSuppressFire: Boolean;
     FSlotMenuBack: TCastleRectangleControl;
     FSlotMenuText: TDoomFontText;
+    { F2 / F3: Doom's save and load pages (M_SAVEG / M_LOADG, slot borders)
+      over the game; the pause and volume menus use FSlotMenuText. }
+    FSlotScreen: TDoomMenuScreen;
+    FSlotTicAccum: Single;
+    procedure SlotScreenAction(const Action: TDoomMenuAction);
     procedure SaveGame(const Slot: Integer);
     procedure LoadGame(const Slot: Integer);
     function LoadGameUrl(const Url: String): Boolean;
@@ -290,7 +295,7 @@ begin
     'F: light diminishing on/off   M: mouse look' + NL +
     'N / P: next / previous map   J: music on/off   F4: volume' + NL +
     'F2 / F3: save / load   F6 / F9: quick save / load' + NL +
-    'F5: screenshot' + NL +
+    'F5: screenshot   F1: Read This! (title menu)' + NL +
     'F8: Castle Game Engine inspector' + NL +
     'H: hide this help   Esc: pause (again: title menu)';
   InsertFront(FHelpLabel);
@@ -326,6 +331,14 @@ begin
   FSlotMenuBack.Color := Vector4(0, 0, 0, 0.7);
   FSlotMenuBack.Exists := false;
   InsertFront(FSlotMenuBack);
+  FSlotScreen := TDoomMenuScreen.Create(FreeAtStop);
+  FSlotScreen.Overlay := true;
+  FSlotScreen.Anchor(hpMiddle);
+  FSlotScreen.Anchor(vpMiddle);
+  FSlotScreen.OnAction := {$ifdef FPC}@{$endif} SlotScreenAction;
+  FSlotScreen.MouseEnabled := AutoTestPrefix = '';
+  FSlotScreen.Exists := false;
+  InsertFront(FSlotScreen);
   FSlotMenuText := TDoomFontText.Create(FreeAtStop);
   FSlotMenuText.Graphics := Graphics;
   FSlotMenuText.Anchor(hpMiddle);
@@ -580,6 +593,25 @@ begin
   end
   else if Cmd = 'X' then
     FWorld.FireWeapon
+  else if Cmd = 'KEY' then
+  begin
+    { KEY:name presses a key through Press like the keyboard would
+      (menus: UP, DOWN, LEFT, RIGHT, ENTER, ESCAPE, F1..F4). }
+    Rest := UpperCase(Rest);
+    if Rest = 'UP' then K := keyArrowUp
+    else if Rest = 'DOWN' then K := keyArrowDown
+    else if Rest = 'LEFT' then K := keyArrowLeft
+    else if Rest = 'RIGHT' then K := keyArrowRight
+    else if Rest = 'ENTER' then K := keyEnter
+    else if Rest = 'ESCAPE' then K := keyEscape
+    else if Rest = 'F1' then K := keyF1
+    else if Rest = 'F2' then K := keyF2
+    else if Rest = 'F3' then K := keyF3
+    else if Rest = 'F4' then K := keyF4
+    else K := keyNone;
+    if K <> keyNone then
+      Press(InputKey(TVector2.Zero, K, '', []));
+  end
   else if Cmd = 'UNLOCK' then
     { What the browser's Esc does: the pointer lock is cancelled. }
     PointerLockUserCancelled(nil)
@@ -770,30 +802,57 @@ end;
 
 procedure TViewPlay.OpenSlotMenu(const Mode: Integer);
 var
-  Lines, Desc: String;
   I: Integer;
   J: TJSONObject;
 begin
   if (FWorld = nil) or not FWorld.MapLoaded or FIntermission then Exit;
   FSlotMenu := Mode;
-  if Mode = SlotMenuSave then Lines := 'SAVE GAME' else Lines := 'LOAD GAME';
-  Lines := Lines + NL + NL;
+  { M_SaveGame / M_LoadGame: the slots with their descriptions (Doom
+    shows only the description; the date is ours). }
+  FSlotScreen.Setup(Graphics, Sounds, 0, FStrings);
   for I := 1 to SaveSlots do
   begin
     J := ReadSaveFile(SaveSlotUrl(I));
     if J = nil then
-      Desc := 'EMPTY'
+      FSlotScreen.SetSlot(I, '')
     else
     begin
-      Desc := J.Get('description', '?') + '   ' + J.Get('saved', '');
+      { The time of day after the description ("2026-10-09 17:26"). }
+      FSlotScreen.SetSlot(I, J.Get('description', '?') + ' ' + Copy(J.Get('saved', ''), 12, 5));
       FreeAndNil(J);
     end;
-    Lines := Lines + Format('%d  %s', [I, Desc]) + NL;
   end;
-  Lines := Lines + NL + 'PRESS 1-' + IntToStr(SaveSlots) + ', ESC TO CANCEL';
-  FSlotMenuText.SetScale(Max(1, Round(EffectiveHeight / 200)) * 1.5);
-  FSlotMenuText.SetText(Lines);
+  FSlotScreen.SetMenuActive(true);
+  if Mode = SlotMenuSave then
+    FSlotScreen.OpenPage(mpSave)
+  else
+    FSlotScreen.OpenPage(mpLoad);
+  FSlotScreen.Exists := true;
   FSlotMenuBack.Exists := true;
+end;
+
+procedure TViewPlay.SlotScreenAction(const Action: TDoomMenuAction);
+var
+  Slot: Integer;
+  Mode: Integer;
+begin
+  Slot := FSlotScreen.Slot;
+  Mode := FSlotMenu;
+  case Action of
+    maSaveSlot:
+      begin
+        CloseSlotMenu;
+        if Mode = SlotMenuSave then SaveGame(Slot);
+      end;
+    maLoadSlot:
+      begin
+        CloseSlotMenu;
+        if Mode = SlotMenuLoad then LoadGame(Slot);
+      end;
+    maClose:
+      CloseSlotMenu;
+    else ;
+  end;
 end;
 
 { Doom's thermometer (M_DrawThermo) in text: one mark per volume step. }
@@ -866,6 +925,7 @@ begin
   FSlotMenu := SlotMenuNone;
   FSlotMenuBack.Exists := false;
   FSlotMenuText.Exists := false;
+  FSlotScreen.Exists := false;
 end;
 
 procedure TViewPlay.PlacePlayer(const DoomX, DoomY, DoomZ, AngleDeg: Single);
@@ -1210,6 +1270,18 @@ begin
   begin
     { The game is paused while picking a slot, like Doom's menus. }
     FNavigation.Exists := false;
+    if FSlotScreen.Exists then
+    begin
+      { 320x200 shown 4:3 like the title menu; the skull blinks. }
+      FSlotScreen.Height := Min(EffectiveHeight, EffectiveWidth * 3 / 4);
+      FSlotScreen.Width := FSlotScreen.Height * 4 / 3;
+      FSlotTicAccum := FSlotTicAccum + SecondsPassed;
+      while FSlotTicAccum >= TicSeconds do
+      begin
+        FSlotTicAccum := FSlotTicAccum - TicSeconds;
+        FSlotScreen.Tic;
+      end;
+    end;
     Exit;
   end;
   FStatusBar.Exists := true;
@@ -1465,8 +1537,11 @@ begin
         Exit(true);
       end;
     end;
-    if Event.IsKey(keyEscape) or Event.IsKey(keyF2) or Event.IsKey(keyF3) then
-      CloseSlotMenu;
+    if Event.IsKey(keyF2) or Event.IsKey(keyF3) then
+      CloseSlotMenu
+    else
+      { Arrows, Enter, Esc like Doom's menu (the mouse goes to it directly). }
+      FSlotScreen.HandleKey(Event);
     Exit(true); { the menu swallows other input }
   end;
   if Event.IsKey(keyF2) then
