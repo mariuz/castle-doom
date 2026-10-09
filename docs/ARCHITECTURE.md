@@ -732,12 +732,15 @@ always: no dynamic linking in WebAssembly; `--fm-synth` forces it):
    that URL is assigned to `SoundEngine.LoopingChannel[0]`, the engine's
    music channel, which loops it.
 
-Rendering a 2-minute track takes about a second natively and a few seconds in
-WebAssembly, so it is not done in one go: `TDoomMusic.Play` renders the
-first 8 seconds at once (a fraction of a second of work), plays that as
-`D_XXX_INTRO.wav`, and `TDoomMusic.Update` (called every frame by both views)
-renders the rest 2048 samples at a time for at most `RenderBudget` (12 ms)
-per frame; the finished song then takes over at the same position
+Rendering a 2-minute track takes a few seconds natively (Nuked OPL3; about
+a second with the FM model) and longer in WebAssembly, so it is not done in
+one go: `TDoomMusic.Update` (called every frame by both views) renders 2048
+samples at a time for at most `RenderBudget` (12 ms) per frame, 40 ms while
+a song's first seconds are awaited (`StartIntro` asks for them, nothing
+plays yet); `TryStartIntro` plays the first 8 seconds as `D_XXX_INTRO.wav`
+as soon as they are rendered (about 10 frames, no stall; rendering them at
+once in `Play` was 100-300 ms), and the finished song then takes over at
+the same position
 (`TCastlePlayingSound.InitialOffset` = time since the intro started, looping,
 priority 1). The fixed gain is what makes the two identical where they
 overlap; per-song normalization would need the whole song first. When a song is queued, the

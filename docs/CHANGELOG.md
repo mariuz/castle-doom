@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A level, a warp, a loaded game and the title no longer pause for the
+  music's first seconds: they are rendered over the first frames and the
+  song starts a few frames in.
 - Music is played on a real OPL3 emulator: Nuked OPL3 (LGPL, a separate
   shared library in `data/lib`, built by `tools/build_nuked_opl3.sh` and
   packaged by CI) is programmed with the WAD's GENMIDI instruments like

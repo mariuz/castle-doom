@@ -43,10 +43,15 @@ type
     FIntroSound: TCastleSound;
     FIntroOf: String;
     FIntroStart: TTimerResult;
+    { The song whose first seconds should start playing as soon as they
+      are rendered (Update renders them in slices), and since when. }
+    FIntroWanted: String;
+    FIntroWantedSince: TTimerResult;
     FPrefetch: String;
     procedure PlaySound(const Sound: TCastleSound; const Loop: Boolean; const Offset: Single);
     procedure StopSound;
     procedure StartIntro(const LumpName: String);
+    procedure TryStartIntro;
     function ReadMusic(const Url: String; out MimeType: String): TStream;
     procedure SetEnabled(const Value: Boolean);
     procedure SetVolume(const Value: Single);
@@ -1464,6 +1469,8 @@ var
 begin
   R := FRenderer as TSongRenderer;
   Name := FRendering;
+  if FIntroWanted = Name then
+    FIntroWanted := '';
   Wav := R.MakeWav;
   WritelnLog('Music', 'Rendered %s with %s: %.1f s of audio in %d ms (in slices), peak %.2f', [
     Name, R.SynthName, R.Seconds, Round(FRenderTime * 1000), R.SongPeak * R.OutputGain]);
@@ -1502,10 +1509,17 @@ end;
 procedure TDoomMusic.Update;
 var
   Start: TTimerResult;
-  Spent: Double;
+  Spent, Budget: Double;
 begin
   StartNextRender;
   if FRenderer = nil then Exit;
+  { Nothing plays while a song's first seconds are awaited: spend more of
+    the frame on them (still no stall: a few frames of silence instead of
+    the 100-300 ms the synchronous intro took, more on the web). }
+  if FIntroWanted <> '' then
+    Budget := Max(RenderBudget, 0.04)
+  else
+    Budget := RenderBudget;
   Start := Timer;
   repeat
     if (FRenderer as TSongRenderer).Step(2048) then
@@ -1515,8 +1529,9 @@ begin
       Exit;
     end;
     Spent := TimerSeconds(Timer, Start);
-  until Spent >= RenderBudget;
+  until Spent >= Budget;
   FRenderTime := FRenderTime + Spent;
+  TryStartIntro;
 end;
 
 procedure TDoomMusic.PlaySound(const Sound: TCastleSound; const Loop: Boolean; const Offset: Single);
@@ -1554,34 +1569,38 @@ begin
   PlaySound(S, true, Offset);
 end;
 
-{ Render the first IntroSeconds of the song at once (a fraction of a second
-  of work) and play that while Update renders the rest. }
+{ Play the first IntroSeconds of the song as soon as Update has rendered
+  them (a few frames), while it renders the rest. Rendering them here at
+  once was the last stall of a level start (100-300 ms natively, more on
+  the web). }
 procedure TDoomMusic.StartIntro(const LumpName: String);
+begin
+  StartNextRender;
+  if (FRenderer = nil) or (FRendering <> LumpName) then Exit;
+  FIntroWanted := LumpName;
+  FIntroWantedSince := Timer;
+  TryStartIntro;
+end;
+
+procedure TDoomMusic.TryStartIntro;
 const
   IntroSeconds = 8;
 var
   R: TSongRenderer;
-  Start: TTimerResult;
 begin
-  StartNextRender;
-  if (FRenderer = nil) or (FRendering <> LumpName) then Exit;
+  if (FIntroWanted = '') or (FRenderer = nil) or (FRendering <> FIntroWanted) then Exit;
   R := FRenderer as TSongRenderer;
-  Start := Timer;
-  if R.Step(IntroSeconds * SampleRate) then
-  begin
-    FinishRender; { a short song: done already }
-    Exit;
-  end;
-  FReady.AddOrSetValue(LumpName + '_INTRO', R.MakeWav(R.Rendered));
+  if R.Rendered < IntroSeconds * SampleRate then Exit;
+  FReady.AddOrSetValue(FIntroWanted + '_INTRO', R.MakeWav(R.Rendered));
   StopSound;
   FIntroSound := TCastleSound.Create(nil);
-  FIntroSound.Url := 'doommus:/' + LumpName + '_INTRO.wav';
+  FIntroSound.Url := 'doommus:/' + FIntroWanted + '_INTRO.wav';
   PlaySound(FIntroSound, false, 0);
-  FIntroOf := LumpName;
+  FIntroOf := FIntroWanted;
   FIntroStart := Timer;
-  FRenderTime := FRenderTime + TimerSeconds(Timer, Start);
-  WritelnLog('Music', 'Playing the first %.1f s of %s while the rest renders (made in %d ms)',
-    [R.Rendered / SampleRate, LumpName, Round(TimerSeconds(Timer, Start) * 1000)]);
+  WritelnLog('Music', 'Playing the first %.1f s of %s while the rest renders (ready after %d ms)',
+    [R.Rendered / SampleRate, FIntroWanted, Round(TimerSeconds(Timer, FIntroWantedSince) * 1000)]);
+  FIntroWanted := '';
 end;
 
 procedure TDoomMusic.Play(const LumpName: String);
@@ -1666,6 +1685,7 @@ end;
 
 procedure TDoomMusic.Stop;
 begin
+  FIntroWanted := '';
   StopSound;
   FIntroOf := '';
   FCurrent := '';

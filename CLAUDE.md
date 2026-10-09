@@ -264,7 +264,9 @@ bullets, and E1M1's par 999 s.
 Music prefetch: `W:90,E,W:1,U,U,U,U,U,W:3,Q` on E1M1 (software GL renders
 songs slowly, so wait long) logs `Rendered D_E1M2` during the level and
 `Playing D_E1M2, rendered before` on the next one; `Music: Released` lines
-show freed songs; the intro log line gives its render time in ms.
+show freed songs; the intro log line (`Playing the first 8.x s of ...
+while the rest renders (ready after N ms)`) says how long after the
+level start the music began: a few frames, it is rendered in slices.
 
 Set `CASTLE_DOOM_DUMP_MUSIC=<dir>` to write rendered music WAVs for analysis
 (a pitch-grid/level check script lived in the scratchpad as `analyze_wav.py`:

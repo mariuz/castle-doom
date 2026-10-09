@@ -6,6 +6,12 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Music without the start stall: the first 8 seconds of a song are no
+  longer rendered at once when a level, a warp, a loaded game or the title
+  starts (100-300 ms natively, more on the web); `TDoomMusic.Update`
+  renders them in its per-frame slices (with a 40 ms budget while nothing
+  plays) and `TryStartIntro` starts the intro as soon as they are there
+  (log `ready after N ms`: about 10 frames), the rest as before.
 - Sprites merged by texture in persistent shapes: within each
   `TSpriteBatch` scene (light group and kind) a `TSpriteShape` holds the
   quads of every thing showing one texture (four vertices and six indices
@@ -423,7 +429,6 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **OPL3 details** after Nuked OPL3 (done, see above): DMX's exact volume curve (a 128-entry table; the port uses 0.75 dB per total-level step from the linear product of velocity, volume and expression), its voice-stealing order and the OPL2 vibrato / tremolo depth bits, compared by ear or against a recording of the original driver. | Closer to the original mix. | `TOplSongRenderer` | S |
-| **Music for warps and loads**: the first level, `-warp`, a loaded game and the title still render an 8-second intro at once (115-230 ms natively); a desktop thread, or rendering the intro in slices behind a short silence, would remove the last stall. | Smoother first level start. | `DoomMusic` | S |
 | **Stereo panning** for positional sounds is done by the engine, but Doom's `S_CLIPPING_DIST` falloff curve could be matched more closely. | Minor. | `DoomSound` | S |
 | **PC speaker** sounds (`DP*`) are ignored on purpose; no change planned. | - | - | - |
 
@@ -455,6 +460,6 @@ L = several days). Items inside a section are in suggested order.
 2. Web gamepads (M): a browser backend for CGE's game controllers
    (`navigator.getGamepads()`), so the desktop bindings work on the web
    (see Engine and tooling).
-3. Music for warps and loads (S, see Audio): render the song before the
-   first level, a `-warp` and a loaded game start, so they do not begin
-   with the 8-second intro.
+3. More unit tests (S, see Engine and tooling): MIDI parsing, the
+   synth's envelope timings and the generated ZDoom / glBSP node lumps in
+   FPCUnit, which runs in seconds without a window.
