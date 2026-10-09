@@ -338,9 +338,17 @@ a vertex and a fragment `TEffectPartNode`). The vertex part writes the eye
 depth (`-vertex_eye.z`, in Doom units since the world is not scaled; the
 camera's 90 degree horizontal field of view is Doom's) and the light into a
 varying; `PLUG_fragment_modify` computes the colormap with Doom's integer
-steps and multiplies the colour by `(32 - colormap) / 32`, which is how the
-colormaps were made from the palette (the real lump is not sampled, see the
-roadmap). Map geometry gets a `GeometryEffect` in each scene root and reads
+steps and then looks the colour up in the real `COLORMAP`: the lit pixel is
+rounded to 6 bits per channel and finds its `PLAYPAL` index in a 512x512
+lookup image (`doom_index_lut`; cell (r + 64 (b mod 8), g + 64 (b div 8)),
+exact palette colours first, the nearest palette colour elsewhere), and that
+index and the colormap pick the colour from a 256x34 image of the
+`COLORMAP` rows through `PLAYPAL` (`doom_colormap_lut`). `TDoomGraphics`
+builds both from the WAD (`MakeLuts`) and serves them as
+`doomgfx:/lut/index<n>.tga` / `colormap<n>.tga`; each effect gets fresh
+nearest-filtered texture nodes with those URLs. `PaletteMapped := false`
+(demo command `PALMAP`) goes back to multiplying the colour by
+`(32 - colormap) / 32`, the old approximation. Map geometry gets a `GeometryEffect` in each scene root and reads
 the `doom_light` attribute; each actor's scene root gets a `SpriteEffect`
 whose `doom_sprite` uniform `TDoomActor.SetLight` updates (kind normal, full
 bright, or fuzz, which leaves the spectre's black alone). The effect is in
@@ -354,7 +362,7 @@ list of them (removed again through `AddDestructionNotification`) and sends
 a changed value to all. `TViewPlay.Update` sets `ExtraLight` from
 `Player.ExtraLight` (A_Light1 / A_Light2 of the flash frames) and
 `FixedColormap` from `TDoomWorld.FixedColormap` (R_SetupFrame: the inverted
-greys of invulnerability, colormap 1 for the light amplification visor, both
+greys of invulnerability, `COLORMAP` row 32, colormap 1 for the light amplification visor, both
 blinking in the last 4 seconds). `F` switches diminishing off (each sector
 then gets colormap `start / 2`). The player's weapon is a 2D image control,
 lit with `WeaponColormap` (`spritelights[MAXLIGHTSCALE - 1]` of the player's

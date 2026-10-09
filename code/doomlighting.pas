@@ -42,6 +42,9 @@ type
     FEffects: TEffectNodeList;
     FExtraLight, FFixedColormap: Integer;
     FDiminish: Boolean;
+    FIndexLutUrl, FColormapLutUrl: String;
+    FPaletteMapped: Boolean;
+    procedure SetPaletteMapped(const Value: Boolean);
     procedure EffectDestroyed(const Node: TX3DNode);
     function NewEffect(const VertexCode, FragmentInput: String): TEffectNode;
     procedure SetExtraLight(const Value: Integer);
@@ -71,6 +74,12 @@ type
     property FixedColormap: Integer read FFixedColormap write SetFixedColormap;
     { Light diminishing with distance; off gives each sector a flat light. }
     property Diminish: Boolean read FDiminish write SetDiminish;
+    { The lookup images (TDoomGraphics serves them) for palette-mapped
+      colours; effects made after this use them. }
+    procedure SetLookupUrls(const IndexUrl, ColormapUrl: String);
+    { Doom's real COLORMAP rows instead of darkening by (32 - level) / 32
+      (needs the lookup images). }
+    property PaletteMapped: Boolean read FPaletteMapped write SetPaletteMapped;
   end;
 
 function DoomLightingInstance: TDoomLighting;
@@ -92,6 +101,19 @@ const
     'uniform float doom_extra_light;' + NL +
     'uniform float doom_fixed_colormap;' + NL +
     'uniform float doom_diminish;' + NL +
+    'uniform float doom_palette_mapped;' + NL +
+    'uniform sampler2D doom_index_lut;' + NL +
+    'uniform sampler2D doom_colormap_lut;' + NL +
+    '' + NL +
+    { Doom's exact colour: the texel back to its palette index (6 bits a
+      channel, TDoomGraphics.MakeLuts), then COLORMAP row "level". }
+    'vec3 doom_colormapped(vec3 c, float level)' + NL +
+    '{' + NL +
+    '  vec3 q = floor(floor(clamp(c, 0.0, 1.0) * 255.0 + 0.5) / 4.0);' + NL +
+    '  vec2 cell = vec2(q.r + 64.0 * mod(q.b, 8.0), q.g + 64.0 * floor(q.b / 8.0));' + NL +
+    '  float index = floor(texture2D(doom_index_lut, (cell + 0.5) / 512.0).r * 255.0 + 0.5);' + NL +
+    '  return texture2D(doom_colormap_lut, vec2((index + 0.5) / 256.0, (level + 0.5) / 64.0)).rgb;' + NL +
+    '}' + NL +
     '' + NL +
     'void PLUG_fragment_modify(inout vec4 fragment_color)' + NL +
     '{' + NL +
@@ -101,7 +123,10 @@ const
     '  float level;' + NL +
     '  if (kind > 25.0) return;' + NL +
     '  if (doom_fixed_colormap > 31.5) {' + NL +
-    '    fragment_color.rgb = vec3(1.0 - dot(fragment_color.rgb, vec3(0.299, 0.587, 0.114)));' + NL +
+    '    if (doom_palette_mapped > 0.5)' + NL +
+    '      fragment_color.rgb = doom_colormapped(fragment_color.rgb, 32.0);' + NL +
+    '    else' + NL +
+    '      fragment_color.rgb = vec3(1.0 - dot(fragment_color.rgb, vec3(0.299, 0.587, 0.114)));' + NL +
     '    return;' + NL +
     '  }' + NL +
     '  if (doom_fixed_colormap > -0.5)' + NL +
@@ -123,7 +148,10 @@ const
     '    }' + NL +
     '  }' + NL +
     '  level = clamp(level, 0.0, 31.0);' + NL +
-    '  fragment_color.rgb *= 1.0 - level / 32.0;' + NL +
+    '  if (doom_palette_mapped > 0.5)' + NL +
+    '    fragment_color.rgb = doom_colormapped(fragment_color.rgb, level);' + NL +
+    '  else' + NL +
+    '    fragment_color.rgb *= 1.0 - level / 32.0;' + NL +
     '}';
 
   GeometryVertex =
@@ -164,6 +192,40 @@ begin
   FExtraLight := 0;
   FFixedColormap := NoFixedColormap;
   FDiminish := true;
+  FPaletteMapped := true;
+end;
+
+procedure TDoomLighting.SetLookupUrls(const IndexUrl, ColormapUrl: String);
+begin
+  FIndexLutUrl := IndexUrl;
+  FColormapLutUrl := ColormapUrl;
+end;
+
+{ A lookup image as a texture: exact texels (no filtering, no mipmaps).
+  A new node per effect (one node must not be in two scenes); CGE's
+  texture cache shares the image by its URL. }
+function LutTexture(const Url: String): TImageTextureNode;
+var
+  Props: TTexturePropertiesNode;
+begin
+  Result := TImageTextureNode.Create;
+  Result.SetUrl([Url]);
+  Result.RepeatS := false;
+  Result.RepeatT := false;
+  Props := TTexturePropertiesNode.Create;
+  Props.MagnificationFilter := magNearest;
+  Props.MinificationFilter := minNearest;
+  Props.GenerateMipMaps := false;
+  Props.BoundaryModeS := bmClampToEdge;
+  Props.BoundaryModeT := bmClampToEdge;
+  Result.TextureProperties := Props;
+end;
+
+procedure TDoomLighting.SetPaletteMapped(const Value: Boolean);
+begin
+  if FPaletteMapped = Value then Exit;
+  FPaletteMapped := Value;
+  SendAll('doom_palette_mapped', Ord(Value and (FIndexLutUrl <> '')));
 end;
 
 destructor TDoomLighting.Destroy;
@@ -191,6 +253,15 @@ begin
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_extra_light', FExtraLight));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fixed_colormap', FFixedColormap));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_diminish', Ord(FDiminish)));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_palette_mapped',
+    Ord(FPaletteMapped and (FIndexLutUrl <> ''))));
+  if FIndexLutUrl <> '' then
+  begin
+    Result.AddCustomField(TSFNode.Create(Result, true, 'doom_index_lut', [TImageTextureNode],
+      LutTexture(FIndexLutUrl)));
+    Result.AddCustomField(TSFNode.Create(Result, true, 'doom_colormap_lut', [TImageTextureNode],
+      LutTexture(FColormapLutUrl)));
+  end;
 
   VertexPart := TEffectPartNode.Create;
   VertexPart.ShaderType := stVertex;

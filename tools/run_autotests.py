@@ -107,6 +107,8 @@ TESTS = [
      [r'Save: Saved E1M1 to castle-config:/save1\.json'], [], check_typed_name),
     ('pointer-lock-pause', 'E1M1', 'W:0.5,SAVE:1,UNLOCK,W:2,S,SAVE:2,RESUME,W:1,SAVE:3,Q',
      [r'PointerLock: Cancelled by the user, pausing'], [], check_pause),
+    ('palette', 'E1M1', 'W:0.5,S,INVUL,W:0.3,S,PALMAP,W:0.3,S,Q',
+     [r'Graphics: Palette lookup images made', r'Saved screenshot 3'], [], None),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]

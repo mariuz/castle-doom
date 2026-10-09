@@ -100,6 +100,9 @@ Lighting (`DoomLighting`): `DIM` toggles light diminishing (the `F` key),
 light amplification visor (colormap 1); `INVUL:1` / `AMP:1` end them. `Y`
 is a separate god mode flag now, so god-mode screenshots keep normal
 colours. Fire (`X`) and screenshot after `W:0.03` to see the flash light.
+The light goes through the real `COLORMAP` (log `Graphics: Palette lookup
+images made`); `PALMAP` toggles back to the old multiply, so
+`W:0.5,S,PALMAP,W:0.3,S` gives a before / after pair.
 Comparing several screenshots is easier as one grid image (PIL in Python).
 
 `SHOTS` in a demo logs every player shot (`Shot:` angle, slope, range,

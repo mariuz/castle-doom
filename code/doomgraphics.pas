@@ -84,6 +84,11 @@ type
     FAnimByName: {$ifdef FPC}specialize{$endif} TDictionary<String, TAnimGroup>;
     FMissing: TDoomImage;
     FLevel: Integer;
+    { Palette-mapped lighting's lookup images (DoomLighting): RGB to palette
+      index, and COLORMAP's rows as colours. Made on first request. }
+    FLutId: Integer;
+    FIndexLut, FColormapLut: TRGBAlphaImage;
+    procedure MakeLuts;
     procedure ReadPNames;
     { Mark an image (and the rest of its animation) as used by this level. }
     procedure Touch(const Img: TDoomImage);
@@ -132,7 +137,10 @@ type
 
 implementation
 
-uses Math, CastleLog, CastleStringUtils, CastleUtils, CastleDownload;
+uses Math, CastleLog, CastleStringUtils, CastleUtils, CastleDownload, DoomLighting;
+
+var
+  LutCounter: Integer;
 
 { TDoomImage ----------------------------------------------------------------- }
 
@@ -273,6 +281,13 @@ begin
   FAnimByName := {$ifdef FPC}specialize{$endif} TDictionary<String, TAnimGroup>.Create;
 
   RegisterUrlProtocol('doomgfx', {$ifdef FPC}@{$endif} ReadGfx, nil);
+  { A new name per WAD: CGE's texture cache must not reuse the lookup
+    images of the previous WAD's palette. }
+  Inc(LutCounter);
+  FLutId := LutCounter;
+  DoomLightingInstance.SetLookupUrls(
+    Format('doomgfx:/lut/index%d.tga', [FLutId]),
+    Format('doomgfx:/lut/colormap%d.tga', [FLutId]));
   ReadPNames;
   ReadTextureLump('TEXTURE1');
   if FWad.HasLump('TEXTURE2') then
@@ -287,6 +302,8 @@ end;
 destructor TDoomGraphics.Destroy;
 begin
   UnregisterUrlProtocol('doomgfx');
+  FreeAndNil(FIndexLut);
+  FreeAndNil(FColormapLut);
   FreeAndNil(FAnimGroups);
   FreeAndNil(FAnimByName);
   FreeAndNil(FMissing);
@@ -511,6 +528,18 @@ begin
   else if Kind = 'flat' then Img := Flat(Name)
   else if Kind = 'patch' then Img := Patch(Name)
   else if Kind = 'missing' then Img := MissingTexture
+  else if Kind = 'lut' then
+  begin
+    MakeLuts;
+    Result := TMemoryStream.Create;
+    if Copy(Name, 1, 5) = 'index' then
+      WriteTga(FIndexLut, Result)
+    else
+      WriteTga(FColormapLut, Result);
+    Result.Position := 0;
+    MimeType := 'image/x-targa';
+    Exit;
+  end
   else Img := nil;
   if Img = nil then
     raise Exception.CreateFmt('Doom graphic not found: %s', [Url]);
@@ -518,6 +547,82 @@ begin
   WriteTga(Img.Image, Result);
   Result.Position := 0;
   MimeType := 'image/x-targa';
+end;
+
+{ The lookup images of DoomLighting's palette-mapped colours:
+  - index: 512 x 512, the palette index (in red) of every colour with 6 bits
+    per channel (r + 64 * (b mod 8), g + 64 * (b div 8)); PLAYPAL's colours
+    all fall in different cells, so they map back exactly; other colours
+    (texture filtering) get the nearest entry, found on a 5-bit grid;
+  - colormap: 256 x 64, row R (0..33) is COLORMAP's row R as colours:
+    pixel (I, R) = PLAYPAL[COLORMAP[R][I]] (32 = invulnerability). }
+procedure TDoomGraphics.MakeLuts;
+var
+  Nearest5: array of Byte;
+  R, G, B, I, Best, D, BestD, X, Y, Lump, Row: Integer;
+  C: TVector4Byte;
+  P: PVector4Byte;
+  Map: PByte;
+begin
+  if FIndexLut <> nil then Exit;
+  SetLength(Nearest5, 32 * 32 * 32);
+  for B := 0 to 31 do
+    for G := 0 to 31 do
+      for R := 0 to 31 do
+      begin
+        Best := 0;
+        BestD := MaxInt;
+        for I := 0 to 255 do
+        begin
+          C := FWad.PaletteColor(I);
+          D := Sqr(R * 8 + 4 - C.X) + Sqr(G * 8 + 4 - C.Y) + Sqr(B * 8 + 4 - C.Z);
+          if D < BestD then
+          begin
+            BestD := D;
+            Best := I;
+          end;
+        end;
+        Nearest5[R + G * 32 + B * 1024] := Best;
+      end;
+  FIndexLut := TRGBAlphaImage.Create(512, 512);
+  for B := 0 to 63 do
+    for G := 0 to 63 do
+      for R := 0 to 63 do
+      begin
+        I := Nearest5[(R shr 1) + (G shr 1) * 32 + (B shr 1) * 1024];
+        PVector4Byte(FIndexLut.PixelPtr(R + 64 * (B mod 8), G + 64 * (B div 8)))^ := Vector4Byte(I, I, I, 255);
+      end;
+  { The exact colours last, the lowest index winning duplicates. }
+  for I := 255 downto 0 do
+  begin
+    C := FWad.PaletteColor(I);
+    R := C.X shr 2; G := C.Y shr 2; B := C.Z shr 2;
+    PVector4Byte(FIndexLut.PixelPtr(R + 64 * (B mod 8), G + 64 * (B div 8)))^ := Vector4Byte(I, I, I, 255);
+  end;
+
+  FColormapLut := TRGBAlphaImage.Create(256, 64);
+  Lump := FWad.FindLump('COLORMAP');
+  for Y := 0 to 63 do
+  begin
+    Row := Min(Y, 33);
+    for X := 0 to 255 do
+    begin
+      P := PVector4Byte(FColormapLut.PixelPtr(X, Y));
+      if Lump >= 0 then
+      begin
+        Map := FWad.LumpPointer(Lump);
+        P^ := FWad.PaletteColor(Map[Row * 256 + X]);
+      end else
+      begin
+        { No COLORMAP: darken like the colormaps roughly do. }
+        C := FWad.PaletteColor(X);
+        P^ := Vector4Byte(C.X * (32 - Min(Row, 32)) div 32, C.Y * (32 - Min(Row, 32)) div 32,
+          C.Z * (32 - Min(Row, 32)) div 32, 255);
+      end;
+      P^.W := 255;
+    end;
+  end;
+  WritelnLog('Graphics', 'Palette lookup images made (PLAYPAL to index, COLORMAP)');
 end;
 
 procedure TDoomGraphics.ResolveAnim(const Img: TDoomImage; const IsFlat: Boolean);

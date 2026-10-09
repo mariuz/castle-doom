@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Palette-mapped lighting: the `DoomLighting` shader rounds each lit
+  pixel to its `PLAYPAL` index (a 512x512 lookup image, 6 bits per
+  channel, nearest palette colour for the rest) and takes the colour from
+  the real `COLORMAP` row for its light level (a 256x34 image), so walls,
+  flats and sprites show Doom's exact colours and banding, and
+  invulnerability uses `COLORMAP` row 32 itself. Both images are made from
+  the WAD and served as `doomgfx:/lut/...`. Demo command `PALMAP` switches
+  back to the old multiply for comparison; autotest `palette`.
 - Typed save names like `M_SaveSelect`: choosing a slot on Doom's save
   page edits its name with the `_` cursor (a new save starts with the
   map, kills and time, an old one with its name), letters / digits /
@@ -311,7 +319,7 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
-| **Palette-mapped rendering** for the real 8-bit look: quantize each texel to the palette and look it up in the real `COLORMAP` rows (a 32x32x32 RGB-to-index texture and a 256x34 colormap texture in the `DoomLighting` effect), instead of multiplying by (32 - level) / 32. | Exact Doom colours, banding of the palette. | `DoomLighting` | M |
+| **Palette-mapped weapon and filtering**: the player's weapon (a 2D image control) is still lit by multiplying its colour, and textures are filtered before the palette lookup; Doom samples unfiltered texels. A nearest-filter option would complete the 8-bit look. | Fidelity of the palette look. | `GameViewPlay`, `DoomGraphics` | S |
 
 ## 3. Audio
 
@@ -346,9 +354,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Palette-mapped rendering (M): quantize to `PLAYPAL` and look the
-   light level up in the real `COLORMAP` rows in the `DoomLighting`
-   shader (see Presentation), for Doom's exact colours and banding, and
-   the inverted colormap from `COLORMAP` row 32 itself.
-3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
+2. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.
+3. Palette-mapped weapon and filtering (S): light the weapon through the
+   same `COLORMAP` lookup and offer unfiltered (nearest) textures, so the
+   whole view has the 8-bit look (see Presentation).

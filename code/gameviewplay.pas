@@ -540,6 +540,8 @@ begin
     FWorld.Player.LightAmpTics := Iff(Arg > 0, Round(Arg), 120 * 35)
   else if Cmd = 'DIM' then
     DoomLightingInstance.Diminish := not DoomLightingInstance.Diminish
+  else if Cmd = 'PALMAP' then
+    DoomLightingInstance.PaletteMapped := not DoomLightingInstance.PaletteMapped
   else if Cmd = 'K' then
     FWorld.GiveAll
   else if Cmd = 'MENU' then
