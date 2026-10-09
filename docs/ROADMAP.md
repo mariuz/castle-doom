@@ -6,6 +6,12 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Column fuzz: spectres and the weapon under partial invisibility are
+  drawn as black specks in `R_DrawFuzzColumn`'s `fuzzoffset` pattern
+  (50 entries of +1 / -1, at Doom's 320x200 grain, starting elsewhere
+  every tic) instead of an evenly translucent silhouette. Spectres do it
+  in the `DoomLighting` shader, the weapon with a fuzz copy of its
+  image. Autotest `fuzz`.
 - Palette-mapped lighting: the `DoomLighting` shader rounds each lit
   pixel to its `PLAYPAL` index (a 512x512 lookup image, 6 bits per
   channel, nearest palette colour for the rest) and takes the colour from
@@ -309,7 +315,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Column fuzz shader**: Doom's fuzz also shifts columns up and down by a pixel (`fuzzoffset`); a `TEffectNode` fragment shader could add that wobble to spectres and the invisible weapon. | Closer look. | `DoomActors` appearance | S |
+| **True fuzz from the background**: Doom's fuzz copies the pixel one row above or below, darkened by colormap 6; the shader cannot read the framebuffer, so the pattern is black specks instead. A screen-space pass (render the spectres into a mask, then shift and darken the scene there) would be exact. | Exact spectre look. | `DoomLighting`, `GameViewPlay` | M |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
 | **Item respawn / deathmatch starts**: not applicable to single player, but the flags are parsed. | Only if multiplayer ever happens. | - | - |
 
@@ -354,8 +360,9 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
-   the invisible weapon, the last step of the fuzz work.
-3. Palette-mapped weapon and filtering (S): light the weapon through the
+2. Palette-mapped weapon and filtering (S): light the weapon through the
    same `COLORMAP` lookup and offer unfiltered (nearest) textures, so the
    whole view has the 8-bit look (see Presentation).
+3. `-deh` / `.bex` files (M-L): load DeHackEd patches given on the
+   command line and the other DeHackEd sections (things, frames,
+   weapons, ammo), for classic PWADs that change monsters.

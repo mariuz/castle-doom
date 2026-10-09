@@ -62,7 +62,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   sector (sound spreads through open doors, stops at closed ones and crosses at most one sound-blocking
   line; ambush monsters must also see you). They chase (2D Doom-style movement with step/drop-off
   rules, they open doors and use teleporters and monster-only teleport lines; spectres are
-  drawn as shimmering fuzz; flyers rise and sink towards you like Doom's `P_ZMovement`
+  drawn as Doom's speckled `fuzzoffset` fuzz; flyers rise and sink towards you like Doom's `P_ZMovement`
   and their corpses fall), attack with melee, hitscan or projectiles, take pain, die
   (or burst into gibs when overkilled), get knocked back by hits and explosions (so do you),
   are squashed to gibs as corpses under closing doors and crushers, drop items, and fight each other when hit by another monster (infighting). Lost souls

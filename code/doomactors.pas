@@ -127,11 +127,10 @@ begin
   Fuzz := Info^.Num = 58;
   if Fuzz then
   begin
-    { Black and translucent: the background shows through darkened, like
-      Doom's colormap-6 fuzz columns; AnimateTic varies the opacity. }
+    { Blended: the DoomLighting shader turns the sprite into black specks
+      of Doom's fuzzoffset pattern, which the background shows through. }
     FAppearance.AlphaMode := amBlend;
     FMaterial.EmissiveColor := Vector3(0, 0, 0);
-    FMaterial.Transparency := 0.6;
   end;
   Billboard := TCastleBillboard.Create(Self);
   Billboard.AxisOfRotation := Vector3(0, 1, 0);
@@ -261,9 +260,6 @@ end;
 procedure TDoomActor.AnimateTic;
 begin
   SequenceDone := false;
-  { R_DrawFuzzColumn's shimmer: a different darkness every tic. }
-  if Fuzz then
-    FMaterial.Transparency := 0.5 + Random * 0.3;
   if Length(FSequence) <= 1 then
   begin
     if (not FSeqLoop) and (FTicsLeft > 0) then

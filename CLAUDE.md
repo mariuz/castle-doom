@@ -122,7 +122,8 @@ monster walk out of the doorway first when frames are slow).
 `SIGHT` in a demo logs, for every monster within 2500 units, the 2D and
 3D line of sight to the player and the REJECT bit (`Sight:` lines).
 `INVIS` in a demo gives partial invisibility (the weapon turns to fuzz);
-`P:58:180` spawns a spectre to look at.
+`P:58:180` spawns a spectre to look at (both use Doom's `fuzzoffset`
+specks; the `fuzz` autotest takes one screenshot of each).
 
 Gibs: `D` deals 100000 damage, so it gibs every zombie, sergeant, imp and
 SS (grep `Gib:`); `Y,P:3005:350` from the lift top (`G:160:256,A:0`) shows a

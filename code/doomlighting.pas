@@ -26,8 +26,20 @@ const
   DoomLightWall = 0;
   DoomLightPlane = 10;
   DoomLightFullBright = 20;
-  { Spectre fuzz: the colour is left alone. }
+  { Spectre fuzz (R_DrawFuzzColumn): a black, translucent shimmer in
+    Doom's fuzzoffset pattern instead of the sprite's colours. }
   DoomLightFuzz = 30;
+
+  { r_draw.c fuzzoffset: each fuzz pixel copies the background from the
+    row above (-) or below (+); FuzzOffsets[(FuzzPhase + ...) mod 50]. }
+  FuzzOffsets: array [0..49] of ShortInt = (
+    1, -1, 1, -1, 1, 1, -1, 1, 1, -1, 1, 1, 1, -1, 1, 1, 1, -1, -1, -1, -1,
+    1, -1, -1, 1, 1, 1, 1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, -1, -1, -1,
+    1, 1, 1, 1, -1, 1, 1, -1, 1);
+  { The black's opacity where the background would come from below / above:
+    rows pulled from elsewhere show up as dark and light specks. }
+  FuzzAlphaPlus = 0.7;
+  FuzzAlphaMinus = 0.3;
 
   { DoomLighting.FixedColormap values. }
   NoFixedColormap = -1;
@@ -44,6 +56,10 @@ type
     FDiminish: Boolean;
     FIndexLutUrl, FColormapLutUrl: String;
     FPaletteMapped: Boolean;
+    FFuzzScale: Single;
+    FFuzzPhase: Integer;
+    procedure SetFuzzScale(const Value: Single);
+    procedure SetFuzzPhase(const Value: Integer);
     procedure SetPaletteMapped(const Value: Boolean);
     procedure EffectDestroyed(const Node: TX3DNode);
     function NewEffect(const VertexCode, FragmentInput: String): TEffectNode;
@@ -80,6 +96,12 @@ type
     { Doom's real COLORMAP rows instead of darkening by (32 - level) / 32
       (needs the lookup images). }
     property PaletteMapped: Boolean read FPaletteMapped write SetPaletteMapped;
+    { Screen pixels per Doom pixel (view height / 200): the fuzz pattern's
+      grain. }
+    property FuzzScale: Single read FFuzzScale write SetFuzzScale;
+    { Where the fuzz pattern starts (0..49), changed every tic like Doom's
+      ever-advancing fuzzpos. }
+    property FuzzPhase: Integer read FFuzzPhase write SetFuzzPhase;
   end;
 
 function DoomLightingInstance: TDoomLighting;
@@ -97,6 +119,9 @@ const
     walls and sprites: index = min(2560 / depth, 47), level = start - index / 2;
     planes: index = min(depth / 16, 127), level = start - (160 / (index + 1)) / 2;
     start = (15 - lightnum) * 4, lightnum = light / 16 + extra light (+ contrast). }
+  FuzzAlphaPlusGlsl = '0.7';
+  FuzzAlphaMinusGlsl = '0.3';
+
   FragmentCode =
     'uniform float doom_extra_light;' + NL +
     'uniform float doom_fixed_colormap;' + NL +
@@ -104,6 +129,17 @@ const
     'uniform float doom_palette_mapped;' + NL +
     'uniform sampler2D doom_index_lut;' + NL +
     'uniform sampler2D doom_colormap_lut;' + NL +
+    'uniform float doom_fuzz_scale;' + NL +
+    'uniform float doom_fuzz_phase;' + NL +
+    '' + NL +
+    { FuzzOffsets as bits (1 = +1), 10 a number so that mediump floats keep
+      them exact. }
+    'float doom_fuzz_bit(float i)' + NL +
+    '{' + NL +
+    '  float chunk = floor(i / 10.0);' + NL +
+    '  float bits = chunk < 1.0 ? 437.0 : chunk < 2.0 ? 119.0 : chunk < 3.0 ? 754.0 : chunk < 4.0 ? 102.0 : 734.0;' + NL +
+    '  return mod(floor(bits / exp2(i - chunk * 10.0)), 2.0);' + NL +
+    '}' + NL +
     '' + NL +
     { Doom's exact colour: the texel back to its palette index (6 bits a
       channel, TDoomGraphics.MakeLuts), then COLORMAP row "level". }
@@ -121,7 +157,15 @@ const
     '  float kind = doom_light_info.y;' + NL +
     '  float depth = max(doom_light_info.z, 1.0);' + NL +
     '  float level;' + NL +
-    '  if (kind > 25.0) return;' + NL +
+    '  if (kind > 25.0) {' + NL +
+    { Doom pixels (320x200 grain), counted down each column like fuzzpos;
+      the column adds an offset so neighbours differ. }
+    '    vec2 p = floor(gl_FragCoord.xy / doom_fuzz_scale);' + NL +
+    '    float i = mod(doom_fuzz_phase + mod(p.x, 50.0) * 7.0 + 50.0 - mod(p.y, 50.0), 50.0);' + NL +
+    '    float alpha = doom_fuzz_bit(i) > 0.5 ? ' + FuzzAlphaPlusGlsl + ' : ' + FuzzAlphaMinusGlsl + ';' + NL +
+    '    fragment_color = vec4(0.0, 0.0, 0.0, fragment_color.a > 0.5 ? alpha : 0.0);' + NL +
+    '    return;' + NL +
+    '  }' + NL +
     '  if (doom_fixed_colormap > 31.5) {' + NL +
     '    if (doom_palette_mapped > 0.5)' + NL +
     '      fragment_color.rgb = doom_colormapped(fragment_color.rgb, 32.0);' + NL +
@@ -193,6 +237,21 @@ begin
   FFixedColormap := NoFixedColormap;
   FDiminish := true;
   FPaletteMapped := true;
+  FFuzzScale := 1;
+end;
+
+procedure TDoomLighting.SetFuzzScale(const Value: Single);
+begin
+  if FFuzzScale = Value then Exit;
+  FFuzzScale := Value;
+  SendAll('doom_fuzz_scale', Value);
+end;
+
+procedure TDoomLighting.SetFuzzPhase(const Value: Integer);
+begin
+  if FFuzzPhase = Value then Exit;
+  FFuzzPhase := Value;
+  SendAll('doom_fuzz_phase', Value);
 end;
 
 procedure TDoomLighting.SetLookupUrls(const IndexUrl, ColormapUrl: String);
@@ -255,6 +314,8 @@ begin
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_diminish', Ord(FDiminish)));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_palette_mapped',
     Ord(FPaletteMapped and (FIndexLutUrl <> ''))));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_scale', FFuzzScale));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_phase', FFuzzPhase));
   if FIndexLutUrl <> '' then
   begin
     Result.AddCustomField(TSFNode.Create(Result, true, 'doom_index_lut', [TImageTextureNode],

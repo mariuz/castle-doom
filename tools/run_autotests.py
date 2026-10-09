@@ -109,6 +109,8 @@ TESTS = [
      [r'PointerLock: Cancelled by the user, pausing'], [], check_pause),
     ('palette', 'E1M1', 'W:0.5,S,INVUL,W:0.3,S,PALMAP,W:0.3,S,Q',
      [r'Graphics: Palette lookup images made', r'Saved screenshot 3'], [], None),
+    ('fuzz', 'E1M1', 'Y,W:1,P:58:250,W:0.2,S,INVIS,W:0.3,S,Q',
+     [r'Spawn: SARG', r'Saved screenshot 2'], [], None),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]

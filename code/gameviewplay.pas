@@ -1021,6 +1021,38 @@ begin
     end;
 end;
 
+{ Where the fuzz pattern starts in a tic: Doom's fuzzpos never resets, so
+  each frame starts somewhere else. }
+function FuzzPhaseOfTic(const Tic: Int64): Integer;
+begin
+  Result := (Tic * 23) mod Length(FuzzOffsets);
+end;
+
+{ R_DrawFuzzColumn for the player's weapon (partial invisibility): every
+  opaque pixel becomes black, more or less opaque by Doom's fuzzoffset
+  pattern, column after column from the top like fuzzpos. }
+function FuzzCopy(const Source: TCastleImage; const Phase: Integer): TCastleImage;
+var
+  X, Y, I: Integer;
+  C: TCastleColor;
+  A: Single;
+begin
+  Result := Source.MakeCopy;
+  I := Phase;
+  for X := 0 to Result.Width - 1 do
+    for Y := Result.Height - 1 downto 0 do
+    begin
+      C := Result.Colors[X, Y, 0];
+      if C.W > 0.5 then
+      begin
+        if FuzzOffsets[I] > 0 then A := FuzzAlphaPlus else A := FuzzAlphaMinus;
+        I := (I + 1) mod Length(FuzzOffsets);
+      end else
+        A := 0;
+      Result.Colors[X, Y, 0] := Vector4(0, 0, 0, A);
+    end;
+end;
+
 procedure TViewPlay.UpdateWeaponSprite(const SecondsPassed: Single);
 var
   P: TPlayerState;
@@ -1028,7 +1060,7 @@ var
   Img: TDoomImage;
   S, Speed, Bob, BobX, BobY: Single;
   W, H, Bright: Single;
-  Inverted: Boolean;
+  Inverted, Fuzzy: Boolean;
   InvSuffix: String;
   CamPos: TVector3;
   Sec, Light: Integer;
@@ -1053,10 +1085,11 @@ begin
 
   { Partial invisibility: the weapon is drawn as fuzz too, blinking back to
     normal in the last seconds (st_stuff / r_things: > 4*32 tics or bit 8). }
-  if (P.InvisibleTics > 4 * 32) or ((P.InvisibleTics and 8) <> 0) then
+  Fuzzy := (P.InvisibleTics > 4 * 32) or ((P.InvisibleTics and 8) <> 0);
+  if Fuzzy then
   begin
-    FWeaponImage.Color := Vector4(0, 0, 0, 0.3 + Random * 0.25);
-    FFlashImage.Color := Vector4(0, 0, 0, 0.3 + Random * 0.25);
+    FWeaponImage.Color := White;
+    FFlashImage.Color := White;
   end else
   begin
     { R_DrawPSprite: the weapon is lit like a sprite at the nearest scale
@@ -1082,9 +1115,13 @@ begin
   end;
 
   { Fuzz wins over the fixed colormap, like in R_DrawPSprite. }
-  Inverted := (FWorld.FixedColormap = InverseColormap) and
-    not ((P.InvisibleTics > 4 * 32) or ((P.InvisibleTics and 8) <> 0));
-  if Inverted then InvSuffix := '/inverse' else InvSuffix := '';
+  Inverted := (FWorld.FixedColormap = InverseColormap) and not Fuzzy;
+  if Fuzzy then
+    InvSuffix := '/fuzz' + IntToStr(FuzzPhaseOfTic(FWorld.Tic))
+  else if Inverted then
+    InvSuffix := '/inverse'
+  else
+    InvSuffix := '';
 
   SpriteName := FWorld.WeaponSprite(P.Weapon) + P.WeaponFrame + '0';
   Img := Graphics.Patch(SpriteName);
@@ -1092,7 +1129,9 @@ begin
   begin
     if SpriteName + InvSuffix <> FWeaponImageName then
     begin
-      if Inverted then
+      if Fuzzy then
+        FWeaponImage.Image := FuzzCopy(Img.Image, FuzzPhaseOfTic(FWorld.Tic))
+      else if Inverted then
         FWeaponImage.Image := InvertedCopy(Img.Image)
       else
         FWeaponImage.Image := Img.Image.MakeCopy;
@@ -1118,7 +1157,9 @@ begin
   begin
     if FlashName + InvSuffix <> FFlashImageName then
     begin
-      if Inverted then
+      if Fuzzy then
+        FFlashImage.Image := FuzzCopy(Img.Image, FuzzPhaseOfTic(FWorld.Tic))
+      else if Inverted then
         FFlashImage.Image := InvertedCopy(Img.Image)
       else
         FFlashImage.Image := Img.Image.MakeCopy;
@@ -1440,6 +1481,9 @@ begin
     the light amplification visor fix the colormap (DoomLighting). }
   DoomLightingInstance.ExtraLight := FWorld.Player.ExtraLight;
   DoomLightingInstance.FixedColormap := FWorld.FixedColormap;
+  { Spectre fuzz in Doom's pixels, a new pattern start every tic. }
+  DoomLightingInstance.FuzzScale := Max(1, FViewport.EffectiveHeight / 200);
+  DoomLightingInstance.FuzzPhase := FuzzPhaseOfTic(FWorld.Tic);
   FMessageText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
   FAutomapTitle.Exists := FAutomap.Exists;
   if FAutomap.Exists then

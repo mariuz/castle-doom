@@ -394,13 +394,18 @@ position come from the patch's width, height and offsets (Doom's origin is at
 the feet). `UpdateRotation` picks one of the 8 rotation sprites with Doom's
 formula `(angle_to_thing - thing_angle + 202.5°) / 45°`, and `ApplySprite`
 sets the quad's coordinates (mirrored if needed) and the texture node's URL.
-Spectres (`Fuzz`, Doom's `MF_SHADOW`) get `AlphaMode = amBlend`, a black
-unlit colour and a `Transparency` re-rolled between 0.5 and 0.8 every tic:
-the background shows through darkened and shimmering, an approximation of
-`R_DrawFuzzColumn` (which darkens the pixels behind with colormap 6 at
-random row offsets). The view draws the player's weapon the same way during
-partial invisibility (`TCastleImageControl.Color` black with a random alpha,
-normal again in the blinking last seconds).
+Spectres (`Fuzz`, Doom's `MF_SHADOW`) get `AlphaMode = amBlend` and the
+fuzz kind in `doom_sprite`: the `DoomLighting` shader replaces each opaque
+texel with black whose opacity follows `R_DrawFuzzColumn`'s `fuzzoffset`
+table (`FuzzOffsets`, 50 entries; 0.7 where Doom would copy the pixel from
+below, 0.3 from above), indexed by the screen pixel in Doom's 320x200 grain
+(`doom_fuzz_scale` = view height / 200) and a start (`doom_fuzz_phase`) that
+changes every tic, like Doom's never-reset `fuzzpos`. Doom itself darkens
+the shifted background with colormap 6; a shader cannot read the pixels
+behind, so the shift shows up as dark and light specks. The view draws the
+player's weapon (and flash) the same way during partial invisibility:
+`FuzzCopy` makes a black copy of the image with the same pattern, column by
+column from the top, every tic (normal again in the blinking last seconds).
 
 Animation is a frame sequence (`PlaySequence('ABCD', tics, loop)`) advanced by
 `AnimateTic`; `SequenceDone` tells the world when a one-shot sequence (pain,
