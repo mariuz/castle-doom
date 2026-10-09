@@ -38,6 +38,7 @@ type
     FIntroSound: TCastleSound;
     FIntroOf: String;
     FIntroStart: TTimerResult;
+    FPrefetch: String;
     procedure PlaySound(const Sound: TCastleSound; const Loop: Boolean; const Offset: Single);
     procedure StopSound;
     procedure StartIntro(const LumpName: String);
@@ -49,6 +50,8 @@ type
     procedure StartNextRender;
     procedure FinishRender;
     procedure StartPlaying(const LumpName: String; const Offset: Single);
+    { Free rendered songs nothing will play soon (each is ~0.5 MB a 15 s). }
+    procedure ReleaseUnneeded;
   public
     { Seconds of synthesis per Update call (one per frame). }
     RenderBudget: Single;
@@ -57,6 +60,9 @@ type
     { Start looping the music lump (like 'D_E1M1'). Empty name stops music. }
     procedure Play(const LumpName: String);
     procedure Stop;
+    { Render a song in the background (after the ones already queued), e.g.
+      the next map's while this one is played, so that it starts at once. }
+    procedure Prefetch(const LumpName: String);
     { Call every frame: renders the next slice of a queued song and starts
       the current one as soon as it is ready. }
     procedure Update;
@@ -1209,10 +1215,12 @@ const
   IntroSeconds = 8;
 var
   R: TSongRenderer;
+  Start: TTimerResult;
 begin
   StartNextRender;
   if (FRenderer = nil) or (FRendering <> LumpName) then Exit;
   R := FRenderer as TSongRenderer;
+  Start := Timer;
   if R.Step(IntroSeconds * SampleRate) then
   begin
     FinishRender; { a short song: done already }
@@ -1225,7 +1233,9 @@ begin
   PlaySound(FIntroSound, false, 0);
   FIntroOf := LumpName;
   FIntroStart := Timer;
-  WritelnLog('Music', 'Playing the first %.1f s of %s while the rest renders', [R.Rendered / SampleRate, LumpName]);
+  FRenderTime := FRenderTime + TimerSeconds(Timer, Start);
+  WritelnLog('Music', 'Playing the first %.1f s of %s while the rest renders (made in %d ms)',
+    [R.Rendered / SampleRate, LumpName, Round(TimerSeconds(Timer, Start) * 1000)]);
 end;
 
 procedure TDoomMusic.Play(const LumpName: String);
@@ -1247,9 +1257,12 @@ begin
     StopSound;
     Exit;
   end;
+  ReleaseUnneeded;
   if FReady.ContainsKey(U) then
-    StartPlaying(U, 0)
-  else
+  begin
+    StartPlaying(U, 0);
+    WritelnLog('Music', 'Playing %s, rendered before', [U]);
+  end else
   begin
     { The first seconds now, the rest a slice per frame (Update); then the
       intermission track, the next one needed. }
@@ -1267,6 +1280,41 @@ begin
     end;
     StartIntro(U);
     Prepare(IntermissionLump, false);
+  end;
+end;
+
+procedure TDoomMusic.Prefetch(const LumpName: String);
+begin
+  FPrefetch := UpperCase(LumpName);
+  Prepare(FPrefetch, false);
+  ReleaseUnneeded;
+end;
+
+procedure TDoomMusic.ReleaseUnneeded;
+var
+  Names: TStringList;
+  Name: String;
+
+  function Needed(const N: String): Boolean;
+  begin
+    Result := (N = FCurrent) or (N = FPrefetch) or (N = IntermissionLump) or
+      ((FIntroOf <> '') and (N = FIntroOf + '_INTRO'));
+  end;
+
+begin
+  Names := TStringList.Create;
+  try
+    for Name in FReady.Keys do
+      if not Needed(Name) then
+        Names.Add(Name);
+    for Name in Names do
+    begin
+      FReady.Remove(Name);
+      FSounds.Remove(Name);
+      WritelnLog('Music', 'Released %s', [Name]);
+    end;
+  finally
+    FreeAndNil(Names);
   end;
 end;
 

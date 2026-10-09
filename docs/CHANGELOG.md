@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The next level's music is synthesized while you play, so a new level
+  starts without the short freeze of rendering its first seconds; songs
+  no longer needed are freed from memory.
+
 ## v0.5.0 (2026-10-09)
 
 - Mouse look is no longer far too fast: it follows Doom's sensitivity

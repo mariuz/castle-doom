@@ -706,7 +706,12 @@ begin
   else
     FWorld.ShowMessage(FStrings.LevelName(MapName, Wad.IsDoom2));
   if Music <> nil then
+  begin
     Music.Play(Music.LumpForMap(MapName));
+    { The next map's song renders while this one plays (after the
+      intermission's), so the next level starts without synthesis. }
+    Music.Prefetch(Music.LumpForMap(NextMapName(MapName, false, Wad.IsDoom2)));
+  end;
 end;
 
 procedure TViewPlay.RestoreViewState(const State: TJSONObject);

@@ -697,9 +697,13 @@ per frame; the finished song then takes over at the same position
 (`TCastlePlayingSound.InitialOffset` = time since the intro started, looping,
 priority 1). The fixed gain is what makes the two identical where they
 overlap; per-song normalization would need the whole song first. When a song is queued, the
-intermission track is queued after it, so it is ready at the level's exit; a
-prefetch in progress gives way to a song that is needed now. Finished songs
-stay in memory (`FReady`, served by `ReadMusic`). Set the environment variable
+intermission track is queued after it, so it is ready at the level's exit,
+and `GameViewPlay` then queues the next map's song (`Prefetch`), so the next
+level plays it at once with no intro to synthesize; a prefetch in progress
+gives way to a song that is needed now. Finished songs stay in memory
+(`FReady`, served by `ReadMusic`) while they are the current, the
+intermission or the prefetched one; `ReleaseUnneeded` frees the others (and
+their `TCastleSound`) on every `Play` / `Prefetch`. Set the environment variable
 `CASTLE_DOOM_DUMP_MUSIC` to a folder to get the WAV files for listening.
 
 ---

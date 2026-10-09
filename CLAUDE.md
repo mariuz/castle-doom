@@ -225,6 +225,11 @@ DeHackEd patches after the WADs' `DEHACKED` lumps; the log prints `DeHackEd:
 `tools/testdata/test.deh` makes the imp 1 HP, the start 50 health and 20
 bullets, and E1M1's par 999 s.
 
+Music prefetch: `W:90,E,W:1,U,U,U,U,U,W:3,Q` on E1M1 (software GL renders
+songs slowly, so wait long) logs `Rendered D_E1M2` during the level and
+`Playing D_E1M2, rendered before` on the next one; `Music: Released` lines
+show freed songs; the intro log line gives its render time in ms.
+
 Set `CASTLE_DOOM_DUMP_MUSIC=<dir>` to write rendered music WAVs for analysis
 (a pitch-grid/level check script lived in the scratchpad as `analyze_wav.py`:
 Goertzel on semitone vs quarter-tone frequencies).

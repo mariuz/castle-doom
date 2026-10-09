@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Music ahead of time: every level start queues the next map's song
+  behind the intermission's (`TDoomMusic.Prefetch`), so it is rendered in
+  frame slices while the level is played and the next level starts it at
+  once ("Playing D_E1M2, rendered before") instead of synthesizing an
+  8-second intro first (115-230 ms natively, more in WebAssembly). Songs
+  no one will play soon are freed (`ReleaseUnneeded`; about 5 MB each);
+  they used to stay in memory for the whole session.
 - DeHackEd patches: `-deh` / `-bex` files and the WADs' `DEHACKED` lumps
   change the thing table ("Thing N": hit points, speed, width, height,
   mass, pain chance), the Misc values (initial health and bullets,
@@ -356,7 +363,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Register-accurate OPL3 emulation** (port Nuked OPL3 or DBOPL) instead of the approximate FM model; or at least tune envelope shapes against recordings. | The music is recognisable but not exact. | `DoomMusic` synth core (keep the MUS/MIDI/GENMIDI front end) | L |
-| **Background rendering of music** on desktop (thread) and chunked rendering on the web so the level does not pause for the synth; or stream through a custom sound backend. | Removes the few-second pause per track. | `DoomMusic`, `GameViewPlay` | M |
+| **Music for warps and loads**: the first level, `-warp`, a loaded game and the title still render an 8-second intro at once (115-230 ms natively); a desktop thread, or rendering the intro in slices behind a short silence, would remove the last stall. | Smoother first level start. | `DoomMusic` | S |
 | **Stereo panning** for positional sounds is done by the engine, but Doom's `S_CLIPPING_DIST` falloff curve could be matched more closely. | Minor. | `DoomSound` | S |
 | **PC speaker** sounds (`DP*`) are ignored on purpose; no change planned. | - | - | - |
 
@@ -384,9 +391,9 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Background rendering of music (M): synthesize the next track in a
-   thread on the desktop and in slices on the web, so a level start
-   never waits for the synth (see Audio).
-3. glBSP `GL_` lumps (M): load maps whose nodes come only as glBSP's
+2. glBSP `GL_` lumps (M): load maps whose nodes come only as glBSP's
    `GL_VERT` / `GL_SEGS` / `GL_SSECT` / `GL_NODES` (see Content and
    formats).
+3. Register-accurate OPL3 emulation (L): port Nuked OPL3 or DBOPL for
+   the synth core so the music sounds exactly like the original (see
+   Audio).
