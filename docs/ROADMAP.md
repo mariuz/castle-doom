@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Smaller first download on the web: the web workflow takes
+  `freedoom2.wad` out of the data zip and publishes it as
+  `play/freedoom2.zip` (10 MB instead of 28 MB uncompressed); choosing
+  Freedoom Phase 2 (Options, a Phase 2 save, a MAPxx command line)
+  downloads it with `TCastleDownload` (progress shown on the menu),
+  mounts it with `TCastleZip.RegisterUrlProtocol` and carries on with
+  what was asked. Saves keep naming `castle-data:/wads/freedoom2.wad`.
+  The same path runs on the desktop with `--wad-base-url URL` (an
+  autotest serves the zip locally). The level loading text was already
+  there ("LOADING MAPxx..." for a frame before the synchronous build).
 - Autotests in CI: `tools/run_autotests.py` runs 12 demo scripts (title
   menu, save round trip with gibs, knockback, door crushing a corpse,
   melee turn, Arch-vile raise, texture memory, MAP05 donut, MAP04 crusher
@@ -299,7 +309,7 @@ L = several days). Items inside a section are in suggested order.
 | **Replace the in-code UI with editor designs** (`.castle-user-interface`) for the HUD and menu so they can be edited in the CGE editor; keep the generated map geometry in code. | Demonstrates the editor workflow. | `data/*.castle-user-interface`, views | M |
 | **Unit tests** (`castle-tester`/FPCUnit) for `DoomWad`, `DoomMap` polygon clipping, MUS/MIDI parsing, the synth envelope timings (the `--autotest` CI job covers gameplay; these would cover the parsers). | Catch regressions without a human. | `tests/`, `build.yml` | M |
 | **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
-| **Web**: smaller download (ship only one WAD by default or load WADs on demand with `TCastleDownload`), progress UI during level load, pointer-lock prompt, gamepad. | Faster first play on the Pages site. | web build, `GameViewPlay` | M |
+| **Web**: pointer-lock prompt, gamepad, a progress bar during the first data download. | Friendlier first play. | web build | S |
 | **Performance**: build a static-sector blockmap; merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
 
 ## Suggested next three
@@ -307,8 +317,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Web polish (S-M): a loading progress line while a level builds and
-   one WAD downloaded on demand instead of both (the browser fetches about
-   90 MB before the title screen).
+2. Title / credits cycle and the rest of Doom's menu (M): `TITLEPIC`,
+   `CREDIT` and `HELP` pages cycling on the title screen, Read This, and
+   the in-game save / load menus drawn by `DoomMenu` in `M_*` graphics.
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

@@ -142,6 +142,13 @@ Texture memory: each map load logs `Graphics: Freed N textures and flats
 of earlier levels (K KB); ... cached`; walk maps with `N` and come back
 with `LOAD:n` to check that released textures (and animated flats) return.
 
+Freedoom Phase 2 on demand (the web build has only Phase 1 in its data):
+`--wad-base-url http://127.0.0.1:PORT/` makes the desktop fetch
+`freedoom2.zip` from there like the browser does from the page's
+directory (log `WAD: Downloading` / `Downloaded` / `Loaded
+freedoom2-zip:/freedoom2.wad`); the `phase2-download` autotest serves it
+from a local HTTP server.
+
 Pause / pointer lock: `UNLOCK` does what the browser's Esc does (cancels
 the pointer lock, so the game pauses; log `PointerLock:`), `RESUME`
 clicks the pause away. The save's `tic` must not move while paused.
