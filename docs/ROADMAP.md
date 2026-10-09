@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Gamepads and a click prompt: on the desktop (CGE reads controllers on
+  Windows and Linux) the sticks move and look (`UseGameController`), the
+  right trigger fires, A / X use, the bumpers switch weapons, View opens
+  the automap and Menu Doom's menu; in menus and the intermission the
+  D-pad, A and B act as arrows, Enter and Esc (`GameGamepad` turns
+  buttons into the keys the views already handle). In the browser a
+  "CLICK TO LOOK AROUND WITH THE MOUSE" prompt (Doom font) shows while
+  mouse look is on but the pointer is not locked. The first download
+  already had a progress bar (CGE's page) and the Phase 2 download its
+  own progress line. Demo command `CLICKPROMPT`, autotest `click-prompt`.
 - Unit tests: `tests/castle_doom_tests.lpr` (FPCUnit, console runner)
   checks the parsers without a window: both Freedoom WADs and PLAYPAL,
   E1M1's BSP (682 subsectors, polygon area 6712683, point-in-sector),
@@ -395,7 +405,7 @@ L = several days). Items inside a section are in suggested order.
 | **Replace the in-code UI with editor designs** (`.castle-user-interface`) for the HUD and menu so they can be edited in the CGE editor; keep the generated map geometry in code. | Demonstrates the editor workflow. | `data/*.castle-user-interface`, views | M |
 | **More unit tests**: MIDI (not only MUS) parsing, the synth's envelope timings, ZDoom / glBSP node formats from generated lumps (now only in the autotests), DoomGeometry's sector chunks. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
 | **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
-| **Web**: pointer-lock prompt, gamepad, a progress bar during the first data download. | Friendlier first play. | web build | S |
+| **Web gamepads**: CGE has no browser backend for `CastleGameControllers` yet; one reading `navigator.getGamepads()` through JOB (polled each frame, standard mapping) would make the desktop bindings work on the web too. Best contributed to CGE. | Play with a controller in the browser. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
 | **Performance**: build a static-sector blockmap; merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
 
 ## Suggested next three
@@ -403,8 +413,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Web friendliness (S): a progress bar during the first data download,
-   a "click to play" prompt for the pointer lock, gamepad input (see
-   Engine and tooling).
+2. Web gamepads (M): a browser backend for CGE's game controllers
+   (`navigator.getGamepads()`), so the desktop bindings work on the web
+   (see Engine and tooling).
 3. Register-accurate OPL3 emulation (L): needs a licence decision first
    (see Audio), then a port or a clean-room emulator.

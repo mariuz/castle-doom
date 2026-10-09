@@ -138,7 +138,7 @@ implementation
 uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils,
   CastleStringUtils,
   CastleFilesUtils,
-  GameViewPlay, GameSettings, GameSaveBundle, GameSaveStorage;
+  GameViewPlay, GameSettings, GameSaveBundle, GameSaveStorage, GameGamepad;
 
 const
   Freedoom1 = 'castle-data:/wads/freedoom1.wad';
@@ -1097,9 +1097,14 @@ begin
 end;
 
 function TViewMenu.Press(const Event: TInputPressRelease): Boolean;
+var
+  K: TKey;
 begin
   Result := inherited;
   if Result then Exit;
+  { Gamepad: the D-pad and A / B drive the menu like the arrows, Enter, Esc. }
+  if GamepadKey(Event, true, K) then
+    Exit(Press(InputKey(Container.MousePosition, K, '', [])));
   if FOptions.Exists then
   begin
     if Event.IsKey(keyEnter) then

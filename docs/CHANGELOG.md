@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Gamepad support in the desktop versions (Windows, Linux): sticks to
+  move and look, right trigger to fire, A to use, bumpers for weapons,
+  and the D-pad, A and B in the menus.
+- In the browser, a "click to look around" prompt shows when the mouse
+  is not captured.
+- Unit tests for the WAD, map, music and DeHackEd code run in CI.
 - Maps built with glBSP (GL nodes only, versions 1, 2, 3 and 5, also
   with a separate `.gwa` file) now load.
 - The next level's music is synthesized while you play, so a new level

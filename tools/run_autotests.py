@@ -118,6 +118,7 @@ TESTS = [
     # Doom's mouse sensitivity formula: 0.088 degrees a pixel at the default 5.
     ('mouse-sensitivity', 'E1M1', 'W:0.3,Q',
      [r'MouseLook: Sensitivity 5: 0\.0879 degrees a pixel'], [], None),
+    ('click-prompt', 'E1M1', 'W:0.3,CLICKPROMPT,W:0.3,S,Q', [r'Saved screenshot 1'], [], None),
     ('palette', 'E1M1', 'W:0.5,S,INVUL,W:0.3,S,PALMAP,W:0.3,S,Q',
      [r'Graphics: Palette lookup images made', r'Saved screenshot 3'], [], None),
     ('fuzz', 'E1M1', 'Y,W:1,P:58:250,W:0.2,S,INVIS,W:0.3,S,Q',

@@ -9,7 +9,7 @@ uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleUtils,
   CastleFilesUtils, CastleUriUtils,
-  DoomLighting, DoomDehacked, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
+  DoomLighting, DoomDehacked, GameGamepad, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
 
 var
   Window: TCastleWindow;
@@ -130,6 +130,7 @@ begin
   end;
   { Volumes and toggles from the last session. }
   LoadSettings;
+  InitializeGamepads;
   DoomLightingInstance.Diminish := Settings.Diminish;
   ViewMenu := TViewMenu.Create(Application);
   ViewPlay := TViewPlay.Create(Application);

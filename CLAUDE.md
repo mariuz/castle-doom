@@ -172,6 +172,11 @@ Pause / pointer lock: `UNLOCK` does what the browser's Esc does (cancels
 the pointer lock, so Doom's menu opens over the paused game; log
 `PointerLock:`), `RESUME` closes it like Esc or a click beside it. The save's `tic` must not move while paused.
 
+`CLICKPROMPT` shows the browser's "click to look around" prompt in an
+autotest (it is hidden in autotests otherwise). Gamepads (`GameGamepad`)
+log `Gamepad: Controller N: name` at startup; there is no controller in the
+cloud container, so only their key mapping is exercised by reading code.
+
 `LOOK:deg` pitches the view (negative looks down), for sky and floor
 screenshots.
 

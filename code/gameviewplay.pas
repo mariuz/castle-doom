@@ -25,6 +25,11 @@ type
     FPaletteTints: array [0..13] of TVector4;
     FInfoLabel, FHelpLabel: TCastleLabel;
     FMessageText, FLoadingText, FAutomapTitle: TDoomFontText;
+    { "Click to look around" while mouse look is wanted but the browser
+      released the pointer (Esc, another window). }
+    FClickPrompt: TDoomFontText;
+    { Demo command CLICKPROMPT: show the prompt in an autotest. }
+    FForceClickPrompt: Boolean;
     FIntermissionBack: TCastleRectangleControl;
     FIntermissionScreen: TDoomIntermission;
     FFinaleScreen: TDoomFinale;
@@ -143,7 +148,7 @@ uses Math, JsonParser,
   CastleDownload, DoomActors,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleTimeUtils, CastleRenderContext,
   DoomGeometry, DoomMap, DoomLighting,
-  GameViewMenu, GameSaveStorage, GameSettings;
+  GameViewMenu, GameSaveStorage, GameSettings, GameGamepad;
 
 type
   { Opens TCastleNavigation.Move (protected) to push the player. }
@@ -267,6 +272,14 @@ begin
   FMessageText.Exists := false;
   InsertFront(FMessageText);
 
+  FClickPrompt := TDoomFontText.Create(FreeAtStop);
+  FClickPrompt.Graphics := Graphics;
+  FClickPrompt.Anchor(hpMiddle);
+  FClickPrompt.Anchor(vpMiddle, 40);
+  FClickPrompt.SetText('CLICK TO LOOK AROUND WITH THE MOUSE');
+  FClickPrompt.Exists := false;
+  InsertFront(FClickPrompt);
+
   { The level title at the bottom left of the automap (AM_drawTitle). }
   FAutomapTitle := TDoomFontText.Create(FreeAtStop);
   FAutomapTitle.Graphics := Graphics;
@@ -298,7 +311,9 @@ begin
     'F2 / F3: save / load   F6 / F9: quick save / load' + NL +
     'F5: screenshot   F1: Read This! (title menu)' + NL +
     'F8: Castle Game Engine inspector' + NL +
-    'H: hide this help   Esc: menu (pauses; Esc again resumes)';
+    'H: hide this help   Esc: menu (pauses; Esc again resumes)' + NL +
+    'Gamepad: sticks move / look, RT fire, A use, LB / RB weapons,' + NL +
+    '  View automap, Menu menu (D-pad, A, B in menus)';
   InsertFront(FHelpLabel);
   FHelpVisible := true;
 
@@ -368,6 +383,9 @@ begin
   WritelnLog('MouseLook', 'Sensitivity %d: %.4f degrees a pixel', [
     Settings.MouseSensitivity, RadToDeg(MouseLookSensitivity)]);
   FNavigation.MinAngleFromGravityUp := DegToRad(20);
+  { Gamepad sticks: move / strafe and turn / look (GameGamepad); the
+    jump / crouch bindings it adds are cleared below. }
+  FNavigation.UseGameController;
   { No jumping / crouching / flying in Doom. }
   FNavigation.Input_Jump.MakeClear;
   FNavigation.Input_Crouch.MakeClear;
@@ -545,6 +563,8 @@ begin
     FWorld.Player.LightAmpTics := Iff(Arg > 0, Round(Arg), 120 * 35)
   else if Cmd = 'DIM' then
     DoomLightingInstance.Diminish := not DoomLightingInstance.Diminish
+  else if Cmd = 'CLICKPROMPT' then
+    FForceClickPrompt := true
   else if Cmd = 'PALMAP' then
     DoomLightingInstance.PaletteMapped := not DoomLightingInstance.PaletteMapped
   else if Cmd = 'K' then
@@ -1508,7 +1528,8 @@ begin
     resumed the game or took the mouse back). }
   if FSuppressFire and not (buttonLeft in Container.MousePressed) then
     FSuppressFire := false;
-  if ((buttonLeft in Container.MousePressed) and not FSuppressFire) or Container.Pressed.Items[keyCtrl] then
+  if ((buttonLeft in Container.MousePressed) and not FSuppressFire) or Container.Pressed.Items[keyCtrl] or
+     GamepadFireHeld then
     FWorld.FireWeapon
   else
     FWorld.Player.Refire := false;
@@ -1523,6 +1544,13 @@ begin
   DoomLightingInstance.FuzzScale := Max(1, FViewport.EffectiveHeight / 200);
   DoomLightingInstance.FuzzPhase := FuzzPhaseOfTic(FWorld.Tic);
   FMessageText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
+  { The browser only locks the pointer after a click or key press (and drops
+    it on Esc or another window): say so instead of a dead mouse. }
+  FClickPrompt.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
+  FClickPrompt.Exists := (FSlotMenu = SlotMenuNone) and not FIntermission and
+    not FWorld.Player.Dead and
+    (FForceClickPrompt or ((AutoTestPrefix = '') and Settings.MouseLook and
+     not (FNavigation.MouseLook and Container.PointerLock.Active)));
   FAutomapTitle.Exists := FAutomap.Exists;
   if FAutomap.Exists then
   begin
@@ -1573,6 +1601,19 @@ begin
   Result := inherited;
   if Result then Exit;
   if FWorld = nil then Exit;
+
+  { Gamepad buttons act as the keys of the same action. }
+  if Event.EventType = itGameController then
+  begin
+    if (not FIntermission) and (FSlotMenu = SlotMenuNone) and (GamepadWeaponStep(Event) <> 0) then
+    begin
+      FWorld.NextWeapon(GamepadWeaponStep(Event));
+      Exit(true);
+    end;
+    if GamepadKey(Event, FIntermission or (FSlotMenu <> SlotMenuNone), K) then
+      Exit(Press(InputKey(Container.MousePosition, K, '', [])));
+    Exit;
+  end;
 
   if FIntermission then
   begin
