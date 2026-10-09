@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Things are drawn in a few batched scenes (one per light level and kind)
+  instead of one scene each, for fewer draw calls, mainly in the browser.
 - Gamepad support in the desktop versions (Windows, Linux): sticks to
   move and look, right trigger to fire, A to use, bumpers for weapons,
   and the D-pad, A and B in the menus.

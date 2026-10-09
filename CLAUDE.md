@@ -180,11 +180,14 @@ cloud container, so only their key mapping is exercised by reading code.
 Profiling: `PERF` logs a `PerfView:` line at once (also every 10 s): our
 per-frame costs, CGE's FPS (`only render` = without display waits) and the
 last frame's render statistics (shapes, scenes, draw calls). `NOSPRITES`
-and `NOMAP` toggle every thing / the map geometry to see what each costs,
-`PALMAP` the palette lookup. E1M1 at `G:480:712,A:0` draws about 255
-shapes: 151 map, 104 sprites. `SPRITESTATS` logs how many sprites are
-shown and how many distinct texture|light group|kind combinations they
-have (what batching could merge: 208 and 87 on E1M1). In the browser the same runs through the
+and `NOMAP` toggle the things' batch scenes / the map geometry to see what
+each costs, `PALMAP` the palette lookup. E1M1 at `G:480:712,A:0` draws
+about 224 shapes: 151 map, 73 sprites (the 104 visible quads merged by
+CGE's dynamic batching, 8 texture groups per pass; before the
+`TSpriteBatch` it was 104 in 104 scenes). `SPRITESTATS` logs how many
+sprites are shown and how many distinct texture|light group|kind
+combinations they have (what a complete merge would give: 208 and 86 on
+E1M1). In the browser the same runs through the
 page URL: `play/?map=E1M1&demo=G:480:712,A:0,W:30,PERF` (`S` only logs,
 `Q` ends the demo; `warp=` and `skill=` work too). A headless Chromium with
 SwiftShader (Playwright, `--use-angle=swiftshader`) loads the live page in
@@ -273,6 +276,16 @@ Goertzel on semitone vs quarter-tone frequencies).
 - **One X3D node must not live in two `TCastleScene`s** (the engine warns).
   Create a fresh `TImageTextureNode` per use via `TDoomImage.MakeTextureNode`;
   sharing happens through the URL cache.
+- **Moving X3D nodes between scenes**: `RemoveChildren` keeps `Node.Scene`
+  (the next scene warns "already part of another TCastleScene"), so call
+  `Node.UnregisterScene` after it; and `AddChildren` rebuilds the shape
+  tree (`ChangedAll`) without clearing the scene's `TransformationDirty`
+  list, so a transform changed earlier in the same frame leaves a dangling
+  pointer and the next `Update` dies with a corrupt depth (`EOutOfMemory`
+  from `FinishTransformationChanges`). Call `Scene.BeforeNodesFree` before
+  adding (`TSpriteBatch.Attach`). CGE's dynamic batching never merges shapes
+  under a group `Effect` node (`State.Effects` is compared by pointer) and
+  keeps only 8 open texture groups per pass (`MergeSlots`).
 - **`TCastleContainer.SetView` cannot be called inside `TCastleView.Start`**;
   use `WaitForRenderAndCall`.
 - **`TCastleWalkNavigation.MoveForward` does not move by itself** (it needs the

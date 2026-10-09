@@ -30,6 +30,8 @@ type
     FClickPrompt: TDoomFontText;
     { Demo command CLICKPROMPT: show the prompt in an autotest. }
     FForceClickPrompt: Boolean;
+    { Demo command NOSPRITES: the things are hidden (profiling). }
+    FNoSprites: Boolean;
     FIntermissionBack: TCastleRectangleControl;
     FIntermissionScreen: TDoomIntermission;
     FFinaleScreen: TDoomFinale;
@@ -671,9 +673,10 @@ begin
     PerfLog
   else if Cmd = 'NOSPRITES' then
   begin
-    { Profiling: hide every thing (sprite scenes) to see what they cost. }
-    for P := 0 to FWorld.Actors.Count - 1 do
-      FWorld.Actors[P].Exists := not FWorld.Actors[P].Exists;
+    { Profiling: hide every thing (the batch scenes with the quads) to see
+      what they cost. }
+    FNoSprites := not FNoSprites;
+    FWorld.SpriteBatch.SetVisible(not FNoSprites);
   end else if Cmd = 'SPRITESTATS' then
   begin
     { How many draw calls the sprites would need if merged per texture

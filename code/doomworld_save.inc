@@ -519,7 +519,7 @@ begin
           end;
           if Info <> nil then
           begin
-            A := TDoomActor.Create(nil, FGraphics, Info);
+            A := TDoomActor.Create(nil, FGraphics, FSpriteBatch, Info);
             A.SpritePrefix := AJ.Get('sprite', Info^.Sprite);
             A.DoomX := AJ.Get('x', 0.0);
             A.DoomY := AJ.Get('y', 0.0);
@@ -552,7 +552,7 @@ begin
             A.SetAnimation(AJ.Get('frames', Info^.IdleFrames), AJ.Get('frameIndex', 0),
               AJ.Get('frameTics', 6), AJ.Get('frameTicsLeft', 6), AJ.Get('frameLoop', true));
             if Info^.Kind in [tkTeleportDest, tkBossSpot] then
-              A.Scene.Exists := false;
+              A.HideSprite;
             if A.Sector >= 0 then
               A.SetLight(FMap.Sectors[A.Sector].LightLevel)
             else

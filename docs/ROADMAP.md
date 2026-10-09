@@ -6,6 +6,18 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Sprite batching: the things' quads are drawn from `TSpriteBatch` scenes,
+  one per light group (sector light div 16) and kind (normal, full bright,
+  fuzz), where CGE's dynamic batching merges the quads with the same
+  texture; the light effect sits on each quad's appearance (a group effect
+  gives every shape its own `State.Effects` list, compared by pointer, so
+  nothing merged). Each actor keeps an invisible quad of its own for
+  collisions and picking, and turns its drawn quad toward the view angle
+  itself (`TDoomActor.UpdateTransform`). E1M1 at the door spot: 104 sprite
+  draw calls in 104 scenes -> 73 draw calls in 9 scenes (CGE merges at
+  most `MergeSlots` = 8 texture groups per pass, the next limit). Found on
+  the way: CGE's `ChangedAll` leaves `TransformationDirty` pointing at the
+  freed shape tree, so `TSpriteBatch.Attach` calls `BeforeNodesFree` first.
 - Gamepads and a click prompt: on the desktop (CGE reads controllers on
   Windows and Linux) the sticks move and look (`UseGameController`), the
   right trigger fires, A / X use, the bumpers switch weapons, View opens
@@ -378,7 +390,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **DeHackEd frames and code pointers**: `-deh` patches already change thing stats, Misc, Ammo and par times; frames, code pointers, sprite / sound names and weapon frames would need vanilla's state table (`info.c` states) behind `TDoomActor`'s frame sequences. | Mods that change behaviour, not just numbers. | `DoomThings`, `DoomActors`, `DoomDehacked` | L |
-| **Browser frame rate**, measured (headless Chromium + SwiftShader on the live page, Chrome CPU profile, `PerfView:` statistics): a frame on E1M1 at the door spot draws 255 shapes = 255 draw calls (map 151 of its 206 per-texture shapes, sprites 104, one scene each); per frame the CPU time is ~94 ms in wasm (game logic 13 ms, the rest CGE's per-shape rendering and the music synth slice) + ~66 ms in the JOB JS bridge (`HaveSharedArrayBuffer`, `decode`, `Invoke_*`, then the WebGL calls: `bindBuffer`, `enable/disableVertexAttribArray`, `activeTexture`, `uniform*`), i.e. about 0.6 ms per shape, so the frame rate is the number of draw calls. Tried and reverted: splitting the static map geometry into 1024-unit cells for frustum culling (151 -> 249 map draw calls: textures repeat per cell and a 90-degree view covers most cells of a flat level). Next, in order of certainty: (1) sprites in one scene per (light group, kind) with CGE's dynamic batching merging equal textures (E1M1: 208 sprites, 87 distinct texture-light-kind groups, so ~2.4x fewer sprite draw calls and ~10 scenes instead of 104; custom vertex attributes block batching, so the light stays a per-scene uniform; the per-actor scenes stay invisible for collisions and picking); (2) in CGE for the web: vertex array objects and cached uniform locations to cut WebGL calls per shape (every call crosses wasm -> JS); (3) a wall / flat texture atlas with shader-side wrapping for the map (one draw call per chunk). | Playable speed on the Pages site. | `DoomActors`, CGE web renderer, `DoomGeometry` | M each |
+| **Browser frame rate**, measured (headless Chromium + SwiftShader on the live page, Chrome CPU profile, `PerfView:` statistics): a frame on E1M1 at the door spot draws 255 shapes = 255 draw calls (map 151 of its 206 per-texture shapes, sprites 104, one scene each); per frame the CPU time is ~94 ms in wasm (game logic 13 ms, the rest CGE's per-shape rendering and the music synth slice) + ~66 ms in the JOB JS bridge (`HaveSharedArrayBuffer`, `decode`, `Invoke_*`, then the WebGL calls: `bindBuffer`, `enable/disableVertexAttribArray`, `activeTexture`, `uniform*`), i.e. about 0.6 ms per shape, so the frame rate is the number of draw calls. Tried and reverted: splitting the static map geometry into 1024-unit cells for frustum culling (151 -> 249 map draw calls: textures repeat per cell and a 90-degree view covers most cells of a flat level). Done: (1) sprites in one scene per (light group, kind) with CGE's dynamic batching merging equal textures (`TSpriteBatch`; E1M1 door spot: sprites 104 -> 73 draw calls, 104 -> 9 scenes, the whole frame 255 -> 224 draw calls). CGE's batcher keeps only `MergeSlots` = 8 open texture groups per pass (`castleinternalbatchshapes.pas`, a constant; the log says "Consider increasing MergeSlots"), and the 104 visible sprites have more distinct textures than that, so the rest render unmerged. Next, in order of certainty: (2) raise or expose `MergeSlots` in CGE (a one-line engine change, best contributed upstream; the web build follows the `snapshot` tag) or merge the quads of one texture ourselves into one geometry per group (`SPRITESTATS` counts the groups: 86 for all 208 E1M1 sprites); (3) in CGE for the web: vertex array objects and cached uniform locations to cut WebGL calls per shape (every call crosses wasm -> JS); (4) a wall / flat texture atlas with shader-side wrapping for the map (one draw call per chunk). | Playable speed on the Pages site. | `DoomActors`, CGE web renderer, `DoomGeometry` | M each |
 
 ## 3. Audio
 
@@ -410,9 +422,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Browser frame rate (M): measured, see Presentation; next step is the
-   sprite batching (one scene per light group and kind, textures merged
-   by CGE's dynamic batching), expected ~2.4x fewer sprite draw calls.
+1. Browser frame rate (M): sprite batching done, see Presentation; next
+   step is getting past CGE's 8 merge slots (an engine change to
+   contribute, or merging each texture's quads ourselves), then fewer
+   WebGL calls per shape in CGE's web renderer.
 2. Web gamepads (M): a browser backend for CGE's game controllers
    (`navigator.getGamepads()`), so the desktop bindings work on the web
    (see Engine and tooling).

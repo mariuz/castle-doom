@@ -138,6 +138,8 @@ type
     FMap: TDoomMap;
     FGeometry: TDoomGeometry;
     FItems: TCastleRootTransform;
+    { The scenes the things are drawn in (DoomActors). }
+    FSpriteBatch: TSpriteBatch;
     FActors: TDoomActorList;
     FMovers: TSectorMoverList;
     FButtons: array of TButtonTimer;
@@ -392,6 +394,7 @@ type
     property Graphics: TDoomGraphics read FGraphics;
     property Sounds: TDoomSounds read FSounds;
     property Actors: TDoomActorList read FActors;
+    property SpriteBatch: TSpriteBatch read FSpriteBatch;
     property Tic: Int64 read FTic;
     property ExitRequested: Boolean read FExitRequested write FExitRequested;
     property SecretExit: Boolean read FSecretExit;
@@ -742,6 +745,7 @@ begin
   FGraphics := AGraphics;
   FSounds := ASounds;
   FItems := AItems;
+  FSpriteBatch := TSpriteBatch.Create(FItems);
   FActors := TDoomActorList.Create(true);
   FMovers := TSectorMoverList.Create(true);
   FPlayerEmitter := TCastleTransform.Create(nil);
@@ -755,6 +759,7 @@ begin
   FreeAndNil(FPlayerEmitter);
   FreeAndNil(FMovers);
   FreeAndNil(FActors);
+  FreeAndNil(FSpriteBatch);
   inherited;
 end;
 
@@ -953,7 +958,7 @@ begin
     if Info^.Kind = tkInvisible then Continue;
     Sec := FMap.SectorAt(T.X, T.Y);
     if Sec < 0 then Continue;
-    A := TDoomActor.Create(nil, FGraphics, Info);
+    A := TDoomActor.Create(nil, FGraphics, FSpriteBatch, Info);
     A.DoomX := T.X;
     A.DoomY := T.Y;
     A.Angle := T.Angle;
@@ -967,7 +972,7 @@ begin
     else
       A.DoomZ := FMap.Sectors[Sec].FloorHeight;
     if Info^.Kind in [tkTeleportDest, tkBossSpot] then
-      A.Scene.Exists := false;
+      A.HideSprite;
     if Info^.Num = 2035 then
       A.Health := 20; { barrel }
     A.Bright := Info^.Pickup in [pkSoulsphere, pkMegasphere, pkInvulnerability, pkInvisibility, pkBerserk, pkRadSuit, pkComputerMap, pkLightAmp];
@@ -1602,6 +1607,7 @@ var
   A, O: TDoomActor;
   Sec: Integer;
 begin
+  FSpriteBatch.ViewAngle := Player.Angle;
   for I := FActors.Count - 1 downto 0 do
   begin
     A := FActors[I];
@@ -2314,7 +2320,7 @@ begin
   if Info = nil then Exit;
   Sec := FMap.SectorAt(X, Y);
   if Sec < 0 then Exit;
-  Result := TDoomActor.Create(nil, FGraphics, Info);
+  Result := TDoomActor.Create(nil, FGraphics, FSpriteBatch, Info);
   Result.DoomX := X;
   Result.DoomY := Y;
   Result.DoomZ := Z;
@@ -2466,7 +2472,7 @@ end;
 
 function TDoomWorld.SpawnEffectAt(const Kind: TEffectKind; const X, Y, Z: Single; const Tics: Integer): TDoomActor;
 begin
-  Result := TDoomActor.Create(nil, FGraphics, @EffectInfos[Kind]);
+  Result := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[Kind]);
   Result.State := asEffect;
   Result.Bright := true;
   Result.DoomX := X; Result.DoomY := Y; Result.DoomZ := Z;
@@ -2535,7 +2541,7 @@ begin
   Targ := Spots[FBrainTargetIndex mod Length(Spots)];
   FBrainTargetIndex := (FBrainTargetIndex + 1) mod Length(Spots);
 
-  Cube := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekSpawnShot]);
+  Cube := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[ekSpawnShot]);
   Cube.State := asMissile;
   Cube.Bright := true;
   Cube.Shooter := A;
@@ -2659,7 +2665,7 @@ end;
 
 function TDoomWorld.SpawnFog(const X, Y, Z: Single; const Sec: Integer): TDoomActor;
 begin
-  Result := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekTeleFog]);
+  Result := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[ekTeleFog]);
   Result.State := asEffect;
   Result.Bright := true;
   Result.DoomX := X; Result.DoomY := Y; Result.DoomZ := Z;
@@ -2793,7 +2799,7 @@ begin
   A.AttackFired := false;
   if A.Info^.AttackSound <> '' then FSounds.PlayAt(A.Info^.AttackSound, A);
   if A.Fire <> nil then A.Fire.Removed := true;
-  F := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekVileFire]);
+  F := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[ekVileFire]);
   F.State := asEffect;
   F.Bright := true;
   F.Shooter := A;
@@ -3087,7 +3093,7 @@ begin
     else K := ekBal1;
   end;
   TargetPosition(A, TX, TY, TZ, TR);
-  M := TDoomActor.Create(nil, FGraphics, @EffectInfos[K]);
+  M := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[K]);
   M.State := asMissile;
   M.Bright := true;
   M.Shooter := A;
@@ -3264,7 +3270,7 @@ begin
   PlayerAim(1024, Angle, Slope);
   CA := Cos(DegToRad(Angle));
   SA := Sin(DegToRad(Angle));
-  M := TDoomActor.Create(nil, FGraphics, @EffectInfos[Kind]);
+  M := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[Kind]);
   M.State := asMissile;
   M.FromPlayer := true;
   M.Bright := true;
@@ -3329,7 +3335,7 @@ begin
       DamageActor(Target, Dice(15, 7), Target.DoomX, Target.DoomY, Target.DoomZ + Target.Info^.Height / 2,
         nil, true, true, Player.X, Player.Y, Player.Z);
       { The green BFG "hit" flash on each sprayed target. }
-      Fx := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekBarrelExplosion]);
+      Fx := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[ekBarrelExplosion]);
       Fx.SpritePrefix := 'BFE2';
       Fx.State := asEffect;
       Fx.Bright := true;
@@ -3422,7 +3428,7 @@ begin
   A.Health := A.Health - Damage;
   if A.Info^.Num <> 2035 then
   begin
-    Blood := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekBlood]);
+    Blood := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[ekBlood]);
     Blood.State := asEffect;
     Blood.DoomX := HitX; Blood.DoomY := HitY; Blood.DoomZ := HitZ - 8;
     Blood.Sector := A.Sector;
@@ -3532,7 +3538,7 @@ begin
     Info := FindThingInfo(A.Info^.Drop);
     if Info <> nil then
     begin
-      Drop := TDoomActor.Create(nil, FGraphics, Info);
+      Drop := TDoomActor.Create(nil, FGraphics, FSpriteBatch, Info);
       Drop.DoomX := A.DoomX; Drop.DoomY := A.DoomY; Drop.DoomZ := A.DoomZ;
       Drop.Sector := A.Sector;
       Drop.Dropped := true;
@@ -3711,7 +3717,7 @@ procedure TDoomWorld.SpawnPuff(const X, Y, Z: Single);
 var
   Puff: TDoomActor;
 begin
-  Puff := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekPuff]);
+  Puff := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[ekPuff]);
   Puff.State := asEffect;
   Puff.Bright := true;
   Puff.DoomX := X; Puff.DoomY := Y; Puff.DoomZ := Z - 4;
@@ -4748,7 +4754,7 @@ begin
       if (A.Info^.Kind = tkTeleportDest) and (A.Sector = S) then
       begin
         { Fog at the departure point. }
-        Fog := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekTeleFog]);
+        Fog := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[ekTeleFog]);
         Fog.State := asEffect;
         Fog.Bright := true;
         Fog.DoomX := Player.X; Fog.DoomY := Player.Y; Fog.DoomZ := Player.Z;
@@ -4773,7 +4779,7 @@ begin
         FOldPlayerX := Player.X;
         FOldPlayerY := Player.Y;
 
-        Fog := TDoomActor.Create(nil, FGraphics, @EffectInfos[ekTeleFog]);
+        Fog := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[ekTeleFog]);
         Fog.State := asEffect;
         Fog.Bright := true;
         Fog.DoomX := A.DoomX + Cos(DegToRad(A.Angle)) * 20;
