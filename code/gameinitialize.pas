@@ -8,7 +8,7 @@ implementation
 uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleUtils,
-  CastleFilesUtils, CastleUriUtils,
+  CastleFilesUtils, CastleUriUtils, CastleGLShaders,
   DoomLighting, DoomDehacked, DoomMusic, GameGamepad, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
 
 var
@@ -152,6 +152,10 @@ begin
   { Volumes and toggles from the last session. }
   LoadSettings;
   InitializeGamepads;
+  { CASTLE_DOOM_LOG_SHADERS=1 logs every shader compile and link (CGE's
+    LogShaders): a count that keeps growing during play means GL
+    resources are being recreated, which is slow in the browser. }
+  LogShaders := GetEnvironmentVariable('CASTLE_DOOM_LOG_SHADERS') <> '';
   DoomLightingInstance.Diminish := Settings.Diminish;
   ViewMenu := TViewMenu.Create(Application);
   ViewPlay := TViewPlay.Create(Application);

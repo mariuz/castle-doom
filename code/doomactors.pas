@@ -44,7 +44,7 @@ type
     FTexture: TImageTextureNode;
     { Light level and kind (the doom_sprite uniform of the scene the quad is in). }
     FLightValue: TVector2;
-    FHidden: Boolean;
+    FHidden, FShown: Boolean;
     FYaw: Single;
     FCurrentImage: TDoomImage;
     FCurrentMirror: Boolean;
@@ -379,10 +379,15 @@ begin
   FScene.Load(Root, true);
   FScene.Visible := false;
   Add(FScene);
+  FShown := true; { the nodes' defaults: Render and Exists }
 end;
 
 procedure TDoomActor.SetShown(const Shown: Boolean);
 begin
+  { ApplySprite calls this every tic for every thing; an X3D field Send
+    is a change event for the batch scene even when the value stays. }
+  if FShown = Shown then Exit;
+  FShown := Shown;
   FShape.Render := Shown;
   FScene.Exists := Shown;
 end;

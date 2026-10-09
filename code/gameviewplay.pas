@@ -1529,6 +1529,20 @@ begin
   CamDir := FViewport.Camera.Direction;
   Feet := CgeToDoom(CamPos);
   Feet.Z := Feet.Z - PlayerViewHeight;
+  { Doom never lets the player sink below the floor; the walk navigation
+    can (a long frame on a slow machine steps the fall through it, after
+    which nothing stops it and the fall speed grows without bound: CI once
+    logged a Z of -1e23 and NaN transforms). Put the feet back on the
+    floor and stop the fall. }
+  Sec := FWorld.Map.SectorAt(Feet.X, Feet.Y);
+  if (Sec >= 0) and (Feet.Z < FWorld.Map.Sectors[Sec].FloorHeight - 4) then
+  begin
+    Feet.Z := FWorld.Map.Sectors[Sec].FloorHeight;
+    CamPos := DoomToCge(Feet.X, Feet.Y, Feet.Z + PlayerViewHeight);
+    FViewport.Camera.Translation := CamPos;
+    FNavigation.CancelFalling;
+    WritelnLog('Player', 'Below the floor of sector %d, put back on it', [Sec]);
+  end;
   PerfT := Timer;
   FWorld.Update(SecondsPassed, Feet.X, Feet.Y, Feet.Z, DoomAngleFromCamera, CamPos, CamDir);
   FPerfWorld := FPerfWorld + TimerSeconds(Timer, PerfT);

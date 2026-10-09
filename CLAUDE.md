@@ -299,6 +299,13 @@ autotest only checks the library loads.
   adding (`TSpriteBatch.Attach`). CGE's dynamic batching never merges shapes
   under a group `Effect` node (`State.Effects` is compared by pointer) and
   keeps only 8 open texture groups per pass (`MergeSlots`).
+- **The walk navigation can drop the player through the floor** on a slow
+  frame (CI's `icon-of-sin` once logged a feet Z of -1e23 and NaN
+  transforms: a long frame stepped the fall through MAP30's floor and
+  CGE's `FallSpeedIncrease` then grew it without bound). `TViewPlay.Update`
+  puts the feet back on the sector floor and cancels the fall (log
+  `Player: Below the floor`); a timeout of an autotest with a huge Z in
+  its screenshot line is that.
 - **`TCastleContainer.SetView` cannot be called inside `TCastleView.Start`**;
   use `WaitForRenderAndCall`.
 - **`TCastleWalkNavigation.MoveForward` does not move by itself** (it needs the
