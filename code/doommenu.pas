@@ -16,9 +16,13 @@ uses Classes,
   DoomGraphics, DoomSound, DoomDehacked;
 
 type
-  TDoomMenuPage = (mpMain, mpEpisode, mpSkill, mpLoad, mpReadThis1, mpReadThis2, mpSave);
-  { maClose: an overlay's page was left with Esc (the game takes over). }
-  TDoomMenuAction = (maNone, maNewGame, maLoadSlot, maOptions, maQuit, maSaveSlot, maClose);
+  TDoomMenuPage = (mpMain, mpEpisode, mpSkill, mpLoad, mpReadThis1, mpReadThis2, mpSave,
+    mpOptions, mpSound);
+  { maClose: an overlay's page was left with Esc (the game takes over).
+    maEndGame: Options -> End Game, confirmed. maSettings: a slider or
+    toggle changed (SfxVolume, MusicVolume, MouseSensitivity, MessagesOn). }
+  TDoomMenuAction = (maNone, maNewGame, maLoadSlot, maOptions, maQuit, maSaveSlot, maClose,
+    maEndGame, maSettings);
 
   TDoomMenuEvent = procedure (const Action: TDoomMenuAction) of object;
 
@@ -49,6 +53,10 @@ type
     FPageIndex, FPageLeft: Integer;
     { Read This! pages: HELP1 / HELP2 in Doom 1, HELP in Doom 2. }
     FHelp1, FHelp2: String;
+    procedure DrawThermo(const Img: TRGBAlphaImage; const X, Y, Steps, Value: Integer);
+    procedure ChangeSlider(const Delta: Integer);
+    function ItemName: String;
+    function Selectable(const Item: Integer): Boolean;
     procedure Compose;
     function ItemCount(const Page: TDoomMenuPage): Integer;
     function ItemPatch(const Page: TDoomMenuPage; const Index: Integer): String;
@@ -72,6 +80,15 @@ type
     { Drawn over the running game (the in-game F2 / F3 save and load
       pages): no title page behind, transparent elsewhere, Esc closes. }
     Overlay: Boolean;
+    { The in-game menu (set before Setup): Save Game in the main menu, and
+      Options opens Doom's options page instead of maOptions. }
+    InGame: Boolean;
+    { In an overlay, backing out of this page closes the menu (maClose). }
+    EntryPage: TDoomMenuPage;
+    { What the options and sound pages show and change (maSettings). }
+    SfxVolume, MusicVolume: Integer; { 0..15 }
+    MouseSensitivity: Integer;       { 0..9 }
+    MessagesOn: Boolean;
     constructor Create(AOwner: TComponent); override;
     { Set up for a WAD: graphics, sounds, how many episodes (0 = Doom 2). }
     procedure Setup(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds; const AEpisodes: Integer;
@@ -109,6 +126,7 @@ const
   { Used when the WAD has no DEHACKED strings. }
   NightmarePrompt = 'Are you sure? This skill level' + #10 + 'isn''t even remotely fair.' + #10#10 + 'Press Y or N.';
   QuitPrompt = 'Are you sure you want to quit?';
+  EndGamePrompt = 'Are you sure you want to end the game?' + #10#10 + 'Press Y or N.';
   QuitPromptKey = '(Press Y to quit.)';
   SkullXOff = -32;
   SkullYOff = -5;
@@ -139,6 +157,11 @@ begin
   FMainItems[0] := 'M_NGAME';
   FMainItems[1] := 'M_OPTION';
   FMainItems[2] := 'M_LOADG';
+  if InGame then
+  begin
+    SetLength(FMainItems, Length(FMainItems) + 1);
+    FMainItems[High(FMainItems)] := 'M_SAVEG';
+  end;
   if (AEpisodes > 0) and (FGraphics.Patch('M_RDTHIS') <> nil) then
   begin
     SetLength(FMainItems, Length(FMainItems) + 1);
@@ -165,6 +188,63 @@ begin
   FPageLeft := FPageTics[0];
   FDirty := true;
   Compose;
+end;
+
+function TDoomMenuScreen.ItemName: String;
+begin
+  Result := ItemPatch(FPage, FItemOn[FPage]);
+end;
+
+function TDoomMenuScreen.Selectable(const Item: Integer): Boolean;
+begin
+  Result := (Item >= 0) and (Item < ItemCount(FPage)) and
+    ((FPage in [mpLoad, mpSave]) or (ItemPatch(FPage, Item) <> ''));
+end;
+
+{ The sliders' routines (M_SfxVol, M_MusicVol, M_ChangeSensitivity) and
+  M_ChangeMessages. }
+procedure TDoomMenuScreen.ChangeSlider(const Delta: Integer);
+var
+  Item: String;
+begin
+  Item := ItemName;
+  if Item = 'M_SFXVOL' then
+    SfxVolume := Max(0, Min(15, SfxVolume + Delta))
+  else if Item = 'M_MUSVOL' then
+    MusicVolume := Max(0, Min(15, MusicVolume + Delta))
+  else if Item = 'M_MSENS' then
+    MouseSensitivity := Max(0, Min(9, MouseSensitivity + Delta))
+  else if Item = 'M_MESSG' then
+    MessagesOn := not MessagesOn
+  else
+    Exit;
+  if FSounds <> nil then FSounds.Play('DSSTNMOV');
+  FDirty := true;
+  Compose;
+  if Assigned(OnAction) then OnAction(maSettings);
+end;
+
+{ M_DrawThermo: the left end, Steps middle pieces, the right end, and the
+  knob on step Value. }
+procedure TDoomMenuScreen.DrawThermo(const Img: TRGBAlphaImage; const X, Y, Steps, Value: Integer);
+var
+  I: Integer;
+
+  procedure Draw(const PatchName: String; const PX: Integer);
+  var
+    P: TDoomImage;
+  begin
+    P := FGraphics.Patch(PatchName);
+    if P <> nil then
+      BlitDoomImage(Img, P, PX - P.LeftOffset, Y - P.TopOffset);
+  end;
+
+begin
+  Draw('M_THERML', X);
+  for I := 0 to Steps - 1 do
+    Draw('M_THERMM', X + 8 + I * 8);
+  Draw('M_THERMR', X + 8 + Steps * 8);
+  Draw('M_THERMO', X + 8 + Value * 8);
 end;
 
 function TDoomMenuScreen.CurrentTitlePage: String;
@@ -195,6 +275,8 @@ begin
   case Page of
     mpMain: Result := Length(FMainItems);
     mpReadThis1, mpReadThis2: Result := 1;
+    mpOptions: Result := 5;
+    mpSound: Result := 4;
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
     mpLoad, mpSave: Result := 6;
@@ -205,11 +287,17 @@ end;
 function TDoomMenuScreen.ItemPatch(const Page: TDoomMenuPage; const Index: Integer): String;
 const
   SkillItems: array [0..4] of String = ('M_JKILL', 'M_ROUGH', 'M_HURT', 'M_ULTRA', 'M_NMARE');
+  { m_menu.c's OptionsDef without detail and screen size; '' rows are the
+    thermometers' (not selectable). }
+  OptionItems: array [0..4] of String = ('M_ENDGAM', 'M_MESSG', 'M_MSENS', '', 'M_SVOL');
+  SoundItems: array [0..3] of String = ('M_SFXVOL', '', 'M_MUSVOL', '');
 begin
   case Page of
     mpMain: Result := FMainItems[Index];
     mpEpisode: Result := 'M_EPI' + IntToStr(Index + 1);
     mpSkill: Result := SkillItems[Index];
+    mpOptions: Result := OptionItems[Index];
+    mpSound: Result := SoundItems[Index];
     else Result := '';
   end;
 end;
@@ -221,6 +309,8 @@ begin
     mpMain: begin X := 97; Y := 64; end;
     mpEpisode, mpSkill: begin X := 48; Y := 63; end;
     mpLoad, mpSave: begin X := 80; Y := 54; end;
+    mpOptions: begin X := 60; Y := 37; end;
+    mpSound: begin X := 80; Y := 64; end;
     { m_menu.c puts the Read This! skull off the 320x200 screen. }
     mpReadThis1, mpReadThis2: begin X := 330; Y := 165; end;
   end;
@@ -242,7 +332,10 @@ var
   N: Integer;
 begin
   N := ItemCount(FPage);
-  FItemOn[FPage] := (FItemOn[FPage] + Delta + N) mod N;
+  { Thermometer rows are not items (status -1 in m_menu.c). }
+  repeat
+    FItemOn[FPage] := (FItemOn[FPage] + Delta + N) mod N;
+  until Selectable(FItemOn[FPage]);
   if FSounds <> nil then FSounds.Play('DSPSTOP');
   FDirty := true;
   Compose;
@@ -252,17 +345,28 @@ procedure TDoomMenuScreen.Back;
 begin
   if FSounds <> nil then FSounds.Play('DSSWTCHX');
   case FPage of
-    mpLoad, mpSave:
-      if Overlay then
+    mpLoad, mpSave, mpEpisode, mpReadThis1, mpReadThis2, mpOptions:
+      if Overlay and (FPage = EntryPage) then
       begin
         if Assigned(OnAction) then OnAction(maClose);
       end else
         OpenPage(mpMain);
-    mpEpisode, mpReadThis1, mpReadThis2: OpenPage(mpMain);
+    mpSound:
+      if Overlay and (FPage = EntryPage) then
+      begin
+        if Assigned(OnAction) then OnAction(maClose);
+      end else
+        OpenPage(mpOptions);
     mpSkill:
       if FEpisodes > 0 then OpenPage(mpEpisode) else OpenPage(mpMain);
-    { M_ClearMenus: Esc on the main menu shows the title pages again. }
-    mpMain: SetMenuActive(false);
+    { M_ClearMenus: Esc on the main menu shows the title pages again, or
+      gives the game back. }
+    mpMain:
+      if Overlay then
+      begin
+        if Assigned(OnAction) then OnAction(maClose);
+      end else
+        SetMenuActive(false);
   end;
 end;
 
@@ -284,10 +388,15 @@ begin
       end else
       if FMainItems[Item] = 'M_OPTION' then
       begin
+        if InGame then
+          OpenPage(mpOptions)
+        else
         if Assigned(OnAction) then OnAction(maOptions);
       end else
       if FMainItems[Item] = 'M_LOADG' then
         OpenPage(mpLoad)
+      else if FMainItems[Item] = 'M_SAVEG' then
+        OpenPage(mpSave)
       else if FMainItems[Item] = 'M_RDTHIS' then
         OpenPage(mpReadThis1)
       else if FMainItems[Item] = 'M_QUITG' then
@@ -328,6 +437,20 @@ begin
         Slot := Item + 1;
         if Assigned(OnAction) then OnAction(maSaveSlot);
       end;
+    mpOptions:
+      if ItemName = 'M_ENDGAM' then
+      begin
+        { M_EndGame: ENDGAME asks first. }
+        if FStrings <> nil then
+          StartPrompt(FStrings.Get('ENDGAME', EndGamePrompt), maEndGame)
+        else
+          StartPrompt(EndGamePrompt, maEndGame);
+      end else
+      if ItemName = 'M_MESSG' then
+        ChangeSlider(1)
+      else if ItemName = 'M_SVOL' then
+        OpenPage(mpSound);
+    mpSound: ;
   end;
 end;
 
@@ -410,6 +533,11 @@ begin
     Activate;
     Exit;
   end;
+  if Event.IsKey(keyArrowLeft) or Event.IsKey(keyArrowRight) then
+  begin
+    if Event.IsKey(keyArrowLeft) then ChangeSlider(-1) else ChangeSlider(1);
+    Exit;
+  end;
   if Event.IsKey(keyArrowUp) then Move(-1)
   else if Event.IsKey(keyArrowDown) then Move(1)
   else if Event.IsKey(keyEnter) or Event.IsKey(keySpace) then Activate
@@ -449,7 +577,7 @@ begin
   if DoomPoint(Event.Position, DX, DY) then
   begin
     Item := ItemAt(DX, DY);
-    if (Item >= 0) and (Item <> FItemOn[FPage]) then
+    if Selectable(Item) and (Item <> FItemOn[FPage]) then
     begin
       FItemOn[FPage] := Item;
       FDirty := true;
@@ -484,12 +612,19 @@ begin
   begin
     if FPrompt then Exit(true);
     Item := ItemAt(DX, DY);
-    if Item >= 0 then
+    if Selectable(Item) then
     begin
       FItemOn[FPage] := Item;
       Activate;
       Exit(true);
     end;
+  end;
+  { Over the game, a click beside the items of the first page closes the
+    menu (the game takes the mouse back). }
+  if Overlay and Event.IsMouseButton(buttonLeft) and (FPage = EntryPage) and not FPrompt then
+  begin
+    if Assigned(OnAction) then OnAction(maClose);
+    Exit(true);
   end;
   if Event.IsMouseButton(buttonRight) then
   begin
@@ -620,6 +755,21 @@ begin
       DrawPatch('M_LOADG', 72, 28);
     mpSave:
       DrawPatch('M_SAVEG', 72, 28);
+    mpOptions:
+      begin
+        DrawPatch('M_OPTTTL', 108, 15);
+        { M_DrawOptions: messages on / off, the sensitivity thermometer. }
+        if MessagesOn then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 1)
+        else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 1);
+        DrawThermo(Img, X, Y + LineHeight * 3, 10, MouseSensitivity);
+      end;
+    mpSound:
+      begin
+        { M_DrawSound }
+        DrawPatch('M_SVOL', 60, 38);
+        DrawThermo(Img, X, Y + LineHeight * 1, 16, SfxVolume);
+        DrawThermo(Img, X, Y + LineHeight * 3, 16, MusicVolume);
+      end;
   end;
 
   if FPage in [mpLoad, mpSave] then
@@ -638,7 +788,8 @@ begin
     end;
   end else
     for I := 0 to ItemCount(FPage) - 1 do
-      DrawPatch(ItemPatch(FPage, I), X, Y + LineHeight * I);
+      if ItemPatch(FPage, I) <> '' then
+        DrawPatch(ItemPatch(FPage, I), X, Y + LineHeight * I);
 
   { Skull cursor }
   if FLastSkull = 0 then Text := 'M_SKULL1' else Text := 'M_SKULL2';

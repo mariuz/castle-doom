@@ -112,7 +112,9 @@ punches an imp 12 degrees aside and turns onto it; `C:8` saws instead.
 It logs knockback too (`Push:`): `K,SHOTS,C:5,W:1,A:180,W:0.3,X,W:1.5,S`
 fires a rocket into the wall behind the start and the player ends near
 (-350, 256). Crushed corpses log `Crush:`; a zombie killed in the E1M1 door
-is squashed when it closes: `Y,G:480:712,A:0,U,W:1.5,P:3004:72,D,W:7,Q`.
+is squashed when it closes: `Y,G:480:712,A:0,U,W:1.5,CORPSE:3004:72,W:7,Q`
+(`CORPSE:type:dist` spawns and kills in one frame; `P` then `D` lets the
+monster walk out of the doorway first when frames are slow).
 
 `SIGHT` in a demo logs, for every monster within 2500 units, the 2D and
 3D line of sight to the player and the REJECT bit (`Sight:` lines).
@@ -156,8 +158,8 @@ F1..F4 through `Press`, e.g. `KEY:F2,KEY:DOWN,KEY:ENTER` saves slot 2 from
 Doom's save page.
 
 Pause / pointer lock: `UNLOCK` does what the browser's Esc does (cancels
-the pointer lock, so the game pauses; log `PointerLock:`), `RESUME`
-clicks the pause away. The save's `tic` must not move while paused.
+the pointer lock, so Doom's menu opens over the paused game; log
+`PointerLock:`), `RESUME` closes it like Esc or a click beside it. The save's `tic` must not move while paused.
 
 `LOOK:deg` pitches the view (negative looks down), for sky and floor
 screenshots.
@@ -165,9 +167,11 @@ screenshots.
 Sector specials: `LINE:n[:special]` activates linedef n (as another
 special with the same tag if given; `Line:` log). MAP05's donut:
 `Y,G:-64:408,A:-90,W:0.3,U,W:9,SAVE:2` (grep `Donut:`; sectors 54 and 53
-end at floor 0, 53 in GRASS1). MAP04's slow crusher with the god-mode
-player under it, stopped and resumed:
-`Y,G:704:1792,W:0.2,LINE:269,W:2,SAVE:3,LINE:269:74,W:2,SAVE:4,LINE:269,W:2,SAVE:5`
+end at floor 0, 53 in GRASS1). MAP04's slow crusher with a barrel under
+it (`P:2035:192` from the south; a god-mode player under it is flaky: the
+camera's collision with the ceiling depends on the frame rate), stopped
+and resumed:
+`Y,G:704:1600,A:90,W:0.2,P:2035:192,W:0.1,LINE:269,W:2,SAVE:3,LINE:269:74,W:2,SAVE:4,LINE:269,W:2,SAVE:5`
 (sector 82's ceiling and mover speed 0.125 in the saves). Reading a save's
 JSON (`sectorFloor`, `sectorCeiling`, `movers`) is the easy way to check
 heights.

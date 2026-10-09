@@ -12,6 +12,9 @@ type
     MusicOn: Boolean;
     Diminish: Boolean;
     MouseLook: Boolean;
+    { Doom's options page: mouse sensitivity 0..9, messages on / off. }
+    MouseSensitivity: Integer;
+    ShowMessages: Boolean;
   end;
 
 const
@@ -28,6 +31,8 @@ procedure SaveSettings;
   mix the game always had: effects at full volume, music at half. }
 function SfxGain: Single;
 function MusicGain: Single;
+{ TCastleWalkNavigation.MouseLook*Sensitivity for the mouse sensitivity. }
+function MouseLookSensitivity: Single;
 
 implementation
 
@@ -43,6 +48,8 @@ begin
   Settings.MusicOn := true;
   Settings.Diminish := true;
   Settings.MouseLook := true;
+  Settings.MouseSensitivity := 5;
+  Settings.ShowMessages := true;
 end;
 
 procedure LoadSettings;
@@ -72,6 +79,8 @@ begin
     Settings.MusicOn := J.Get('musicOn', Settings.MusicOn);
     Settings.Diminish := J.Get('diminish', Settings.Diminish);
     Settings.MouseLook := J.Get('mouseLook', Settings.MouseLook);
+    Settings.MouseSensitivity := Clamped(J.Get('mouseSensitivity', Settings.MouseSensitivity), 0, 9);
+    Settings.ShowMessages := J.Get('showMessages', Settings.ShowMessages);
   finally
     FreeAndNil(J);
   end;
@@ -91,6 +100,8 @@ begin
     J.Add('musicOn', Settings.MusicOn);
     J.Add('diminish', Settings.Diminish);
     J.Add('mouseLook', Settings.MouseLook);
+    J.Add('mouseSensitivity', Settings.MouseSensitivity);
+    J.Add('showMessages', Settings.ShowMessages);
     SaveStorageWrite(SettingsUrl, J.FormatJSON(AsCompressedJSON));
   finally
     FreeAndNil(J);
@@ -100,6 +111,12 @@ end;
 function SfxGain: Single;
 begin
   Result := Settings.SfxVolume / MaxVolume;
+end;
+
+function MouseLookSensitivity: Single;
+begin
+  { 5 (Doom's default) is the 0.15 this port always used. }
+  Result := 0.15 * (Settings.MouseSensitivity + 1) / 6;
 end;
 
 function MusicGain: Single;

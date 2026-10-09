@@ -86,7 +86,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Doom's own menu from the WAD's graphics: the title pages cycle (TITLEPIC, CREDIT, HELP2)
   until a key opens the menu; New Game, episode and skill select (all five skills, with
   Nightmare's fast monsters and respawning), Load Game, Read This! (`F1`); `-skill 1..5`.
-  The in-game F2 / F3 save and load pages use Doom's `M_SAVEG` / `M_LOADG` slot graphics.
+  In the game, Esc / F2 / F3 / F4 open Doom's main menu, save and load pages and the sound
+  volume page (`M_*` graphics, thermometer sliders) over the paused game.
   The Options page picks WADs, map and skill.
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used
@@ -123,9 +124,9 @@ Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` light diminishing, `M` mouse look on/off,
 `J` music on/off, `F4` sound / music volume, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
 `F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `N`/`P` next/previous map,
-`F5` screenshot, `F8` engine inspector, `H` help, `Esc` pause (click or `Enter` resumes, `Esc`
-again goes to the title menu; in the browser, Esc releasing the mouse pauses the same way and a
-click takes the mouse back).
+`F5` screenshot, `F8` engine inspector, `H` help, `Esc` Doom's menu over the paused game
+(Options: end game, messages, mouse sensitivity, sound volume; `Esc` again or a click beside
+the items resumes; in the browser, Esc releasing the mouse opens it the same way).
 
 Automated smoke test (loads a map, runs a script, saves screenshots, quits):
 

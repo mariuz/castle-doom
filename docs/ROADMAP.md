@@ -6,6 +6,19 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Doom's menus in the game: Esc (and, in the browser, losing the pointer
+  lock) opens Doom's main menu over the paused game (New Game, Options,
+  Load, Save, Read This!, Quit), Esc again or a click beside the items
+  resumes. Options (`M_OPTTTL`): End Game (asks `ENDGAME`), Messages on /
+  off (`M_MSGON` / `M_MSGOFF`; off hides player messages but its own),
+  Mouse Sensitivity (0..9 thermometer, a new setting) and Sound Volume
+  (`M_SVOL`, effects and music on 16-step `M_THERM*` thermometers, also F4).
+  Everything is remembered in the settings. In-game New Game goes through
+  the title view's episode / skill start; Quit Game quits on the desktop
+  and goes to the title in the browser. The text PAUSED and volume
+  overlays are gone. Demo command `CORPSE:type:dist`; autotest
+  `ingame-options`; the crusher and door tests no longer depend on the
+  frame rate.
 - Doom's title loop and menus: the title pages cycle like
   `D_DoAdvanceDemo` without the demos (Phase 1: TITLEPIC 170 tics,
   CREDIT 200, HELP2 200; Phase 2: TITLEPIC 11 s, CREDIT) and the menu
@@ -291,7 +304,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
-| **Options and sound volume pages in Doom's graphics** (`M_OPTTTL`, `M_SVOL`, the `M_THERML/M/R/O` thermometer) instead of the CGE Options panel and the text pause / volume overlays; demo playback for the attract loop needs tic-exact player physics (see Content). | Menus look like Doom everywhere. | `DoomMenu`, `GameViewMenu`, `GameViewPlay` | M |
+| **Demo playback for the attract loop** and Doom's message-typing for save descriptions (`M_SaveSelect` lets you type a name; here the map, kills and time are used). | Fidelity of the title loop and saves. | `DoomMenu`, demo playback (see Content) | S (typing), L (demos) |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
 | **Palette-mapped rendering** for the real 8-bit look: quantize each texel to the palette and look it up in the real `COLORMAP` rows (a 32x32x32 RGB-to-index texture and a 256x34 colormap texture in the `DoomLighting` effect), instead of multiplying by (32 - level) / 32. | Exact Doom colours, banding of the palette. | `DoomLighting` | M |
 
@@ -328,9 +341,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Options and sound volume pages in Doom's graphics (M): `M_OPTTTL`,
-   `M_SVOL` with the `M_THERM*` thermometer for the F4 menu, and the
-   pause screen, replacing the text overlays and (in the title menu) the
-   CGE Options panel for what Doom's options page has.
+2. Typed save names (S): Doom's save page lets you type a description
+   (`M_SaveSelect`, the `_` cursor, Enter / Esc); the default stays the
+   map, kills and time.
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

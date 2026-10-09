@@ -47,6 +47,8 @@ type
     FFetchSlot: Integer;
     FFetchCommandLine: Boolean;
     FFetchLabel: TCastleLabel;
+    FNewGameRequested: Boolean;
+    FNewGameEpisode, FNewGameSkill: Integer;
     { Load the IWAD and PWADs (title music, menus follow). False when they
       did not load, or when Freedoom Phase 2 is being downloaded first. }
     function LoadWads(const Iwad: String; const Pwads: TStrings): Boolean;
@@ -56,6 +58,7 @@ type
     { The command-line part of Start (map, warp, autotest), also run when a
       download it waited for arrives. }
     procedure StartFromCommandLine;
+    procedure StartRequestedNewGame(Sender: TObject);
     procedure SetupDoomMenu;
     procedure RefreshSlots;
     procedure DoomMenuAction(const Action: TDoomMenuAction);
@@ -93,6 +96,9 @@ type
     procedure AutoScreenshot;
     procedure NextMenuKey;
   public
+    { New Game chosen in the in-game menu: the title view starts it (the
+      episode 0 means the first map, Doom 2). }
+    procedure RequestNewGame(const Episode, Skill: Integer);
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Start; override;
@@ -357,6 +363,15 @@ begin
   FFetchLabel.Exists := false;
   InsertFront(FFetchLabel);
 
+  if FNewGameRequested and (FWad <> nil) then
+  begin
+    { New Game from the in-game menu (before the command line, which would
+      start its own map). Cannot change the view inside Start. }
+    SetupDoomMenu;
+    FDoomMenu.SetMenuActive(true);
+    WaitForRenderAndCall({$ifdef FPC}@{$endif} StartRequestedNewGame);
+    Exit;
+  end;
   if CmdLoadSlot >= 0 then
   begin
     { Cannot change the view inside Start; do it after the first render. }
@@ -400,6 +415,21 @@ begin
     UpdateWadsLabel;
     FMusic.Play(FMusic.TitleLump);
   end;
+end;
+
+procedure TViewMenu.RequestNewGame(const Episode, Skill: Integer);
+begin
+  FNewGameRequested := true;
+  FNewGameEpisode := Episode;
+  FNewGameSkill := Skill;
+end;
+
+procedure TViewMenu.StartRequestedNewGame(Sender: TObject);
+begin
+  FNewGameRequested := false;
+  FDoomMenu.Episode := FNewGameEpisode;
+  FDoomMenu.Skill := FNewGameSkill;
+  DoomMenuAction(maNewGame);
 end;
 
 procedure TViewMenu.StartFromCommandLine;

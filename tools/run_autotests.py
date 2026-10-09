@@ -36,13 +36,20 @@ def check_donut(config):
 
 
 def check_crusher(config):
-    """MAP04's slow crusher on the god-mode player: 1/8 speed, stopped, resumed."""
+    """MAP04's slow crusher on a barrel: 1/8 speed, stopped, resumed."""
     c = [save_json(config, n)['sectorCeiling'][82] for n in (3, 4, 5)]
     speeds = [[m['speed'] for m in save_json(config, n)['movers'] if m['sector'] == 82] for n in (3, 4, 5)]
     phases = [[m['phase'] for m in save_json(config, n)['movers'] if m['sector'] == 82] for n in (3, 4, 5)]
     assert all(s == [0.125] for s in speeds), 'crusher speeds %s' % speeds
     assert phases[1] == [3], 'crusher not in stasis: %s' % phases
     assert c[0] < 56 and abs(c[1] - c[0]) <= 1 and c[2] < c[1] - 4, 'crusher ceilings %s' % c
+
+
+def check_options(config):
+    """Doom's options and sound pages change and remember the settings."""
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        s = json.load(f)
+    assert s['mouseSensitivity'] == 6 and s['sfxVolume'] == 14, 'settings %s' % s
 
 
 def check_pause(config):
@@ -60,7 +67,7 @@ TESTS = [
      [r'Save: E1M1: restored \d+ actors', r'Gib: '], [], None),
     ('knockback', 'E1M1', 'K,SHOTS,C:5,W:1,A:180,W:0.3,X,W:1.5,S,Q',
      [r'Push: player by \d+ damage'], [], None),
-    ('door-crush', 'E1M1', 'Y,G:480:712,A:0,U,W:1.5,P:3004:72,D,W:7,S,Q',
+    ('door-crush', 'E1M1', 'Y,G:480:712,A:0,U,W:1.5,CORPSE:3004:72,W:7,S,Q',
      [r'Crush: POSS .* crushed to gibs'], [], None),
     ('melee-turn', 'E1M1', 'Y,K,SHOTS,C:1,W:1,A:0,P:3001:55,T:12,W:0.1,X,W:0.3,S,Q',
      [r'Turn: from'], [], None),
@@ -71,7 +78,10 @@ TESTS = [
     ('donut', 'MAP05', 'Y,G:-64:408,A:-90,W:0.3,U,W:9,SAVE:2,S,Q',
      [r'Donut: pillar 54 and ring 53'], [], check_donut),
     ('crusher', 'MAP04',
-     'Y,G:704:1792,W:0.2,LINE:269,W:2,SAVE:3,LINE:269:74,W:2,SAVE:4,LINE:269,W:2,SAVE:5,Q',
+     # A barrel under it (not the player: the camera's collision with a
+     # descending ceiling depends on the frame rate).
+     'Y,G:704:1600,A:90,W:0.2,P:2035:192,W:0.1,LINE:269,W:2,SAVE:3,LINE:269:74,W:2,SAVE:4,'
+     'LINE:269,W:2,SAVE:5,Q',
      [r'Line: line 269 special 74'], [], check_crusher),
     ('title-pages', 'MENUTITLE', None, [r'Menu screenshot MENUTITLE'], [], None),
     ('read-this', 'MENUREADTHIS', None, [r'Menu screenshot MENUREADTHIS'], [], None),
@@ -80,6 +90,11 @@ TESTS = [
      'KEY:F3,KEY:DOWN,KEY:DOWN,KEY:ENTER,W:1,Q',
      [r'Save: Saved E1M1 to castle-config:/save3\.json', r'Save: Loading castle-config:/save3\.json',
       r'Save: E1M1: restored'], [], None),
+    ('ingame-options', 'E1M1',
+     'W:0.3,KEY:ESCAPE,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:RIGHT,KEY:DOWN,KEY:ENTER,'
+     'KEY:LEFT,W:0.2,S,KEY:ESCAPE,KEY:ESCAPE,KEY:ESCAPE,KEY:ESCAPE,KEY:DOWN,KEY:DOWN,KEY:ENTER,'
+     'KEY:DOWN,KEY:ENTER,W:0.3,S,KEY:ESCAPE,Q',
+     [r'Saved screenshot 2'], [], check_options),
     ('pointer-lock-pause', 'E1M1', 'W:0.5,SAVE:1,UNLOCK,W:2,S,SAVE:2,RESUME,W:1,SAVE:3,Q',
      [r'PointerLock: Cancelled by the user, pausing'], [], check_pause),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
