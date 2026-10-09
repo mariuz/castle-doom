@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Music is played on a real OPL3 emulator: Nuked OPL3 (LGPL, a separate
+  shared library in `data/lib`, built by `tools/build_nuked_opl3.sh` and
+  packaged by CI) is programmed with the WAD's GENMIDI instruments like
+  Doom's own sound driver did; the built-in FM model remains the fallback
+  (`--fm-synth` forces it) and the browser's synthesizer.
 - Things are drawn in a few batched scenes (one per light level and kind)
   instead of one scene each, for fewer draw calls, mainly in the browser.
 - Gamepad support in the desktop versions (Windows, Linux): sticks to

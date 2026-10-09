@@ -48,6 +48,9 @@ jobs:
           castle-build-ci/install_dependencies
           castle-build-ci/setup_castle_engine
 
+      - name: Build Nuked OPL3 (shared library in data/lib)
+        run: tools/build_nuked_opl3.sh
+
       - name: Package Linux (x86_64)
         run: castle-engine package --os=linux --cpu=x86_64 --mode=release --verbose
 
@@ -76,6 +79,9 @@ jobs:
             --depth=1 --single-branch --branch=master
           castle-build-ci/install_dependencies
           castle-build-ci/setup_castle_engine
+
+      - name: Build Nuked OPL3 (shared library in data/lib)
+        run: tools/build_nuked_opl3.sh
 
       - name: Package Windows (x86_64)
         run: castle-engine package --os=win64 --cpu=x86_64 --mode=release --verbose
@@ -110,6 +116,9 @@ jobs:
             --depth=1 --single-branch --branch=master
           castle-build-ci/install_dependencies
           castle-build-ci/setup_castle_engine
+
+      - name: Build Nuked OPL3 (shared library in data/lib)
+        run: tools/build_nuked_opl3.sh
 
       # Not signed or notarized (no Apple developer certificate): the first
       # start needs right-click > Open, or xattr -dr com.apple.quarantine.
@@ -181,6 +190,9 @@ jobs:
           git clone --depth 1 --branch snapshot https://github.com/castle-engine/castle-engine.git "$HOME/castle-engine"
           # The script expects to run from the engine's directory (castle-fpc.cfg).
           cd "$HOME/castle-engine" && ./tools/build-tool/castle-engine_compile.sh
+
+      - name: Build Nuked OPL3 (shared library in data/lib)
+        run: tools/build_nuked_opl3.sh
 
       - name: Compile
         timeout-minutes: 10

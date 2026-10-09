@@ -16,7 +16,7 @@ Contents
 7. [DoomThings and DoomActors: sprites as billboards](#7-doomthings-and-doomactors-sprites-as-billboards)
 8. [DoomWorld: the game simulation](#8-doomworld-the-game-simulation)
 9. [DoomSound: DMX sound effects](#9-doomsound-dmx-sound-effects)
-10. [DoomMusic: MUS/MIDI through an FM synthesizer](#10-doommusic-musmidi-through-an-fm-synthesizer)
+10. [DoomMusic: MUS/MIDI on an OPL3](#10-doommusic-musmidi-on-an-opl3)
 11. [DoomHud: the status bar](#11-doomhud-the-status-bar)
 12. [Views: menu and play](#12-views-menu-and-play)
 13. [The player: TCastleWalkNavigation](#13-the-player-tcastlewalknavigation)
@@ -74,7 +74,8 @@ Sizes, for orientation (lines of Pascal):
 | Unit | Lines | Role |
 |---|---:|---|
 | `doomworld.pas` | 2763 | game logic: movers, specials, AI, weapons, pickups |
-| `doommusic.pas` | 1029 | MUS/MIDI parsing and the FM synthesizer |
+| `doommusic.pas` | 1700 | MUS/MIDI parsing, the OPL3 driver and the FM synthesizer |
+| `doomopl3.pas` | 170 | Nuked OPL3 as a runtime-loaded shared library |
 | `doomgeometry.pas` | 930 | map to X3D scenes |
 | `doomgraphics.pas` | 765 | WAD graphics decoding, texture URLs |
 | `gameviewplay.pas` | 688 | viewport, navigation, HUD, input, test harness |
@@ -677,12 +678,18 @@ On Windows the engine needs `OpenAL32.dll` next to the executable;
 
 ---
 
-## 10. DoomMusic: MUS/MIDI through an FM synthesizer
+## 10. DoomMusic: MUS/MIDI on an OPL3
 
 The engine has no MIDI playback, and Doom music was never recorded audio: it is
 note data (MUS, or plain MIDI in Freedoom) played on the sound card's Yamaha
 OPL2 FM chip using the instrument bank in the `GENMIDI` lump. `DoomMusic`
-recreates that pipeline in software:
+recreates that pipeline in software, with the chip itself emulated by Nuked
+OPL3 when its shared library is there (`DoomOpl3`: `data/lib/libnukedopl3.so`
+/ `nukedopl3.dll` / `libnukedopl3.dylib`, built from the LGPL sources by
+`tools/build_nuked_opl3.sh` and never compiled into the MIT program; loaded
+with `DynLibs`, three entry points: `OPL3_Reset`, `OPL3_WriteReg`,
+`OPL3_GenerateStream`) and by the built-in FM model otherwise (the web build
+always: no dynamic linking in WebAssembly; `--fm-synth` forces it):
 
 1. `ParseMus` / `ParseMidi` turn the lump into a time-stamped event list
    (note on/off, program, volume, expression, pitch bend). MUS runs at 140 Hz
@@ -693,7 +700,22 @@ recreates that pipeline in software:
 2. `LoadGenMidi` reads the 175 instruments (128 melodic, 47 percussion), each
    with up to two voices of modulator/carrier parameters, feedback/connection,
    note offset, fine tuning, fixed pitch.
-3. `TSongRenderer` runs the synthesizer (`RenderDoomSong` renders a whole song at once): up to 36 voices, each two operators
+3. `TSongRenderer` owns the events, the channel state, the timeline and the
+   WAV writer (`RenderDoomSong` renders a whole song at once;
+   `NewSongRenderer` picks the subclass). `TOplSongRenderer` drives the
+   emulated chip like Doom's DMX driver: OPL3 mode (register 0x105) for 18
+   two-operator channels, one per GENMIDI voice (two for double-voice
+   instruments, the second detuned by the fine tuning); a note writes the
+   instrument's operator bytes to 0x20 / 0x40 / 0x60 / 0x80 / 0xE0 of both
+   slots, feedback and connection to 0xC0 (with both output bits), the
+   carrier's total level attenuated by velocity, channel volume and
+   expression (0.75 dB per step; the modulator too when the operators add),
+   and the F-number / block for the note's frequency (with the channel's
+   pitch bend) to 0xA0 / 0xB0 with key on. Note off clears key on (the
+   release runs on the chip) and frees the voice; the oldest voice is
+   stolen when all 18 play. Samples come from `OPL3_GenerateStream` at the
+   song's 22050 Hz (the chip resamples from its 49716 Hz), rendered between
+   events. `TFmSongRenderer` is the built-in model: up to 36 voices, each two operators
    with 32-bit fixed-point phase accumulators, 2048-entry wave tables for the
    four OPL waveforms, ADSR envelopes with YM3812 timings and rate scaling,
    key-scale level, total level, feedback (up to 2 cycles of phase), FM
@@ -1028,8 +1050,10 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
   `DoomMenu`.
 - Vanilla node format only. A blockmap-free design means all 2D queries scan
   all lines.
-- The FM synth approximates the OPL2 (envelope shapes and the modulation index
-  are estimates, not a register-accurate emulation).
+- The built-in FM synth (web, or without the library) approximates the OPL2
+  (envelope shapes and the modulation index are estimates, not a
+  register-accurate emulation); the OPL3 driver's volume curve is a
+  logarithmic approximation of DMX's table.
 
 ---
 

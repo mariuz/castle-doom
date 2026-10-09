@@ -10,3 +10,6 @@ tests/castle_doom_tests.exe
 tests/*.o
 tests/*.ppu
 *.lps
+
+# Nuked OPL3 shared library built by tools/build_nuked_opl3.sh (LGPL, not ours)
+data/lib/

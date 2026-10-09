@@ -13,7 +13,7 @@ program castle_doom_tests;
 
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils,
-  DoomWad, DoomMap, DoomMusic, DoomThings, DoomDehacked;
+  DoomWad, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked;
 
 function DataPath(const Name: String): String;
 begin
@@ -45,6 +45,7 @@ type
   published
     procedure TestRenderMus;
     procedure TestRejectGarbage;
+    procedure TestOpl3Synth;
   end;
 
   TTestDehacked = class(TTestCase)
@@ -206,6 +207,44 @@ begin
       AssertNull('not a song', Wav);
     finally
       FreeAndNil(Wav);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ Both synthesizers render the same song to the same length, and differ
+  (the OPL3 library is optional: without it only the FM model is tried). }
+procedure TTestMusic.TestOpl3Synth;
+var
+  W: TDoomWad;
+  L, I, Differ: Integer;
+  Fm, Opl: TMemoryStream;
+begin
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    L := W.FindLump('D_E1M8');
+    AssertTrue('music lump', L >= 0);
+    ForceFmSynth := true;
+    Fm := RenderDoomSong(W, W.LumpPointer(L), W.LumpSize(L));
+    ForceFmSynth := false;
+    Opl := RenderDoomSong(W, W.LumpPointer(L), W.LumpSize(L));
+    try
+      AssertNotNull('FM rendered', Fm);
+      AssertNotNull('OPL rendered', Opl);
+      AssertEquals('same length', Fm.Size, Opl.Size);
+      if Opl3Available then
+      begin
+        Differ := 0;
+        for I := 44 to Fm.Size - 1 do
+          if PByte(Fm.Memory)[I] <> PByte(Opl.Memory)[I] then Inc(Differ);
+        AssertTrue('OPL3 output differs from the FM model', Differ > Fm.Size div 2);
+        Writeln('Nuked OPL3 tested: ', Opl3Status);
+      end else
+        Writeln('Nuked OPL3 not tested: ', Opl3Status);
+    finally
+      FreeAndNil(Fm);
+      FreeAndNil(Opl);
     end;
   finally
     FreeAndNil(W);

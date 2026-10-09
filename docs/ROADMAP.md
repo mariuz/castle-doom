@@ -6,6 +6,19 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Nuked OPL3 as a dynamically linked library (LGPL 2.1, kept out of the MIT
+  code): `tools/build_nuked_opl3.sh` fetches `opl3.c` at a pinned commit and
+  builds `data/lib/libnukedopl3.so` / `nukedopl3.dll` / `libnukedopl3.dylib`
+  (CI does it in every package job, with the licence and a README next to
+  the library); `DoomOpl3` loads it at runtime (`data/lib`, next to the exe,
+  `CASTLE_DOOM_OPL3`), and `TOplSongRenderer` programs it the way DMX did
+  (18 two-operator channels, the GENMIDI operator bytes written to the
+  registers, F-number / block from the note, volume as total-level
+  attenuation, pitch bend, double voices with fine tuning). The built-in
+  model (`TFmSongRenderer`) stays as the fallback, `--fm-synth` forces it,
+  and the web build keeps it (no dynamic linking there). The unit test
+  renders a song with both, the `music-opl3` autotest checks the library
+  loads in CI.
 - Sprite batching: the things' quads are drawn from `TSpriteBatch` scenes,
   one per light group (sector light div 16) and kind (normal, full bright,
   fuzz), where CGE's dynamic batching merges the quads with the same
@@ -396,7 +409,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Nuked OPL3** (decided: LGPL 2.1, kept out of the MIT code by dynamic linking) instead of the approximate FM model: build Nuked OPL3's `opl3.c` as a shared library (`libnukedopl3.so` / `.dll` / `.dylib`, packaged next to the exe, with its licence text), load it at runtime from `DoomMusic` (fall back to the built-in synth when it is missing, and always on the web, where there is no dynamic linking), and drive it with the same GENMIDI register programming Doom's `i_oplmusic.c` does. | Exact OPL3 sound, LGPL satisfied by letting users replace the library. | `DoomMusic` synth core (keep the MUS/MIDI/GENMIDI front end), `CastleEngineManifest.xml` packaging, `build.yml` | L |
+| **OPL3 details** after Nuked OPL3 (done, see above): DMX's exact volume curve (a 128-entry table; the port uses 0.75 dB per total-level step from the linear product of velocity, volume and expression), its voice-stealing order and the OPL2 vibrato / tremolo depth bits, compared by ear or against a recording of the original driver. | Closer to the original mix. | `TOplSongRenderer` | S |
 | **Music for warps and loads**: the first level, `-warp`, a loaded game and the title still render an 8-second intro at once (115-230 ms natively); a desktop thread, or rendering the intro in slices behind a short silence, would remove the last stall. | Smoother first level start. | `DoomMusic` | S |
 | **Stereo panning** for positional sounds is done by the engine, but Doom's `S_CLIPPING_DIST` falloff curve could be matched more closely. | Minor. | `DoomSound` | S |
 | **PC speaker** sounds (`DP*`) are ignored on purpose; no change planned. | - | - | - |
@@ -429,5 +442,6 @@ L = several days). Items inside a section are in suggested order.
 2. Web gamepads (M): a browser backend for CGE's game controllers
    (`navigator.getGamepads()`), so the desktop bindings work on the web
    (see Engine and tooling).
-3. Nuked OPL3 as a dynamically linked library (L): decided, see Audio; the
-   built-in synth stays as the fallback and the web build's synth.
+3. Music for warps and loads (S, see Audio): render the song before the
+   first level, a `-warp` and a loaded game start, so they do not begin
+   with the 8-second intro.

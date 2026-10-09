@@ -11,6 +11,11 @@ for how the code works; this file is about *working on it*.
   the engine through custom URL protocols (`doomgfx:`, `doomsfx:`, `doommus:`).
 - Map geometry is generated as X3D nodes (`DoomGeometry`), things are billboard
   sprites (`DoomActors`), gameplay runs at 35 tics/s in `DoomWorld`.
+- Music is OPL3 emulation: Nuked OPL3 (LGPL) is **not in the repository**;
+  `tools/build_nuked_opl3.sh` downloads it at a pinned commit and builds the
+  shared library into `data/lib/` (gitignored; CI runs the script in every
+  package job and the autotest job). Without it the built-in FM model plays
+  (and always on the web). Keep it that way: no LGPL code compiled in.
 - Published at https://github.com/mariuz/castle-doom (MIT), web build at
   https://mariuz.github.io/castle-doom/ (GitHub Pages), native packages on the
   Releases page (built by CI on `v*` tags).
@@ -260,7 +265,15 @@ show freed songs; the intro log line gives its render time in ms.
 
 Set `CASTLE_DOOM_DUMP_MUSIC=<dir>` to write rendered music WAVs for analysis
 (a pitch-grid/level check script lived in the scratchpad as `analyze_wav.py`:
-Goertzel on semitone vs quarter-tone frequencies).
+Goertzel on semitone vs quarter-tone frequencies). The log says which
+synthesizer runs: `Music: Nuked OPL3 loaded from <path>` (or why not) at
+startup and `Rendered D_E1M1 with Nuked OPL3 / the built-in FM synthesizer`
+per song; `--fm-synth` forces the built-in one, `CASTLE_DOOM_OPL3=<file>`
+points at another library build. Nuked renders about 1.6x slower than the FM
+model (E1M1's 132 s song: 5 s of CPU, in 12 ms slices per frame), so a demo
+waiting for `Rendered` under xvfb needs `W:80`. The unit test `TestOpl3Synth`
+renders a song with both and expects them to differ; the `music-opl3`
+autotest only checks the library loads.
 
 ## Pitfalls learned the hard way
 

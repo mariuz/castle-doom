@@ -9,7 +9,7 @@ uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleUtils,
   CastleFilesUtils, CastleUriUtils,
-  DoomLighting, DoomDehacked, GameGamepad, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
+  DoomLighting, DoomDehacked, DoomMusic, GameGamepad, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
 
 var
   Window: TCastleWindow;
@@ -54,6 +54,9 @@ begin
       AutoTestPrefix := Parameters[I + 2];
       Inc(I, 2);
     end else
+    if Parameters[I] = '--fm-synth' then
+      ForceFmSynth := true
+    else
     if (Parameters[I] = '--demo') and (I + 1 <= Parameters.High) then
     begin
       AutoTestDemo := Parameters[I + 1];

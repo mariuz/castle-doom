@@ -97,6 +97,10 @@ TESTS = [
      'Y,G:704:1600,A:90,W:0.2,P:2035:192,W:0.1,LINE:269,W:2,SAVE:3,LINE:269:74,W:2,SAVE:4,'
      'LINE:269,W:2,SAVE:5,Q',
      [r'Line: line 269 special 74'], [], check_crusher),
+    # The Nuked OPL3 library (data/lib, built by tools/build_nuked_opl3.sh)
+    # loads and renders the intro of the level's song.
+    ('music-opl3', 'E1M1', 'W:1,Q',
+     [r'Music: Nuked OPL3 loaded from', r'Playing the first 8\.0 s of D_E1M1'], [], None),
     ('title-pages', 'MENUTITLE', None, [r'Menu screenshot MENUTITLE'], [], None),
     ('read-this', 'MENUREADTHIS', None, [r'Menu screenshot MENUREADTHIS'], [], None),
     ('ingame-save-load', 'E1M1',

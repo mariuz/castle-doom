@@ -1,13 +1,18 @@
-{ Doom music: MUS and MIDI lumps rendered with a small OPL2-style FM
-  synthesizer driven by the WAD's GENMIDI instrument bank (the same
-  instrument definitions the original game used with AdLib / Sound Blaster
-  cards). The song is rendered once to a 16-bit WAV in memory, a slice per
-  frame (TDoomMusic.Update) so a level start does not freeze, served through
-  the custom "doommus:" URL protocol and looped by the engine's sound system.
+{ Doom music: MUS and MIDI lumps rendered with the WAD's GENMIDI instrument
+  bank (the same instrument definitions the original game used with AdLib /
+  Sound Blaster cards). The song is rendered once to a 16-bit WAV in memory,
+  a slice per frame (TDoomMusic.Update) so a level start does not freeze,
+  served through the custom "doommus:" URL protocol and looped by the
+  engine's sound system.
 
-  The FM model is an approximation of the Yamaha YM3812: two operators per
-  voice (modulator -> carrier, or additive), 4 waveforms, ADSR envelopes with
-  rate scaling, key-scale level, feedback, vibrato and tremolo. }
+  Two synthesizers share the parsing, the timeline and the WAV writer
+  (TSongRenderer): TOplSongRenderer programs a real OPL3 emulator (Nuked
+  OPL3, loaded as a shared library by DoomOpl3) with the GENMIDI registers
+  the way the game's DMX driver did; TFmSongRenderer is the built-in
+  approximation of the Yamaha YM3812 (two operators per voice, modulator ->
+  carrier or additive, 4 waveforms, ADSR envelopes with rate scaling,
+  key-scale level, feedback, vibrato and tremolo), used when the library is
+  missing and always on the web. }
 unit DoomMusic;
 
 interface
@@ -79,9 +84,14 @@ type
   is not a song or GENMIDI is missing. }
 function RenderDoomSong(const Wad: TDoomWad; const SongData: PByte; const SongSize: Integer): TMemoryStream;
 
+var
+  { Use the built-in FM model even when the Nuked OPL3 library is there
+    (command line --fm-synth). }
+  ForceFmSynth: Boolean = false;
+
 implementation
 
-uses Math, CastleDownload, CastleLog, CastleUriUtils, CastleUtils;
+uses Math, CastleDownload, CastleLog, CastleUriUtils, CastleUtils, DoomOpl3;
 
 const
   SampleRate = 22050;
@@ -645,28 +655,29 @@ end;
 { The synthesizer as an object, so a song can be rendered a slice at a time
   (TDoomMusic.Update) instead of blocking for seconds at a level start. }
 type
+  { A song being rendered: the parsed events, the channel state and the
+    output; the synthesizer itself is the subclass. }
   TSongRenderer = class
-  strict private
+  protected
     Instruments: array [0..174] of TInstrument;
     Events: TMusicEventList;
-    Voices: array [0..MaxVoices - 1] of TVoice;
     Channels: array [0..15] of TChannelState;
-    TotalSamples, SampleIndex, NextEvent, VoiceHigh: Integer;
+    TotalSamples, SampleIndex, NextEvent: Integer;
     Float: array of Single;
-    VibLfo, TremLfo, VibPhase, TremPhase, Peak: Double;
-    Age: Int64;
-    function FindVoice: Integer;
-    procedure ReleaseVoice(var Vc: TVoice);
-    procedure StartVoice(const Channel, Note, Velocity: Integer; const Params: TVoiceParams;
-      const PlayNote: Double);
-    procedure NoteOn(const Channel, Note, Velocity: Integer);
-    procedure NoteOff(const Channel, Note: Integer);
-    procedure UpdateVoiceFreqs(const Channel: Integer);
-    procedure UpdateVoiceGains(const Channel: Integer);
-    procedure HandleEvent(const Ev: TMusicEvent);
-    function RenderVoice(var Vc: TVoice; const VibMul, Trem: Double): Double;
+    Peak: Double;
+    { Start a new song (after the parse; the channels are reset already). }
+    procedure ResetSynth; virtual; abstract;
+    { Render samples SampleIndex .. Last - 1 into Float, handling the events
+      that fall due (Events[NextEvent] onwards), and keep Peak. }
+    procedure Render(const Last: Integer); virtual; abstract;
   public
     destructor Destroy; override;
+    class function SynthName: String; virtual; abstract;
+    { Multiplies the rendered samples in MakeWav (one gain for every song:
+      the OPL had no normalization either, and the first seconds rendered
+      for a quick start, TDoomMusic.Play, must equal the same part of the
+      finished song, so switching is seamless). }
+    class function OutputGain: Double; virtual; abstract;
     { Parse the song; false when it is not MUS / MIDI or GENMIDI is missing. }
     function Init(const Wad: TDoomWad; const SongData: PByte; const SongSize: Integer): Boolean;
     { Render up to Count more samples; true when the song is complete. }
@@ -681,13 +692,95 @@ type
     property SongPeak: Double read Peak;
   end;
 
+  { The built-in FM model. }
+  TFmSongRenderer = class(TSongRenderer)
+  strict private
+    Voices: array [0..MaxVoices - 1] of TVoice;
+    VoiceHigh: Integer;
+    VibLfo, TremLfo, VibPhase, TremPhase: Double;
+    Age: Int64;
+    function FindVoice: Integer;
+    procedure ReleaseVoice(var Vc: TVoice);
+    procedure StartVoice(const Channel, Note, Velocity: Integer; const Params: TVoiceParams;
+      const PlayNote: Double);
+    procedure NoteOn(const Channel, Note, Velocity: Integer);
+    procedure NoteOff(const Channel, Note: Integer);
+    procedure UpdateVoiceFreqs(const Channel: Integer);
+    procedure UpdateVoiceGains(const Channel: Integer);
+    procedure HandleEvent(const Ev: TMusicEvent);
+    function RenderVoice(var Vc: TVoice; const VibMul, Trem: Double): Double;
+  protected
+    procedure ResetSynth; override;
+    procedure Render(const Last: Integer); override;
+  public
+    class function SynthName: String; override;
+    class function OutputGain: Double; override;
+  end;
+
+const
+  OplVoices = 18;
+  { The OPL3's own sample rate: F-number to Hz. }
+  OplRate = 49716;
+  { Operator slot of the first operator of channels 0..8 in a bank; the
+    second operator is 3 higher. }
+  OplSlot: array [0..8] of Byte = (0, 1, 2, 8, 9, 10, 16, 17, 18);
+
+type
+  TOplVoice = record
+    { Key on. A voice that was released may be taken again at once (the
+      release tail is cut when all 18 are needed, like DMX did). }
+    Active: Boolean;
+    Channel, Note, Velocity: Integer;
+    Params: TVoiceParams;
+    PlayNote: Double;
+    Age: Int64;
+  end;
+
+  { Nuked OPL3 driven like the game's DMX driver: two-operator melodic
+    channels (18 in OPL3 mode), one per GENMIDI voice, with the instrument's
+    operator bytes written to the chip and the note's F-number / block. }
+  TOplSongRenderer = class(TSongRenderer)
+  strict private
+    Chip: TOpl3Chip;
+    Voices: array [0..OplVoices - 1] of TOplVoice;
+    Age: Int64;
+    Buffer: array of SmallInt;
+    function ChannelReg(const V, Base: Integer): Word;
+    function SlotReg(const V, Op, Base: Integer): Word;
+    procedure WriteOperator(const V, Op: Integer; const P: TOperatorParams; const Level: Integer);
+    procedure SetVolume(const V: Integer);
+    procedure SetFrequency(const V: Integer; const KeyOn: Boolean);
+    function FindVoice: Integer;
+    procedure StartVoice(const Channel, Note, Velocity: Integer; const Params: TVoiceParams;
+      const PlayNote: Double);
+    procedure NoteOn(const Channel, Note, Velocity: Integer);
+    procedure NoteOff(const Channel, Note: Integer);
+    procedure HandleEvent(const Ev: TMusicEvent);
+  protected
+    procedure ResetSynth; override;
+    procedure Render(const Last: Integer); override;
+  public
+    destructor Destroy; override;
+    class function SynthName: String; override;
+    class function OutputGain: Double; override;
+  end;
+
+{ The synthesizer for the next song: the OPL3 library when it loads. }
+function NewSongRenderer: TSongRenderer;
+begin
+  if (not ForceFmSynth) and Opl3Available then
+    Result := TOplSongRenderer.Create
+  else
+    Result := TFmSongRenderer.Create;
+end;
+
 destructor TSongRenderer.Destroy;
 begin
   FreeAndNil(Events);
   inherited;
 end;
 
-function TSongRenderer.FindVoice: Integer;
+function TFmSongRenderer.FindVoice: Integer;
 var
   J, Oldest: Integer;
 begin
@@ -699,7 +792,7 @@ begin
   Result := Oldest;
 end;
 
-procedure TSongRenderer.ReleaseVoice(var Vc: TVoice);
+procedure TFmSongRenderer.ReleaseVoice(var Vc: TVoice);
 var
   O: Integer;
 begin
@@ -711,7 +804,7 @@ begin
     end;
 end;
 
-procedure TSongRenderer.StartVoice(const Channel, Note, Velocity: Integer; const Params: TVoiceParams;
+procedure TFmSongRenderer.StartVoice(const Channel, Note, Velocity: Integer; const Params: TVoiceParams;
   const PlayNote: Double);
 var
   Idx, Block: Integer;
@@ -733,7 +826,7 @@ begin
   Voices[Idx].Gain := (Velocity / 127) * (Channels[Channel].Volume / 127) * (Channels[Channel].Expression / 127);
 end;
 
-procedure TSongRenderer.NoteOn(const Channel, Note, Velocity: Integer);
+procedure TFmSongRenderer.NoteOn(const Channel, Note, Velocity: Integer);
 var
   Inst: Integer;
   PlayNote: Double;
@@ -752,7 +845,7 @@ begin
     StartVoice(Channel, Note, Velocity, I2.Voices[1], PlayNote + I2.Voices[1].NoteOffset + (I2.FineTuning - 128) / 64);
 end;
 
-procedure TSongRenderer.NoteOff(const Channel, Note: Integer);
+procedure TFmSongRenderer.NoteOff(const Channel, Note: Integer);
 var
   J: Integer;
 begin
@@ -762,7 +855,7 @@ begin
       ReleaseVoice(Voices[J]);
 end;
 
-procedure TSongRenderer.UpdateVoiceFreqs(const Channel: Integer);
+procedure TFmSongRenderer.UpdateVoiceFreqs(const Channel: Integer);
 var
   J: Integer;
   Freq: Double;
@@ -776,7 +869,7 @@ begin
     end;
 end;
 
-procedure TSongRenderer.UpdateVoiceGains(const Channel: Integer);
+procedure TFmSongRenderer.UpdateVoiceGains(const Channel: Integer);
 var
   J: Integer;
 begin
@@ -785,7 +878,7 @@ begin
       Voices[J].Gain := 1.0 * (Channels[Channel].Volume / 127) * (Channels[Channel].Expression / 127);
 end;
 
-procedure TSongRenderer.HandleEvent(const Ev: TMusicEvent);
+procedure TFmSongRenderer.HandleEvent(const Ev: TMusicEvent);
 var
   J: Integer;
 begin
@@ -806,7 +899,7 @@ begin
   end;
 end;
 
-function TSongRenderer.RenderVoice(var Vc: TVoice; const VibMul, Trem: Double): Double;
+function TFmSongRenderer.RenderVoice(var Vc: TVoice; const VibMul, Trem: Double): Double;
 var
   ModOut, CarOut, Env0, Env1, Fb: Double;
   Idx: Cardinal;
@@ -873,7 +966,6 @@ begin
   if TotalSamples <= 0 then Exit;
   SetLength(Float, TotalSamples);
   Peak := 0;
-  for I := 0 to MaxVoices - 1 do Voices[I].Active := false;
   for I := 0 to 15 do
   begin
     Channels[I].Prog := 0;
@@ -881,26 +973,53 @@ begin
     Channels[I].Expression := 127;
     Channels[I].PitchBend := 0;
   end;
-  Age := 0;
-  VoiceHigh := 0;
   NextEvent := 0;
   SampleIndex := 0;
+  ResetSynth;
+  Result := true;
+end;
+
+procedure TFmSongRenderer.ResetSynth;
+var
+  I: Integer;
+begin
+  for I := 0 to MaxVoices - 1 do Voices[I].Active := false;
+  Age := 0;
+  VoiceHigh := 0;
   VibPhase := 0;
   TremPhase := 0;
   VibLfo := 1;
   TremLfo := 1;
-  Result := true;
+end;
+
+class function TFmSongRenderer.SynthName: String;
+begin
+  Result := 'the built-in FM synthesizer';
+end;
+
+class function TFmSongRenderer.OutputGain: Double;
+begin
+  { Freedoom's tracks peak at 3.4 .. 8 here, 5.5 maps to 0.89. }
+  Result := 0.89 / 5.5;
 end;
 
 function TSongRenderer.Step(const Count: Integer): Boolean;
 var
-  Last, V: Integer;
-  Mix: Double;
+  Last: Integer;
 begin
   if Count >= TotalSamples - SampleIndex then
     Last := TotalSamples
   else
     Last := SampleIndex + Count;
+  Render(Last);
+  Result := Done;
+end;
+
+procedure TFmSongRenderer.Render(const Last: Integer);
+var
+  V: Integer;
+  Mix: Double;
+begin
   while SampleIndex < Last do
   begin
     while (NextEvent < Events.Count) and (Events[NextEvent].Time * SampleRate <= SampleIndex) do
@@ -924,7 +1043,6 @@ begin
     if Abs(Mix) > Peak then Peak := Abs(Mix);
     Inc(SampleIndex);
   end;
-  Result := Done;
 end;
 
 function TSongRenderer.Done: Boolean;
@@ -944,16 +1062,11 @@ end;
 
 function TSongRenderer.MakeWav(const Count: Integer): TMemoryStream;
 const
-  { One gain for every song (the OPL had no normalization either): Freedoom's
-    tracks peak at 3.4 .. 8 here, 5.5 maps to 0.89. A fixed gain also makes
-    the first seconds rendered for a quick start (TDoomMusic.Play) identical
-    to the same part of the finished song, so switching is seamless. }
-  Gain = 0.89 / 5.5;
   Knee = 0.7;
 var
   Samples: array of SmallInt;
   I, N: Integer;
-  X, A: Double;
+  X, A, Gain: Double;
 
   procedure WriteU32(const S: TStream; const X: UInt32);
   begin
@@ -973,6 +1086,7 @@ var
 begin
   if (Count < 0) or (Count > SampleIndex) then N := SampleIndex else N := Count;
   if N < 1 then N := 1;
+  Gain := OutputGain;
   SetLength(Samples, N);
   for I := 0 to N - 1 do
   begin
@@ -1004,12 +1118,240 @@ begin
   Result.Position := 0;
 end;
 
+
+{ TOplSongRenderer ----------------------------------------------------------- }
+
+destructor TOplSongRenderer.Destroy;
+begin
+  FreeAndNil(Chip);
+  inherited;
+end;
+
+class function TOplSongRenderer.SynthName: String;
+begin
+  Result := 'Nuked OPL3';
+end;
+
+class function TOplSongRenderer.OutputGain: Double;
+begin
+  { The chip's 16-bit output scaled to -1..1; Freedoom's songs peak around
+    0.3 .. 0.5 there. }
+  Result := 1.8;
+end;
+
+function TOplSongRenderer.ChannelReg(const V, Base: Integer): Word;
+begin
+  Result := (V div 9) * $100 + Base + (V mod 9);
+end;
+
+function TOplSongRenderer.SlotReg(const V, Op, Base: Integer): Word;
+begin
+  Result := (V div 9) * $100 + Base + OplSlot[V mod 9] + Op * 3;
+end;
+
+procedure TOplSongRenderer.WriteOperator(const V, Op: Integer; const P: TOperatorParams; const Level: Integer);
+begin
+  Chip.WriteReg(SlotReg(V, Op, $20),
+    Ord(P.Tremolo) shl 7 or Ord(P.Vibrato) shl 6 or Ord(P.Sustain) shl 5 or Ord(P.Ksr) shl 4 or P.Multi);
+  Chip.WriteReg(SlotReg(V, Op, $40), P.Ksl shl 6 or Level);
+  Chip.WriteReg(SlotReg(V, Op, $60), P.Attack shl 4 or P.Decay);
+  Chip.WriteReg(SlotReg(V, Op, $80), P.SustainLevel shl 4 or P.Release);
+  Chip.WriteReg(SlotReg(V, Op, $E0), P.Waveform);
+end;
+
+{ The carrier's total level (and the modulator's when the operators add)
+  attenuated by velocity, channel volume and expression: 0.75 dB per step. }
+procedure TOplSongRenderer.SetVolume(const V: Integer);
+var
+  Vol: Double;
+  Att: Integer;
+begin
+  Vol := (Voices[V].Velocity / 127) * (Channels[Voices[V].Channel].Volume / 127) *
+    (Channels[Voices[V].Channel].Expression / 127);
+  if Vol <= 0.0001 then
+    Att := 63
+  else
+    Att := Round(-20 * Log10(Vol) / 0.75);
+  Chip.WriteReg(SlotReg(V, 1, $40),
+    Voices[V].Params.Carrier.Ksl shl 6 or Min(63, Voices[V].Params.Carrier.Level + Att));
+  if Voices[V].Params.Additive then
+    Chip.WriteReg(SlotReg(V, 0, $40),
+      Voices[V].Params.Modulator.Ksl shl 6 or Min(63, Voices[V].Params.Modulator.Level + Att));
+end;
+
+procedure TOplSongRenderer.SetFrequency(const V: Integer; const KeyOn: Boolean);
+var
+  Freq, FNum: Double;
+  Block, N: Integer;
+begin
+  Freq := 440 * Power(2, (Voices[V].PlayNote - 69 + Channels[Voices[V].Channel].PitchBend) / 12);
+  FNum := Freq * 1048576 / OplRate;
+  Block := 0;
+  while (FNum >= 1024) and (Block < 7) do
+  begin
+    FNum := FNum / 2;
+    Inc(Block);
+  end;
+  N := Min(1023, Round(FNum));
+  Chip.WriteReg(ChannelReg(V, $A0), N and $FF);
+  Chip.WriteReg(ChannelReg(V, $B0), Ord(KeyOn) shl 5 or Block shl 2 or N shr 8);
+end;
+
+function TOplSongRenderer.FindVoice: Integer;
+var
+  J, Oldest: Integer;
+begin
+  for J := 0 to OplVoices - 1 do
+    if not Voices[J].Active then Exit(J);
+  Oldest := 0;
+  for J := 1 to OplVoices - 1 do
+    if Voices[J].Age < Voices[Oldest].Age then Oldest := J;
+  Result := Oldest;
+end;
+
+procedure TOplSongRenderer.StartVoice(const Channel, Note, Velocity: Integer; const Params: TVoiceParams;
+  const PlayNote: Double);
+var
+  V: Integer;
+begin
+  V := FindVoice;
+  if Voices[V].Active then
+    SetFrequency(V, false);
+  Voices[V].Active := true;
+  Voices[V].Channel := Channel;
+  Voices[V].Note := Note;
+  Voices[V].Velocity := Velocity;
+  Voices[V].Params := Params;
+  Voices[V].PlayNote := PlayNote;
+  Voices[V].Age := Age; Inc(Age);
+  WriteOperator(V, 0, Params.Modulator, Params.Modulator.Level);
+  WriteOperator(V, 1, Params.Carrier, Params.Carrier.Level);
+  { Feedback, connection; bits 4 and 5 send the channel to both outputs. }
+  Chip.WriteReg(ChannelReg(V, $C0), $30 or Params.Feedback shl 1 or Ord(Params.Additive));
+  SetVolume(V);
+  SetFrequency(V, true);
+end;
+
+procedure TOplSongRenderer.NoteOn(const Channel, Note, Velocity: Integer);
+var
+  Inst: Integer;
+  PlayNote: Double;
+  I2: TInstrument;
+begin
+  if Channel = 9 then
+  begin
+    Inst := 128 + Note - 35;
+    if (Inst < 128) or (Inst > 174) then Exit;
+  end else
+    Inst := Clamped(Channels[Channel].Prog, 0, 127);
+  I2 := Instruments[Inst];
+  if I2.FixedPitch then PlayNote := I2.FixedNote else PlayNote := Note;
+  StartVoice(Channel, Note, Velocity, I2.Voices[0], PlayNote + I2.Voices[0].NoteOffset);
+  if I2.DoubleVoice then
+    StartVoice(Channel, Note, Velocity, I2.Voices[1], PlayNote + I2.Voices[1].NoteOffset + (I2.FineTuning - 128) / 64);
+end;
+
+procedure TOplSongRenderer.NoteOff(const Channel, Note: Integer);
+var
+  J: Integer;
+begin
+  for J := 0 to OplVoices - 1 do
+    if Voices[J].Active and (Voices[J].Channel = Channel) and (Voices[J].Note = Note) then
+    begin
+      SetFrequency(J, false);
+      Voices[J].Active := false;
+    end;
+end;
+
+procedure TOplSongRenderer.HandleEvent(const Ev: TMusicEvent);
+var
+  J: Integer;
+begin
+  case Ev.Kind of
+    ekNoteOn: NoteOn(Ev.Channel, Ev.Data1, Ev.Data2);
+    ekNoteOff: NoteOff(Ev.Channel, Ev.Data1);
+    ekProgram: Channels[Ev.Channel].Prog := Ev.Data1;
+    ekVolume, ekExpression:
+      begin
+        if Ev.Kind = ekVolume then
+          Channels[Ev.Channel].Volume := Ev.Data1
+        else
+          Channels[Ev.Channel].Expression := Ev.Data1;
+        for J := 0 to OplVoices - 1 do
+          if Voices[J].Active and (Voices[J].Channel = Ev.Channel) then SetVolume(J);
+      end;
+    ekPitchBend:
+      begin
+        Channels[Ev.Channel].PitchBend := (Ev.Data1 - 8192) / 8192 * 2;
+        for J := 0 to OplVoices - 1 do
+          if Voices[J].Active and (Voices[J].Channel = Ev.Channel) then SetFrequency(J, true);
+      end;
+    ekAllNotesOff:
+      for J := 0 to OplVoices - 1 do
+        if Voices[J].Active and (Voices[J].Channel = Ev.Channel) then
+        begin
+          SetFrequency(J, false);
+          Voices[J].Active := false;
+        end;
+  end;
+end;
+
+procedure TOplSongRenderer.ResetSynth;
+var
+  V: Integer;
+begin
+  FreeAndNil(Chip);
+  Chip := TOpl3Chip.Create(SampleRate);
+  SetLength(Buffer, 2 * 2048);
+  Chip.WriteReg($105, 1);  { OPL3 mode: 18 channels, 8 waveforms }
+  Chip.WriteReg($104, 0);  { no four-operator channels }
+  Chip.WriteReg($01, $20); { waveform select }
+  Chip.WriteReg($BD, 0);   { no rhythm mode, shallow vibrato and tremolo }
+  for V := 0 to OplVoices - 1 do
+  begin
+    Voices[V] := Default(TOplVoice);
+    Chip.WriteReg(ChannelReg(V, $B0), 0);
+    Chip.WriteReg(ChannelReg(V, $C0), $30);
+    Chip.WriteReg(SlotReg(V, 0, $40), $3F);
+    Chip.WriteReg(SlotReg(V, 1, $40), $3F);
+  end;
+  Age := 0;
+end;
+
+procedure TOplSongRenderer.Render(const Last: Integer);
+var
+  N, I: Integer;
+  X: Single;
+begin
+  while SampleIndex < Last do
+  begin
+    while (NextEvent < Events.Count) and (Events[NextEvent].Time * SampleRate <= SampleIndex) do
+    begin
+      HandleEvent(Events[NextEvent]);
+      Inc(NextEvent);
+    end;
+    { Up to the next event, in buffer-sized pieces. }
+    N := Last - SampleIndex;
+    if NextEvent < Events.Count then
+      N := Min(N, Ceil(Events[NextEvent].Time * SampleRate) - SampleIndex);
+    N := Min(Max(N, 1), Length(Buffer) div 2);
+    Chip.Generate(@Buffer[0], N);
+    for I := 0 to N - 1 do
+    begin
+      X := Buffer[2 * I] / 32768;
+      Float[SampleIndex + I] := X;
+      if Abs(X) > Peak then Peak := Abs(X);
+    end;
+    Inc(SampleIndex, N);
+  end;
+end;
+
 function RenderDoomSong(const Wad: TDoomWad; const SongData: PByte; const SongSize: Integer): TMemoryStream;
 var
   R: TSongRenderer;
 begin
   Result := nil;
-  R := TSongRenderer.Create;
+  R := NewSongRenderer;
   try
     if not R.Init(Wad, SongData, SongSize) then Exit;
     R.Step(MaxInt);
@@ -1032,6 +1374,10 @@ begin
   FReady := {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TMemoryStream>.Create([doOwnsValues]);
   FQueue := TStringList.Create;
   RegisterUrlProtocol('doommus', {$ifdef FPC}@{$endif} ReadMusic, nil);
+  if ForceFmSynth then
+    WritelnLog('Music', 'Built-in FM synthesizer forced (--fm-synth)')
+  else
+    WritelnLog('Music', Opl3Status);
 end;
 
 destructor TDoomMusic.Destroy;
@@ -1096,7 +1442,7 @@ begin
     if FReady.ContainsKey(Name) then Continue;
     Lump := FWad.FindLump(Name);
     if Lump < 0 then Continue;
-    R := TSongRenderer.Create;
+    R := NewSongRenderer;
     if not R.Init(FWad, FWad.LumpPointer(Lump), FWad.LumpSize(Lump)) then
     begin
       WritelnWarning('Music', 'Lump %s is not a MUS/MIDI song', [Name]);
@@ -1119,8 +1465,8 @@ begin
   R := FRenderer as TSongRenderer;
   Name := FRendering;
   Wav := R.MakeWav;
-  WritelnLog('Music', 'Rendered %s with the FM synthesizer: %.1f s of audio in %d ms (in slices), peak %.2f', [
-    Name, R.Seconds, Round(FRenderTime * 1000), R.SongPeak * 0.89 / 5.5]);
+  WritelnLog('Music', 'Rendered %s with %s: %.1f s of audio in %d ms (in slices), peak %.2f', [
+    Name, R.SynthName, R.Seconds, Round(FRenderTime * 1000), R.SongPeak * R.OutputGain]);
   FreeAndNil(FRenderer);
   FRendering := '';
   FReady.AddOrSetValue(Name, Wav);

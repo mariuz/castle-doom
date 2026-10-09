@@ -39,7 +39,7 @@ is mapped onto a Castle Game Engine feature.
 | Shooting | Doom's autoaim (`P_AimLineAttack`) and line attacks traced in Doom units against linedefs and thing boxes |
 | Doors, lifts, floors, ceilings, stairs, crushers | sector height changes regenerate the affected `TCastleScene` coordinates in place |
 | Sounds (`DS*` DMX lumps) | converted to WAV on the fly via `doomsfx:/DSPISTOL` URL protocol, positional audio with `TCastleSoundSource` |
-| Music (`D_*` MUS or MIDI lumps + `GENMIDI` OPL patches) | a small OPL2-style FM synthesizer in `DoomMusic` renders the song to WAV (`doommus:/D_E1M1.wav`), looped on `SoundEngine.LoopingChannel[0]` |
+| Music (`D_*` MUS or MIDI lumps + `GENMIDI` OPL patches) | `DoomMusic` programs Nuked OPL3 (a shared library loaded by `DoomOpl3`; a built-in FM model otherwise) with the GENMIDI registers and renders the song to WAV (`doommus:/D_E1M1.wav`), looped on `SoundEngine.LoopingChannel[0]` |
 | Status bar | `STBAR` + digit patches composed into one image shown by a pixel-perfect `TCastleImageControl` |
 | Weapon sprites, flashes, screen flashes, messages | `TCastleImageControl`, `TCastleRectangleControl`, `TCastleLabel` |
 | Title / intermission | `TCastleView`s |
@@ -100,15 +100,16 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
   `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`) and glBSP GL nodes (V1, V2, V3, V5, also from
   a `.gwa` file), so maps built with ZDBSP or glBSP load too.
-- Music: MUS and MIDI lumps played through an FM synthesizer driven by the WAD's GENMIDI
-  instrument bank (the AdLib / Sound Blaster sound of the original), title, level and
-  intermission tracks.
+- Music: MUS and MIDI lumps played on an emulated OPL3 (Nuked OPL3, loaded as a shared
+  library packaged with the game) driven by the WAD's GENMIDI instrument bank, the AdLib /
+  Sound Blaster sound of the original; a built-in FM model plays when the library is
+  missing and in the browser. Title, level and intermission tracks.
 
 ## Not (yet) done
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no UDMF maps,
 DeHackEd patches change numbers (thing stats, ammo, limits, par times) but not frames or
-code pointers, the music synth approximates the OPL2.
+code pointers, the browser's music is the approximate FM model (no OPL3 emulator there).
 
 ## Build and run
 
@@ -168,7 +169,8 @@ code/doomthings.pas     thing type table (info.c reduced)
 code/doomactors.pas     sprite billboards with frame animation
 code/doomworld.pas      game logic: movers, specials, pickups, AI, weapons
 code/doomsound.pas      DMX -> WAV, doomsfx: protocol
-code/doommusic.pas      MUS/MIDI parsing, GENMIDI FM synthesizer, doommus: protocol
+code/doommusic.pas      MUS/MIDI parsing, GENMIDI -> OPL3 registers or the FM model, doommus: protocol
+code/doomopl3.pas       Nuked OPL3 loaded as a shared library (data/lib)
 code/doomhud.pas        status bar composition
 code/doomautomap.pas    automap (DrawPrimitive2D)
 code/doomfont.pas       STCFN text
@@ -183,3 +185,8 @@ code/gameviewplay.pas   viewport, navigation, HUD, input
 
 Freedoom is Copyright (c) 2001-2024 Contributors to the Freedoom project, BSD licence
 (see `data/wads/COPYING.txt`). Castle Game Engine is LGPL with static linking exception.
+The music's OPL3 emulator is [Nuked OPL3](https://github.com/nukeykt/Nuked-OPL3) by
+Nuke.YKT, LGPL 2.1 or later: it is not part of this repository but built by
+`tools/build_nuked_opl3.sh` into `data/lib/` (CI does this for the packages, with the
+licence text next to it) as a shared library the game loads at runtime, so you can
+replace it with your own build, or delete it to get the built-in FM synthesizer.
