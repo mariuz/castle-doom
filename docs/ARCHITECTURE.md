@@ -354,12 +354,9 @@ nearest-filtered texture nodes with those URLs. `PaletteMapped := false`
 the `doom_light` attribute; each `TSpriteBatch` scene has one `SpriteEffect`
 whose `doom_sprite` uniform holds the scene's light group and kind (normal,
 full bright, or fuzz, which leaves the spectre's black alone), and
-`TSpriteBatch.Attach` sets it on each quad's `Appearance.effects`. It is on
-the appearance and not in the root because a group effect gives every shape
-its own `State.Effects` list, which CGE's dynamic batching compares by
-pointer, so nothing would merge; appearance effects are not compared and the
-merged shape takes the first quad's appearance, which is right because all
-quads of a batch scene share one light.
+`TSpriteGroup.ShapeFor` sets it on each shape's `Appearance.effects`
+(a group effect in the root would do as well now that the quads are merged
+by the game itself).
 
 Uniforms shared by all effects (`doom_extra_light`, `doom_fixed_colormap`,
 `doom_diminish`) live on every effect node; `DoomLightingInstance` keeps a
@@ -394,26 +391,34 @@ hangs from the ceiling or floats, idle/move/attack/pain/death frame letters,
 health, speed, pain chance, attack kind, damage dice, pickup kind and sounds.
 `PickupMessage` has the original messages.
 
-A `TDoomActor` is a `TCastleTransform` that owns one textured quad (a
-`TTransformNode` with a `TShapeNode`; its `TTexturePropertiesNode` has
-`GuiTexture`: no power-of-two resize and no mipmaps, nearest filtering;
-resizing hundreds of odd-sized sprites on the CPU made the web build crawl).
-The quad is not drawn by the actor's own scene: it lives in a `TSpriteBatch`
-scene, one per light group (sector light div 16, what the shader rounds to)
-and kind (normal, full bright, fuzz), so that CGE's dynamic batching
-(`Viewport.DynamicBatching`) can merge the quads with the same texture into
-one draw call (E1M1 at the door: 104 sprite draw calls and scenes before,
-73 draw calls in 9 scenes after; the batcher merges at most 8 texture
-groups per pass). `TDoomActor.SetLight` moves the node between the batch
-scenes (`TSpriteBatch.Attach` / `Detach`; `Attach` calls the scene's
-`BeforeNodesFree` first because CGE's `ChangedAll` leaves its
+A `TDoomActor` is a `TCastleTransform`; its quad is not drawn by a scene
+of its own but by a `TSpriteBatch`: one `TCastleScene` per light group
+(sector light div 16, what the shader rounds to) and kind (normal, full
+bright, fuzz), and in it one `TSpriteShape` per sprite texture holding the
+quads of every thing showing that texture (four vertices and six indices a
+quad; the `TTexturePropertiesNode` has `GuiTexture`: no power-of-two resize
+and no mipmaps, nearest filtering, since resizing hundreds of odd-sized
+sprites on the CPU made the web build crawl). So a draw call is a texture in
+a light: E1M1 at the door draws 35 sprite draw calls in 9 scenes instead of
+104 scenes of one quad each. The shapes persist: `UpdateMembership` moves a
+thing's quad between shapes when its frame, light group or visibility
+changes (the last quad of a shape takes the freed slot), only a texture new
+to a light group adds a shape to the scene (`ShapeFor`, a `ChangedAll`;
+it calls `BeforeNodesFree` first because CGE's `ChangedAll` leaves its
 `TransformationDirty` list pointing at the freed shape tree, which crashed
-the next frame). The actor's own child `TCastleScene` holds an invisible
-copy of the quad for collisions and picking (`FScene.Visible := false`),
-and `UpdateTransform` turns the drawn quad toward the view angle the world
-sets each tic (`TSpriteBatch.ViewAngle`; a `TCastleBillboard` would need
-one scene per thing). The quad's size and position come from the patch's
-width, height and offsets (Doom's origin is at the feet). `UpdateRotation` picks one of the 8 rotation sprites with Doom's
+the next frame), and `TSpriteBatch.Flush` sends the frame's coordinate and
+index changes once per world update. The actor's own child `TCastleScene`
+holds an invisible copy of the quad for collisions and picking
+(`FScene.Visible := false`, a `TCastleBillboard` turns it); the drawn quad
+is written in world space each tic (`WriteCorners`, skipped when nothing
+moved) along `TSpriteBatch.Right`, the horizontal axis for the view angle
+the world sets each tic, like Doom's screen-aligned sprites. CGE's dynamic
+batching was tried first and dropped: it merges 8 textures a pass, and its
+pool shapes switching appearances every frame relinked the per-scene
+sprite shaders continuously (the program cache frees a program at its last
+reference), 40 ms a frame in the browser. The quad's size and position
+come from the patch's width, height and offsets (Doom's origin is at the
+feet). `UpdateRotation` picks one of the 8 rotation sprites with Doom's
 formula `(angle_to_thing - thing_angle + 202.5°) / 45°`, and `ApplySprite`
 sets the quad's coordinates (mirrored if needed) and the texture node's URL.
 Spectres (`Fuzz`, Doom's `MF_SHADOW`) get `AlphaMode = amBlend` and the
@@ -1075,7 +1080,7 @@ Where each engine feature is used, as a map for learning the engine:
 | `TCastleScene.Load(RootNode, true)`, `PreciseCollisions`, `Collides`, `Pickable`, `Visible` | DoomGeometry, DoomActors | scenes and collision flags |
 | `SetPoint`/`SetColor` on coordinate/colour nodes | DoomGeometry | updating moving sectors in place |
 | `TCastleTransform`, `Translation`, `AddBehavior`, `FindBehavior` | DoomActors, DoomSound | things and sound emitters |
-| `TCastleScene.BeforeNodesFree`, `TX3DNode.UnregisterScene`, `KeepExistingBegin` / `FreeIfUnused`, `TAppearanceNode.SetEffects` | DoomActors | moving a thing's quad between the batch scenes |
+| `TCastleScene.BeforeNodesFree`, `KeepExistingBegin` / `FreeIfUnused`, `TAppearanceNode.SetEffects`, `TMFVec3f.Items` / `TMFInt32.Items` + `Changed` | DoomActors | the merged sprite shapes |
 | `TCastleViewport`, `Items`, `Camera`, `DynamicBatching` | GameViewPlay | rendering |
 | `TCastleCamera.SetView`, `Direction`, `Perspective.FieldOfView/FieldOfViewAxis`, `ProjectionNear` | GameViewPlay | the player's eye |
 | `TEffectNode`, `TEffectPartNode` (`PLUG_vertex_eye_space`, `PLUG_fragment_modify`), custom `TSFFloat` / `TSFVec2f` uniform fields, `TFloatVertexAttributeNode`, `AddDestructionNotification` | DoomLighting, DoomGeometry, DoomActors | light diminishing |

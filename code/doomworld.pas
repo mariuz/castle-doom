@@ -1255,6 +1255,7 @@ begin
   T := Timer;
   FGeometry.Update(SecondsPassed, CameraPos);
   FGeometry.FlushDirty;
+  FSpriteBatch.Flush;
   FPerf[7] := FPerf[7] + TimerSeconds(Timer, T);
   Inc(FPerfFrames);
   FPerfClock := FPerfClock + SecondsPassed;

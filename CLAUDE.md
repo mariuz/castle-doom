@@ -187,12 +187,15 @@ per-frame costs, CGE's FPS (`only render` = without display waits) and the
 last frame's render statistics (shapes, scenes, draw calls). `NOSPRITES`
 and `NOMAP` toggle the things' batch scenes / the map geometry to see what
 each costs, `PALMAP` the palette lookup. E1M1 at `G:480:712,A:0` draws
-about 224 shapes: 151 map, 73 sprites (the 104 visible quads merged by
-CGE's dynamic batching, 8 texture groups per pass; before the
-`TSpriteBatch` it was 104 in 104 scenes). `SPRITESTATS` logs how many
-sprites are shown and how many distinct texture|light group|kind
-combinations they have (what a complete merge would give: 208 and 86 on
-E1M1). In the browser the same runs through the
+about 186 shapes: 151 map, 35 sprites (the 104 visible quads merged per
+texture and light group by `TSpriteBatch`; before it they were 104 in 104
+scenes). `SPRITESTATS` logs how many sprites are shown and how many
+distinct texture|light group|kind combinations they have (the sprite
+draw calls if all were in view: 208 and 87 on E1M1).
+`CASTLE_DOOM_LOG_SHADERS=1` logs every shader compile and link; during
+play the count must stay at the level's initial ~70 (it grew by 7 a
+second with CGE's dynamic batching, which is why the sprites are merged
+by the game). In the browser the same runs through the
 page URL: `play/?map=E1M1&demo=G:480:712,A:0,W:30,PERF` (`S` only logs,
 `Q` ends the demo; `warp=` and `skill=` work too). A headless Chromium with
 SwiftShader (Playwright, `--use-angle=swiftshader`) loads the live page in
@@ -296,9 +299,13 @@ autotest only checks the library loads.
   list, so a transform changed earlier in the same frame leaves a dangling
   pointer and the next `Update` dies with a corrupt depth (`EOutOfMemory`
   from `FinishTransformationChanges`). Call `Scene.BeforeNodesFree` before
-  adding (`TSpriteBatch.Attach`). CGE's dynamic batching never merges shapes
-  under a group `Effect` node (`State.Effects` is compared by pointer) and
-  keeps only 8 open texture groups per pass (`MergeSlots`).
+  adding (`TSpriteGroup.ShapeFor`). CGE's dynamic batching never merges
+  shapes under a group `Effect` node (`State.Effects` is compared by
+  pointer), keeps only 8 open texture groups per pass (`MergeSlots`), and
+  its pool shapes, switching appearances every frame, make the renderer
+  drop and relink shader programs (the cache frees a program at its last
+  reference; effect nodes are hashed by pointer) -- unusable with
+  per-shape effects on the web.
 - **The walk navigation can drop the player through the floor** on a slow
   frame (CI's `icon-of-sin` once logged a feet Z of -1e23 and NaN
   transforms: a long frame stepped the fall through MAP30's floor and

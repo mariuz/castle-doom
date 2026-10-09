@@ -4,13 +4,17 @@
 
   The quads are not rendered one scene per thing: TSpriteBatch keeps one
   TCastleScene per light group and kind (the doom_sprite uniform of the
-  DoomLighting effect is per scene), each thing's quad is a TTransformNode
-  in the scene of its light, and CGE's dynamic batching merges the quads
-  with the same texture into one draw call. One scene per thing was a draw
-  call and a scene visit per thing every frame (104 of 255 draw calls on
-  E1M1's start); a custom vertex attribute for the light would have stopped
-  the batching. Each thing keeps a small invisible scene of its own for the
-  player's collisions. }
+  DoomLighting effect is per scene) and, in it, one shape per sprite
+  texture holding the quads of every thing showing that texture (four
+  vertices and six indices each, written in world space every tic). So a
+  draw call is a texture in a light, whatever the number of things, and
+  the shapes live on: a thing changing frame, light or visibility only
+  edits index and vertex lists. One scene per thing was a draw call and a
+  scene visit per thing every frame (104 of 255 draw calls on E1M1's
+  start); CGE's dynamic batching merged only 8 textures a pass and its
+  pool shapes relinked the sprite shaders several times a second (40 ms a
+  frame in the browser). Each thing keeps a small invisible scene of its
+  own for the player's collisions. }
 unit DoomActors;
 
 interface
@@ -24,28 +28,28 @@ type
 
   TSpriteBatch = class;
   TSpriteGroup = class;
+  TSpriteShape = class;
 
   TDoomActor = class(TCastleTransform)
   strict private
     FGraphics: TDoomGraphics;
     FBatch: TSpriteBatch;
-    { The invisible quad the player collides with (its own nodes: one
-      node cannot be in two scenes). }
+    { The invisible quad the player collides with. }
     FScene: TCastleScene;
     FCollCoord: TCoordinateNode;
-    { The drawn quad, in a TSpriteBatch scene. }
-    FNode: TTransformNode;
-    FShape: TShapeNode;
+    { Where the drawn quad is: the light group's scene, the texture's
+      shape in it and the quad's slot there (-1 = not drawn). }
     FGroup: TSpriteGroup;
-    FCoord: TCoordinateNode;
-    FTexCoord: TTextureCoordinateNode;
-    FAppearance: TAppearanceNode;
-    FMaterial: TUnlitMaterialNode;
-    FTexture: TImageTextureNode;
+    FShape: TSpriteShape;
+    FSlot: Integer;
+    { The quad's corners around the feet (mirrored sprites have X0 > X1). }
+    FX0, FX1, FY0, FY1: Single;
+    { The corners last written to the shape, to skip unchanged ticks. }
+    FLast: array [0..3] of TVector3;
+    FLastValid: Boolean;
     { Light level and kind (the doom_sprite uniform of the scene the quad is in). }
     FLightValue: TVector2;
     FHidden, FShown: Boolean;
-    FYaw: Single;
     FCurrentImage: TDoomImage;
     FCurrentMirror: Boolean;
     FFrame: Char;
@@ -57,10 +61,15 @@ type
     FTicsLeft: Integer;
     procedure BuildScene;
     procedure SetShown(const Shown: Boolean);
+    { Put the quad in the shape it belongs to now (or in none). }
+    procedure UpdateMembership;
+    procedure WriteCorners;
   public
-    { Profiling: what CGE's batching merges: "texture|light group|kind"
-      ('' while the actor has no sprite image). }
+    { Profiling: the draw call the quad is part of: "texture|light group|kind"
+      ('' while the actor has no sprite image or is not drawn). }
     function RenderKey: String;
+    { TSpriteShape bookkeeping. }
+    property Slot: Integer read FSlot write FSlot;
   strict private
     procedure ApplySprite;
   public
@@ -125,7 +134,7 @@ type
     procedure AnimateTic;
     { Pick the sprite rotation for a viewer at (ViewerX, ViewerY) in Doom coords. }
     procedure UpdateRotation(const ViewerX, ViewerY: Single);
-    { Apply the position (DoomX/Y/Z) to the CGE transform. }
+    { Apply the position (DoomX/Y/Z) to the CGE transform and the drawn quad. }
     procedure UpdateTransform;
     { Sector light level -> sprite brightness. }
     procedure SetLight(const Light: Integer);
@@ -138,40 +147,65 @@ type
 
   TDoomActorList = {$ifdef FPC}specialize{$endif} TObjectList<TDoomActor>;
 
+  { The quads of one texture in one TSpriteGroup: one shape, so one draw
+    call. Slot I of a member is vertices 4 I .. 4 I + 3 and indices
+    6 I .. 6 I + 5; a removed member's slot is filled by the last one. }
+  TSpriteShape = class
+    Shape: TShapeNode;
+    Geometry: TIndexedTriangleSetNode;
+    Coord: TCoordinateNode;
+    TexCoord: TTextureCoordinateNode;
+    Members: TDoomActorList;
+    { Pending change events (TSpriteBatch.Flush sends them once a frame). }
+    CoordsDirty, IndexDirty: Boolean;
+    constructor Create(const Url: String; const Kind: Integer);
+    destructor Destroy; override;
+    procedure Add(const A: TDoomActor);
+    procedure Remove(const A: TDoomActor);
+    procedure Flush;
+  end;
+  TSpriteShapeDict = {$ifdef FPC}specialize{$endif} TDictionary<String, TSpriteShape>;
+
   { One scene of a TSpriteBatch: the things of one light group and kind. }
   TSpriteGroup = class
     Root: TX3DRootNode;
     Scene: TCastleScene;
-    { The light effect, set on every member's Appearance (an Effect node
-      in the graph would give each shape its own State.Effects list, which
-      CGE's dynamic batching compares by pointer, so nothing would merge). }
+    Kind: Integer;
+    { The light effect on every shape's Appearance. }
     Effect: TEffectNode;
+    Shapes: TSpriteShapeDict;
+    destructor Destroy; override;
+    { The shape for a texture URL, made (and added to the scene) on demand. }
+    function ShapeFor(const Url: String): TSpriteShape;
   end;
   TGroupDict = {$ifdef FPC}specialize{$endif} TDictionary<Integer, TSpriteGroup>;
 
   { The scenes the things are drawn in: one per light group (sector light
     div 16, what the shader rounds to anyway) and kind (normal, full
-    bright, fuzz), made as needed and added to the world's items. Within a
-    scene CGE's dynamic batching merges the quads with the same texture. }
+    bright, fuzz), made as needed and added to the world's items. }
   TSpriteBatch = class
   strict private
     FParent: TCastleTransform;
     FGroups: TGroupDict;
+    FViewAngle: Single;
+    FRight: TVector3;
+    procedure SetViewAngle(const Value: Single);
   public
-    { The player's view angle (Doom degrees): the quads face the camera
-      like Doom's screen-aligned sprites (set every tic by the world). }
-    ViewAngle: Single;
     constructor Create(const AParent: TCastleTransform);
     destructor Destroy; override;
+    { The player's view angle (Doom degrees): the quads face the camera
+      like Doom's screen-aligned sprites (set every tic by the world). }
+    property ViewAngle: Single read FViewAngle write SetViewAngle;
+    { The quads' horizontal axis in CGE coordinates for ViewAngle. }
+    property Right: TVector3 read FRight;
     { The group for a light level (0..255) and kind (DoomLight*). }
     function GroupFor(const Light, Kind: Integer): TSpriteGroup;
-    { Put a thing's quad (its transform and appearance) into a group /
-      take it out again. }
-    procedure Attach(const Group: TSpriteGroup; const Node: TTransformNode;
-      const Appearance: TAppearanceNode);
-    procedure Detach(const Group: TSpriteGroup; const Node: TTransformNode;
-      const Appearance: TAppearanceNode);
+    { Send the frame's vertex and index changes to the scenes (the world
+      calls it once per Update, after the tics). }
+    procedure Flush;
     function SceneCount: Integer;
+    { Shapes with at least one quad (the sprites' draw calls). }
+    function ShapeCount: Integer;
     { Show / hide all the drawn quads (profiling). }
     procedure SetVisible(const Value: Boolean);
   end;
@@ -181,6 +215,157 @@ implementation
 uses Math, CastleUtils, CastleLog, CastleRenderOptions, CastleSceneCore,
   DoomGeometry, DoomLighting;
 
+{ TSpriteShape --------------------------------------------------------------- }
+
+constructor TSpriteShape.Create(const Url: String; const Kind: Integer);
+var
+  Props: TTexturePropertiesNode;
+  Texture: TImageTextureNode;
+  Material: TUnlitMaterialNode;
+  Appearance: TAppearanceNode;
+begin
+  inherited Create;
+  Members := TDoomActorList.Create(false);
+  Coord := TCoordinateNode.Create;
+  TexCoord := TTextureCoordinateNode.Create;
+  Geometry := TIndexedTriangleSetNode.Create;
+  Geometry.Coord := Coord;
+  Geometry.TexCoord := TexCoord;
+  Geometry.Solid := false;
+  Material := TUnlitMaterialNode.Create;
+  Appearance := TAppearanceNode.Create;
+  Appearance.Material := Material;
+  Appearance.AlphaMode := amMask;
+  if Kind = DoomLightFuzz then
+  begin
+    { Blended: the DoomLighting shader turns the sprite into black specks
+      of Doom's fuzzoffset pattern, which the background shows through. }
+    Appearance.AlphaMode := amBlend;
+    Material.EmissiveColor := Vector3(0, 0, 0);
+  end;
+  Texture := TImageTextureNode.Create;
+  Texture.SetUrl([Url]);
+  Texture.RepeatS := false;
+  Texture.RepeatT := false;
+  { Like CGE's own sprite sheets: GuiTexture means no power-of-two resize and
+    no mipmaps. Sprites have odd sizes (36x48...) and there are hundreds per
+    level; resizing and mipmapping each one on the CPU kept the web build at
+    about 1 FPS while a level's sprites were first shown. Nearest filtering
+    is also the crisp Doom look. }
+  Props := TTexturePropertiesNode.Create;
+  Props.GuiTexture := true;
+  Props.MagnificationFilter := magNearest;
+  Props.MinificationFilter := minNearest;
+  Props.BoundaryModeS := bmClampToEdge;
+  Props.BoundaryModeT := bmClampToEdge;
+  Texture.TextureProperties := Props;
+  Appearance.Texture := Texture;
+  Shape := TShapeNode.Create;
+  Shape.Appearance := Appearance;
+  Shape.Geometry := Geometry;
+  { Empty until the first quad. }
+  Shape.Render := false;
+end;
+
+destructor TSpriteShape.Destroy;
+begin
+  FreeAndNil(Members);
+  inherited;
+end;
+
+procedure TSpriteShape.Add(const A: TDoomActor);
+var
+  Base: Integer;
+begin
+  A.Slot := Members.Count;
+  Members.Add(A);
+  Base := A.Slot * 4;
+  Coord.FdPoint.Items.Count := Base + 4;
+  TexCoord.FdPoint.Items.Count := Base + 4;
+  TexCoord.FdPoint.Items[Base] := Vector2(0, 0);
+  TexCoord.FdPoint.Items[Base + 1] := Vector2(1, 0);
+  TexCoord.FdPoint.Items[Base + 2] := Vector2(1, 1);
+  TexCoord.FdPoint.Items[Base + 3] := Vector2(0, 1);
+  Geometry.FdIndex.Items.AddRange([Base, Base + 1, Base + 2, Base, Base + 2, Base + 3]);
+  IndexDirty := true;
+  CoordsDirty := true;
+end;
+
+procedure TSpriteShape.Remove(const A: TDoomActor);
+var
+  I, Last, J: Integer;
+  B: TDoomActor;
+begin
+  I := A.Slot;
+  Last := Members.Count - 1;
+  if (I < 0) or (I > Last) or (Members[I] <> A) then Exit;
+  if I <> Last then
+  begin
+    { The last quad takes the freed slot (its texture coordinates are the
+      same in every slot, the indices refer to the slot). }
+    B := Members[Last];
+    Members[I] := B;
+    B.Slot := I;
+    for J := 0 to 3 do
+      Coord.FdPoint.Items[I * 4 + J] := Coord.FdPoint.Items[Last * 4 + J];
+  end;
+  Members.Delete(Last);
+  A.Slot := -1;
+  Coord.FdPoint.Items.Count := Last * 4;
+  TexCoord.FdPoint.Items.Count := Last * 4;
+  Geometry.FdIndex.Items.Count := Last * 6;
+  IndexDirty := true;
+  CoordsDirty := true;
+end;
+
+procedure TSpriteShape.Flush;
+begin
+  if IndexDirty then
+  begin
+    { A different vertex count: the whole geometry again. }
+    Geometry.FdIndex.Changed;
+    TexCoord.FdPoint.Changed;
+    Coord.FdPoint.Changed;
+    if Shape.Render <> (Members.Count > 0) then
+      Shape.Render := Members.Count > 0;
+  end else
+  if CoordsDirty then
+    Coord.FdPoint.Changed;
+  IndexDirty := false;
+  CoordsDirty := false;
+end;
+
+{ TSpriteGroup --------------------------------------------------------------- }
+
+destructor TSpriteGroup.Destroy;
+var
+  S: TSpriteShape;
+begin
+  if Shapes <> nil then
+    for S in Shapes.Values do
+      S.Free;
+  FreeAndNil(Shapes);
+  inherited;
+end;
+
+function TSpriteGroup.ShapeFor(const Url: String): TSpriteShape;
+begin
+  if not Shapes.TryGetValue(Url, Result) then
+  begin
+    Result := TSpriteShape.Create(Url, Kind);
+    Result.Shape.Appearance.SetEffects([Effect]);
+    Shapes.Add(Url, Result);
+    { Adding children rebuilds the scene's shape tree (ChangedAll), but CGE
+      (snapshot, castlescenecore.pas ChangedAll -> BeforeNodesFree(true))
+      keeps its list of transforms changed since the last frame
+      (TransformationDirty) pointing at the freed tree, which crashed the
+      next Update once; BeforeNodesFree without the flag clears it. This
+      happens once per texture in a light group, not per thing. }
+    Scene.BeforeNodesFree;
+    Root.AddChildren(Result.Shape);
+  end;
+end;
+
 { TSpriteBatch ------------------------------------------------------------- }
 
 constructor TSpriteBatch.Create(const AParent: TCastleTransform);
@@ -188,6 +373,7 @@ begin
   inherited Create;
   FParent := AParent;
   FGroups := TGroupDict.Create;
+  FRight := Vector3(1, 0, 0);
 end;
 
 destructor TSpriteBatch.Destroy;
@@ -207,6 +393,18 @@ begin
   inherited;
 end;
 
+procedure TSpriteBatch.SetViewAngle(const Value: Single);
+var
+  A: Single;
+begin
+  FViewAngle := Value;
+  { Face the camera like Doom's screen-aligned sprites: the quad's width
+    runs along (sin A, -cos A) in Doom coordinates, which is (sin A, 0,
+    cos A) in CGE's (Z = -Doom Y). }
+  A := DegToRad(Value);
+  FRight := Vector3(Sin(A), 0, Cos(A));
+end;
+
 function TSpriteBatch.GroupFor(const Light, Kind: Integer): TSpriteGroup;
 var
   Key: Integer;
@@ -216,6 +414,8 @@ begin
   if not FGroups.TryGetValue(Key, Result) then
   begin
     Result := TSpriteGroup.Create;
+    Result.Kind := Kind;
+    Result.Shapes := TSpriteShapeDict.Create;
     Result.Effect := DoomLightingInstance.SpriteEffect(LightField);
     Result.Effect.KeepExistingBegin;
     LightField.Value := Vector2((Light div 16) * 16, Kind);
@@ -231,34 +431,31 @@ begin
   end;
 end;
 
-procedure TSpriteBatch.Attach(const Group: TSpriteGroup; const Node: TTransformNode;
-  const Appearance: TAppearanceNode);
+procedure TSpriteBatch.Flush;
+var
+  Group: TSpriteGroup;
+  S: TSpriteShape;
 begin
-  Appearance.SetEffects([Group.Effect]);
-  { Adding children rebuilds the scene's shape tree (ChangedAll), but CGE
-    (snapshot, castlescenecore.pas ChangedAll -> BeforeNodesFree(true))
-    keeps its list of transforms changed since the last frame
-    (TransformationDirty) pointing at the freed tree: the next Update then
-    crashed with a corrupt depth (EOutOfMemory) once a thing had moved in
-    the same frame a thing was added to its scene. BeforeNodesFree without
-    the flag clears that list; the rebuild recomputes the transforms anyway. }
-  Group.Scene.BeforeNodesFree;
-  Group.Root.AddChildren(Node);
-end;
-
-procedure TSpriteBatch.Detach(const Group: TSpriteGroup; const Node: TTransformNode;
-  const Appearance: TAppearanceNode);
-begin
-  Group.Root.RemoveChildren(Node);
-  Appearance.SetEffects([]);
-  { CGE keeps Node.Scene after a removal and warns when another scene
-    picks the node up; forget the old scene for the whole subtree. }
-  Node.UnregisterScene;
+  for Group in FGroups.Values do
+    for S in Group.Shapes.Values do
+      if S.IndexDirty or S.CoordsDirty then
+        S.Flush;
 end;
 
 function TSpriteBatch.SceneCount: Integer;
 begin
   Result := FGroups.Count;
+end;
+
+function TSpriteBatch.ShapeCount: Integer;
+var
+  Group: TSpriteGroup;
+  S: TSpriteShape;
+begin
+  Result := 0;
+  for Group in FGroups.Values do
+    for S in Group.Shapes.Values do
+      if S.Members.Count > 0 then Inc(Result);
 end;
 
 procedure TSpriteBatch.SetVisible(const Value: Boolean);
@@ -284,22 +481,16 @@ begin
   Health := Info^.Health;
   FRot := 1;
   FFrame := 'A';
+  FSlot := -1;
+  FShown := true;
   BuildScene;
   Fuzz := Info^.Num = 58;
-  if Fuzz then
-  begin
-    { Blended: the DoomLighting shader turns the sprite into black specks
-      of Doom's fuzzoffset pattern, which the background shows through. }
-    FAppearance.AlphaMode := amBlend;
-    FMaterial.EmissiveColor := Vector3(0, 0, 0);
-  end;
   Billboard := TCastleBillboard.Create(Self);
   Billboard.AxisOfRotation := Vector3(0, 1, 0);
   AddBehavior(Billboard);
   Collides := Info^.Solid;
-  { The quad joins a batch scene with the world's first SetLight (every
-    spawn calls it after setting Bright / Fuzz, and TicActors each tic);
-    joining here would rebuild two scenes' shape trees per spawn for nothing. }
+  { The quad is drawn from the world's first SetLight on (every spawn
+    calls it after setting Bright / Fuzz, and TicActors each tic). }
   { Only monsters and barrels stop bullets. }
   Pickable := (Info^.Kind = tkMonster) or (Info^.Num = 2035);
   PlaySequence(Info^.IdleFrames, Info^.IdleTics, true);
@@ -307,64 +498,20 @@ end;
 
 destructor TDoomActor.Destroy;
 begin
-  if FGroup <> nil then
-    FBatch.Detach(FGroup, FNode, FAppearance);
+  if FShape <> nil then
+    FShape.Remove(Self);
+  FShape := nil;
   FGroup := nil;
-  if FNode <> nil then
-  begin
-    FNode.KeepExistingEnd;
-    FNode.FreeIfUnused;
-    FNode := nil;
-  end;
   inherited;
 end;
 
 procedure TDoomActor.BuildScene;
 var
-  Props: TTexturePropertiesNode;
   Root: TX3DRootNode;
   Shape: TShapeNode;
   Geometry: TIndexedTriangleSetNode;
 begin
-  FCoord := TCoordinateNode.Create;
-  FCoord.SetPoint([Vector3(-1, 0, 0), Vector3(1, 0, 0), Vector3(1, 2, 0), Vector3(-1, 2, 0)]);
-  FTexCoord := TTextureCoordinateNode.Create;
-  FTexCoord.SetPoint([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]);
-  Geometry := TIndexedTriangleSetNode.Create;
-  Geometry.Coord := FCoord;
-  Geometry.TexCoord := FTexCoord;
-  Geometry.SetIndex([0, 1, 2, 0, 2, 3]);
-  Geometry.Solid := false;
-  FMaterial := TUnlitMaterialNode.Create;
-  FAppearance := TAppearanceNode.Create;
-  FAppearance.Material := FMaterial;
-  FAppearance.AlphaMode := amMask;
-  FTexture := TImageTextureNode.Create;
-  FTexture.RepeatS := false;
-  FTexture.RepeatT := false;
-  { Like CGE's own sprite sheets: GuiTexture means no power-of-two resize and
-    no mipmaps. Sprites have odd sizes (36x48...) and there are hundreds per
-    level; resizing and mipmapping each one on the CPU kept the web build at
-    about 1 FPS while a level's sprites were first shown. Nearest filtering
-    is also the crisp Doom look. }
-  Props := TTexturePropertiesNode.Create;
-  Props.GuiTexture := true;
-  Props.MagnificationFilter := magNearest;
-  Props.MinificationFilter := minNearest;
-  Props.BoundaryModeS := bmClampToEdge;
-  Props.BoundaryModeT := bmClampToEdge;
-  FTexture.TextureProperties := Props;
-  FAppearance.Texture := FTexture;
-  FShape := TShapeNode.Create;
-  FShape.Appearance := FAppearance;
-  FShape.Geometry := Geometry;
-  { The drawn quad lives in a TSpriteBatch scene (SetLight puts it there);
-    the node outlives its moves between scenes. }
-  FNode := TTransformNode.Create;
-  FNode.AddChildren(FShape);
-  FNode.KeepExistingBegin;
-
-  { The collision quad: the same corners, no texture, never drawn. }
+  { The collision quad: the sprite's corners, no texture, never drawn. }
   FCollCoord := TCoordinateNode.Create;
   FCollCoord.SetPoint([Vector3(-1, 0, 0), Vector3(1, 0, 0), Vector3(1, 2, 0), Vector3(-1, 2, 0)]);
   Geometry := TIndexedTriangleSetNode.Create;
@@ -379,17 +526,61 @@ begin
   FScene.Load(Root, true);
   FScene.Visible := false;
   Add(FScene);
-  FShown := true; { the nodes' defaults: Render and Exists }
+end;
+
+procedure TDoomActor.UpdateMembership;
+var
+  Wanted: TSpriteShape;
+begin
+  if FShown and (FCurrentImage <> nil) and (FGroup <> nil) then
+    Wanted := FGroup.ShapeFor(FCurrentImage.Url)
+  else
+    Wanted := nil;
+  if Wanted = FShape then Exit;
+  if FShape <> nil then
+    FShape.Remove(Self);
+  FShape := Wanted;
+  FLastValid := false;
+  if FShape <> nil then
+  begin
+    FShape.Add(Self);
+    WriteCorners;
+  end;
+end;
+
+procedure TDoomActor.WriteCorners;
+var
+  T, R: TVector3;
+  C: array [0..3] of TVector3;
+  I, Base: Integer;
+begin
+  if FShape = nil then Exit;
+  T := DoomToCge(DoomX, DoomY, DoomZ);
+  R := FBatch.Right;
+  C[0] := T + R * FX0 + Vector3(0, FY0, 0);
+  C[1] := T + R * FX1 + Vector3(0, FY0, 0);
+  C[2] := T + R * FX1 + Vector3(0, FY1, 0);
+  C[3] := T + R * FX0 + Vector3(0, FY1, 0);
+  if FLastValid and TVector3.PerfectlyEquals(C[0], FLast[0]) and TVector3.PerfectlyEquals(C[1], FLast[1]) and
+     TVector3.PerfectlyEquals(C[2], FLast[2]) and TVector3.PerfectlyEquals(C[3], FLast[3]) then
+    Exit;
+  Base := FSlot * 4;
+  for I := 0 to 3 do
+  begin
+    FShape.Coord.FdPoint.Items[Base + I] := C[I];
+    FLast[I] := C[I];
+  end;
+  FLastValid := true;
+  FShape.CoordsDirty := true;
 end;
 
 procedure TDoomActor.SetShown(const Shown: Boolean);
 begin
-  { ApplySprite calls this every tic for every thing; an X3D field Send
-    is a change event for the batch scene even when the value stays. }
   if FShown = Shown then Exit;
   FShown := Shown;
-  FShape.Render := Shown;
-  FScene.Exists := Shown;
+  if FScene.Exists <> Shown then
+    FScene.Exists := Shown;
+  UpdateMembership;
 end;
 
 procedure TDoomActor.HideSprite;
@@ -400,7 +591,7 @@ end;
 
 function TDoomActor.RenderKey: String;
 begin
-  if (FCurrentImage = nil) or not FShape.Render then Exit('');
+  if FShape = nil then Exit('');
   Result := Format('%s|%d|%d', [FCurrentImage.Url, Round(FLightValue.X) div 16, Round(FLightValue.Y)]);
 end;
 
@@ -408,7 +599,6 @@ procedure TDoomActor.ApplySprite;
 var
   Img: TDoomImage;
   Mirror: Boolean;
-  X0, X1, Y0, Y1: Single;
 begin
   Img := FGraphics.Sprite(SpritePrefix, FFrame, FRot, Mirror);
   if Img = nil then
@@ -422,18 +612,19 @@ begin
   FCurrentMirror := Mirror;
   { Doom sprite offsets: LeftOffset pixels from the left edge to the origin,
     TopOffset pixels from the top edge down to the origin (the feet). }
-  X0 := -Img.LeftOffset;
-  X1 := Img.Width - Img.LeftOffset;
-  Y1 := Img.TopOffset;
-  Y0 := Img.TopOffset - Img.Height;
+  FX0 := -Img.LeftOffset;
+  FX1 := Img.Width - Img.LeftOffset;
+  FY1 := Img.TopOffset;
+  FY0 := Img.TopOffset - Img.Height;
   if Mirror then
   begin
-    X0 := -X0;
-    X1 := -X1;
+    FX0 := -FX0;
+    FX1 := -FX1;
   end;
-  FCoord.SetPoint([Vector3(X0, Y0, 0), Vector3(X1, Y0, 0), Vector3(X1, Y1, 0), Vector3(X0, Y1, 0)]);
-  FCollCoord.SetPoint([Vector3(X0, Y0, 0), Vector3(X1, Y0, 0), Vector3(X1, Y1, 0), Vector3(X0, Y1, 0)]);
-  FTexture.SetUrl([Img.Url]);
+  FCollCoord.SetPoint([Vector3(FX0, FY0, 0), Vector3(FX1, FY0, 0), Vector3(FX1, FY1, 0), Vector3(FX0, FY1, 0)]);
+  FLastValid := false;
+  UpdateMembership;
+  WriteCorners;
 end;
 
 procedure TDoomActor.PlaySequence(const Frames: String; const TicsPerFrame: Integer; const Loop: Boolean);
@@ -523,24 +714,9 @@ begin
 end;
 
 procedure TDoomActor.UpdateTransform;
-var
-  T: TVector3;
-  A, Yaw: Single;
 begin
-  T := DoomToCge(DoomX, DoomY, DoomZ);
-  Translation := T;
-  if not TVector3.PerfectlyEquals(FNode.Translation, T) then
-    FNode.Translation := T;
-  { Face the camera like Doom's screen-aligned sprites: the quad's +Z
-    (local) turned against the view direction (cos A, sin A) in Doom
-    coordinates, (cos A, 0, -sin A) in CGE's. }
-  A := DegToRad(FBatch.ViewAngle);
-  Yaw := ArcTan2(-Cos(A), Sin(A));
-  if Abs(Yaw - FYaw) > 0.0005 then
-  begin
-    FYaw := Yaw;
-    FNode.Rotation := Vector4(0, 1, 0, Yaw);
-  end;
+  Translation := DoomToCge(DoomX, DoomY, DoomZ);
+  WriteCorners;
 end;
 
 procedure TDoomActor.SetLight(const Light: Integer);
@@ -563,10 +739,8 @@ begin
   NewGroup := FBatch.GroupFor(Light, Round(V.Y));
   if NewGroup <> FGroup then
   begin
-    if FGroup <> nil then
-      FBatch.Detach(FGroup, FNode, FAppearance);
-    FBatch.Attach(NewGroup, FNode, FAppearance);
     FGroup := NewGroup;
+    UpdateMembership;
   end;
 end;
 

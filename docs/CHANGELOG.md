@@ -7,8 +7,9 @@
   packaged by CI) is programmed with the WAD's GENMIDI instruments like
   Doom's own sound driver did; the built-in FM model remains the fallback
   (`--fm-synth` forces it) and the browser's synthesizer.
-- Things are drawn in a few batched scenes (one per light level and kind)
-  instead of one scene each, for fewer draw calls, mainly in the browser.
+- Things are drawn in a few batched scenes (one per light level and kind,
+  one draw call per sprite texture in each) instead of one scene each: a
+  third of the draw calls for the sprites, mainly for the browser.
 - Gamepad support in the desktop versions (Windows, Linux): sticks to
   move and look, right trigger to fire, A to use, bumpers for weapons,
   and the D-pad, A and B in the menus.
