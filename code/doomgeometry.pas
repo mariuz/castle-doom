@@ -490,8 +490,13 @@ begin
   SetLength(Pts, N);
   SetLength(Tex, N);
 
-  { Floor: polygon is counter-clockwise in Doom (X, Y) = facing up. }
-  Img := FOwner.Graphics.Flat(Map.Sectors[Sec].FloorTex);
+  { Floor: polygon is counter-clockwise in Doom (X, Y) = facing up. A sky
+    floor is not drawn either (r_plane draws any F_SKY1 plane as sky: the
+    sky pits); BuildCollisionScene keeps it walkable. }
+  if Map.HasSkyFloor(Sec) then
+    Img := nil
+  else
+    Img := FOwner.Graphics.Flat(Map.Sectors[Sec].FloorTex);
   if Img <> nil then
   begin
     Z := Map.Sectors[Sec].FloorHeight;
@@ -708,11 +713,12 @@ var
   CoordNode: TCoordinateNode;
   Geometry: TIndexedTriangleSetNode;
   Shape: TShapeNode;
-  I, Base: Integer;
+  I, J, Base: Integer;
   L: TDoomLinedef;
   VA, VB: TDoomVertex;
   ZB, ZT: Single;
   F, B: Integer;
+  Sub: TDoomSubsector;
 begin
   { Invisible walls for two-sided lines flagged "impassable" (fences, ledges). }
   Coords := TVector3List.Create;
@@ -735,6 +741,20 @@ begin
       Coords.Add(DoomToCge(VA.X, VA.Y, ZT));
       Indices.Add(Base); Indices.Add(Base + 1); Indices.Add(Base + 2);
       Indices.Add(Base); Indices.Add(Base + 2); Indices.Add(Base + 3);
+    end;
+    { Sky floors are not drawn, so they collide here (at the height they
+      have when the level starts). }
+    for I := 0 to High(FMap.Subsectors) do
+    begin
+      Sub := FMap.Subsectors[I];
+      if (Length(Sub.Poly) < 3) or not FMap.HasSkyFloor(Sub.Sector) then Continue;
+      Base := Coords.Count;
+      for J := 0 to High(Sub.Poly) do
+        Coords.Add(DoomToCge(Sub.Poly[J].X, Sub.Poly[J].Y, FMap.Sectors[Sub.Sector].FloorHeight));
+      for J := 1 to High(Sub.Poly) - 1 do
+      begin
+        Indices.Add(Base); Indices.Add(Base + J); Indices.Add(Base + J + 1);
+      end;
     end;
     FCollisionScene := TCastleScene.Create(nil);
     FCollisionScene.Visible := false;
@@ -764,14 +784,25 @@ procedure TDoomGeometry.BuildSky(const SkyTexture: String);
 const
   Radius = 12000;
   Segments = 16; { per quarter }
+  { Doom draws one sky row per screen row and projects heights with a focal
+    length of 160 pixels, so texture row R sits at a slope of
+    (100 - R) / 160 from the eye, relative to the world like the walls. }
+  SkyTextureMid = 100;
+  SkyFocal = 160;
+  Tiles = 4;
 var
   Img: TDoomImage;
   Root: TX3DRootNode;
   Batch: TGeomBatch;
-  Q, I: Integer;
-  A0, A1: Single;
-  YTop, YBottom, YHorizonTop, YHorizonBottom: Single;
+  Q, I, Band: Integer;
+  A0, A1, Y0, Y1, V0, V1: Single;
   P0, P1, P2, P3: TVector3;
+
+  function RowHeight(const Row: Single): Single;
+  begin
+    Result := Radius * (SkyTextureMid - Row) / SkyFocal;
+  end;
+
 begin
   FSkyScene := TCastleScene.Create(nil);
   FSkyScene.Collides := false;
@@ -780,34 +811,47 @@ begin
   if Img = nil then Exit;
 
   { Doom maps 1024 sky columns around a full turn, i.e. the 256 wide texture
-    repeats 4 times. Vertically, texture row 100 (of 128) sits at the horizon. }
-  YHorizonTop := Radius * 1.25;    { texture row 0 }
-  YHorizonBottom := -Radius * 0.35; { texture row 128 }
-  YTop := Radius * 4;
-  YBottom := -Radius * 2;
-
+    repeats 4 times. Bands from the top: row 0 stretched upwards (only mouse
+    look gets there), then the texture repeated downwards the way Doom wraps
+    it below the horizon (what sky pits show). v = 1 is row 0. }
   Batch := TGeomBatch.Create;
   try
     Batch.Img := Img;
     Batch.Clamp := true;
-    for Q := 0 to 3 do
-      for I := 0 to Segments - 1 do
+    for Band := -1 to Tiles - 1 do
+    begin
+      if Band < 0 then
       begin
-        A0 := (Q * Segments + I) / (4 * Segments) * 2 * Pi;
-        A1 := (Q * Segments + I + 1) / (4 * Segments) * 2 * Pi;
-        { Facing inward (we are inside the cylinder). Doom angles grow
-          counter-clockwise; texture columns grow with the angle. }
-        P0 := DoomToCge(Cos(A1) * Radius, Sin(A1) * Radius, YBottom);
-        P1 := DoomToCge(Cos(A0) * Radius, Sin(A0) * Radius, YBottom);
-        P2 := DoomToCge(Cos(A0) * Radius, Sin(A0) * Radius, YTop);
-        P3 := DoomToCge(Cos(A1) * Radius, Sin(A1) * Radius, YTop);
-        Batch.AddQuad(P0, P1, P2, P3,
-          Vector2((I + 1) / Segments, (YBottom - YHorizonBottom) / (YHorizonTop - YHorizonBottom)),
-          Vector2(I / Segments, (YBottom - YHorizonBottom) / (YHorizonTop - YHorizonBottom)),
-          Vector2(I / Segments, (YTop - YHorizonBottom) / (YHorizonTop - YHorizonBottom)),
-          Vector2((I + 1) / Segments, (YTop - YHorizonBottom) / (YHorizonTop - YHorizonBottom)),
-          Vector2(255, DoomLightFullBright));
+        Y0 := Radius * 4;
+        Y1 := RowHeight(0);
+        V0 := 1;
+        V1 := 1;
+      end else
+      begin
+        Y0 := RowHeight(Band * Img.Height);
+        Y1 := RowHeight((Band + 1) * Img.Height);
+        V0 := 1;
+        V1 := 0;
       end;
+      for Q := 0 to 3 do
+        for I := 0 to Segments - 1 do
+        begin
+          A0 := (Q * Segments + I) / (4 * Segments) * 2 * Pi;
+          A1 := (Q * Segments + I + 1) / (4 * Segments) * 2 * Pi;
+          { Facing inward (we are inside the cylinder). Doom angles grow
+            counter-clockwise; texture columns grow with the angle. }
+          P0 := DoomToCge(Cos(A1) * Radius, Sin(A1) * Radius, Y1);
+          P1 := DoomToCge(Cos(A0) * Radius, Sin(A0) * Radius, Y1);
+          P2 := DoomToCge(Cos(A0) * Radius, Sin(A0) * Radius, Y0);
+          P3 := DoomToCge(Cos(A1) * Radius, Sin(A1) * Radius, Y0);
+          Batch.AddQuad(P0, P1, P2, P3,
+            Vector2((I + 1) / Segments, V1),
+            Vector2(I / Segments, V1),
+            Vector2(I / Segments, V0),
+            Vector2((I + 1) / Segments, V0),
+            Vector2(255, DoomLightFullBright));
+        end;
+    end;
     Batch.CreateNodes;
     Batch.Geometry.Solid := false;
     Root := TX3DRootNode.Create;

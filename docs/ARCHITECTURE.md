@@ -312,9 +312,12 @@ north-south ones), `DoomLightPlane` for floors and ceilings, or
 
 The sky is a textured cylinder scene that follows the camera (updated every
 frame in `Update`). Doom maps 1024 sky columns around a full turn, so the
-256-wide texture repeats 4 times; row 100 of 128 sits at the horizon. It is
-full bright (only the invulnerability colormap changes it). Sky ceilings are
-simply not drawn.
+256-wide texture repeats 4 times. Vertically texture row R sits at the slope
+(100 - R) / 160 from the eye (Doom's `skytexturemid` 100 and 160-pixel focal
+length), the texture repeats downwards (Doom wraps it below the horizon) and
+row 0 is stretched upwards. It is full bright (only the invulnerability
+colormap changes it). Sky ceilings and sky floors are simply not drawn; sky
+floors get collision triangles in the invisible collision scene.
 
 ### Light diminishing (`DoomLighting`)
 

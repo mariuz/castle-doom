@@ -116,6 +116,9 @@ Gibs: `D` deals 100000 damage, so it gibs every zombie, sergeant, imp and
 SS (grep `Gib:`); `Y,P:3005:350` from the lift top (`G:160:256,A:0`) shows a
 cacodemon rising out of the pit, and `D` then drops its corpse.
 
+`LOOK:deg` pitches the view (negative looks down), for sky and floor
+screenshots.
+
 Sector specials: `LINE:n[:special]` activates linedef n (as another
 special with the same tag if given; `Line:` log). MAP05's donut:
 `Y,G:-64:408,A:-90,W:0.3,U,W:9,SAVE:2` (grep `Donut:`; sectors 54 and 53

@@ -401,7 +401,7 @@ end;
 procedure TViewPlay.RunDemo(const SecondsPassed: Single);
 var
   Step, Cmd, Rest, KeyStr: String;
-  Arg, Arg2: Single;
+  Arg, Arg2, LookAngle, LookPitch: Single;
   P, Sec: Integer;
   K: TKey;
 begin
@@ -478,6 +478,15 @@ begin
     FAutomap.ShowAll := not FAutomap.ShowAll
   else if Cmd = 'Z' then
     FAutomap.ZoomBy(Arg)
+  else if Cmd = 'LOOK' then
+  begin
+    { Pitch the view by Arg degrees (positive up), keeping the angle. }
+    LookAngle := DegToRad(DoomAngleFromCamera);
+    LookPitch := DegToRad(Arg);
+    FViewport.Camera.SetView(FViewport.Camera.Translation,
+      DoomToCge(Cos(LookAngle) * Cos(LookPitch), Sin(LookAngle) * Cos(LookPitch), Sin(LookPitch)),
+      DoomToCge(-Cos(LookAngle) * Sin(LookPitch), -Sin(LookAngle) * Sin(LookPitch), Cos(LookPitch)));
+  end
   else if Cmd = 'LINE' then
     FWorld.DebugActivateLine(Round(Arg), Round(Arg2))
   else if Cmd = 'SHOTS' then

@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- The sky like Doom's: texture row 100 at eye height and one row per
+  1/160 of slope (r_plane's `skytexturemid` with Doom's 160-pixel focal
+  length; the sky used to be twice as tall), repeated downwards the way
+  Doom wraps it below the horizon and row 0 stretched upwards for mouse
+  look. Sky floors (`F_SKY1` as a floor flat, E2/E3 and a few Doom II
+  maps) are not drawn, so the sky shows through like r_plane draws any
+  sky plane; they still collide (the invisible collision scene). Demo
+  command `LOOK:deg` pitches the view.
 - The last vanilla sector specials: the donut (9, `EV_DoDonut`: the pillar
   lowers to the outer floor, the ring rises to it and takes its texture;
   MAP05), raise to the shortest lower texture (30 / 96, "-" ignored like
@@ -221,7 +229,6 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
-| **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
 | **Palette-mapped rendering** for the real 8-bit look: quantize each texel to the palette and look it up in the real `COLORMAP` rows (a 32x32x32 RGB-to-index texture and a 256x34 colormap texture in the `DoomLighting` effect), instead of multiplying by (32 - level) / 32. | Exact Doom colours, banding of the palette. | `DoomLighting` | M |
 
@@ -261,7 +268,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Sky (S): Doom's vertical stretch and the sky-floor hack for pits
-   (`DoomGeometry.BuildSky`).
+2. Settings that stay (S): music and sound volume in the options menu,
+   remembered with `CastleConfig` (desktop) / `localStorage` (web), with
+   the light diminishing and mouse look toggles.
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

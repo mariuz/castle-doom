@@ -152,6 +152,7 @@ type
     { Side texture helper: sidedef for a line side, nil-safe via index -1. }
     function SideSector(const LineIndex, SideIndex: Integer): Integer;
     function HasSkyCeiling(const Sec: Integer): Boolean;
+    function HasSkyFloor(const Sec: Integer): Boolean;
 
     property Name: String read FName;
     property Wad: TDoomWad read FWad;
@@ -990,6 +991,11 @@ end;
 function TDoomMap.HasSkyCeiling(const Sec: Integer): Boolean;
 begin
   Result := (Sec >= 0) and (Sectors[Sec].CeilingTex = 'F_SKY1');
+end;
+
+function TDoomMap.HasSkyFloor(const Sec: Integer): Boolean;
+begin
+  Result := (Sec >= 0) and (Sectors[Sec].FloorTex = 'F_SKY1');
 end;
 
 end.
