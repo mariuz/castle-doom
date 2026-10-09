@@ -116,6 +116,8 @@ type
     FDynamic: array of Boolean;
     FScrollOffset: Single;
     FLineChunk: array of TMapChunk;
+    FVisible: Boolean;
+    procedure SetVisible(const Value: Boolean);
     procedure AssignChunks;
     procedure BuildCollisionScene;
     procedure BuildSky(const SkyTexture: String);
@@ -130,6 +132,8 @@ type
     procedure SectorChanged(const Sec: Integer);
     { Regenerate chunks marked by SectorChanged. Call once per frame. }
     procedure FlushDirty;
+    { Draw the map (walls, floors, sky); off for profiling the rest. }
+    property Visible: Boolean read FVisible write SetVisible;
     { Animate scrolling walls; SecondsPassed since last frame. }
     procedure Update(const SecondsPassed: Single; const CameraPosition: TVector3);
     { Flip a switch texture on a line (SW1xxx <-> SW2xxx). }
@@ -865,10 +869,24 @@ begin
   end;
 end;
 
+procedure TDoomGeometry.SetVisible(const Value: Boolean);
+var
+  C: TMapChunk;
+begin
+  FVisible := Value;
+  for C in FChunks do
+  begin
+    C.SceneSolid.Visible := Value;
+    C.ScenePassable.Visible := Value;
+  end;
+  FSkyScene.Visible := Value;
+end;
+
 procedure TDoomGeometry.AddToWorld(const Parent: TCastleTransform);
 var
   C: TMapChunk;
 begin
+  FVisible := true;
   for C in FChunks do
   begin
     Parent.Add(C.SceneSolid);

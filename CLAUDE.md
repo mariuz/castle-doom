@@ -177,6 +177,18 @@ autotest (it is hidden in autotests otherwise). Gamepads (`GameGamepad`)
 log `Gamepad: Controller N: name` at startup; there is no controller in the
 cloud container, so only their key mapping is exercised by reading code.
 
+Profiling: `PERF` logs a `PerfView:` line at once (also every 10 s): our
+per-frame costs, CGE's FPS (`only render` = without display waits) and the
+last frame's render statistics (shapes, scenes, draw calls). `NOSPRITES`
+and `NOMAP` toggle every thing / the map geometry to see what each costs,
+`PALMAP` the palette lookup. E1M1 at `G:480:712,A:0` draws about 255
+shapes: 151 map, 104 sprites. In the browser the same runs through the
+page URL: `play/?map=E1M1&demo=G:480:712,A:0,W:30,PERF` (`S` only logs,
+`Q` ends the demo; `warp=` and `skill=` work too). A headless Chromium with
+SwiftShader (Playwright, `--use-angle=swiftshader`) loads the live page in
+the cloud container; its software GL exaggerates fill cost, so trust the
+draw-call counts and a CDP CPU profile (wasm vs JS glue time), not its FPS.
+
 `LOOK:deg` pitches the view (negative looks down), for sky and floor
 screenshots.
 

@@ -95,6 +95,7 @@ type
     { The user ended the pointer lock (on the web: Esc, which the browser
       keeps for itself): pause like Doom's Esc menu would. }
     procedure PointerLockUserCancelled(Sender: TObject);
+    procedure PerfLog;
     procedure RunDemo(const SecondsPassed: Single);
     procedure LoadPendingMap(Sender: TObject);
     procedure CreateUi;
@@ -658,13 +659,43 @@ begin
   else if Cmd = 'S' then
   begin
     Inc(FAutoTestShots);
+    { No colour read-back and no files in the browser: just the log line. }
+    {$ifndef WASI}
     Application.MainWindow.SaveScreen(Format('%s_%d.png', [AutoTestPrefix, FAutoTestShots]));
+    {$endif}
     WritelnLog('AutoTest', 'Saved screenshot %d at %s (player %f %f %f)', [FAutoTestShots, FMapName,
       FWorld.Player.X, FWorld.Player.Y, FWorld.Player.Z]);
-  end else if Cmd = 'Q' then
+  end else if Cmd = 'PERF' then
+    { Log the render statistics and the frame rate now (the 10 s lines too). }
+    PerfLog
+  else if Cmd = 'NOSPRITES' then
+  begin
+    { Profiling: hide every thing (sprite scenes) to see what they cost. }
+    for P := 0 to FWorld.Actors.Count - 1 do
+      FWorld.Actors[P].Exists := not FWorld.Actors[P].Exists;
+  end else if Cmd = 'NOMAP' then
+    FWorld.Geometry.Visible := not FWorld.Geometry.Visible
+  else if Cmd = 'Q' then
+  begin
+    {$ifdef WASI}
+    WritelnLog('AutoTest', 'Demo finished (no quit in the browser)');
+    {$else}
     Application.Terminate;
+    {$endif}
+  end;
   Inc(FDemoStep);
   FDemoTime := 0;
+end;
+
+{ "PerfView:" line: our own per-frame costs, CGE's frame rate (FPS, and
+  "only render" = without waiting for the display) and the last frame's
+  render statistics (shapes, scenes, draw calls). }
+procedure TViewPlay.PerfLog;
+begin
+  WritelnLog('PerfView', '%d frames in %.1f s; ms per frame: world %.2f, status bar %.2f, weapon %.2f; %s; %s',
+    [FPerfFrames, FPerfClock, FPerfWorld * 1000 / Max(1, FPerfFrames), FPerfStatusBar * 1000 / Max(1, FPerfFrames),
+     FPerfWeapon * 1000 / Max(1, FPerfFrames), Container.Fps.ToString, FViewport.Statistics.ToString]);
+  FPerfWorld := 0; FPerfStatusBar := 0; FPerfWeapon := 0; FPerfClock := 0; FPerfFrames := 0;
 end;
 
 procedure TViewPlay.StartMap(const MapName: String; const KeepInventory: Boolean);
@@ -1577,12 +1608,7 @@ begin
   Inc(FPerfFrames);
   FPerfClock := FPerfClock + SecondsPassed;
   if FPerfClock >= 10 then
-  begin
-    WritelnLog('PerfView', '%d frames in %.1f s; ms per frame: world %.2f, status bar %.2f, weapon %.2f',
-      [FPerfFrames, FPerfClock, FPerfWorld * 1000 / FPerfFrames, FPerfStatusBar * 1000 / FPerfFrames,
-       FPerfWeapon * 1000 / FPerfFrames]);
-    FPerfWorld := 0; FPerfStatusBar := 0; FPerfWeapon := 0; FPerfClock := 0; FPerfFrames := 0;
-  end;
+    PerfLog;
   FCrosshair.Exists := FNavigation.MouseLook and not P.Dead and not FAutomap.Exists;
 
   if FWorld.ExitRequested then

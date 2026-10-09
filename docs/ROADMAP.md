@@ -384,7 +384,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Register-accurate OPL3 emulation** instead of the approximate FM model; or at least tune envelope shapes against recordings. Licences: Nuked OPL3 is LGPL 2.1 and DOSBox's DBOPL GPL, while this project is MIT, so a port needs the owner's decision (relicensing the synth unit, or a clean-room emulator from the YMF262 documentation). | The music is recognisable but not exact. | `DoomMusic` synth core (keep the MUS/MIDI/GENMIDI front end) | L |
+| **Nuked OPL3** (decided: LGPL 2.1, kept out of the MIT code by dynamic linking) instead of the approximate FM model: build Nuked OPL3's `opl3.c` as a shared library (`libnukedopl3.so` / `.dll` / `.dylib`, packaged next to the exe, with its licence text), load it at runtime from `DoomMusic` (fall back to the built-in synth when it is missing, and always on the web, where there is no dynamic linking), and drive it with the same GENMIDI register programming Doom's `i_oplmusic.c` does. | Exact OPL3 sound, LGPL satisfied by letting users replace the library. | `DoomMusic` synth core (keep the MUS/MIDI/GENMIDI front end), `CastleEngineManifest.xml` packaging, `build.yml` | L |
 | **Music for warps and loads**: the first level, `-warp`, a loaded game and the title still render an 8-second intro at once (115-230 ms natively); a desktop thread, or rendering the intro in slices behind a short silence, would remove the last stall. | Smoother first level start. | `DoomMusic` | S |
 | **Stereo panning** for positional sounds is done by the engine, but Doom's `S_CLIPPING_DIST` falloff curve could be matched more closely. | Minor. | `DoomSound` | S |
 | **PC speaker** sounds (`DP*`) are ignored on purpose; no change planned. | - | - | - |
@@ -416,5 +416,5 @@ L = several days). Items inside a section are in suggested order.
 2. Web gamepads (M): a browser backend for CGE's game controllers
    (`navigator.getGamepads()`), so the desktop bindings work on the web
    (see Engine and tooling).
-3. Register-accurate OPL3 emulation (L): needs a licence decision first
-   (see Audio), then a port or a clean-room emulator.
+3. Nuked OPL3 as a dynamically linked library (L): decided, see Audio; the
+   built-in synth stays as the fallback and the web build's synth.

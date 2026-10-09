@@ -120,6 +120,24 @@ begin
     end;
     Inc(I);
   end;
+  {$ifdef WASI}
+  { The web build has no command line: the page URL's query gives the same
+    options, e.g. play/?map=E1M1&demo=G:480:712,A:0,W:30 (profiling, see
+    the "Perf:" / "PerfView:" console lines) or ?warp=E1M2&skill=4. }
+  if Application.PageUrlParameters.ContainsKey('map') then
+  begin
+    AutoTestMap := UpperCase(Application.PageUrlParameters['map']);
+    AutoTestPrefix := 'web';
+  end;
+  if Application.PageUrlParameters.ContainsKey('demo') then
+    AutoTestDemo := Application.PageUrlParameters['demo'];
+  if Application.PageUrlParameters.ContainsKey('warp') then
+    CmdWarp := UpperCase(Application.PageUrlParameters['warp']);
+  if Application.PageUrlParameters.ContainsKey('skill') then
+    CmdSkill := Clamped(StrToIntDef(Application.PageUrlParameters['skill'], 3), 1, 5) - 1;
+  if (AutoTestMap <> '') or (CmdWarp <> '') then
+    WritelnLog('Web', 'Page URL options: map "%s", demo "%s", warp "%s"', [AutoTestMap, AutoTestDemo, CmdWarp]);
+  {$endif}
   Window.Container.LoadSettings('castle-data:/CastleSettings.xml');
   { Remembered WAD paths live in the user config (castle-config:/). }
   UserConfig.Load;
