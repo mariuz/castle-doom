@@ -3,6 +3,8 @@
 #
 # - On every push / pull request: build and keep the packages as workflow artifacts.
 # - On a tag like v1.2.3: also attach the packages to a GitHub Release.
+# - Run by hand (workflow_dispatch) with release_tag set: create that tag on
+#   the chosen branch's commit and the same GitHub Release.
 #
 # See https://castle-engine.io/github_actions and https://castle-engine.io/docker
 
@@ -14,6 +16,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Create this release tag (e.g. v1.2.3) on the commit; empty: just build'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -94,22 +101,34 @@ jobs:
 
   release:
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.release_tag, 'v')
     needs: build-native
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
+    env:
+      TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
           path: packages
       - name: List packages
         run: ls -l packages
+      # The release notes: this version's section of docs/CHANGELOG.md.
+      - name: Release notes from the changelog
+        run: |
+          awk -v v="## $TAG " 'index($0, v) == 1 { on = 1; next } /^## / { on = 0 } on' docs/CHANGELOG.md > notes.md
+          cat notes.md
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Castle DOOM ${{ env.TAG }}
+          body_path: notes.md
           files: |
             packages/*.zip
             packages/*.tar.gz
