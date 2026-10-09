@@ -131,6 +131,10 @@ the cloud; `Save: Exported N files`). The home page's "Your saves" JS
 `castle-doom:castle-config:/save1.json`..., click export, `setInputFiles`
 the import.
 
+Texture memory: each map load logs `Graphics: Freed N textures and flats
+of earlier levels (K KB); ... cached`; walk maps with `N` and come back
+with `LOAD:n` to check that released textures (and animated flats) return.
+
 `LOOK:deg` pitches the view (negative looks down), for sky and floor
 screenshots.
 

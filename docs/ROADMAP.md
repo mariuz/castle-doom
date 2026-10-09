@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Memory: decoded wall textures and flats belong to the level that last
+  asked for them (`TDoomGraphics.BeginLevel` / `ReleaseUnused`, a cache
+  hit marks the whole animation group); once a new level's geometry is
+  built, the rest are freed, and animation groups refill dropped frames
+  when used again. E1M1 -> E1M2 -> E1M3 -> E1M1 frees 3-4.6 MB of
+  decoded images at each change and ends with the same 120 textures and
+  48 flats E1M1 started with (`Graphics: Freed ...` log line). Sprites
+  and HUD patches stay cached (shared by all maps).
 - Saves move between browsers and computers: a "Your saves" section on
   the home page lists the saves in this site's localStorage (same origin
   as `/play/`), exports them with the settings as one JSON bundle and
@@ -274,14 +282,16 @@ L = several days). Items inside a section are in suggested order.
 | **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
 | **Web**: smaller download (ship only one WAD by default or load WADs on demand with `TCastleDownload`), progress UI during level load, pointer-lock prompt, gamepad. | Faster first play on the Pages site. | web build, `GameViewPlay` | M |
 | **Performance**: build a static-sector blockmap; merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
-| **Memory**: free decoded textures of unloaded maps; the `TDoomGraphics` caches grow with every map visited in one session. | Long sessions. | `DoomGraphics` | S |
 
 ## Suggested next three
 
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Memory (S): free the decoded textures of maps left behind; the
-   `TDoomGraphics` caches grow with every map visited in one session.
+2. Autotests in CI (M): a `build.yml` job that builds on Linux, runs a
+   handful of `--autotest` scripts under `xvfb-run` (the recipe in
+   CLAUDE.md works on GitHub's Ubuntu runners' Mesa), greps the log for
+   exceptions and expected lines (`Save:` round trip, `Gib:`, `Donut:`)
+   and keeps the screenshots as artifacts.
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

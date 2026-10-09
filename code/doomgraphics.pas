@@ -29,6 +29,9 @@ type
     HasAlpha: Boolean;
     { Animation group (NUKAGE1..3 etc.) this image belongs to, or nil. }
     AnimGroup: TAnimGroup;
+    { Textures and flats: the last level (TDoomGraphics.BeginLevel count)
+      that asked for this image; older ones are freed by ReleaseUnused. }
+    LastLevel: Integer;
     destructor Destroy; override;
     { A new ImageTexture node showing this image. Repeating (walls, flats)
       or clamped (sprites, sky). The caller (its scene) owns the node. }
@@ -80,7 +83,11 @@ type
     FAnimGroups: TAnimGroupList;
     FAnimByName: {$ifdef FPC}specialize{$endif} TDictionary<String, TAnimGroup>;
     FMissing: TDoomImage;
+    FLevel: Integer;
     procedure ReadPNames;
+    { Mark an image (and the rest of its animation) as used by this level. }
+    procedure Touch(const Img: TDoomImage);
+    procedure ReleaseFrom(const Dict: TDoomImageDict; var Count: Integer; var Bytes: Int64);
     procedure ReadTextureLump(const LumpName: String);
     procedure IndexFlats;
     procedure IndexSprites;
@@ -106,6 +113,14 @@ type
     function Sprite(const Prefix: String; const Frame: Char; const Rot: Integer;
       out Mirror: Boolean): TDoomImage;
     function HasSpriteFrame(const Prefix: String; const Frame: Char): Boolean;
+    { A new level starts: every texture and flat it asks for from now on is
+      marked as its own. }
+    procedure BeginLevel;
+    { Free the decoded textures and flats no texture node of this level can
+      ask for again (the previous level's geometry must be gone; CGE asks
+      again through doomgfx: for any that is needed later). Sprites and
+      other patches stay, the HUD and menus keep using them. }
+    procedure ReleaseUnused;
     { Advance animated textures. Call once per Doom tic (35 Hz). }
     procedure AnimationTic(const Tic: Int64);
     { Does the WAD know this wall texture name? }
@@ -514,12 +529,74 @@ begin
   begin
     Img.AnimGroup := G;
     if Length(G.Frames) = 0 then
-    begin
       SetLength(G.Frames, G.Names.Count);
-      for I := 0 to G.Names.Count - 1 do
+    { Every frame, also the ones ReleaseUnused dropped since. The images
+      are in the cache before this runs, so the recursion ends. }
+    for I := 0 to G.Names.Count - 1 do
+      if G.Frames[I] = nil then
         if IsFlat then G.Frames[I] := Flat(G.Names[I]) else G.Frames[I] := Texture(G.Names[I]);
-    end;
   end;
+end;
+
+procedure TDoomGraphics.Touch(const Img: TDoomImage);
+var
+  F: TDoomImage;
+begin
+  Img.LastLevel := FLevel;
+  if Img.AnimGroup <> nil then
+    for F in Img.AnimGroup.Frames do
+      if F <> nil then
+        F.LastLevel := FLevel;
+end;
+
+procedure TDoomGraphics.BeginLevel;
+begin
+  Inc(FLevel);
+end;
+
+procedure TDoomGraphics.ReleaseFrom(const Dict: TDoomImageDict; var Count: Integer; var Bytes: Int64);
+var
+  Stale: TStringList;
+  Key: String;
+  Img: TDoomImage;
+  I: Integer;
+begin
+  Stale := TStringList.Create;
+  try
+    for Key in Dict.Keys do
+    begin
+      Img := Dict[Key];
+      if (Img <> nil) and (Img.LastLevel < FLevel) then
+        Stale.Add(Key);
+    end;
+    for Key in Stale do
+    begin
+      Img := Dict[Key];
+      { Its animation group must not point at the freed image. }
+      if Img.AnimGroup <> nil then
+        for I := 0 to High(Img.AnimGroup.Frames) do
+          if Img.AnimGroup.Frames[I] = Img then
+            Img.AnimGroup.Frames[I] := nil;
+      Inc(Count);
+      Bytes := Bytes + Int64(Img.Width) * Img.Height * 4;
+      Dict.Remove(Key); { owns the image }
+    end;
+  finally
+    FreeAndNil(Stale);
+  end;
+end;
+
+procedure TDoomGraphics.ReleaseUnused;
+var
+  Count: Integer;
+  Bytes: Int64;
+begin
+  Count := 0;
+  Bytes := 0;
+  ReleaseFrom(FTextures, Count, Bytes);
+  ReleaseFrom(FFlats, Count, Bytes);
+  WritelnLog('Graphics', 'Freed %d textures and flats of earlier levels (%d KB); %d textures, %d flats, %d patches cached', [
+    Count, Bytes div 1024, FTextures.Count, FFlats.Count, FPatches.Count]);
 end;
 
 function TDoomGraphics.MissingTexture: TDoomImage;
@@ -589,6 +666,7 @@ begin
     DrawPatchInto(FWad, Result.Image, FWad.LumpPointer(LumpIdx), FWad.LumpSize(LumpIdx), OriginX, OriginY);
   end;
   Result.HasAlpha := ImageHasAlpha(Result.Image);
+  Result.LastLevel := FLevel;
   FTextures.Add(Def.Name, Result);
   ResolveAnim(Result, false);
 end;
@@ -605,7 +683,11 @@ var
 begin
   U := UpperCase(Name);
   if (U = '') or (U = '-') then Exit(nil);
-  if FTextures.TryGetValue(U, Result) then Exit;
+  if FTextures.TryGetValue(U, Result) then
+  begin
+    Touch(Result);
+    Exit;
+  end;
   if FTextureDefs.TryGetValue(U, Def) then
     Result := ComposeTexture(Def)
   else
@@ -625,7 +707,11 @@ var
   P: PByte;
 begin
   U := UpperCase(Name);
-  if FFlats.TryGetValue(U, Result) then Exit;
+  if FFlats.TryGetValue(U, Result) then
+  begin
+    Touch(Result);
+    Exit;
+  end;
   if not FFlatLumps.TryGetValue(U, Lump) then
   begin
     if U <> 'F_SKY1' then
@@ -642,6 +728,7 @@ begin
   for Y := 0 to 63 do
     for X := 0 to 63 do
       PVector4Byte(Result.Image.PixelPtr(X, 63 - Y))^ := FWad.PaletteColor(P[Y * 64 + X]);
+  Result.LastLevel := FLevel;
   FFlats.Add(U, Result);
   ResolveAnim(Result, true);
 end;

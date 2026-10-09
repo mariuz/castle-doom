@@ -1014,8 +1014,11 @@ begin
   if State <> nil then
     RestoreMapState(State);
   WritelnLog('Load', '%s: map parsed in %d ms', [MapName, Ms]);
+  FGraphics.BeginLevel;
   FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName));
   FGeometry.AddToWorld(FItems);
+  { The previous level's geometry is gone: its textures can go too. }
+  FGraphics.ReleaseUnused;
   WritelnLog('Load', '%s: geometry built in %d ms', [MapName, Ms]);
   FItems.Add(FPlayerEmitter);
   if KeepInventory and not Saved.Dead then
