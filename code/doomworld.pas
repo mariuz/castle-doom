@@ -287,6 +287,10 @@ type
     { Upward distance the player still has to be thrown (Arch-vile blast);
       the view consumes it, gravity brings the player down. }
     PlayerKnockUp: Single;
+    { Degrees the view still has to turn the player (counter-clockwise):
+      melee attacks turn the player to the target. The view applies and
+      clears it. }
+    PlayerTurn: Single;
     { Skill level, Doom's gameskill: 0 "I'm too young to die" .. 4 "Nightmare!".
       Set before LoadMap (things are spawned by it); saved with the game. }
     Skill: Integer;
@@ -312,6 +316,8 @@ type
     procedure UseInFront;
     { The player fires the current weapon. }
     procedure FireWeapon;
+    { Turn the player to a Doom angle in degrees (through PlayerTurn). }
+    procedure TurnPlayer(const NewAngle: Single);
     procedure SelectWeapon(const W: TWeapon);
     { Start lowering the current weapon to bring up W (P_SetPsprite S_LOWER). }
     procedure ChangeWeapon(const W: TWeapon);
@@ -1029,6 +1035,7 @@ begin
     FLightPhase[I] := 0;
   end;
   PlayerTeleported := false;
+  PlayerTurn := 0;
   if State <> nil then
     RestoreDynamicState(State);
 end;
@@ -3751,12 +3758,49 @@ begin
   end;
 end;
 
+{ Signed difference A - B in degrees, in -180..180. }
+function AngleDelta(const A, B: Single): Single;
+begin
+  Result := A - B;
+  while Result > 180 do Result := Result - 360;
+  while Result < -180 do Result := Result + 360;
+end;
+
+procedure TDoomWorld.TurnPlayer(const NewAngle: Single);
+var
+  D: Single;
+begin
+  D := AngleDelta(NewAngle, Player.Angle);
+  if DebugShots then
+    WritelnLog('Turn', 'from %.1f to %.1f (%.1f)', [Player.Angle, Player.Angle + D, D]);
+  Player.Angle := Player.Angle + D;
+  PlayerTurn := PlayerTurn + D;
+end;
+
 procedure TDoomWorld.FireWeapon;
 var
   Ammo: TAmmoType;
   Cost, I, Dmg: Integer;
   Angle, Slope, LookAngle: Single;
-  Target: TDoomActor;
+  Target, AimTarget: TDoomActor;
+
+  { A_Saw: turn towards the target 4.5 degrees (ANG90/20) at a time, or
+    jump to 4.29 degrees (ANG90/21) past it when it is further away, so the
+    view jitters around a target held in the saw. }
+  procedure SawTurn(const T: TDoomActor);
+  var
+    Ang, D: Single;
+  begin
+    Ang := RadToDeg(ArcTan2(T.DoomY - Player.Y, T.DoomX - Player.X));
+    D := AngleDelta(Ang, Player.Angle);
+    if D < 0 then
+    begin
+      if D < -4.5 then TurnPlayer(Ang + 90 / 21) else TurnPlayer(Player.Angle - 4.5);
+    end else
+    begin
+      if D > 4.5 then TurnPlayer(Ang - 90 / 21) else TurnPlayer(Player.Angle + 4.5);
+    end;
+  end;
 
   { P_Random() - P_Random() scaled to MaxDeg at the extremes. }
   function Spread(const MaxDeg: Single): Single;
@@ -3815,15 +3859,26 @@ begin
         PlayerLook(Angle, Slope);
         Angle := Angle + Spread(5.6);
         Slope := AimLineAttack(nil, Player.X, Player.Y, Player.Z + PlayerHeight / 2 + 8,
-          Angle, IfThen(Player.Weapon = wpFist, 64, 65), Target);
-        if Target = nil then PlayerLook(LookAngle, Slope);
-        Target := PlayerLineAttack(Angle, Slope, IfThen(Player.Weapon = wpFist, 64, 65), Dmg);
+          Angle, IfThen(Player.Weapon = wpFist, 64, 65), AimTarget);
+        if AimTarget = nil then PlayerLook(LookAngle, Slope);
+        PlayerLineAttack(Angle, Slope, IfThen(Player.Weapon = wpFist, 64, 65), Dmg);
+        { The aim's linetarget decides the sound and turns the player to it. }
         if Player.Weapon = wpChainsaw then
         begin
-          if Target <> nil then FSounds.Play('DSSAWHIT') else FSounds.Play('DSSAWFUL');
+          if AimTarget = nil then
+            FSounds.Play('DSSAWFUL')
+          else
+          begin
+            FSounds.Play('DSSAWHIT');
+            SawTurn(AimTarget);
+          end;
         end else
-        if Target <> nil then
+        if AimTarget <> nil then
+        begin
           FSounds.Play('DSPUNCH');
+          { A_Punch: face the target. }
+          TurnPlayer(RadToDeg(ArcTan2(AimTarget.DoomY - Player.Y, AimTarget.DoomX - Player.X)));
+        end;
       end;
     wpPistol:
       begin

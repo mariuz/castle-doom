@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Melee turns the player like Doom: a punch that finds a target faces it
+  (`A_Punch`), the chainsaw pulls the view towards it 4.5 degrees a tic or
+  jumps to 4.29 degrees short of it (`A_Saw`, the familiar jitter); the
+  world asks the view to turn through `PlayerTurn`. During invulnerability
+  the weapon and its flash are drawn in the inverted colormap too
+  (inverted copies of the sprites; partial invisibility's fuzz still wins,
+  as in `R_DrawPSprite`).
 - Gibs and flying like Doom: a zombieman, shotgun guy, chaingunner, imp or
   SS killed with its health below minus its spawn health bursts
   (`XDEATH` frames, `DSSLOP`, `Gib:` log lines). Flyers follow
@@ -196,7 +203,7 @@ L = several days). Items inside a section are in suggested order.
 | **Title/credits cycle** (`TITLEPIC`, `CREDIT`, `HELP1` pages and demos) and the rest of Doom's menu (Options with volume sliders, Read This, Save Game, quit confirmation) in `M_*` graphics; the in-game menu still uses the slot lists from `GameViewPlay`. | Menus look like Doom everywhere. | `DoomMenu`, `GameViewPlay` | M |
 | **Sky**: match Doom's vertical stretch exactly and use the per-episode skies (`SKY1..4`, `RSKY1..3` already mapped), sky-floor hack for pits. | Fidelity. | `DoomGeometry.BuildSky` | S |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
-| **Palette-mapped rendering** for the real 8-bit look: quantize each texel to the palette and look it up in the real `COLORMAP` rows (a 32x32x32 RGB-to-index texture and a 256x34 colormap texture in the `DoomLighting` effect), instead of multiplying by (32 - level) / 32. Also the inverted colormap on the weapon sprite during invulnerability. | Exact Doom colours, banding of the palette. | `DoomLighting` | M |
+| **Palette-mapped rendering** for the real 8-bit look: quantize each texel to the palette and look it up in the real `COLORMAP` rows (a 32x32x32 RGB-to-index texture and a 256x34 colormap texture in the `DoomLighting` effect), instead of multiplying by (32 - level) / 32. | Exact Doom colours, banding of the palette. | `DoomLighting` | M |
 
 ## 3. Audio
 
@@ -234,9 +241,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Melee turns the player to the target (A_Punch / A_Saw) and the
-   inverted invulnerability colormap on the weapon sprite (S): small
-   fidelity gaps left from the hitscan and lighting work.
-3. Crushers turn corpses into gibs (`P_ChangeSector`: `S_GIBS`, `POL5`)
+2. Crushers turn corpses into gibs (`P_ChangeSector`: `S_GIBS`, `POL5`)
    and knockback from hits and explosions (S): the next physical
    details after the gibs.
+3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
+   the invisible weapon, the last step of the fuzz work.

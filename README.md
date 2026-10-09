@@ -70,6 +70,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   spawn monsters and dies to rockets through the hole in its wall.
 - Weapons: fist, chainsaw, pistol, shotgun, super shotgun, chaingun, and real projectiles
   for the rocket launcher (splash damage), plasma gun and BFG (charge, ball, tracer spray).
+  Punches and the chainsaw turn you towards what they hit, like in Doom.
 - Status bar with face, keys, arms, ammo table; weapon bobbing, weapons lowered and raised
   when switching; damage, pickup and radiation-suit tints from the WAD's palettes; Doom's
   screen melt between levels.

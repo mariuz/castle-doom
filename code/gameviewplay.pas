@@ -770,6 +770,24 @@ begin
   Result := RadToDeg(ArcTan2(-D.Z, D.X));
 end;
 
+{ A copy of a weapon sprite in Doom's inverted invulnerability colormap:
+  the same grey 1 - luma as the world's shader (DoomLighting). }
+function InvertedCopy(const Source: TCastleImage): TCastleImage;
+var
+  X, Y: Integer;
+  C: TCastleColor;
+  G: Single;
+begin
+  Result := Source.MakeCopy;
+  for Y := 0 to Result.Height - 1 do
+    for X := 0 to Result.Width - 1 do
+    begin
+      C := Result.Colors[X, Y, 0];
+      G := 1 - (C.X * 0.299 + C.Y * 0.587 + C.Z * 0.114);
+      Result.Colors[X, Y, 0] := Vector4(G, G, G, C.W);
+    end;
+end;
+
 procedure TViewPlay.UpdateWeaponSprite(const SecondsPassed: Single);
 var
   P: TPlayerState;
@@ -777,6 +795,8 @@ var
   Img: TDoomImage;
   S, Speed, Bob, BobX, BobY: Single;
   W, H, Bright: Single;
+  Inverted: Boolean;
+  InvSuffix: String;
   CamPos: TVector3;
   Sec, Light: Integer;
 begin
@@ -809,8 +829,8 @@ begin
     { R_DrawPSprite: the weapon is lit like a sprite at the nearest scale
       (spritelights[MAXLIGHTSCALE - 1]) of the player's sector, the flash
       is full bright; a fixed colormap applies to both (the inverted
-      invulnerability colormap cannot be done with a colour multiplier,
-      the weapon stays normal then). }
+      invulnerability colormap is not a colour multiplier: the images
+      are swapped for inverted copies below). }
     Sec := FWorld.Map.SectorAt(P.X, P.Y);
     if Sec >= 0 then
       Light := FWorld.Map.Sectors[Sec].LightLevel
@@ -828,14 +848,22 @@ begin
     FFlashImage.Color := Vector4(Bright, Bright, Bright, 1);
   end;
 
+  { Fuzz wins over the fixed colormap, like in R_DrawPSprite. }
+  Inverted := (FWorld.FixedColormap = InverseColormap) and
+    not ((P.InvisibleTics > 4 * 32) or ((P.InvisibleTics and 8) <> 0));
+  if Inverted then InvSuffix := '/inverse' else InvSuffix := '';
+
   SpriteName := FWorld.WeaponSprite(P.Weapon) + P.WeaponFrame + '0';
   Img := Graphics.Patch(SpriteName);
   if (Img <> nil) and not P.Dead and not FAutomap.Exists then
   begin
-    if SpriteName <> FWeaponImageName then
+    if SpriteName + InvSuffix <> FWeaponImageName then
     begin
-      FWeaponImage.Image := Img.Image.MakeCopy;
-      FWeaponImageName := SpriteName;
+      if Inverted then
+        FWeaponImage.Image := InvertedCopy(Img.Image)
+      else
+        FWeaponImage.Image := Img.Image.MakeCopy;
+      FWeaponImageName := SpriteName + InvSuffix;
     end;
     FWeaponImage.Exists := true;
     FWeaponImage.Width := Img.Width * S;
@@ -855,10 +883,13 @@ begin
   if FlashName <> '' then Img := Graphics.Patch(FlashName);
   if (Img <> nil) and not P.Dead and not FAutomap.Exists then
   begin
-    if FlashName <> FFlashImageName then
+    if FlashName + InvSuffix <> FFlashImageName then
     begin
-      FFlashImage.Image := Img.Image.MakeCopy;
-      FFlashImageName := FlashName;
+      if Inverted then
+        FFlashImage.Image := InvertedCopy(Img.Image)
+      else
+        FFlashImage.Image := Img.Image.MakeCopy;
+      FFlashImageName := FlashName + InvSuffix;
     end;
     FFlashImage.Exists := true;
     FFlashImage.Width := Img.Width * S;
@@ -990,7 +1021,7 @@ procedure TViewPlay.Update(const SecondsPassed: Single; var HandleInput: Boolean
 var
   Lift, MaxEye: Single;
   Sec: Integer;
-  CamPos, CamDir: TVector3;
+  CamPos, CamDir, TurnPos, TurnDir, TurnUp: TVector3;
   Feet: TVector3;
   P: TPlayerState;
   PerfT: TTimerResult;
@@ -1105,6 +1136,17 @@ begin
   begin
     FWorld.PlayerTeleported := false;
     PlacePlayer(FWorld.PlayerTeleportX, FWorld.PlayerTeleportY, FWorld.PlayerTeleportZ, FWorld.PlayerTeleportAngle);
+  end;
+
+  { Melee attacks turn the player (A_Punch / A_Saw): rotate the view
+    around the vertical axis, keeping the pitch. }
+  if FWorld.PlayerTurn <> 0 then
+  begin
+    FViewport.Camera.GetView(TurnPos, TurnDir, TurnUp);
+    TurnDir := RotatePointAroundAxisRad(DegToRad(FWorld.PlayerTurn), TurnDir, Vector3(0, 1, 0));
+    TurnUp := RotatePointAroundAxisRad(DegToRad(FWorld.PlayerTurn), TurnUp, Vector3(0, 1, 0));
+    FViewport.Camera.SetView(TurnPos, TurnDir, TurnUp);
+    FWorld.PlayerTurn := 0;
   end;
 
   { Arch-vile blast: throw the camera up (under the ceiling); the walk
