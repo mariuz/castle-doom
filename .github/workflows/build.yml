@@ -1,5 +1,7 @@
-# Native builds (Windows x86_64, Linux x86_64) using the Castle Game Engine
-# Docker image, which bundles FPC with cross-compilers and the CGE build tool.
+# Native builds: Windows x86_64 and Linux x86_64 with the Castle Game Engine
+# Docker image (FPC with cross-compilers and the CGE build tool), macOS
+# x86_64 and aarch64 on GitHub's macOS runners (FPC and CGE set up by
+# castle-build-ci, like CGE's own template castle-game/.github/workflows/build.yml).
 #
 # - On every push / pull request: build and keep the packages as workflow artifacts.
 # - On a tag like v1.2.3: also attach the packages to a GitHub Release.
@@ -59,6 +61,44 @@ jobs:
           path: "*-linux-x86_64.tar.gz"
           if-no-files-found: error
 
+  build-macos:
+    name: Package macOS (${{ matrix.cpu }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            cpu: x86_64
+          - runner: macos-latest
+            cpu: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up FPC and Castle Game Engine
+        timeout-minutes: 25
+        run: |
+          cd /tmp/
+          git clone https://github.com/castle-engine/castle-build-ci.git \
+            --depth=1 --single-branch --branch=master
+          castle-build-ci/install_dependencies
+          castle-build-ci/setup_castle_engine
+
+      # Not signed or notarized (no Apple developer certificate): the first
+      # start needs right-click > Open, or xattr -dr com.apple.quarantine.
+      - name: Package app bundle (zip)
+        run: |
+          castle-engine package --mode=release --package-format=mac-app-bundle-zip --verbose
+          ls -l *.zip
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: castle-doom-macos-${{ matrix.cpu }}
+          path: "*-darwin-*.zip"
+          if-no-files-found: error
+
   autotest:
     name: Autotests (Linux, Xvfb)
     runs-on: ubuntu-latest
@@ -102,7 +142,7 @@ jobs:
   release:
     name: GitHub Release
     if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.release_tag, 'v')
-    needs: build-native
+    needs: [build-native, build-macos]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
