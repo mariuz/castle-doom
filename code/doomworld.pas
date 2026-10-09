@@ -79,7 +79,9 @@ type
     ekSpawnShot, ekSpawnFire, ekBrainExplosion);
 
   TMoverKind = (mkDoor, mkLift, mkFloor, mkCeiling, mkCrusher);
-  TMoverPhase = (mpMoving, mpWaiting, mpDone);
+  { mpStasis: a stopped perpetual lift or crusher (EV_StopPlat,
+    EV_CeilingCrushStop) that a new start resumes (P_ActivateInStasis). }
+  TMoverPhase = (mpMoving, mpWaiting, mpDone, mpStasis);
 
   TSectorMover = class
   public
@@ -96,6 +98,14 @@ type
     ReturnTarget: Single;
     Perpetual: Boolean;
     Phase: TMoverPhase;
+    { The phase to resume when leaving mpStasis. }
+    StasisPhase: TMoverPhase;
+    { Crushers: their own speed; slow ones go at 1/8 of it while something
+      is under them (T_MoveCeiling), back at full speed from the bottom. }
+    NormalSpeed: Single;
+    SlowsWhenCrushing: Boolean;
+    { Silent crusher (141): no grinding, a stop sound at both ends. }
+    Silent: Boolean;
     StartSound, StopSound, MoveSound: String;
     Emitter: TCastleTransform;
     { Floor texture to apply when done (numeric/trigger change types). }
@@ -267,7 +277,14 @@ type
     procedure DoDoor(const Sec: Integer; const Open, Close, Blaze: Boolean; const WaitTics: Integer);
     procedure DoLift(const Sec: Integer; const Blaze: Boolean; const Perpetual: Boolean);
     procedure DoFloor(const Sec: Integer; const Target: Single; const Speed: Single; const ChangeTexFrom: Integer = -1);
-    procedure DoCeiling(const Sec: Integer; const Target: Single; const Speed: Single; const Crusher: Boolean);
+    procedure DoCeiling(const Sec: Integer; const Target: Single; const Speed: Single; const Crusher: Boolean;
+      const Silent: Boolean = false);
+    { EV_DoDonut: the tagged pillar lowers to the floor of the sector around
+      its ring, the ring rises to it and takes its floor texture. }
+    procedure DoDonut(const Tag: Integer);
+    { P_ActivateInStasis / P_ActivateInStasisCeiling: resume stopped
+      perpetual lifts or crushers with this tag. }
+    procedure ResumeMovers(const Tag: Integer; const Kind: TMoverKind);
     procedure DoStairs(const Line: Integer; const StepSize: Integer; const Speed: Single);
     procedure DoLight(const Sec: Integer; const Level: Integer);
     procedure DoTeleport(const Line: Integer);
@@ -343,6 +360,9 @@ type
     procedure CrushCorpse(const A: TDoomActor);
     { Debug: every awake monster turns on the nearest other monster. }
     procedure DebugInfight;
+    { Debug: activate a linedef (as Special if non-zero, keeping its tag),
+      trying the cross, use and shoot activations: "Line:" log. }
+    procedure DebugActivateLine(const Line, Special: Integer);
     { Debug: kill every monster (exercises boss-death triggers). }
     procedure DebugKillAll;
     { Debug: log the 2D and 3D line of sight from every monster within 2500
@@ -656,6 +676,8 @@ begin
           end;
           if Blocked and (Kind <> mkCrusher) then
             Exit;
+          if Blocked and SlowsWhenCrushing and (NormalSpeed > 0) then
+            Speed := NormalSpeed / 8;
         end;
 
         SetHeight(NewH);
@@ -664,11 +686,13 @@ begin
 
         if NewH = Target then
         begin
+          if (Kind = mkCrusher) and (NormalSpeed > 0) then
+            Speed := NormalSpeed;
           if HasReturn or Perpetual then
           begin
             Phase := mpWaiting;
             WaitLeft := WaitTics;
-            if (Kind = mkLift) and (StopSound <> '') then
+            if ((Kind = mkLift) or Silent) and (StopSound <> '') then
               World.Sounds.PlayAt(StopSound, Emitter);
           end else
           begin
@@ -704,7 +728,7 @@ begin
             World.Sounds.PlayAt(StartSound, Emitter);
         end;
       end;
-    mpDone: ;
+    mpDone, mpStasis: ;
   end;
 end;
 
@@ -4460,7 +4484,8 @@ begin
   M.Start;
 end;
 
-procedure TDoomWorld.DoCeiling(const Sec: Integer; const Target: Single; const Speed: Single; const Crusher: Boolean);
+procedure TDoomWorld.DoCeiling(const Sec: Integer; const Target: Single; const Speed: Single; const Crusher: Boolean;
+  const Silent: Boolean);
 var
   M: TSectorMover;
 begin
@@ -4481,6 +4506,11 @@ begin
     M.HasReturn := true;
     M.ReturnTarget := FMap.Sectors[Sec].CeilingHeight;
     M.WaitTics := 1;
+    M.NormalSpeed := Speed;
+    { Only the slow crushers slow down (not 6 / 77, the fast ones). }
+    M.SlowsWhenCrushing := Speed <= CeilSpeed;
+    M.Silent := Silent;
+    if Silent then M.MoveSound := '';
   end;
   FMovers.Add(M);
   M.Start;
@@ -4536,13 +4566,70 @@ begin
   end;
 end;
 
+procedure TDoomWorld.DebugActivateLine(const Line, Special: Integer);
+var
+  Orig, Used: Integer;
+  Act: TActivation;
+  Ok: Boolean;
+begin
+  if (Line < 0) or (Line > High(FMap.Linedefs)) then Exit;
+  Orig := FMap.Linedefs[Line].Special;
+  if Special <> 0 then FMap.Linedefs[Line].Special := Special;
+  Used := FMap.Linedefs[Line].Special;
+  Ok := false;
+  for Act := Low(TActivation) to High(TActivation) do
+    if not Ok then
+      Ok := ApplySpecial(Line, Act, false);
+  WritelnLog('Line', 'line %d special %d tag %d: %s', [Line, Used,
+    FMap.Linedefs[Line].Tag, BoolToStr(Ok, 'activated', 'nothing happened')]);
+  FMap.Linedefs[Line].Special := Orig;
+end;
+
 procedure TDoomWorld.StopPlats(const Tag: Integer);
 var
   M: TSectorMover;
 begin
   for M in FMovers do
-    if (M.Kind in [mkLift, mkCrusher]) and (FMap.Sectors[M.Sector].Tag = Tag) then
-      M.Phase := mpDone;
+    if (M.Kind in [mkLift, mkCrusher]) and (FMap.Sectors[M.Sector].Tag = Tag) and
+       (M.Phase <> mpStasis) then
+    begin
+      M.StasisPhase := M.Phase;
+      M.Phase := mpStasis;
+    end;
+end;
+
+procedure TDoomWorld.ResumeMovers(const Tag: Integer; const Kind: TMoverKind);
+var
+  M: TSectorMover;
+begin
+  for M in FMovers do
+    if (M.Kind = Kind) and (M.Phase = mpStasis) and (FMap.Sectors[M.Sector].Tag = Tag) then
+      M.Phase := M.StasisPhase;
+end;
+
+procedure TDoomWorld.DoDonut(const Tag: Integer);
+var
+  S1, S2, S3, L: Integer;
+begin
+  S1 := -1;
+  repeat
+    S1 := FMap.FindSectorFromTag(Tag, S1);
+    if S1 < 0 then Break;
+    if FMap.Sectors[S1].Mover <> nil then Continue;
+    if Length(FMap.Sectors[S1].Lines) = 0 then Continue;
+    { The ring: across the pillar's first line. }
+    S2 := FMap.OtherSector(FMap.Sectors[S1].Lines[0], S1);
+    if S2 < 0 then Continue;
+    for L in FMap.Sectors[S2].Lines do
+    begin
+      S3 := FMap.OtherSector(L, S2);
+      if (S3 < 0) or (S3 = S1) then Continue;
+      WritelnLog('Donut', 'pillar %d and ring %d to %.0f (sector %d)', [S1, S2, FMap.Sectors[S3].FloorHeight, S3]);
+      DoFloor(S2, FMap.Sectors[S3].FloorHeight, FloorSpeed / 2, S3);
+      DoFloor(S1, FMap.Sectors[S3].FloorHeight, FloorSpeed / 2);
+      Break;
+    end;
+  until false;
 end;
 
 procedure TDoomWorld.MonsterCrossLines(const A: TDoomActor; const OldX, OldY: Single);
@@ -4804,7 +4891,7 @@ begin
         { Ceilings }
         41: begin S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight, CeilSpeed, false); Done := true; end;
         43: begin S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight, CeilSpeed, false); Done := true; Repeatable := true; end;
-        49: begin S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight + 8, CeilSpeed, true); Done := true; end;
+        49: begin ResumeMovers(Tag, mkCrusher); S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight + 8, CeilSpeed, true); Done := true; end;
 
         { Stairs }
         7: begin DoStairs(Line, 8, FloorSpeed / 4); Done := true; end;
@@ -4818,8 +4905,7 @@ begin
         11: begin FSounds.Play('DSSWTCHX'); FExitRequested := true; FSecretExit := false; Exit(true); end;
         51: begin FSounds.Play('DSSWTCHX'); FExitRequested := true; FSecretExit := true; Exit(true); end;
 
-        { Donut: approximate as lowering the tagged pillar to the surrounding floor. }
-        9: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.LowestFloorSurrounding(S), FloorSpeed / 2); Done := true; end;
+        9: begin DoDonut(Tag); Done := true; end;
       end;
 
     acCross:
@@ -4843,15 +4929,15 @@ begin
         121: begin TaggedLifts(true, false); Done := true; end;
         88: begin TaggedLifts(false, false); Done := true; Repeatable := true; end;
         120: begin TaggedLifts(true, false); Done := true; Repeatable := true; end;
-        53: begin TaggedLifts(false, true); Done := true; end;
-        87: begin TaggedLifts(false, true); Done := true; Repeatable := true; end;
+        53: begin ResumeMovers(Tag, mkLift); TaggedLifts(false, true); Done := true; end;
+        87: begin ResumeMovers(Tag, mkLift); TaggedLifts(false, true); Done := true; Repeatable := true; end;
         54: begin StopPlats(Tag); Done := true; end;
         89: begin StopPlats(Tag); Done := true; Repeatable := true; end;
 
         5: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.LowestCeilingSurrounding(S), FloorSpeed); Done := true; end;
         19: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.HighestFloorSurrounding(S), FloorSpeed); Done := true; end;
         22: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.NextHighestFloor(S, FMap.Sectors[S].FloorHeight), FloorSpeed / 2, Front); Done := true; end;
-        30, 96: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.Sectors[S].FloorHeight + 64, FloorSpeed); Done := true; Repeatable := Special = 96; end;
+        30, 96: begin S := -1; while NextTagged(S) do DoFloor(S, FloorRaiseToTexture(S), FloorSpeed); Done := true; Repeatable := Special = 96; end;
         36: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.HighestFloorSurrounding(S) + 8, FloorSpeed * 4); Done := true; end;
         37: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.LowestFloorSurrounding(S), FloorSpeed, Front); Done := true; end;
         38: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.LowestFloorSurrounding(S), FloorSpeed); Done := true; end;
@@ -4875,8 +4961,9 @@ begin
         40: begin S := -1; while NextTagged(S) do DoCeiling(S, FMap.HighestCeilingSurrounding(S), CeilSpeed, false); Done := true; end;
         44: begin S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight + 8, CeilSpeed, false); Done := true; end;
         72: begin S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight + 8, CeilSpeed, false); Done := true; Repeatable := true; end;
-        6, 25, 141: begin S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight + 8, CeilSpeed * IfThen(Special = 6, 2, 1), true); Done := true; end;
-        73, 77: begin S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight + 8, CeilSpeed * IfThen(Special = 77, 2, 1), true); Done := true; Repeatable := true; end;
+        6, 25, 141: begin ResumeMovers(Tag, mkCrusher); S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight + 8, CeilSpeed * IfThen(Special = 6, 2, 1), true, Special = 141); Done := true; end;
+        73, 77: begin ResumeMovers(Tag, mkCrusher); S := -1; while NextTagged(S) do DoCeiling(S, FMap.Sectors[S].FloorHeight + 8, CeilSpeed * IfThen(Special = 77, 2, 1), true); Done := true; Repeatable := true; end;
+        57: begin StopPlats(Tag); Done := true; end;
         74: begin StopPlats(Tag); Done := true; Repeatable := true; end;
 
         8: begin DoStairs(Line, 8, FloorSpeed / 4); Done := true; end;

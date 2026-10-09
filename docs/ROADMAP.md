@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- The last vanilla sector specials: the donut (9, `EV_DoDonut`: the pillar
+  lowers to the outer floor, the ring rises to it and takes its texture;
+  MAP05), raise to the shortest lower texture (30 / 96, "-" ignored like
+  Boom), perpetual platforms and crushers stopped by 54 / 89 / 57 / 74 go
+  into stasis and resume where they were on the next start (53 / 87 and
+  the crusher starts; `P_ActivateInStasis`), slow crushers drop to 1/8
+  speed while something is under them until they reach the bottom
+  (`T_MoveCeiling`; fast ones do not), the silent crusher (141) does not
+  grind and clunks at both ends, and 57 (W1 crusher stop) exists. The
+  demo command `LINE:n[:special]` activates any line for tests.
 - Knockback and crushed corpses like Doom: every hit with an inflictor
   pushes by damage * 12.5 / mass (`P_DamageMobj`, info.c masses; a small
   killing hit from 64+ units below sometimes throws the target forward);
@@ -201,7 +211,6 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Donut (special 9)**, **perpetual platforms stop/start**, **raise by shortest lower texture (30/96 are approximated as +64)**, **crusher return speed when blocked**. | Correctness of a few maps. | `ApplySpecial`, `TSectorMover` | S each |
 | **Column fuzz shader**: Doom's fuzz also shifts columns up and down by a pixel (`fuzzoffset`); a `TEffectNode` fragment shader could add that wobble to spectres and the invisible weapon. | Closer look. | `DoomActors` appearance | S |
 | **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
 | **Item respawn / deathmatch starts**: not applicable to single player, but the flags are parsed. | Only if multiplayer ever happens. | - | - |
@@ -252,8 +261,7 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Sector specials left in the gameplay table (S each): the donut (9),
-   perpetual platforms stopping and starting, raise by shortest lower
-   texture, crushers slowing to 1/8 speed when they hit something.
+2. Sky (S): Doom's vertical stretch and the sky-floor hack for pits
+   (`DoomGeometry.BuildSky`).
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

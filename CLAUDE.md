@@ -116,6 +116,16 @@ Gibs: `D` deals 100000 damage, so it gibs every zombie, sergeant, imp and
 SS (grep `Gib:`); `Y,P:3005:350` from the lift top (`G:160:256,A:0`) shows a
 cacodemon rising out of the pit, and `D` then drops its corpse.
 
+Sector specials: `LINE:n[:special]` activates linedef n (as another
+special with the same tag if given; `Line:` log). MAP05's donut:
+`Y,G:-64:408,A:-90,W:0.3,U,W:9,SAVE:2` (grep `Donut:`; sectors 54 and 53
+end at floor 0, 53 in GRASS1). MAP04's slow crusher with the god-mode
+player under it, stopped and resumed:
+`Y,G:704:1792,W:0.2,LINE:269,W:2,SAVE:3,LINE:269:74,W:2,SAVE:4,LINE:269,W:2,SAVE:5`
+(sector 82's ceiling and mover speed 0.125 in the saves). Reading a save's
+JSON (`sectorFloor`, `sectorCeiling`, `movers`) is the easy way to check
+heights.
+
 Monster wake-up: grep `Wake:` (sprite, position, `saw` / `heard` /
 `heard and saw (ambush)`) and `Noise:` (sectors a new shot reached). On
 E1M1, `Y,X,W:1,G:480:712,A:0,U,W:1.5,X,W:2,Q` gives 38 sectors from the

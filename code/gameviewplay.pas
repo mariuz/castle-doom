@@ -478,6 +478,8 @@ begin
     FAutomap.ShowAll := not FAutomap.ShowAll
   else if Cmd = 'Z' then
     FAutomap.ZoomBy(Arg)
+  else if Cmd = 'LINE' then
+    FWorld.DebugActivateLine(Round(Arg), Round(Arg2))
   else if Cmd = 'SHOTS' then
     FWorld.DebugShots := true
   else if Cmd = 'SIGHT' then

@@ -217,6 +217,10 @@ begin
     MJ.Add('returnTarget', Double(M.ReturnTarget));
     MJ.Add('perpetual', M.Perpetual);
     MJ.Add('phase', Ord(M.Phase));
+    MJ.Add('stasisPhase', Ord(M.StasisPhase));
+    MJ.Add('normalSpeed', Double(M.NormalSpeed));
+    MJ.Add('slowsWhenCrushing', M.SlowsWhenCrushing);
+    MJ.Add('silent', M.Silent);
     MJ.Add('startSound', M.StartSound);
     MJ.Add('stopSound', M.StopSound);
     MJ.Add('moveSound', M.MoveSound);
@@ -459,6 +463,10 @@ begin
       M.ReturnTarget := MJ.Get('returnTarget', 0.0);
       M.Perpetual := MJ.Get('perpetual', false);
       M.Phase := TMoverPhase(Clamped(MJ.Get('phase', 0), Ord(Low(TMoverPhase)), Ord(High(TMoverPhase))));
+      M.StasisPhase := TMoverPhase(Clamped(MJ.Get('stasisPhase', 0), Ord(Low(TMoverPhase)), Ord(High(TMoverPhase))));
+      M.NormalSpeed := MJ.Get('normalSpeed', 0.0);
+      M.SlowsWhenCrushing := MJ.Get('slowsWhenCrushing', false);
+      M.Silent := MJ.Get('silent', false);
       M.StartSound := MJ.Get('startSound', '');
       M.StopSound := MJ.Get('stopSound', '');
       M.MoveSound := MJ.Get('moveSound', '');
