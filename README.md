@@ -121,7 +121,9 @@ Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` light diminishing, `M` mouse look on/off,
 `J` music on/off, `F4` sound / music volume, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
 `F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `N`/`P` next/previous map,
-`F5` screenshot, `F8` engine inspector, `H` help, `Esc` menu.
+`F5` screenshot, `F8` engine inspector, `H` help, `Esc` pause (click or `Enter` resumes, `Esc`
+again goes to the title menu; in the browser, Esc releasing the mouse pauses the same way and a
+click takes the mouse back).
 
 Automated smoke test (loads a map, runs a script, saves screenshots, quits):
 

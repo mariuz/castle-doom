@@ -63,6 +63,8 @@ type
     FSlotMenu: Integer;
     { Sound volume menu: 0 effects, 1 music. }
     FSoundRow: Integer;
+    { The click that resumed or re-locked the mouse must not fire. }
+    FSuppressFire: Boolean;
     FSlotMenuBack: TCastleRectangleControl;
     FSlotMenuText: TDoomFontText;
     procedure SaveGame(const Slot: Integer);
@@ -74,6 +76,14 @@ type
     { Change the sound (Row 0) or music (Row 1) volume by Delta steps. }
     procedure ChangeVolume(const Row, Delta: Integer);
     procedure CloseSlotMenu;
+    procedure OpenPauseMenu;
+    { Leave the pause menu and take the mouse again. On the web this must
+      run inside a click or key event (a user gesture), or the browser
+      refuses the pointer lock. }
+    procedure ResumeFromPause;
+    { The user ended the pointer lock (on the web: Esc, which the browser
+      keeps for itself): pause like Doom's Esc menu would. }
+    procedure PointerLockUserCancelled(Sender: TObject);
     procedure RunDemo(const SecondsPassed: Single);
     procedure LoadPendingMap(Sender: TObject);
     procedure CreateUi;
@@ -139,6 +149,9 @@ const
   SlotMenuLoad = 2;
   { F4: Doom's sound volume menu (sound effects, music). }
   SlotMenuSound = 3;
+  { Esc, or the browser cancelling pointer lock (its Esc): the game waits
+    for a click / Enter (resume) or another Esc (title menu). }
+  SlotMenuPause = 4;
   SaveSlots = 6;
 
 function SaveSlotUrl(const Slot: Integer): String;
@@ -279,7 +292,7 @@ begin
     'F2 / F3: save / load   F6 / F9: quick save / load' + NL +
     'F5: screenshot' + NL +
     'F8: Castle Game Engine inspector' + NL +
-    'H: hide this help   Esc: menu';
+    'H: hide this help   Esc: pause (again: title menu)';
   InsertFront(FHelpLabel);
   FHelpVisible := true;
 
@@ -369,6 +382,7 @@ var
 begin
   inherited;
   CreateUi;
+  Container.PointerLock.AddUserCancelledListener({$ifdef FPC}@{$endif} PointerLockUserCancelled);
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
   FWorld.Skill := Skill;
   FreeAndNil(FStrings);
@@ -391,6 +405,7 @@ end;
 
 procedure TViewPlay.Stop;
 begin
+  Container.PointerLock.RemoveUserCancelledListener({$ifdef FPC}@{$endif} PointerLockUserCancelled);
   FreeAndNil(FPendingSave);
   FSlotMenu := SlotMenuNone;
   FreeAndNil(FDemoSteps);
@@ -565,6 +580,11 @@ begin
   end
   else if Cmd = 'X' then
     FWorld.FireWeapon
+  else if Cmd = 'UNLOCK' then
+    { What the browser's Esc does: the pointer lock is cancelled. }
+    PointerLockUserCancelled(nil)
+  else if Cmd = 'RESUME' then
+    ResumeFromPause
   else if Cmd = 'S' then
   begin
     Inc(FAutoTestShots);
@@ -812,6 +832,33 @@ begin
     if Music <> nil then Music.Volume := MusicGain;
   end;
   SaveSettings;
+end;
+
+procedure TViewPlay.OpenPauseMenu;
+begin
+  if (FWorld = nil) or not FWorld.MapLoaded or FIntermission then Exit;
+  FSlotMenu := SlotMenuPause;
+  FSlotMenuText.SetScale(Max(1, Round(EffectiveHeight / 200)) * 1.5);
+  FSlotMenuText.SetText('PAUSED' + NL + NL +
+    'CLICK OR PRESS ENTER TO RESUME' + NL + NL +
+    'ESC: TITLE MENU');
+  FSlotMenuBack.Exists := true;
+end;
+
+procedure TViewPlay.ResumeFromPause;
+begin
+  CloseSlotMenu;
+  FNavigation.Exists := not FWorld.Player.Dead;
+  if AutoTestPrefix = '' then
+    FNavigation.MouseLook := Settings.MouseLook;
+  FSuppressFire := true;
+end;
+
+procedure TViewPlay.PointerLockUserCancelled(Sender: TObject);
+begin
+  WritelnLog('PointerLock', 'Cancelled by the user, pausing');
+  if (Container.View = Self) and (FSlotMenu = SlotMenuNone) then
+    OpenPauseMenu;
 end;
 
 procedure TViewPlay.CloseSlotMenu;
@@ -1249,8 +1296,11 @@ begin
       FWorld.PlayerKnockUp := 0;
   end;
 
-  { Hold the fire button for automatic weapons. }
-  if (buttonLeft in Container.MousePressed) or Container.Pressed.Items[keyCtrl] then
+  { Hold the fire button for automatic weapons (not the click that just
+    resumed the game or took the mouse back). }
+  if FSuppressFire and not (buttonLeft in Container.MousePressed) then
+    FSuppressFire := false;
+  if ((buttonLeft in Container.MousePressed) and not FSuppressFire) or Container.Pressed.Items[keyCtrl] then
     FWorld.FireWeapon
   else
     FWorld.Player.Refire := false;
@@ -1330,6 +1380,16 @@ begin
     FWorld.UseInFront;
     Exit(true);
   end;
+  { Mouse look wanted but the pointer is free (the browser dropped the
+    lock, e.g. after the intermission): the click takes the mouse back
+    (a user gesture, so the browser allows it) instead of firing. }
+  if Event.IsMouseButton(buttonLeft) and Settings.MouseLook and
+     not FNavigation.MouseLook and (AutoTestPrefix = '') then
+  begin
+    FNavigation.MouseLook := true;
+    FSuppressFire := true;
+    Exit(true);
+  end;
   if Event.IsMouseButton(buttonLeft) or Event.IsKey(keyCtrl) then
   begin
     FWorld.FireWeapon;
@@ -1360,6 +1420,14 @@ begin
       end;
       Exit(true);
     end;
+  end;
+  if FSlotMenu = SlotMenuPause then
+  begin
+    if Event.IsMouseButton(buttonLeft) or Event.IsKey(keyEnter) or Event.IsKey(keySpace) then
+      ResumeFromPause
+    else if Event.IsKey(keyEscape) then
+      Container.View := ViewMenu;
+    Exit(true); { paused: nothing else reacts }
   end;
   if FSlotMenu = SlotMenuSound then
   begin
@@ -1508,7 +1576,7 @@ begin
   end;
   if Event.IsKey(keyEscape) then
   begin
-    Container.View := ViewMenu;
+    OpenPauseMenu;
     Exit(true);
   end;
 end;

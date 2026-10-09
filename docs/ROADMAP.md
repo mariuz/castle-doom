@@ -6,6 +6,25 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Autotests in CI: `tools/run_autotests.py` runs 12 demo scripts (title
+  menu, save round trip with gibs, knockback, door crushing a corpse,
+  melee turn, Arch-vile raise, texture memory, MAP05 donut, MAP04 crusher
+  stasis, pointer-lock pause, Icon of Sin death, settings persistence),
+  each with its own `XDG_CONFIG_HOME`, and checks the log (no exception,
+  the expected lines) and some saves' JSON. The `autotest` job in
+  `build.yml` builds on Ubuntu with apt's FPC and the CGE snapshot, runs
+  them under `xvfb-run` (Mesa), writes a summary table and keeps logs and
+  screenshots as an artifact. About 1.5 minutes of tests.
+- Esc and pointer lock like CGE's FPS examples (castle-engine.io/web
+  "Pointer lock"): Esc pauses with a Doom-font PAUSED screen (click / Enter
+  resume, Esc again goes to the title menu). In the browser Esc belongs to
+  the browser and only releases the mouse, so the pointer lock's
+  user-cancelled listener (`Container.PointerLock.AddUserCancelledListener`)
+  opens the same pause; resuming with a click re-enables mouse look inside
+  that user gesture, and a left click in the game while mouse look is
+  wanted but lost takes the mouse back instead of firing. Before, Esc on
+  the web left the game running with a free cursor and clicks never
+  locked the mouse again.
 - Memory: decoded wall textures and flats belong to the level that last
   asked for them (`TDoomGraphics.BeginLevel` / `ReleaseUnused`, a cache
   hit marks the whole animation group); once a new level's geometry is
@@ -278,7 +297,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Replace the in-code UI with editor designs** (`.castle-user-interface`) for the HUD and menu so they can be edited in the CGE editor; keep the generated map geometry in code. | Demonstrates the editor workflow. | `data/*.castle-user-interface`, views | M |
-| **Unit tests** (`castle-tester`/FPCUnit) for `DoomWad`, `DoomMap` polygon clipping, MUS/MIDI parsing, the synth envelope timings; a CI job that runs `--autotest` on a few maps with a software GL (Xvfb + Mesa) and keeps the screenshots as artifacts. | Catch regressions without a human. | `tests/`, `build.yml` | M |
+| **Unit tests** (`castle-tester`/FPCUnit) for `DoomWad`, `DoomMap` polygon clipping, MUS/MIDI parsing, the synth envelope timings (the `--autotest` CI job covers gameplay; these would cover the parsers). | Catch regressions without a human. | `tests/`, `build.yml` | M |
 | **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
 | **Web**: smaller download (ship only one WAD by default or load WADs on demand with `TCastleDownload`), progress UI during level load, pointer-lock prompt, gamepad. | Faster first play on the Pages site. | web build, `GameViewPlay` | M |
 | **Performance**: build a static-sector blockmap; merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
@@ -288,10 +307,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Autotests in CI (M): a `build.yml` job that builds on Linux, runs a
-   handful of `--autotest` scripts under `xvfb-run` (the recipe in
-   CLAUDE.md works on GitHub's Ubuntu runners' Mesa), greps the log for
-   exceptions and expected lines (`Save:` round trip, `Gib:`, `Donut:`)
-   and keeps the screenshots as artifacts.
+2. Web polish (S-M): a loading progress line while a level builds and
+   one WAD downloaded on demand instead of both (the browser fetches about
+   90 MB before the title screen).
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

@@ -49,6 +49,12 @@ run under `xvfb-run -a -s "-screen 0 1280x800x24" ./castle-doom --autotest ...`
 
 ## Testing without watching the window
 
+`tools/run_autotests.py EXE OUTDIR [test...]` runs the regression suite
+(the CI `autotest` job does exactly this under `xvfb-run`): each test in
+its own `XDG_CONFIG_HOME`, failing on exceptions, missing log lines or
+wrong save contents. Add a test there when a feature gets a demo recipe
+below.
+
 The autotest harness is the main verification tool; use it after every change:
 
 ```powershell
@@ -134,6 +140,10 @@ the import.
 Texture memory: each map load logs `Graphics: Freed N textures and flats
 of earlier levels (K KB); ... cached`; walk maps with `N` and come back
 with `LOAD:n` to check that released textures (and animated flats) return.
+
+Pause / pointer lock: `UNLOCK` does what the browser's Esc does (cancels
+the pointer lock, so the game pauses; log `PointerLock:`), `RESUME`
+clicks the pause away. The save's `tic` must not move while paused.
 
 `LOOK:deg` pitches the view (negative looks down), for sky and floor
 screenshots.
@@ -280,6 +290,11 @@ Goertzel on semitone vs quarter-tone frequencies).
   work in WebAssembly; sprites use `GuiTexture`.
 - **FPC on wasm32**: loop counters must be 32-bit (`Int64` loop variables do
   not compile there).
+- **Pointer lock on the web**: the browser keeps Esc and only releases the
+  mouse; the game learns it through
+  `Container.PointerLock.AddUserCancelledListener` (then pauses), and may
+  ask for the lock again only inside a user gesture (a click / key press
+  handler), so mouse look is re-enabled from `Press`, never from `Update`.
 - CGE log goes to `%LOCALAPPDATA%\castle-doom\castle-doom.log`; `WritelnLog`
   also reaches the browser console on the web.
 
