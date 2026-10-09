@@ -219,7 +219,11 @@ state to `TDoomWorld`, `TDoomActor` or `TSectorMover`, add it to
 
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
-test (E1M1 must then log 2231 vertices).
+test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies
+DeHackEd patches after the WADs' `DEHACKED` lumps; the log prints `DeHackEd:
+<source>: N values applied, M not supported` for each.
+`tools/testdata/test.deh` makes the imp 1 HP, the start 50 health and 20
+bullets, and E1M1's par 999 s.
 
 Set `CASTLE_DOOM_DUMP_MUSIC=<dir>` to write rendered music WAVs for analysis
 (a pitch-grid/level check script lived in the scratchpad as `analyze_wav.py`:
@@ -343,7 +347,9 @@ Goertzel on semitone vs quarter-tone frequencies).
   then `gh run rerun <id>` once the cancel has gone through.
 - `main` is the only branch; every push builds Windows/Linux packages
   (Docker) and macOS app bundles (macOS runners, x86_64 and aarch64) in
-  `build.yml` and deploys the web build (`web.yml`). Tags `vX.Y.Z` create a
+  `build.yml`, plus a Windows MSI (WiX 5 on `windows-latest`, source from
+  `tools/make_msi_wxs.py`; WiX does not run on Linux, so only CI tests it),
+  and deploys the web build (`web.yml`). Tags `vX.Y.Z` create a
   GitHub Release with the packages; when a session cannot push tags, run
   `Build` by hand (workflow_dispatch) with `release_tag=vX.Y.Z`, which
   creates the tag and the release (notes from `docs/CHANGELOG.md`). Check runs with

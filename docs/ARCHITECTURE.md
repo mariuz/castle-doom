@@ -84,7 +84,7 @@ Sizes, for orientation (lines of Pascal):
 | `doommenu.pas` | 420 | Doom's menu from `M_*` graphics |
 | `doomintermission.pas` | 330 | intermission screen |
 | `doomfinale.pas` | 460 | finale text, end pictures, bunny scroller, cast call |
-| `doomdehacked.pas` | 130 | BEX strings from `DEHACKED` lumps |
+| `doomdehacked.pas` | 440 | DeHackEd patches (`DEHACKED` lumps, `-deh` files): BEX strings, things, Misc, Ammo, par times |
 | `doomautomap.pas` | 210 | automap drawn with 2D primitives |
 | `doomfont.pas` | 130 | STCFN text |
 | `doomactors.pas` | 248 | sprite billboards with animation |
@@ -995,8 +995,14 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 
 ## 18. Known gaps and ideas
 
-- Other DeHackEd sections (frames, things, weapons, code pointers) are
-  ignored; only BEX strings are read.
+- DeHackEd (`ApplyDehacked`, before each game's world is made): the
+  `DEHACKED` lumps, then `-deh` / `-bex` files, reset and then patch the
+  thing table in place (`ResetThingInfos`; "Thing N" goes through
+  `MobjDoomedNum`, info.c's mobjtype order to THINGS numbers), `DehMisc`,
+  `DehMaxAmmo` / `DehClipAmmo` (pickups give a clip, boxes 5, weapons 2)
+  and `[PARS]` (`DehackedParTime`, used by the intermission). Frames, code
+  pointers, sprites, sounds, cheats and "Text" sections are counted as not
+  supported: the port has no vanilla state table.
 - No demo playback. The in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
   `DoomMenu`.
 - Vanilla node format only. A blockmap-free design means all 2D queries scan

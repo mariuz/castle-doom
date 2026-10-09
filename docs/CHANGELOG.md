@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Mouse look is no longer far too fast: it follows Doom's sensitivity
+  formula (the 0..9 Options slider, 5 by default), about 4 inches of a
+  1000 DPI mouse for a full turn.
+- DeHackEd patches: `-deh file.deh` (or `-bex`) and patches inside WADs
+  change monster hit points, speed and size, ammo limits and clip sizes,
+  starting health and bullets, armor and powerup values, and par times.
+  Freedoom's own par times now show on the intermission.
+- The weapon is lit through Doom's palette like the rest of the view.
+- Spectres and the invisible weapon use Doom's fuzz pattern.
+- Downloads for macOS (Intel and Apple Silicon) and a Windows installer
+  (MSI).
+
 ## v0.4.0 (2026-10-09)
 
 - Doom's own colours: the lighting now looks every pixel up in the real

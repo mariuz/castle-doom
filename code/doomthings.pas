@@ -65,6 +65,9 @@ type
   end;
   PThingInfo = ^TThingInfo;
 
+{ Back to the vanilla table (DeHackEd patches change the entries in place). }
+procedure ResetThingInfos;
+
 { Lookup by the THINGS lump type number. Returns nil for unknown types. }
 function FindThingInfo(const Num: Integer): PThingInfo;
 
@@ -167,7 +170,8 @@ end;
 
 procedure BuildTable;
 begin
-  Index := {$ifdef FPC}specialize{$endif} TDictionary<Integer, Integer>.Create;
+  SetLength(Infos, 0);
+  Index.Clear;
 
   { Player starts, deathmatch starts, teleport destination. }
   Special(1, tkPlayerStart);
@@ -432,7 +436,13 @@ begin
   end;
 end;
 
+procedure ResetThingInfos;
+begin
+  BuildTable;
+end;
+
 initialization
+  Index := {$ifdef FPC}specialize{$endif} TDictionary<Integer, Integer>.Create;
   BuildTable;
 finalization
   FreeAndNil(Index);

@@ -393,6 +393,9 @@ begin
   inherited;
   CreateUi;
   Container.PointerLock.AddUserCancelledListener({$ifdef FPC}@{$endif} PointerLockUserCancelled);
+  { DeHackEd patches (the WADs' DEHACKED lumps, -deh files) before any
+    thing is spawned: they change the thing table in place. }
+  ApplyDehacked(Wad);
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
   FWorld.Skill := Skill;
   FreeAndNil(FStrings);

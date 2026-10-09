@@ -1,0 +1,28 @@
+Patch File for DeHackEd v3.0
+# a test patch
+Doom version = 19
+Patch format = 6
+
+Thing 12 (Imp)
+Hit points = 1
+Width = 1310720
+
+Frame 100
+Duration = 2
+
+Text 5 5
+HELLOWORLD
+Misc 0
+Initial Health = 50
+Initial Bullets = 20
+
+Ammo 0 (Bullets)
+Max ammo = 100
+Per ammo = 7
+
+[PARS]
+par 1 1 999
+
+[STRINGS]
+GOTCLIP = Picked up a DEH clip.\
+ Really.

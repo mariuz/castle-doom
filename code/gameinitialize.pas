@@ -9,7 +9,7 @@ uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleUtils,
   CastleFilesUtils, CastleUriUtils,
-  DoomLighting, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
+  DoomLighting, DoomDehacked, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
 
 var
   Window: TCastleWindow;
@@ -43,7 +43,8 @@ begin
   ExportSaves := '';
   ImportSaves := '';
   { --autotest MAPNAME OUTPUT_PREFIX : load the map, save screenshots, quit. }
-  { Doom-style options: -iwad FILE, -file PWAD [PWAD...], -warp MAP. }
+  { Doom-style options: -iwad FILE, -file PWAD [PWAD...], -deh PATCH [PATCH...],
+    -warp MAP. }
   I := 1;
   while I <= Parameters.High do
   begin
@@ -98,6 +99,16 @@ begin
     begin
       CmdWarp := UpperCase(Parameters[I + 1]);
       Inc(I);
+    end else
+    if (Parameters[I] = '-deh') or (Parameters[I] = '--deh') or
+       (Parameters[I] = '-bex') or (Parameters[I] = '--bex') then
+    begin
+      { DeHackEd / BEX patches, applied after the WADs' DEHACKED lumps. }
+      while (I + 1 <= Parameters.High) and (Parameters[I + 1] <> '') and (Parameters[I + 1][1] <> '-') do
+      begin
+        AddDehackedFile(Parameters[I + 1]);
+        Inc(I);
+      end;
     end else
     if (Parameters[I] = '-file') or (Parameters[I] = '--file') then
     begin

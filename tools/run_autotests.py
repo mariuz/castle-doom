@@ -58,6 +58,14 @@ def check_typed_name(config):
     assert d == 'MY BASE 1', 'description %r' % d
 
 
+def check_dehacked(config):
+    """tools/testdata/test.deh: Misc initial health / bullets, Ammo 0 max ammo."""
+    s = save_json(config, 1)
+    p = s.get('player', s)
+    assert p['health'] == 50 and p['ammo'][0] == 20 and p['maxAmmo'][0] == 100, \
+        'player %s %s %s' % (p['health'], p['ammo'], p['maxAmmo'])
+
+
 def check_pause(config):
     """The game stands still while paused (pointer lock cancelled), runs after resuming."""
     t = [save_json(config, n)['tic'] for n in (1, 2, 3)]
@@ -114,6 +122,13 @@ TESTS = [
      [r'Graphics: Palette lookup images made', r'Saved screenshot 3'], [], None),
     ('fuzz', 'E1M1', 'Y,W:1,P:58:250,W:0.2,S,INVIS,W:0.3,S,Q',
      [r'Spawn: SARG', r'Saved screenshot 2'], [], None),
+    # A -deh patch: a 1 HP imp dies to one bullet, Freedoom's DEHACKED lump
+    # is read too, the patch's par time (999 s) is what the intermission uses.
+    ('dehacked', 'E1M1', 'Y,W:0.3,SAVE:1,SHOTS,P:3001:300,W:0.3,X,W:0.5,Q',
+     [r'DeHackEd: DEHACKED lump: \d+ values applied', r'DeHackEd: test\.deh: 7 values applied',
+      r'Shot: .* hit TROO \(-\d+ health left\)'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'test.deh')],
+     check_dehacked),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]

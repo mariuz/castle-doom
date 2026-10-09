@@ -6,6 +6,21 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- DeHackEd patches: `-deh` / `-bex` files and the WADs' `DEHACKED` lumps
+  change the thing table ("Thing N": hit points, speed, width, height,
+  mass, pain chance), the Misc values (initial health and bullets,
+  bonus / armor / soulsphere / megasphere limits, armor classes, IDKFA
+  armor, BFG cells per shot), "Ammo N" limits and clip sizes, and
+  `[PARS]` par times, so Freedoom's own par times now show on the
+  intermission. Frames, code pointers, sprites, sounds, cheats and the
+  old "Text" replacements are counted and logged as not supported.
+  Autotest `dehacked` with `tools/testdata/test.deh`.
+- Windows installer: CI builds `castle-doom-<version>-win64-x86_64.msi`
+  with WiX (`tools/make_msi_wxs.py`): Program Files, a Start menu
+  shortcut, upgrades replace the older version.
+- Mouse look sensitivity follows Doom's formula in radians per pixel
+  (it was 0.15 radians, 8.6 degrees, per pixel: far too fast with a
+  1000 DPI mouse); autotest `mouse-sensitivity`.
 - macOS packages: CI builds `Castle DOOM.app` for Intel (x86_64) and
   Apple Silicon (aarch64) on GitHub's macOS runners and attaches both
   zips to releases (not signed or notarized: the first start needs
@@ -333,7 +348,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
+| **DeHackEd frames and code pointers**: `-deh` patches already change thing stats, Misc, Ammo and par times; frames, code pointers, sprite / sound names and weapon frames would need vanilla's state table (`info.c` states) behind `TDoomActor`'s frame sequences. | Mods that change behaviour, not just numbers. | `DoomThings`, `DoomActors`, `DoomDehacked` | L |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
 
 ## 3. Audio
@@ -369,9 +384,9 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. `-deh` / `.bex` files (M-L): load DeHackEd patches given on the
-   command line and the other DeHackEd sections (things, frames,
-   weapons, ammo), for classic PWADs that change monsters.
-3. Background rendering of music (M): synthesize the next track in a
+2. Background rendering of music (M): synthesize the next track in a
    thread on the desktop and in slices on the web, so a level start
    never waits for the synth (see Audio).
+3. glBSP `GL_` lumps (M): load maps whose nodes come only as glBSP's
+   `GL_VERT` / `GL_SEGS` / `GL_SSECT` / `GL_NODES` (see Content and
+   formats).

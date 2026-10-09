@@ -53,7 +53,7 @@ implementation
 
 uses SysUtils, Math,
   CastleVectors, CastleUIControls,
-  DoomHud;
+  DoomHud, DoomDehacked;
 
 const
   Doom1Pars: array [1..3, 1..9] of Integer = (
@@ -68,6 +68,8 @@ function ParTime(const MapName: String; const IsDoom2: Boolean): Integer;
 var
   E, M: Integer;
 begin
+  { A DeHackEd [PARS] section (Freedoom has its own times) wins. }
+  if DehackedParTime(MapName, Result) then Exit;
   Result := 0;
   if IsDoom2 then
   begin

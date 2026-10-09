@@ -763,15 +763,13 @@ var
   A: TAmmoType;
 begin
   Player := Default(TPlayerState);
-  Player.Health := 100;
+  { Vanilla values, or a DeHackEd patch's Misc / Ammo sections. }
+  Player.Health := DehMisc.InitialHealth;
   Player.Weapons := [wpFist, wpPistol];
   Player.Weapon := wpPistol;
   for A := Low(TAmmoType) to High(TAmmoType) do Player.Ammo[A] := 0;
-  Player.MaxAmmo[amClip] := 200;
-  Player.MaxAmmo[amShell] := 50;
-  Player.MaxAmmo[amCell] := 300;
-  Player.MaxAmmo[amMisl] := 50;
-  Player.Ammo[amClip] := 50;
+  for A := amClip to amMisl do Player.MaxAmmo[A] := DehMaxAmmo[Ord(A)];
+  Player.Ammo[amClip] := DehMisc.InitialBullets;
   Player.WeaponFrame := 'A';
   Player.FlashFrame := #0;
 end;
@@ -781,13 +779,13 @@ var
   A: TAmmoType;
 begin
   Player.Weapons := [wpFist, wpChainsaw, wpPistol, wpShotgun, wpSuperShotgun, wpChaingun, wpMissile, wpPlasma, wpBfg];
-  Player.MaxAmmo[amClip] := 400; Player.MaxAmmo[amShell] := 100;
-  Player.MaxAmmo[amCell] := 600; Player.MaxAmmo[amMisl] := 100;
+  { IDKFA, with a backpack's limits. }
+  for A := amClip to amMisl do Player.MaxAmmo[A] := 2 * DehMaxAmmo[Ord(A)];
   for A := amClip to amMisl do Player.Ammo[A] := Player.MaxAmmo[A];
   Player.Keys := [keyBlue, keyYellow, keyRed, skullBlue, skullYellow, skullRed];
   Player.Health := 200;
-  Player.Armor := 200;
-  Player.ArmorType := 2;
+  Player.Armor := DehMisc.IdkfaArmor;
+  Player.ArmorType := DehMisc.IdkfaArmorClass;
 end;
 
 function TDoomWorld.MapLoaded: Boolean;
@@ -4018,7 +4016,7 @@ begin
   if Player.WeaponSwitch <> 0 then Exit;
   Ammo := AmmoFor(Player.Weapon);
   Cost := 1;
-  if Player.Weapon = wpBfg then Cost := 40;
+  if Player.Weapon = wpBfg then Cost := DehMisc.BfgCellsPerShot;
   if Player.Weapon = wpSuperShotgun then Cost := 2;
   if (Ammo <> amNoAmmo) and (Player.Ammo[Ammo] < Cost) then
   begin
@@ -4124,6 +4122,7 @@ var
   Picked: Boolean;
   Sound: String;
   Msg: String;
+  AmmoT: TAmmoType;
 
   function GiveAmmo(const T: TAmmoType; const Amount: Integer): Boolean;
   begin
@@ -4170,14 +4169,32 @@ begin
     case P of
       pkStimpack: Picked := GiveHealth(10, 100);
       pkMedikit: Picked := GiveHealth(25, 100);
-      pkHealthBonus: begin GiveHealth(1, 200); Picked := true; end;
-      pkArmorBonus: begin Player.Armor := Min(200, Player.Armor + 1); if Player.ArmorType = 0 then Player.ArmorType := 1; end;
+      { P_TouchSpecialThing with DeHackEd's Misc values (vanilla: bonuses
+        up to 200, green armor class 1 = 100 points, blue 2 = 200). }
+      pkHealthBonus: begin GiveHealth(1, DehMisc.MaxHealth); Picked := true; end;
+      pkArmorBonus:
+        begin
+          Player.Armor := Min(DehMisc.MaxArmor, Player.Armor + 1);
+          if Player.ArmorType = 0 then Player.ArmorType := 1;
+        end;
       pkArmorGreen:
-        if Player.Armor >= 100 then Picked := false
-        else begin Player.Armor := 100; Player.ArmorType := 1; end;
-      pkArmorBlue: begin Player.Armor := 200; Player.ArmorType := 2; end;
-      pkSoulsphere: begin Player.Health := Min(200, Player.Health + 100); Sound := 'DSGETPOW'; end;
-      pkMegasphere: begin Player.Health := 200; Player.Armor := 200; Player.ArmorType := 2; Sound := 'DSGETPOW'; end;
+        if Player.Armor >= DehMisc.GreenArmorClass * 100 then Picked := false
+        else begin Player.Armor := DehMisc.GreenArmorClass * 100; Player.ArmorType := DehMisc.GreenArmorClass; end;
+      pkArmorBlue:
+        if Player.Armor >= DehMisc.BlueArmorClass * 100 then Picked := false
+        else begin Player.Armor := DehMisc.BlueArmorClass * 100; Player.ArmorType := DehMisc.BlueArmorClass; end;
+      pkSoulsphere:
+        begin
+          Player.Health := Min(DehMisc.MaxSoulsphere, Player.Health + DehMisc.SoulsphereHealth);
+          Sound := 'DSGETPOW';
+        end;
+      pkMegasphere:
+        begin
+          Player.Health := DehMisc.MegasphereHealth;
+          Player.Armor := 200;
+          Player.ArmorType := 2;
+          Sound := 'DSGETPOW';
+        end;
       pkBerserk: begin Player.BerserkTics := 60 * TicRate; GiveHealth(100, 100); ChangeWeapon(wpFist); Sound := 'DSGETPOW'; end;
       pkInvulnerability: begin Player.InvulnerableTics := 30 * TicRate; Sound := 'DSGETPOW'; end;
       pkInvisibility: begin Player.InvisibleTics := 60 * TicRate; Sound := 'DSGETPOW'; end;
@@ -4190,26 +4207,30 @@ begin
       pkSkullBlue: Include(Player.Keys, skullBlue);
       pkSkullYellow: Include(Player.Keys, skullYellow);
       pkSkullRed: Include(Player.Keys, skullRed);
-      pkClip: Picked := GiveAmmo(amClip, 10);
-      pkClipBox: Picked := GiveAmmo(amClip, 50);
-      pkShells: Picked := GiveAmmo(amShell, 4);
-      pkShellBox: Picked := GiveAmmo(amShell, 20);
-      pkRocket: Picked := GiveAmmo(amMisl, 1);
-      pkRocketBox: Picked := GiveAmmo(amMisl, 5);
-      pkCell: Picked := GiveAmmo(amCell, 20);
-      pkCellPack: Picked := GiveAmmo(amCell, 100);
+      { P_GiveAmmo: a clip (DeHackEd "Per ammo"), boxes 5 clips, weapons
+        2 clips, a backpack 1 of each and twice the limits. }
+      pkClip: Picked := GiveAmmo(amClip, DehClipAmmo[Ord(amClip)]);
+      pkClipBox: Picked := GiveAmmo(amClip, 5 * DehClipAmmo[Ord(amClip)]);
+      pkShells: Picked := GiveAmmo(amShell, DehClipAmmo[Ord(amShell)]);
+      pkShellBox: Picked := GiveAmmo(amShell, 5 * DehClipAmmo[Ord(amShell)]);
+      pkRocket: Picked := GiveAmmo(amMisl, DehClipAmmo[Ord(amMisl)]);
+      pkRocketBox: Picked := GiveAmmo(amMisl, 5 * DehClipAmmo[Ord(amMisl)]);
+      pkCell: Picked := GiveAmmo(amCell, DehClipAmmo[Ord(amCell)]);
+      pkCellPack: Picked := GiveAmmo(amCell, 5 * DehClipAmmo[Ord(amCell)]);
       pkBackpack:
         begin
-          Player.MaxAmmo[amClip] := 400; Player.MaxAmmo[amShell] := 100;
-          Player.MaxAmmo[amCell] := 600; Player.MaxAmmo[amMisl] := 100;
-          GiveAmmo(amClip, 10); GiveAmmo(amShell, 4); GiveAmmo(amCell, 20); GiveAmmo(amMisl, 1);
+          for AmmoT := amClip to amMisl do
+          begin
+            Player.MaxAmmo[AmmoT] := 2 * DehMaxAmmo[Ord(AmmoT)];
+            GiveAmmo(AmmoT, DehClipAmmo[Ord(AmmoT)]);
+          end;
         end;
-      pkShotgun: begin GiveWeapon(wpShotgun, amShell, 8); Sound := 'DSWPNUP'; end;
-      pkSuperShotgun: begin GiveWeapon(wpSuperShotgun, amShell, 8); Sound := 'DSWPNUP'; end;
-      pkChaingun: begin GiveWeapon(wpChaingun, amClip, 20); Sound := 'DSWPNUP'; end;
-      pkRocketLauncher: begin GiveWeapon(wpMissile, amMisl, 2); Sound := 'DSWPNUP'; end;
-      pkPlasma: begin GiveWeapon(wpPlasma, amCell, 40); Sound := 'DSWPNUP'; end;
-      pkBFG: begin GiveWeapon(wpBfg, amCell, 40); Sound := 'DSWPNUP'; end;
+      pkShotgun: begin GiveWeapon(wpShotgun, amShell, 2 * DehClipAmmo[Ord(amShell)]); Sound := 'DSWPNUP'; end;
+      pkSuperShotgun: begin GiveWeapon(wpSuperShotgun, amShell, 2 * DehClipAmmo[Ord(amShell)]); Sound := 'DSWPNUP'; end;
+      pkChaingun: begin GiveWeapon(wpChaingun, amClip, 2 * DehClipAmmo[Ord(amClip)]); Sound := 'DSWPNUP'; end;
+      pkRocketLauncher: begin GiveWeapon(wpMissile, amMisl, 2 * DehClipAmmo[Ord(amMisl)]); Sound := 'DSWPNUP'; end;
+      pkPlasma: begin GiveWeapon(wpPlasma, amCell, 2 * DehClipAmmo[Ord(amCell)]); Sound := 'DSWPNUP'; end;
+      pkBFG: begin GiveWeapon(wpBfg, amCell, 2 * DehClipAmmo[Ord(amCell)]); Sound := 'DSWPNUP'; end;
       pkChainsaw: begin GiveWeapon(wpChainsaw, amNoAmmo, 0); Sound := 'DSWPNUP'; end;
       else Picked := false;
     end;

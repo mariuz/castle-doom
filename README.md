@@ -4,7 +4,7 @@
 [![Web](https://github.com/mariuz/castle-doom/actions/workflows/web.yml/badge.svg)](https://github.com/mariuz/castle-doom/actions/workflows/web.yml)
 
 **Play in the browser: https://mariuz.github.io/castle-doom/** (WebAssembly build)
-&middot; **Downloads: [Releases](https://github.com/mariuz/castle-doom/releases)** (Windows, Linux, macOS) &middot; [Changelog](docs/CHANGELOG.md)
+&middot; **Downloads: [Releases](https://github.com/mariuz/castle-doom/releases)** (Windows installer or zip, Linux, macOS) &middot; [Changelog](docs/CHANGELOG.md)
 
 Doom levels, rendered and played with [Castle Game Engine](https://castle-engine.io/)
 (Object Pascal). It reads the original WAD format directly: Freedoom Phase 1 and
@@ -13,7 +13,7 @@ vanilla-format Doom 1 / Doom 2 IWADs and PWADs can be loaded from the menu
 ("Open IWAD...", "Add PWAD...") or the command line:
 
 ```bash
-castle-doom -iwad DOOM2.WAD -file mymap.wad -warp MAP01
+castle-doom -iwad DOOM2.WAD -file mymap.wad -deh mymap.deh -warp MAP01
 ```
 
 This project is deliberately written as a *tour of the engine*: every Doom subsystem
@@ -96,7 +96,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   are kept in the page's `localStorage`, so they survive reloads; the home page's "Your
   saves" section exports them to a file and imports them back, and the desktop build reads
   the same file (Options: Export / Import saves, `--export-saves` / `--import-saves`).
-- External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-warp`), PWAD lumps
+- External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-deh` / `-warp`), PWAD lumps
   overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
   `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`), so maps built with ZDBSP load too.
 - Music: MUS and MIDI lumps played through an FM synthesizer driven by the WAD's GENMIDI
@@ -105,8 +105,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no glBSP `GL_` lumps or UDMF maps, no
-`-deh` files, the music synth approximates the OPL2.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no glBSP `GL_` lumps or UDMF maps,
+DeHackEd patches change numbers (thing stats, ammo, limits, par times) but not frames or
+code pointers, the music synth approximates the OPL2.
 
 ## Build and run
 
@@ -140,8 +141,9 @@ castle-doom --autotest E1M1 shots/e1m1 --demo "S,F:3,S,T:90,U,W:2,S,X,S,Q"
 - `.github/workflows/build.yml`: packages Windows x86_64 and Linux x86_64 builds on every
   push using the [Castle Game Engine Docker image](https://castle-engine.io/docker), and macOS
   app bundles (x86_64 and aarch64, unsigned: right-click > Open the first time) on GitHub's
-  macOS runners; pushing a tag `vX.Y.Z`, or running the workflow by hand with `release_tag`,
-  attaches them to a GitHub Release.
+  macOS runners, and a Windows installer (MSI, WiX on a Windows runner, from the Windows zip
+  by `tools/make_msi_wxs.py`); pushing a tag `vX.Y.Z`, or running the workflow by hand with
+  `release_tag`, attaches them to a GitHub Release.
 - `.github/workflows/web.yml`: builds the WebAssembly version (FPC main branch with the
   wasm32 cross-compiler and Pas2js are built from source and cached, since the Docker image
   does not ship them yet) and deploys `pages/` + the game to GitHub Pages.
@@ -163,7 +165,7 @@ code/doomautomap.pas    automap (DrawPrimitive2D)
 code/doomfont.pas       STCFN text
 code/doomintermission.pas  intermission screen
 code/doomfinale.pas     finale text, end pictures, bunny scroller, cast call
-code/doomdehacked.pas   BEX strings from DEHACKED lumps
+code/doomdehacked.pas   DeHackEd patches: BEX strings, things, ammo, par times
 code/doomwipe.pas       the screen melt
 code/doommenu.pas       Doom's menu (M_* graphics): title pages, main, episode, skill, load / save, Read This
 code/gameviewmenu.pas   title screen: Doom menu and options
