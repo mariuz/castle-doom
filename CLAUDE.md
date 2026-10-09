@@ -154,8 +154,9 @@ from a local HTTP server.
 Menus: `MENUTITLE` (title pages without the menu) and `MENUREADTHIS`
 (F1) are menu screenshots too; the other `MENU*` open the menu first.
 In a game, `KEY:name` presses UP / DOWN / LEFT / RIGHT / ENTER / ESCAPE /
-F1..F4 through `Press`, e.g. `KEY:F2,KEY:DOWN,KEY:ENTER` saves slot 2 from
-Doom's save page.
+BACKSPACE / F1..F4 through `Press`, e.g. `KEY:F2,KEY:DOWN,KEY:ENTER,KEY:ENTER`
+saves slot 2 from Doom's save page (the first Enter starts editing the
+name, the second keeps it); `TYPE:text` types characters (no commas).
 
 Pause / pointer lock: `UNLOCK` does what the browser's Esc does (cancels
 the pointer lock, so Doom's menu opens over the paused game; log

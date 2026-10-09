@@ -6,6 +6,12 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Typed save names like `M_SaveSelect`: choosing a slot on Doom's save
+  page edits its name with the `_` cursor (a new save starts with the
+  map, kills and time, an old one with its name), letters / digits /
+  punctuation in Doom's uppercase, 23 at most, Backspace, Enter saves,
+  Esc cancels the edit; 1-6 do not pick slots while typing. Demo
+  commands `TYPE:text` and `KEY:BACKSPACE`; autotest `typed-save-name`.
 - Doom's menus in the game: Esc (and, in the browser, losing the pointer
   lock) opens Doom's main menu over the paused game (New Game, Options,
   Load, Save, Read This!, Quit), Esc again or a click beside the items
@@ -304,7 +310,6 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **`-deh` / `.bex` files** and the other DeHackEd sections (things, frames, weapons, ammo, code pointers) for PWADs that change monsters. | Many classic PWADs ship a `.deh`. | `DoomDehacked`, `DoomThings` | M-L |
-| **Demo playback for the attract loop** and Doom's message-typing for save descriptions (`M_SaveSelect` lets you type a name; here the map, kills and time are used). | Fidelity of the title loop and saves. | `DoomMenu`, demo playback (see Content) | S (typing), L (demos) |
 | **Browser frame rate**: in the Claude browser pane the web build ran at 4-22 FPS with the game logic and music slices taking only ~25 ms per frame; profile rendering in a normal browser (Chrome Performance panel, CGE `FrameProfiler`) and batch the sprite scenes if draw calls dominate. | Playable speed on the Pages site. | web build, `DoomActors` | M |
 | **Palette-mapped rendering** for the real 8-bit look: quantize each texel to the palette and look it up in the real `COLORMAP` rows (a 32x32x32 RGB-to-index texture and a 256x34 colormap texture in the `DoomLighting` effect), instead of multiplying by (32 - level) / 32. | Exact Doom colours, banding of the palette. | `DoomLighting` | M |
 
@@ -341,8 +346,9 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Typed save names (S): Doom's save page lets you type a description
-   (`M_SaveSelect`, the `_` cursor, Enter / Esc); the default stays the
-   map, kills and time.
+2. Palette-mapped rendering (M): quantize to `PLAYPAL` and look the
+   light level up in the real `COLORMAP` rows in the `DoomLighting`
+   shader (see Presentation), for Doom's exact colours and banding, and
+   the inverted colormap from `COLORMAP` row 32 itself.
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

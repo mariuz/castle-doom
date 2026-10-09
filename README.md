@@ -87,7 +87,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   until a key opens the menu; New Game, episode and skill select (all five skills, with
   Nightmare's fast monsters and respawning), Load Game, Read This! (`F1`); `-skill 1..5`.
   In the game, Esc / F2 / F3 / F4 open Doom's main menu, save and load pages and the sound
-  volume page (`M_*` graphics, thermometer sliders) over the paused game.
+  volume page (`M_*` graphics, thermometer sliders) over the paused game; saves get a typed
+  name (Doom's `_` cursor; the map, kills and time by default).
   The Options page picks WADs, map and skill.
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used

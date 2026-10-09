@@ -52,6 +52,12 @@ def check_options(config):
     assert s['mouseSensitivity'] == 6 and s['sfxVolume'] == 14, 'settings %s' % s
 
 
+def check_typed_name(config):
+    """Doom's save page takes a typed name (digits type, they do not pick a slot)."""
+    d = save_json(config, 1)['description']
+    assert d == 'MY BASE 1', 'description %r' % d
+
+
 def check_pause(config):
     """The game stands still while paused (pointer lock cancelled), runs after resuming."""
     t = [save_json(config, n)['tic'] for n in (1, 2, 3)]
@@ -86,7 +92,7 @@ TESTS = [
     ('title-pages', 'MENUTITLE', None, [r'Menu screenshot MENUTITLE'], [], None),
     ('read-this', 'MENUREADTHIS', None, [r'Menu screenshot MENUREADTHIS'], [], None),
     ('ingame-save-load', 'E1M1',
-     'W:0.3,KEY:F2,W:0.3,S,KEY:DOWN,KEY:DOWN,KEY:ENTER,W:0.5,KEY:F3,W:0.3,S,KEY:ESCAPE,'
+     'W:0.3,KEY:F2,W:0.3,S,KEY:DOWN,KEY:DOWN,KEY:ENTER,KEY:ENTER,W:0.5,KEY:F3,W:0.3,S,KEY:ESCAPE,'
      'KEY:F3,KEY:DOWN,KEY:DOWN,KEY:ENTER,W:1,Q',
      [r'Save: Saved E1M1 to castle-config:/save3\.json', r'Save: Loading castle-config:/save3\.json',
       r'Save: E1M1: restored'], [], None),
@@ -95,6 +101,10 @@ TESTS = [
      'KEY:LEFT,W:0.2,S,KEY:ESCAPE,KEY:ESCAPE,KEY:ESCAPE,KEY:ESCAPE,KEY:DOWN,KEY:DOWN,KEY:ENTER,'
      'KEY:DOWN,KEY:ENTER,W:0.3,S,KEY:ESCAPE,Q',
      [r'Saved screenshot 2'], [], check_options),
+    ('typed-save-name', 'E1M1',
+     'W:0.3,KEY:F2,KEY:ENTER,' + ','.join(['KEY:BACKSPACE'] * 16) +
+     ',TYPE:MY BASE 1,KEY:ENTER,W:0.3,KEY:F3,W:0.3,S,KEY:ESCAPE,Q',
+     [r'Save: Saved E1M1 to castle-config:/save1\.json'], [], check_typed_name),
     ('pointer-lock-pause', 'E1M1', 'W:0.5,SAVE:1,UNLOCK,W:2,S,SAVE:2,RESUME,W:1,SAVE:3,Q',
      [r'PointerLock: Cancelled by the user, pausing'], [], check_pause),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',

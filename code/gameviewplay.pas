@@ -70,7 +70,10 @@ type
     { The "Messages ON / OFF" message shows even with messages off. }
     FMessageAlways: Boolean;
     procedure SlotScreenAction(const Action: TDoomMenuAction);
-    procedure SaveGame(const Slot: Integer);
+    { Description: shown on the load page ('' = the map, kills
+      and time). }
+    procedure SaveGame(const Slot: Integer; const Description: String = '');
+    function AutoSaveName: String;
     procedure LoadGame(const Slot: Integer);
     function LoadGameUrl(const Url: String): Boolean;
     procedure RestoreViewState(const State: TJSONObject);
@@ -594,6 +597,12 @@ begin
   end
   else if Cmd = 'X' then
     FWorld.FireWeapon
+  else if Cmd = 'TYPE' then
+  begin
+    { TYPE:text types characters (a save name); ',' cannot be in it. }
+    for P := 1 to Length(Rest) do
+      Press(InputKey(TVector2.Zero, keyNone, Rest[P], []));
+  end
   else if Cmd = 'KEY' then
   begin
     { KEY:name presses a key through Press like the keyboard would
@@ -605,6 +614,7 @@ begin
     else if Rest = 'RIGHT' then K := keyArrowRight
     else if Rest = 'ENTER' then K := keyEnter
     else if Rest = 'ESCAPE' then K := keyEscape
+    else if Rest = 'BACKSPACE' then K := keyBackSpace
     else if Rest = 'F1' then K := keyF1
     else if Rest = 'F2' then K := keyF2
     else if Rest = 'F3' then K := keyF3
@@ -712,7 +722,16 @@ begin
     PlacePlayer(FWorld.Player.X, FWorld.Player.Y, FWorld.Player.Z, FWorld.Player.Angle);
 end;
 
-procedure TViewPlay.SaveGame(const Slot: Integer);
+function TViewPlay.AutoSaveName: String;
+var
+  P: TPlayerState;
+begin
+  P := FWorld.Player;
+  Result := Format('%s  %d/%d  %d:%2.2d', [FMapName, P.Kills, P.TotalKills,
+    Trunc(FLevelTime) div 60, Trunc(FLevelTime) mod 60]);
+end;
+
+procedure TViewPlay.SaveGame(const Slot: Integer; const Description: String);
 var
   J: TJSONObject;
   C, Wads: TJSONArray;
@@ -738,9 +757,10 @@ begin
     for I := 0 to Wad.FileUrls.Count - 1 do
       Wads.Add(Wad.FileUrls[I]);
     J.Add('wads', Wads);
-    P := FWorld.Player;
-    J.Add('description', Format('%s  %d/%d  %d:%2.2d', [FMapName, P.Kills, P.TotalKills,
-      Trunc(FLevelTime) div 60, Trunc(FLevelTime) mod 60]));
+    if Description <> '' then
+      J.Add('description', Description)
+    else
+      J.Add('description', AutoSaveName);
     J.Add('saved', FormatDateTime('yyyy-mm-dd hh:nn', Now));
     try
       WriteSaveFile(SaveSlotUrl(Slot), J);
@@ -823,6 +843,7 @@ begin
   FSlotScreen.MouseSensitivity := Settings.MouseSensitivity;
   FSlotScreen.MessagesOn := Settings.ShowMessages;
   FSlotScreen.Skill := Skill;
+  FSlotScreen.DefaultSaveName := AutoSaveName;
   for I := 1 to SaveSlots do
   begin
     J := ReadSaveFile(SaveSlotUrl(I));
@@ -831,7 +852,8 @@ begin
     else
     begin
       { The time of day after the description ("2026-10-09 17:26"). }
-      FSlotScreen.SetSlot(I, J.Get('description', '?') + ' ' + Copy(J.Get('saved', ''), 12, 5));
+      FSlotScreen.SetSlot(I, J.Get('description', '?') + ' ' + Copy(J.Get('saved', ''), 12, 5),
+        J.Get('description', '?'));
       FreeAndNil(J);
     end;
   end;
@@ -858,7 +880,7 @@ begin
     maSaveSlot:
       begin
         ResumeFromPause;
-        SaveGame(Slot);
+        SaveGame(Slot, FSlotScreen.SaveName);
       end;
     maLoadSlot:
       begin
@@ -1537,7 +1559,7 @@ begin
     begin
       K := TKey(Ord(key0) + Idx);
       { 1-6 on Doom's save / load page picks that slot directly. }
-      if Event.IsKey(K) and (FSlotScreen.Page in [mpSave, mpLoad]) then
+      if Event.IsKey(K) and (FSlotScreen.Page in [mpSave, mpLoad]) and not FSlotScreen.Editing then
       begin
         if FSlotScreen.Page = mpSave then
         begin

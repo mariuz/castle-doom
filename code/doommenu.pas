@@ -41,6 +41,11 @@ type
     FStrings: TDoomStrings;
     FEpisodes: Integer;
     FSlots: array [1..6] of String;
+    { The saves' own names (FSlots may show more, like the time). }
+    FSlotNames: array [1..6] of String;
+    { M_SaveSelect: typing the name of save slot Slot. }
+    FEditing: Boolean;
+    FEditText: String;
     FDirty: Boolean;
     FLastSkull: Integer;
     { Main menu items (M_RDTHIS only in Doom 1, like m_menu.c). }
@@ -89,12 +94,18 @@ type
     SfxVolume, MusicVolume: Integer; { 0..15 }
     MouseSensitivity: Integer;       { 0..9 }
     MessagesOn: Boolean;
+    { The save page: the name a new save starts with, and the one typed
+      (read it on maSaveSlot). }
+    DefaultSaveName: String;
+    SaveName: String;
     constructor Create(AOwner: TComponent); override;
     { Set up for a WAD: graphics, sounds, how many episodes (0 = Doom 2). }
     procedure Setup(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds; const AEpisodes: Integer;
       const AStrings: TDoomStrings);
     { Descriptions shown on the load page ('' = empty slot). }
-    procedure SetSlot(const Index: Integer; const Description: String);
+    { SlotName is the save's own description (what the save page lets you
+      edit); Description may add more for display. }
+    procedure SetSlot(const Index: Integer; const Description: String; const SlotName: String = '');
     procedure OpenPage(const Page: TDoomMenuPage);
     { Show or hide the menu over the title pages. }
     procedure SetMenuActive(const Value: Boolean);
@@ -109,6 +120,8 @@ type
     function Motion(const Event: TInputMotion): Boolean; override;
     property Page: TDoomMenuPage read FPage;
     property Prompting: Boolean read FPrompt;
+    { A save name is being typed (keys go to it). }
+    property Editing: Boolean read FEditing;
   end;
 
 const
@@ -126,6 +139,8 @@ const
   { Used when the WAD has no DEHACKED strings. }
   NightmarePrompt = 'Are you sure? This skill level' + #10 + 'isn''t even remotely fair.' + #10#10 + 'Press Y or N.';
   QuitPrompt = 'Are you sure you want to quit?';
+ { SAVESTRINGSIZE - 1 characters (the border holds 24 with the cursor). }
+  SaveNameLength = 23;
   EndGamePrompt = 'Are you sure you want to end the game?' + #10#10 + 'Press Y or N.';
   QuitPromptKey = '(Press Y to quit.)';
   SkullXOff = -32;
@@ -263,10 +278,13 @@ begin
   Compose;
 end;
 
-procedure TDoomMenuScreen.SetSlot(const Index: Integer; const Description: String);
+procedure TDoomMenuScreen.SetSlot(const Index: Integer; const Description: String; const SlotName: String);
 begin
   if (Index >= Low(FSlots)) and (Index <= High(FSlots)) then
+  begin
     FSlots[Index] := Description;
+    if SlotName <> '' then FSlotNames[Index] := SlotName else FSlotNames[Index] := Description;
+  end;
   FDirty := true;
 end;
 
@@ -320,6 +338,7 @@ procedure TDoomMenuScreen.OpenPage(const Page: TDoomMenuPage);
 begin
   FPage := Page;
   FPrompt := false;
+  FEditing := false;
   { The skill page starts at the current skill (Hurt me plenty by default). }
   if Page = mpSkill then FItemOn[Page] := Skill;
   FItemOn[Page] := Clamped(FItemOn[Page], 0, ItemCount(Page) - 1);
@@ -434,8 +453,14 @@ begin
       end;
     mpSave:
       begin
+        { M_SaveSelect: edit the slot's name (a new save starts with the
+          map, kills and time), Enter saves. }
         Slot := Item + 1;
-        if Assigned(OnAction) then OnAction(maSaveSlot);
+        FEditing := true;
+        if FSlots[Slot] <> '' then FEditText := FSlotNames[Slot] else FEditText := DefaultSaveName;
+        FEditText := Copy(UpperCase(FEditText), 1, SaveNameLength);
+        FDirty := true;
+        Compose;
       end;
     mpOptions:
       if ItemName = 'M_ENDGAM' then
@@ -489,8 +514,47 @@ begin
 end;
 
 function TDoomMenuScreen.HandleKey(const Event: TInputPressRelease): Boolean;
+var
+  C: Char;
 begin
   Result := true;
+  if FEditing then
+  begin
+    { M_Responder with saveStringEnter: type, Backspace, Enter, Esc. }
+    if Event.IsKey(keyEnter) then
+    begin
+      if FEditText <> '' then
+      begin
+        FEditing := false;
+        SaveName := FEditText;
+        FDirty := true;
+        if Assigned(OnAction) then OnAction(maSaveSlot);
+      end;
+    end else
+    if Event.IsKey(keyEscape) then
+    begin
+      FEditing := false;
+      FDirty := true;
+      Compose;
+    end else
+    if Event.IsKey(keyBackSpace) then
+    begin
+      if FEditText <> '' then SetLength(FEditText, Length(FEditText) - 1);
+      FDirty := true;
+      Compose;
+    end else
+    if (Length(Event.KeyString) = 1) and (Event.KeyString[1] >= ' ') and (Event.KeyString[1] <= '~') then
+    begin
+      C := UpCase(Event.KeyString[1]);
+      if Length(FEditText) < SaveNameLength then
+      begin
+        FEditText := FEditText + C;
+        FDirty := true;
+        Compose;
+      end;
+    end;
+    Exit;
+  end;
   if FPrompt then
   begin
     if Event.IsKey(keyY) or Event.IsKey(keyEnter) then
@@ -593,6 +657,8 @@ var
 begin
   Result := inherited;
   if Result or not MouseEnabled then Exit;
+  { Typing a save name: the mouse waits (Enter / Esc end it). }
+  if FEditing then Exit(true);
   if not FMenuActive then
   begin
     if Event.IsMouseButton(buttonLeft) then
@@ -783,6 +849,8 @@ begin
         DrawPatch('M_LSCNTR', X + K * 8, LineY + 7);
       DrawPatch('M_LSRGHT', X + 24 * 8, LineY + 7);
       if FSlots[I + 1] <> '' then Text := FSlots[I + 1] else Text := 'EMPTY SLOT';
+      { The name being typed, with Doom's "_" cursor. }
+      if FEditing and (FPage = mpSave) and (Slot = I + 1) then Text := FEditText + '_';
       { SAVESTRINGSIZE: the border holds 24 characters. }
       DrawDoomText(FGraphics, Img, X, LineY, UpperCase(Copy(Text, 1, 24)));
     end;
