@@ -182,7 +182,9 @@ per-frame costs, CGE's FPS (`only render` = without display waits) and the
 last frame's render statistics (shapes, scenes, draw calls). `NOSPRITES`
 and `NOMAP` toggle every thing / the map geometry to see what each costs,
 `PALMAP` the palette lookup. E1M1 at `G:480:712,A:0` draws about 255
-shapes: 151 map, 104 sprites. In the browser the same runs through the
+shapes: 151 map, 104 sprites. `SPRITESTATS` logs how many sprites are
+shown and how many distinct texture|light group|kind combinations they
+have (what batching could merge: 208 and 87 on E1M1). In the browser the same runs through the
 page URL: `play/?map=E1M1&demo=G:480:712,A:0,W:30,PERF` (`S` only logs,
 `Q` ends the demo; `warp=` and `skill=` work too). A headless Chromium with
 SwiftShader (Playwright, `--use-angle=swiftshader`) loads the live page in

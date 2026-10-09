@@ -33,6 +33,11 @@ type
     FSeqLoop: Boolean;
     FTicsLeft: Integer;
     procedure BuildScene;
+  public
+    { Profiling: what CGE's batching could merge: "texture|light group|kind"
+      ('' while the actor has no sprite image). }
+    function RenderKey: String;
+  strict private
     procedure ApplySprite;
   public
     Info: PThingInfo;
@@ -189,6 +194,12 @@ begin
   FScene := TCastleScene.Create(Self);
   FScene.Load(Root, true);
   Add(FScene);
+end;
+
+function TDoomActor.RenderKey: String;
+begin
+  if (FCurrentImage = nil) or not FScene.Exists then Exit('');
+  Result := Format('%s|%d|%d', [FCurrentImage.Url, Round(FLightField.Value.X) div 16, Round(FLightField.Value.Y)]);
 end;
 
 procedure TDoomActor.ApplySprite;

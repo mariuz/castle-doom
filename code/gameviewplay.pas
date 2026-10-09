@@ -459,6 +459,7 @@ var
   P, Sec: Integer;
   K: TKey;
   SpawnedActor: TDoomActor;
+  FDemoKeys: TStringList;
 begin
   if FDemoSteps = nil then
   begin
@@ -673,6 +674,28 @@ begin
     { Profiling: hide every thing (sprite scenes) to see what they cost. }
     for P := 0 to FWorld.Actors.Count - 1 do
       FWorld.Actors[P].Exists := not FWorld.Actors[P].Exists;
+  end else if Cmd = 'SPRITESTATS' then
+  begin
+    { How many draw calls the sprites would need if merged per texture
+      within one scene per light group and kind. }
+    FDemoKeys := TStringList.Create;
+    try
+      FDemoKeys.Sorted := true;
+      FDemoKeys.Duplicates := dupIgnore;
+      Sec := 0;
+      for P := 0 to FWorld.Actors.Count - 1 do
+        if FWorld.Actors[P].RenderKey <> '' then
+        begin
+          Inc(Sec);
+          FDemoKeys.Add(FWorld.Actors[P].RenderKey);
+        end;
+      KeyStr := '';
+      for P := 0 to FDemoKeys.Count - 1 do
+        KeyStr := KeyStr + Copy(FDemoKeys[P], Pos('|', FDemoKeys[P]), MaxInt) + ' ';
+      WritelnLog('SpriteStats', '%d sprites shown, %d distinct texture|light|kind; groups: %s', [Sec, FDemoKeys.Count, KeyStr]);
+    finally
+      FreeAndNil(FDemoKeys);
+    end;
   end else if Cmd = 'NOMAP' then
     FWorld.Geometry.Visible := not FWorld.Geometry.Visible
   else if Cmd = 'Q' then
