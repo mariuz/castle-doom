@@ -18,7 +18,8 @@
   and the D-pad, A and B in the menus.
 - In the browser, a "click to look around" prompt shows when the mouse
   is not captured.
-- Unit tests for the WAD, map, music and DeHackEd code run in CI.
+- Unit tests for the WAD, map (every node format), music (MUS and MIDI
+  parsing, both synthesizers' envelopes) and DeHackEd code run in CI.
 - Maps built with glBSP (GL nodes only, versions 1, 2, 3 and 5, also
   with a separate `.gwa` file) now load.
 - The next level's music is synthesized while you play, so a new level

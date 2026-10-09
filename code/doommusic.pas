@@ -89,6 +89,23 @@ type
   is not a song or GENMIDI is missing. }
 function RenderDoomSong(const Wad: TDoomWad; const SongData: PByte; const SongSize: Integer): TMemoryStream;
 
+type
+  TEventKind = (ekNoteOn, ekNoteOff, ekProgram, ekVolume, ekExpression, ekPitchBend, ekAllNotesOff);
+
+  TMusicEvent = record
+    Time: Double; { seconds }
+    Kind: TEventKind;
+    Channel: Byte; { 0..15, 9 = percussion }
+    Data1, Data2: Integer;
+  end;
+  TMusicEventList = {$ifdef FPC}specialize{$endif} TList<TMusicEvent>;
+
+{ The song parsers (for the unit tests; RenderDoomSong uses them): the
+  lump's note on / off, program, volume, expression and pitch bend events
+  with their times in seconds; false when the data is not MUS / MIDI. }
+function ParseMus(const Data: PByte; const Size: Integer; const Events: TMusicEventList): Boolean;
+function ParseMidi(const Data: PByte; const Size: Integer; const Events: TMusicEventList): Boolean;
+
 var
   { Use the built-in FM model even when the Nuked OPL3 library is there
     (command line --fm-synth). }
@@ -104,16 +121,6 @@ const
   MaxSongSeconds = 480;
 
 type
-  TEventKind = (ekNoteOn, ekNoteOff, ekProgram, ekVolume, ekExpression, ekPitchBend, ekAllNotesOff);
-
-  TMusicEvent = record
-    Time: Double; { seconds }
-    Kind: TEventKind;
-    Channel: Byte; { 0..15, 9 = percussion }
-    Data1, Data2: Integer;
-  end;
-  TMusicEventList = {$ifdef FPC}specialize{$endif} TList<TMusicEvent>;
-
   TOperatorParams = record
     Tremolo, Vibrato, Sustain, Ksr: Boolean;
     Multi: Integer;

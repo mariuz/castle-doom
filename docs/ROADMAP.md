@@ -6,6 +6,19 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Unit tests for the node formats, the MIDI / MUS parsers and the
+  synthesizers' envelope: `tests/castle_doom_tests.lpr` (15 cases, about
+  20 s) loads E1M1 from every generated node-format PWAD (XNOD, ZNOD,
+  XGLN, ZGL2, XGL3, ZGL3 and glBSP V1, V2, V3, V5: format, 682 / 717
+  subsectors, the polygon areas, the start sector; the WADs come from
+  `tools/make_znodes.py` and `tools/make_glnodes.py` into
+  `tools/testdata/nodes/`, gitignored, CI generates them first), parses
+  a hand-made MUS (program, note on with volume, delay, note off at 0.5
+  s) and Freedoom's MIDI D_E1M1 (sorted times, several channels, a few
+  minutes), rejects each as the other, and renders the MUS with both
+  synthesizers: sound while the note is held, a tenth of it a second
+  after the release. `ParseMus` / `ParseMidi` are in `DoomMusic`'s
+  interface for that.
 - Music without the start stall: the first 8 seconds of a song are no
   longer rendered at once when a level, a warp, a loaded game or the title
   starts (100-300 ms natively, more on the web); `TDoomMusic.Update`
@@ -446,7 +459,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Replace the in-code UI with editor designs** (`.castle-user-interface`) for the HUD and menu so they can be edited in the CGE editor; keep the generated map geometry in code. | Demonstrates the editor workflow. | `data/*.castle-user-interface`, views | M |
-| **More unit tests**: MIDI (not only MUS) parsing, the synth's envelope timings, ZDoom / glBSP node formats from generated lumps (now only in the autotests), DoomGeometry's sector chunks. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
+| **More unit tests**: `DoomGeometry`'s sector chunks (needs the graphics cache without a window), the automap and HUD composition, the save file's round trip through `doomworld_save.inc` on a world without a viewport. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
 | **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
 | **Web gamepads**: CGE has no browser backend for `CastleGameControllers` yet; one reading `navigator.getGamepads()` through JOB (polled each frame, standard mapping) would make the desktop bindings work on the web too. Best contributed to CGE. | Play with a controller in the browser. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
 | **Performance**: build a static-sector blockmap; merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
@@ -460,6 +473,6 @@ L = several days). Items inside a section are in suggested order.
 2. Web gamepads (M): a browser backend for CGE's game controllers
    (`navigator.getGamepads()`), so the desktop bindings work on the web
    (see Engine and tooling).
-3. More unit tests (S, see Engine and tooling): MIDI parsing, the
-   synth's envelope timings and the generated ZDoom / glBSP node lumps in
-   FPCUnit, which runs in seconds without a window.
+3. DeHackEd frames and code pointers (M, see Gameplay): the part of
+   `-deh` patches that changes animations and actions, which mods use
+   most after thing stats.

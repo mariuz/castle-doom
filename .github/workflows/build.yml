@@ -202,6 +202,8 @@ jobs:
       - name: Unit tests (FPCUnit)
         timeout-minutes: 5
         run: |
+          python3 tools/make_znodes.py tools/testdata/nodes/
+          python3 tools/make_glnodes.py tools/testdata/nodes
           CASTLE_ENGINE_PATH="$HOME/castle-engine" "$HOME/castle-engine/tools/build-tool/castle-engine" simple-compile tests/castle_doom_tests.lpr
           tests/castle_doom_tests --all --format=plain
 

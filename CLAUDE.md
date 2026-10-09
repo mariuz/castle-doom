@@ -61,11 +61,17 @@ its own `XDG_CONFIG_HOME`, failing on exceptions, missing log lines or
 wrong save contents. Add a test there when a feature gets a demo recipe
 below.
 
-Unit tests (FPCUnit, no window, about 3 s) cover the parsers:
+Unit tests (FPCUnit, no window, about 20 s, 15 cases) cover the parsers,
+every node format and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
-code 1 on a failure; CI runs them before the autotests). Add a case there
-when changing `DoomWad`, `DoomMap`, `DoomMusic` or `DoomDehacked`.
+code 1 on a failure; CI runs them before the autotests). The node-format
+cases read `tools/testdata/nodes/*.wad` (gitignored): generate them once
+with `python3 tools/make_znodes.py tools/testdata/nodes/` and `python3
+tools/make_glnodes.py tools/testdata/nodes` (needs `glbsp`), else they
+print "skipped". A stale `castle-engine-output/compilation/.../*.ppu` can
+make the test build miss a changed unit interface: delete it. Add a case
+there when changing `DoomWad`, `DoomMap`, `DoomMusic` or `DoomDehacked`.
 
 The autotest harness is the main verification tool; use it after every change:
 
