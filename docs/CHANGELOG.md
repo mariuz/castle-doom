@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.0 (2026-10-09)
 
 - Mouse look is no longer far too fast: it follows Doom's sensitivity
   formula (the 0..9 Options slider, 5 by default), about 4 inches of a
