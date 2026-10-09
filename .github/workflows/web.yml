@@ -111,6 +111,16 @@ jobs:
           ./tools/build-tool/castle-engine_compile.sh
           ls -l tools/build-tool/castle-engine
 
+      - name: Keep Freedoom Phase 2 out of the initial download
+        run: |
+          set -eux
+          # The game downloads play/freedoom2.zip when Phase 2 is chosen
+          # (GameViewMenu.StartFetch), so the first load is only Phase 1.
+          mkdir -p ondemand
+          (cd data/wads && zip -9 ../../ondemand/freedoom2.zip freedoom2.wad)
+          rm data/wads/freedoom2.wad
+          ls -l ondemand
+
       - name: Compile for web
         run: |
           set -eux
@@ -128,6 +138,7 @@ jobs:
           cp pages/index.html _site/
           cp docs/*.png _site/docs/
           cp -R castle-engine-output/web/dist/* _site/play/
+          cp ondemand/freedoom2.zip _site/play/
           du -sh _site
 
       - name: Upload Pages artifact

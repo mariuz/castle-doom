@@ -16,6 +16,11 @@ procedure SaveStorageWrite(const Url, Text: String);
 { Human-readable name of the storage, for the log. }
 function SaveStorageName: String;
 
+{ In the browser: the URL of the directory of the page (window.location
+  without the file name, query and fragment, ending with "/"), for files
+  published next to the game. Empty on other platforms. }
+function PageDirectoryUrl: String;
+
 implementation
 
 uses Classes, SysUtils,
@@ -119,6 +124,20 @@ begin
   FileWrite(Url, Text);
 end;
 
+function PageDirectoryUrl: String;
+var
+  Href: String;
+  P: Integer;
+begin
+  Href := UTF8Encode(JSWindow.ReadJSPropertyObject('location', TJSObject).ReadJSPropertyUnicodeString('href'));
+  P := Pos('#', Href);
+  if P > 0 then Href := Copy(Href, 1, P - 1);
+  P := Pos('?', Href);
+  if P > 0 then Href := Copy(Href, 1, P - 1);
+  P := LastDelimiter('/', Href);
+  Result := Copy(Href, 1, P);
+end;
+
 function SaveStorageName: String;
 begin
   if LocalStorageBroken then
@@ -142,6 +161,11 @@ end;
 function SaveStorageName: String;
 begin
   Result := 'castle-config: files';
+end;
+
+function PageDirectoryUrl: String;
+begin
+  Result := '';
 end;
 
 {$endif}

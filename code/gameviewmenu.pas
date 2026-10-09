@@ -9,6 +9,7 @@ interface
 
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
+  CastleDownload, CastleZip,
   DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked;
 
 type
@@ -36,7 +37,25 @@ type
     FAutoTestTics: Integer;
     FMenuKeys: TStringList;
     FMenuKeyTics, FMenuShots: Integer;
-    procedure LoadWads(const Iwad: String; const Pwads: TStrings);
+    { Freedoom Phase 2 downloaded on demand (the web build ships only Phase
+      1 in its data): the download in progress, then the zip, mounted as
+      freedoom2-zip:. What to do once it arrives: FFetchPwads load, then
+      FFetchSlot (a saved game) or FFetchCommandLine (the command line's map). }
+    FFetch: TCastleDownload;
+    FFetchZip: TCastleZip;
+    FFetchPwads: TStringList;
+    FFetchSlot: Integer;
+    FFetchCommandLine: Boolean;
+    FFetchLabel: TCastleLabel;
+    { Load the IWAD and PWADs (title music, menus follow). False when they
+      did not load, or when Freedoom Phase 2 is being downloaded first. }
+    function LoadWads(const Iwad: String; const Pwads: TStrings): Boolean;
+    function NeedsFetch(const Iwad: String): Boolean;
+    procedure StartFetch(const Pwads: TStrings);
+    procedure FetchFinished(const Sender: TCastleDownload; var FreeSender: Boolean);
+    { The command-line part of Start (map, warp, autotest), also run when a
+      download it waited for arrives. }
+    procedure StartFromCommandLine;
     procedure SetupDoomMenu;
     procedure RefreshSlots;
     procedure DoomMenuAction(const Action: TDoomMenuAction);
@@ -98,6 +117,10 @@ var
   CmdIwad: String;
   CmdPwads: TStringList;
   CmdWarp: String;
+  { --wad-base-url URL: fetch Freedoom Phase 2 as URL + freedoom2.zip even
+    when the WAD is in the data (tests the browser's on-demand download on
+    the desktop). In the browser the page's directory is used. }
+  WadBaseUrl: String;
   { -loadgame N: start from saved game slot N (0 = quick save). }
   CmdLoadSlot: Integer = -1;
   { -skill N (Doom's 1..5) stored as 0..4; -1 when not given. }
@@ -108,7 +131,7 @@ implementation
 uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils,
   CastleStringUtils,
   CastleFilesUtils,
-  GameViewPlay, GameSettings, GameSaveBundle;
+  GameViewPlay, GameSettings, GameSaveBundle, GameSaveStorage;
 
 const
   Freedoom1 = 'castle-data:/wads/freedoom1.wad';
@@ -120,6 +143,8 @@ begin
   inherited;
   FPwads := TStringList.Create;
   FMenuKeys := TStringList.Create;
+  FFetchPwads := TStringList.Create;
+  FFetchSlot := -1;
   FSkill := 2;
 end;
 
@@ -322,6 +347,15 @@ begin
   FOptions.InsertFront(FStatus);
   UpdateSkillLabel;
 
+  { Download progress of Freedoom Phase 2 (web), over the menu and Options. }
+  FFetchLabel := TCastleLabel.Create(FreeAtStop);
+  FFetchLabel.Color := Vector4(1, 0.8, 0.3, 1);
+  FFetchLabel.FontSize := 22;
+  FFetchLabel.Anchor(hpMiddle);
+  FFetchLabel.Anchor(vpBottom, 48);
+  FFetchLabel.Exists := false;
+  InsertFront(FFetchLabel);
+
   if CmdLoadSlot >= 0 then
   begin
     { Cannot change the view inside Start; do it after the first render. }
@@ -346,19 +380,12 @@ begin
       LoadWads(Freedoom2, CmdPwads)
     else
       LoadWads(Freedoom1, CmdPwads);
-    if FWad = nil then Exit;
-    if AutoTestMap <> '' then
-      FMapIndex := Max(0, FWad.MapNames.IndexOf(AutoTestMap))
-    else if CmdWarp <> '' then
-      FMapIndex := Max(0, FWad.MapNames.IndexOf(CmdWarp));
-    UpdateMapLabel;
-    if (AutoTestMap <> '') or (CmdWarp <> '') then
+    if FFetch <> nil then
     begin
-      { Cannot change the view inside Start; do it after the first render. }
-      WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoStart);
+      FFetchCommandLine := true;
       Exit;
     end;
-    FMusic.Play(FMusic.TitleLump);
+    StartFromCommandLine;
     Exit;
   end;
   if FWad = nil then
@@ -372,28 +399,130 @@ begin
   end;
 end;
 
+procedure TViewMenu.StartFromCommandLine;
+begin
+  begin
+    if FWad = nil then Exit;
+    if AutoTestMap <> '' then
+      FMapIndex := Max(0, FWad.MapNames.IndexOf(AutoTestMap))
+    else if CmdWarp <> '' then
+      FMapIndex := Max(0, FWad.MapNames.IndexOf(CmdWarp));
+    UpdateMapLabel;
+    if (AutoTestMap <> '') or (CmdWarp <> '') then
+    begin
+      { Cannot change the view inside Start; do it after the first render. }
+      WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoStart);
+      Exit;
+    end;
+    FMusic.Play(FMusic.TitleLump);
+  end;
+end;
+
 procedure TViewMenu.Stop;
 begin
+  { A download still running would replace the WAD under the game: drop
+    it (choosing Phase 2 again starts it anew). }
+  FreeAndNil(FFetch);
+  FFetchSlot := -1;
+  FFetchCommandLine := false;
+  FFetchLabel := nil; { freed with the view's other controls }
   inherited;
 end;
 
 destructor TViewMenu.Destroy;
 begin
+  FreeAndNil(FFetchZip);
+  FreeAndNil(FFetchPwads);
   FreeAndNil(FPwads);
   FreeAndNil(FMenuKeys);
   FreeAndNil(FStrings);
   inherited;
 end;
 
-procedure TViewMenu.LoadWads(const Iwad: String; const Pwads: TStrings);
+function TViewMenu.NeedsFetch(const Iwad: String): Boolean;
+begin
+  Result := (Iwad = Freedoom2) and (FFetchZip = nil) and
+    ((WadBaseUrl <> '') or (UriExists(Freedoom2) <> ueFile));
+end;
+
+procedure TViewMenu.StartFetch(const Pwads: TStrings);
+var
+  Base: String;
+begin
+  FFetchPwads.Clear;
+  if Pwads <> nil then FFetchPwads.Assign(Pwads);
+  if FFetch <> nil then Exit; { already on its way }
+  Base := WadBaseUrl;
+  if Base = '' then Base := PageDirectoryUrl;
+  if Base = '' then
+  begin
+    FWadsLabel.Caption := 'Freedoom Phase 2 (freedoom2.wad) is not installed';
+    Exit;
+  end;
+  FFetch := TCastleDownload.Create(Self);
+  FFetch.Url := Base + 'freedoom2.zip';
+  FFetch.Options := [soForceMemoryStream];
+  FFetch.OnFinish := {$ifdef FPC}@{$endif} FetchFinished;
+  WritelnLog('WAD', 'Downloading %s', [FFetch.Url]);
+  FFetch.Start;
+  FFetchLabel.Exists := true;
+end;
+
+procedure TViewMenu.FetchFinished(const Sender: TCastleDownload; var FreeSender: Boolean);
+var
+  Slot: Integer;
+begin
+  FreeSender := true;
+  FFetch := nil;
+  if FFetchLabel <> nil then FFetchLabel.Exists := false;
+  if Sender.Status <> dsSuccess then
+  begin
+    WritelnWarning('WAD', 'Cannot download %s: %s', [Sender.Url, Sender.ErrorMessage]);
+    FWadsLabel.Caption := 'Could not download Freedoom Phase 2: ' + Sender.ErrorMessage;
+    FFetchSlot := -1;
+    FFetchCommandLine := false;
+    Exit;
+  end;
+  WritelnLog('WAD', 'Downloaded %s (%d bytes)', [Sender.Url, Sender.Contents.Size]);
+  Sender.OwnsContents := false;
+  FFetchZip := TCastleZip.Create;
+  FFetchZip.Open(Sender.Contents, true);
+  FFetchZip.RegisterUrlProtocol('freedoom2-zip');
+  LoadWads(Freedoom2, FFetchPwads);
+  if FFetchSlot >= 0 then
+  begin
+    Slot := FFetchSlot;
+    FFetchSlot := -1;
+    ContinueFromSlot(Slot);
+  end else
+  if FFetchCommandLine then
+  begin
+    FFetchCommandLine := false;
+    StartFromCommandLine;
+  end;
+end;
+
+function TViewMenu.LoadWads(const Iwad: String; const Pwads: TStrings): Boolean;
 var
   I: Integer;
   NewPwads: TStringList;
+  ReadUrl: String;
 begin
+  Result := false;
+  if NeedsFetch(Iwad) then
+  begin
+    StartFetch(Pwads);
+    Exit;
+  end;
+  { The saves keep naming castle-data:/wads/freedoom2.wad; only reading
+    goes to the downloaded copy. }
+  ReadUrl := Iwad;
+  if (Iwad = Freedoom2) and (FFetchZip <> nil) then
+    ReadUrl := 'freedoom2-zip:/freedoom2.wad';
   NewPwads := TStringList.Create;
   try
     if Pwads <> nil then NewPwads.Assign(Pwads);
-    if (FWad <> nil) and (FIwadUrl = Iwad) and (NewPwads.Text = FPwads.Text) then Exit;
+    if (FWad <> nil) and (FIwadUrl = Iwad) and (NewPwads.Text = FPwads.Text) then Exit(true);
     { The play view may still reference the old objects; it is stopped when
       this view is active, so it is safe to replace them. }
     FreeAndNil(FMusic);
@@ -401,7 +530,7 @@ begin
     FreeAndNil(FGraphics);
     FreeAndNil(FWad);
     try
-      FWad := TDoomWad.Create(Iwad);
+      FWad := TDoomWad.Create(ReadUrl);
       for I := 0 to NewPwads.Count - 1 do
         FWad.AddFile(NewPwads[I]);
       FGraphics := TDoomGraphics.Create(FWad);
@@ -436,6 +565,7 @@ begin
     UpdateMapLabel;
     UpdateWadsLabel;
     RememberWads;
+    Result := true;
   finally
     FreeAndNil(NewPwads);
   end;
@@ -660,7 +790,12 @@ begin
       for I := 1 to TJSONArray(D).Count - 1 do
         Pwads.Add(TJSONArray(D).Strings[I]);
     end;
-    LoadWads(Iwad, Pwads);
+    if not LoadWads(Iwad, Pwads) then
+    begin
+      { Freedoom Phase 2 first: continue when it has arrived. }
+      if FFetch <> nil then FFetchSlot := Slot;
+      Exit;
+    end;
   finally
     FreeAndNil(Pwads);
     FreeAndNil(Save);
@@ -875,6 +1010,15 @@ end;
 procedure TViewMenu.Update(const SecondsPassed: Single; var HandleInput: Boolean);
 begin
   inherited;
+  if FFetch <> nil then
+  begin
+    if FFetch.TotalBytes > 0 then
+      FFetchLabel.Caption := Format('Downloading Freedoom Phase 2: %d / %d MB', [
+        FFetch.DownloadedBytes div (1024 * 1024), FFetch.TotalBytes div (1024 * 1024)])
+    else
+      FFetchLabel.Caption := Format('Downloading Freedoom Phase 2: %d MB', [
+        FFetch.DownloadedBytes div (1024 * 1024)]);
+  end;
   { The title music is rendered a slice per frame. }
   if FMusic <> nil then FMusic.Update;
   if FDoomMenu = nil then Exit;

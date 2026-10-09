@@ -68,6 +68,11 @@ begin
       CmdLoadSlot := StrToIntDef(Parameters[I + 1], 0);
       Inc(I);
     end else
+    if (Parameters[I] = '--wad-base-url') and (I + 1 <= Parameters.High) then
+    begin
+      WadBaseUrl := Parameters[I + 1];
+      Inc(I);
+    end else
     if (Parameters[I] = '--export-saves') and (I + 1 <= Parameters.High) then
     begin
       ExportSaves := Parameters[I + 1];

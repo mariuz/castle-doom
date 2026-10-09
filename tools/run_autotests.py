@@ -138,6 +138,35 @@ def settings_test(exe, out):
     return problems, time.time() - start
 
 
+def phase2_download_test(exe, out):
+    """Freedoom Phase 2 fetched as freedoom2.zip (what the web build does)."""
+    import functools, http.server, threading, zipfile
+    serve = os.path.join(out, 'serve')
+    os.makedirs(serve, exist_ok=True)
+    wad = os.path.join(os.path.dirname(exe), 'data', 'wads', 'freedoom2.wad')
+    with zipfile.ZipFile(os.path.join(serve, 'freedoom2.zip'), 'w', zipfile.ZIP_DEFLATED) as z:
+        z.write(wad, 'freedoom2.wad')
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=serve)
+    httpd = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    config = os.path.join(out, 'config-phase2')
+    shutil.rmtree(config, ignore_errors=True)
+    os.makedirs(config)
+    try:
+        log, code, secs = run_game(exe, out, 'phase2-download', 'MAP01', 'W:1,S,Q',
+                                   ['--wad-base-url', 'http://127.0.0.1:%d/' % httpd.server_port], config)
+    finally:
+        httpd.shutdown()
+    problems = []
+    if code != 0:
+        problems.append('exit code %d' % code)
+    for rx in (r'WAD: Downloaded http://127\.0\.0\.1:\d+/freedoom2\.zip',
+               r'Loaded freedoom2-zip:/freedoom2\.wad', r'Saved screenshot 1 at MAP01'):
+        if not re.search(rx, log):
+            problems.append('missing log line /%s/' % rx)
+    return problems, secs
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -152,6 +181,11 @@ def main():
         problems, secs = run_test(exe, out, test)
         results.append((test[0], problems, secs))
         print('%-16s %s (%.0f s)%s' % (test[0], 'FAIL' if problems else 'ok', secs,
+                                        ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'phase2-download' in only:
+        problems, secs = phase2_download_test(exe, out)
+        results.append(('phase2-download', problems, secs))
+        print('%-16s %s (%.0f s)%s' % ('phase2-download', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)
