@@ -117,7 +117,7 @@ or open `CastleEngineManifest.xml` in the Castle Game Engine editor.
 
 Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` light diminishing, `M` mouse look on/off,
-`J` music on/off, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
+`J` music on/off, `F4` sound / music volume, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
 `F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `N`/`P` next/previous map,
 `F5` screenshot, `F8` engine inspector, `H` help, `Esc` menu.
 

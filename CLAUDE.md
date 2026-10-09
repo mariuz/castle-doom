@@ -116,6 +116,12 @@ Gibs: `D` deals 100000 damage, so it gibs every zombie, sergeant, imp and
 SS (grep `Gib:`); `Y,P:3005:350` from the lift top (`G:160:256,A:0`) shows a
 cacodemon rising out of the pit, and `D` then drops its corpse.
 
+Settings (`GameSettings`, `settings.json` next to the saves; the log
+prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
+like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a
+screenshot. Autotests load the settings too, so delete the file after
+testing volumes.
+
 `LOOK:deg` pitches the view (negative looks down), for sky and floor
 screenshots.
 

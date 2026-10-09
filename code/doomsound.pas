@@ -18,7 +18,9 @@ type
   strict private
     FWad: TDoomWad;
     FSounds: {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TCastleSound>;
+    FVolume: Single;
     function ReadSfx(const Url: String; out MimeType: String): TStream;
+    procedure SetVolume(const Value: Single);
   public
     constructor Create(const AWad: TDoomWad);
     destructor Destroy; override;
@@ -29,6 +31,8 @@ type
     { Attach a positional sound source to a transform and play through it. }
     procedure PlayAt(const LumpName: String; const Emitter: TCastleTransform);
     property Wad: TDoomWad read FWad;
+    { Gain of every sound effect (0..1, the options' sound volume). }
+    property Volume: Single read FVolume write SetVolume;
   end;
 
 { Convert a DMX sound lump into a WAV file in memory. nil when not a sound lump. }
@@ -95,6 +99,7 @@ constructor TDoomSounds.Create(const AWad: TDoomWad);
 begin
   inherited Create;
   FWad := AWad;
+  FVolume := 1;
   FSounds := {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TCastleSound>.Create([doOwnsValues]);
   RegisterUrlProtocol('doomsfx', {$ifdef FPC}@{$endif} ReadSfx, nil);
 end;
@@ -141,7 +146,18 @@ begin
   Result.ReferenceDistance := 200;
   Result.MaxDistance := 1800;
   Result.Url := 'doomsfx:/' + U;
+  Result.Volume := FVolume;
   FSounds.Add(U, Result);
+end;
+
+procedure TDoomSounds.SetVolume(const Value: Single);
+var
+  S: TCastleSound;
+begin
+  FVolume := Value;
+  for S in FSounds.Values do
+    if S <> nil then
+      S.Volume := Value;
 end;
 
 procedure TDoomSounds.Play(const LumpName: String);

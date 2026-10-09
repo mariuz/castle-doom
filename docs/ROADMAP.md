@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Settings that stay: sound effect and music volume on Doom's 0..15
+  scales (F4 in the game opens a Doom-style sound volume menu with
+  thermometer bars; the title Options panel has the same two rows), music
+  on / off (`J`), light diminishing (`F`) and mouse look (`M`) are
+  remembered in `settings.json` next to the saves (`GameSettings`, through
+  `GameSaveStorage`: a castle-config: file on the desktop, localStorage on
+  the web). The defaults keep the old mix (effects 15, music 8).
 - The sky like Doom's: texture row 100 at eye height and one row per
   1/160 of slope (r_plane's `skytexturemid` with Doom's 160-pixel focal
   length; the sky used to be twice as tall), repeated downwards the way
@@ -238,7 +245,6 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **Register-accurate OPL3 emulation** (port Nuked OPL3 or DBOPL) instead of the approximate FM model; or at least tune envelope shapes against recordings. | The music is recognisable but not exact. | `DoomMusic` synth core (keep the MUS/MIDI/GENMIDI front end) | L |
 | **Background rendering of music** on desktop (thread) and chunked rendering on the web so the level does not pause for the synth; or stream through a custom sound backend. | Removes the few-second pause per track. | `DoomMusic`, `GameViewPlay` | M |
-| **Music volume slider**, sound volume, settings persistence (`CastleConfig`). | Usability. | menu | S |
 | **Stereo panning** for positional sounds is done by the engine, but Doom's `S_CLIPPING_DIST` falloff curve could be matched more closely. | Minor. | `DoomSound` | S |
 | **PC speaker** sounds (`DP*`) are ignored on purpose; no change planned. | - | - | - |
 
@@ -268,8 +274,8 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. Settings that stay (S): music and sound volume in the options menu,
-   remembered with `CastleConfig` (desktop) / `localStorage` (web), with
-   the light diminishing and mouse look toggles.
+2. Export / import saves on the web (S): download a save's JSON and
+   upload it back (a file input through JOB), so saves move between
+   browsers and to the desktop build.
 3. Column fuzz shader (S): Doom's `fuzzoffset` wobble for spectres and
    the invisible weapon, the last step of the fuzz work.

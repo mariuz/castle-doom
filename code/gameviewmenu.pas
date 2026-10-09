@@ -19,6 +19,7 @@ type
     FButtons: TCastleVerticalGroup;
     FMapLabel: TCastleLabel;
     FSkillLabel: TCastleLabel;
+    FSfxLabel, FMusicLabel: TCastleLabel;
     FStatus: TCastleLabel;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
@@ -56,6 +57,13 @@ type
     procedure ClickNextMap(Sender: TObject);
     procedure ClickPrevSkill(Sender: TObject);
     procedure ClickNextSkill(Sender: TObject);
+    procedure ClickSfxDown(Sender: TObject);
+    procedure ClickSfxUp(Sender: TObject);
+    procedure ClickMusicDown(Sender: TObject);
+    procedure ClickMusicUp(Sender: TObject);
+    { Apply and remember a volume change (0 sound effects, 1 music). }
+    procedure ChangeVolume(const Which, Delta: Integer);
+    procedure UpdateVolumeLabels;
     procedure UpdateMapLabel;
     procedure UpdateSkillLabel;
     procedure StartGame;
@@ -97,7 +105,7 @@ implementation
 
 uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils,
   CastleStringUtils,
-  GameViewPlay;
+  GameViewPlay, GameSettings;
 
 const
   Freedoom1 = 'castle-data:/wads/freedoom1.wad';
@@ -205,6 +213,40 @@ begin
   B.FontSize := 22;
   B.OnClick := {$ifdef FPC}@{$endif} ClickNextSkill;
   Row.InsertFront(B);
+
+  { Volumes, the same settings as the F4 menu in the game. }
+  Row := TCastleHorizontalGroup.Create(FreeAtStop);
+  Row.Spacing := 10;
+  FButtons.InsertFront(Row);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := '<';
+  B.FontSize := 22;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickSfxDown;
+  Row.InsertFront(B);
+  FSfxLabel := TCastleLabel.Create(FreeAtStop);
+  FSfxLabel.Color := White;
+  FSfxLabel.FontSize := 22;
+  Row.InsertFront(FSfxLabel);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := '>';
+  B.FontSize := 22;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickSfxUp;
+  Row.InsertFront(B);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := '<';
+  B.FontSize := 22;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickMusicDown;
+  Row.InsertFront(B);
+  FMusicLabel := TCastleLabel.Create(FreeAtStop);
+  FMusicLabel.Color := White;
+  FMusicLabel.FontSize := 22;
+  Row.InsertFront(FMusicLabel);
+  B := TCastleButton.Create(FreeAtStop);
+  B.Caption := '>';
+  B.FontSize := 22;
+  B.OnClick := {$ifdef FPC}@{$endif} ClickMusicUp;
+  Row.InsertFront(B);
+  UpdateVolumeLabels;
 
   Row := TCastleHorizontalGroup.Create(FreeAtStop);
   Row.Spacing := 10;
@@ -347,6 +389,9 @@ begin
       FGraphics := TDoomGraphics.Create(FWad);
       FSounds := TDoomSounds.Create(FWad);
       FMusic := TDoomMusic.Create(FWad);
+      FSounds.Volume := SfxGain;
+      FMusic.Volume := MusicGain;
+      FMusic.Enabled := Settings.MusicOn;
     except
       on E: Exception do
       begin
@@ -627,6 +672,51 @@ begin
   FSkill := (FSkill + 4) mod 5;
   FDoomMenu.Skill := FSkill;
   UpdateSkillLabel;
+end;
+
+procedure TViewMenu.UpdateVolumeLabels;
+begin
+  FSfxLabel.Caption := Format('Sound volume %d', [Settings.SfxVolume]);
+  FMusicLabel.Caption := Format('Music volume %d', [Settings.MusicVolume]);
+end;
+
+procedure TViewMenu.ChangeVolume(const Which, Delta: Integer);
+begin
+  if Which = 0 then
+  begin
+    Settings.SfxVolume := Clamped(Settings.SfxVolume + Delta, 0, MaxVolume);
+    if FSounds <> nil then
+    begin
+      FSounds.Volume := SfxGain;
+      FSounds.Play('DSPISTOL');
+    end;
+  end else
+  begin
+    Settings.MusicVolume := Clamped(Settings.MusicVolume + Delta, 0, MaxVolume);
+    if FMusic <> nil then FMusic.Volume := MusicGain;
+  end;
+  SaveSettings;
+  UpdateVolumeLabels;
+end;
+
+procedure TViewMenu.ClickSfxDown(Sender: TObject);
+begin
+  ChangeVolume(0, -1);
+end;
+
+procedure TViewMenu.ClickSfxUp(Sender: TObject);
+begin
+  ChangeVolume(0, 1);
+end;
+
+procedure TViewMenu.ClickMusicDown(Sender: TObject);
+begin
+  ChangeVolume(1, -1);
+end;
+
+procedure TViewMenu.ClickMusicUp(Sender: TObject);
+begin
+  ChangeVolume(1, 1);
 end;
 
 procedure TViewMenu.ClickNextSkill(Sender: TObject);

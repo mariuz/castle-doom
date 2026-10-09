@@ -8,7 +8,7 @@ implementation
 uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleUtils,
-  GameViewMenu, GameViewPlay;
+  DoomLighting, GameViewMenu, GameViewPlay, GameSettings;
 
 var
   Window: TCastleWindow;
@@ -72,6 +72,9 @@ begin
   Window.Container.LoadSettings('castle-data:/CastleSettings.xml');
   { Remembered WAD paths live in the user config (castle-config:/). }
   UserConfig.Load;
+  { Volumes and toggles from the last session. }
+  LoadSettings;
+  DoomLightingInstance.Diminish := Settings.Diminish;
   ViewMenu := TViewMenu.Create(Application);
   ViewPlay := TViewPlay.Create(Application);
   Window.Container.View := ViewMenu;

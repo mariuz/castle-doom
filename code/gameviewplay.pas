@@ -61,6 +61,8 @@ type
     FPendingSave: TJSONObject;
     { 0 = none, 1 = save slot menu (F2), 2 = load slot menu (F3). }
     FSlotMenu: Integer;
+    { Sound volume menu: 0 effects, 1 music. }
+    FSoundRow: Integer;
     FSlotMenuBack: TCastleRectangleControl;
     FSlotMenuText: TDoomFontText;
     procedure SaveGame(const Slot: Integer);
@@ -68,6 +70,9 @@ type
     function LoadGameUrl(const Url: String): Boolean;
     procedure RestoreViewState(const State: TJSONObject);
     procedure OpenSlotMenu(const Mode: Integer);
+    procedure OpenSoundMenu;
+    { Change the sound (Row 0) or music (Row 1) volume by Delta steps. }
+    procedure ChangeVolume(const Row, Delta: Integer);
     procedure CloseSlotMenu;
     procedure RunDemo(const SecondsPassed: Single);
     procedure LoadPendingMap(Sender: TObject);
@@ -122,7 +127,7 @@ uses Math, JsonParser,
   CastleDownload,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleTimeUtils, CastleRenderContext,
   DoomGeometry, DoomMap, DoomLighting,
-  GameViewMenu, GameSaveStorage;
+  GameViewMenu, GameSaveStorage, GameSettings;
 
 type
   { Opens TCastleNavigation.Move (protected) to push the player. }
@@ -132,6 +137,8 @@ const
   SlotMenuNone = 0;
   SlotMenuSave = 1;
   SlotMenuLoad = 2;
+  { F4: Doom's sound volume menu (sound effects, music). }
+  SlotMenuSound = 3;
   SaveSlots = 6;
 
 function SaveSlotUrl(const Slot: Integer): String;
@@ -268,7 +275,7 @@ begin
     '1-7, wheel: weapons' + NL +
     'Tab: automap   + / -: zoom   G: grid   I: reveal map' + NL +
     'F: light diminishing on/off   M: mouse look' + NL +
-    'N / P: next / previous map   J: music on/off' + NL +
+    'N / P: next / previous map   J: music on/off   F4: volume' + NL +
     'F2 / F3: save / load   F6 / F9: quick save / load' + NL +
     'F5: screenshot' + NL +
     'F8: Castle Game Engine inspector' + NL +
@@ -334,7 +341,7 @@ begin
   FNavigation.FallSpeedStart := 180;
   FNavigation.FallSpeedIncrease := 12;
   FNavigation.GrowSpeed := 350;
-  FNavigation.MouseLook := true;
+  FNavigation.MouseLook := Settings.MouseLook;
   FNavigation.MouseLookHorizontalSensitivity := 0.15;
   FNavigation.MouseLookVerticalSensitivity := 0.15;
   FNavigation.MinAngleFromGravityUp := DegToRad(20);
@@ -487,6 +494,14 @@ begin
       DoomToCge(Cos(LookAngle) * Cos(LookPitch), Sin(LookAngle) * Cos(LookPitch), Sin(LookPitch)),
       DoomToCge(-Cos(LookAngle) * Sin(LookPitch), -Sin(LookAngle) * Sin(LookPitch), Cos(LookPitch)));
   end
+  else if Cmd = 'VOL' then
+  begin
+    { VOL:sfx:music sets both volumes (0..15) like the F4 menu. }
+    ChangeVolume(0, Round(Arg) - Settings.SfxVolume);
+    ChangeVolume(1, Round(Arg2) - Settings.MusicVolume);
+  end
+  else if Cmd = 'SOUNDMENU' then
+    OpenSoundMenu
   else if Cmd = 'LINE' then
     FWorld.DebugActivateLine(Round(Arg), Round(Arg2))
   else if Cmd = 'SHOTS' then
@@ -759,6 +774,44 @@ begin
   FSlotMenuText.SetScale(Max(1, Round(EffectiveHeight / 200)) * 1.5);
   FSlotMenuText.SetText(Lines);
   FSlotMenuBack.Exists := true;
+end;
+
+{ Doom's thermometer (M_DrawThermo) in text: one mark per volume step. }
+function VolumeBar(const Value: Integer): String;
+begin
+  Result := '[' + StringOfChar('#', Value) + StringOfChar('-', MaxVolume - Value) + ']';
+end;
+
+procedure TViewPlay.OpenSoundMenu;
+const
+  RowMark: array [Boolean] of String = ('  ', '> ');
+begin
+  if (FWorld = nil) or not FWorld.MapLoaded or FIntermission then Exit;
+  FSlotMenu := SlotMenuSound;
+  FSlotMenuText.SetScale(Max(1, Round(EffectiveHeight / 200)) * 1.5);
+  FSlotMenuText.SetText('SOUND VOLUME' + NL + NL +
+    RowMark[FSoundRow = 0] + 'SFX VOLUME' + NL +
+    '  ' + VolumeBar(Settings.SfxVolume) + Format(' %d', [Settings.SfxVolume]) + NL + NL +
+    RowMark[FSoundRow = 1] + 'MUSIC VOLUME' + NL +
+    '  ' + VolumeBar(Settings.MusicVolume) + Format(' %d', [Settings.MusicVolume]) + NL + NL +
+    'UP / DOWN: CHOOSE, LEFT / RIGHT: CHANGE' + NL + 'ESC TO CLOSE');
+  FSlotMenuBack.Exists := true;
+end;
+
+procedure TViewPlay.ChangeVolume(const Row, Delta: Integer);
+begin
+  if Row = 0 then
+  begin
+    Settings.SfxVolume := Clamped(Settings.SfxVolume + Delta, 0, MaxVolume);
+    if Sounds <> nil then Sounds.Volume := SfxGain;
+    { Doom plays a sound so you hear the new level. }
+    if Sounds <> nil then Sounds.Play('DSPISTOL');
+  end else
+  begin
+    Settings.MusicVolume := Clamped(Settings.MusicVolume + Delta, 0, MaxVolume);
+    if Music <> nil then Music.Volume := MusicGain;
+  end;
+  SaveSettings;
 end;
 
 procedure TViewPlay.CloseSlotMenu;
@@ -1308,6 +1361,23 @@ begin
       Exit(true);
     end;
   end;
+  if FSlotMenu = SlotMenuSound then
+  begin
+    if Event.IsKey(keyArrowUp) or Event.IsKey(keyArrowDown) or Event.IsKey(keyW) or Event.IsKey(keyS) then
+      FSoundRow := 1 - FSoundRow
+    else if Event.IsKey(keyArrowLeft) or Event.IsKey(keyA) then
+      ChangeVolume(FSoundRow, -1)
+    else if Event.IsKey(keyArrowRight) or Event.IsKey(keyD) then
+      ChangeVolume(FSoundRow, 1)
+    else if Event.IsKey(keyEscape) or Event.IsKey(keyF4) or Event.IsKey(keyEnter) then
+    begin
+      CloseSlotMenu;
+      Exit(true);
+    end;
+    if FSlotMenu = SlotMenuSound then
+      OpenSoundMenu;
+    Exit(true);
+  end;
   if FSlotMenu <> SlotMenuNone then
   begin
     for Idx := 1 to SaveSlots do
@@ -1334,6 +1404,11 @@ begin
   if Event.IsKey(keyF2) then
   begin
     OpenSlotMenu(SlotMenuSave);
+    Exit(true);
+  end;
+  if Event.IsKey(keyF4) then
+  begin
+    OpenSoundMenu;
     Exit(true);
   end;
   if Event.IsKey(keyF3) then
@@ -1388,19 +1463,26 @@ begin
       Exit(true);
     end;
   end;
+  { The toggles are remembered (GameSettings). }
   if Event.IsKey(keyF) then
   begin
     DoomLightingInstance.Diminish := not DoomLightingInstance.Diminish;
+    Settings.Diminish := DoomLightingInstance.Diminish;
+    SaveSettings;
     Exit(true);
   end;
   if Event.IsKey(keyM) then
   begin
     FNavigation.MouseLook := not FNavigation.MouseLook;
+    Settings.MouseLook := FNavigation.MouseLook;
+    SaveSettings;
     Exit(true);
   end;
   if Event.IsKey(keyJ) and (Music <> nil) then
   begin
     Music.Enabled := not Music.Enabled;
+    Settings.MusicOn := Music.Enabled;
+    SaveSettings;
     FWorld.ShowMessage('Music ' + BoolToStr(Music.Enabled, 'on', 'off'));
     Exit(true);
   end;
