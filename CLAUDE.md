@@ -276,7 +276,11 @@ Goertzel on semitone vs quarter-tone frequencies).
   ARCHITECTURE section 5). After touching `DoomMap`, run
   `python tools/make_znodes.py C:\TMP\sp` and load each generated
   `e1m1_*.wad` with `-file`; the log must show "682 subsector polygons, total
-  area 6712683" for every format. glBSP `GL_*` lumps and UDMF are not supported.
+  area 6712683" for every format. glBSP GL nodes: `python tools/make_glnodes.py
+  DIR` (needs `glbsp`, apt) writes `e1m1_gl_v1/2/3/5.wad`; glBSP builds its
+  own BSP, so they log 717 subsector polygons, area 6713389 (V1 6691431: its
+  GL vertices are whole units); the `glbsp-nodes` autotest checks them.
+  UDMF is not supported.
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

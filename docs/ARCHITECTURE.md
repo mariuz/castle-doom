@@ -206,6 +206,7 @@ cares which one a map used (`TDoomMap.NodesFormat` tells):
 | `XGLN` / `ZGLN` | `NODES` or `SSECTORS` | GL nodes: closed subsectors with minisegs (linedef `FFFF`), only v1 stored per seg |
 | `XGL2` / `ZGL2` | same | as XGLN with 32-bit linedef numbers |
 | `XGL3` / `ZGL3` | same | as XGL2 with 16.16 fixed-point partition lines |
+| glBSP V1, V2, V3, V5 | `GL_VERT`, `GL_SEGS`, `GL_SSECT`, `GL_NODES` after a `GL_<map>` marker (in the WAD or a `.gwa` given with `-file`) | used when `NODES` and `SSECTORS` are empty (glBSP `-xn`); GL vertices (V1 16-bit, V2+ fixed) appended after `VERTEXES`, seg vertex flag bit 15 / 30 (V3) / 31 (V5), V3 headers `gNd3`, V5 32-bit subsectors and node children (`LoadGlNodes`) |
 
 `LoadExtendedNodes` reads them with a bounds-checked cursor, decompresses
 `Z*` variants with FPC's `zstream` (the same unit CGE's Tiled loader uses, so

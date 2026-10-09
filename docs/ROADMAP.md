@@ -6,6 +6,11 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- glBSP GL nodes: maps whose BSP is only in glBSP's `GL_VERT` /
+  `GL_SEGS` / `GL_SSECT` / `GL_NODES` lumps (after `GL_<map>`, in the
+  WAD or a `.gwa` loaded with `-file`) load in all of glBSP's versions
+  (V1, V2, V3, V5). `tools/make_glnodes.py` builds the test WADs with the
+  real glBSP; autotest `glbsp-nodes` (CI installs glbsp).
 - Music ahead of time: every level start queues the next map's song
   behind the intermission's (`TDoomMusic.Prefetch`), so it is rendered in
   frame slices while the level is played and the next level starts it at
@@ -371,7 +376,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **glBSP `GL_` lumps** (`GL_VERT`, `GL_SEGS`, `GL_SSECT`, `GL_NODES` after a `GL_MAPxx` marker) and **UDMF** (`TEXTMAP`) maps. | Remaining community map formats. | `DoomMap` | M (glBSP), L (UDMF) |
+| **UDMF** (`TEXTMAP`) maps, and glBSP's `GL_LEVEL` markers for map names over 5 letters. | Remaining community map formats. | `DoomMap` | L (UDMF), S (`GL_LEVEL`) |
 | **Boom/MBF specials** (generalized linedefs, scrolling floors, friction, translucency) and **DeHackEd** patches. | Big community map support; large job. | `DoomWorld.ApplySpecial`, `DoomThings` | L |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
@@ -391,9 +396,9 @@ L = several days). Items inside a section are in suggested order.
 1. Browser frame rate (M): profile rendering in a normal browser and batch
    the sprite scenes if draw calls dominate (each sprite now has its own
    light effect, which CGE's dynamic batching does not merge).
-2. glBSP `GL_` lumps (M): load maps whose nodes come only as glBSP's
-   `GL_VERT` / `GL_SEGS` / `GL_SSECT` / `GL_NODES` (see Content and
-   formats).
-3. Register-accurate OPL3 emulation (L): port Nuked OPL3 or DBOPL for
+2. Register-accurate OPL3 emulation (L): port Nuked OPL3 or DBOPL for
    the synth core so the music sounds exactly like the original (see
    Audio).
+3. Unit tests (M): FPCUnit tests for `DoomWad`, `DoomMap` polygon
+   clipping, MUS/MIDI parsing and DeHackEd parsing, run in CI next to
+   the autotests (see Engine and tooling).

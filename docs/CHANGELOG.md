@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Maps built with glBSP (GL nodes only, versions 1, 2, 3 and 5, also
+  with a separate `.gwa` file) now load.
 - The next level's music is synthesized while you play, so a new level
   starts without the short freeze of rendering its first seconds; songs
   no longer needed are freed from memory.

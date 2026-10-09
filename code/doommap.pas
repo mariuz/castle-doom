@@ -110,6 +110,7 @@ type
     procedure LoadLumps(const MarkerIndex: Integer);
     procedure LoadVanillaNodes(const NodesLump, SegsLump, SubsLump: Integer);
     procedure LoadExtendedNodes(const Data: PByte; const Size: Integer; const Format: String);
+    function LoadGlNodes: Boolean;
     procedure BuildSectorLists;
     procedure BuildSubsectorPolygons;
   public
@@ -156,7 +157,8 @@ type
 
     property Name: String read FName;
     property Wad: TDoomWad read FWad;
-    { VANILLA, XNOD, ZNOD, XGLN, ZGLN, XGL2, ZGL2, XGL3 or ZGL3. }
+    { VANILLA, XNOD, ZNOD, XGLN, ZGLN, XGL2, ZGL2, XGL3, ZGL3, or GL_V1,
+      GL_V2, GL_V3, GL_V5 (glBSP lumps). }
     property NodesFormat: String read FNodesFormat;
   end;
 
@@ -399,8 +401,12 @@ begin
     else
     begin
       if (FWad.LumpSize(NodesL) = 0) and (FWad.LumpSize(SubsL) = 0) then
-        raise Exception.CreateFmt('Map %s has no BSP nodes; build it with a node builder (ZDBSP, ZokumBSP...)', [FName]);
-      LoadVanillaNodes(NodesL, SegsL, SubsL);
+      begin
+        { glBSP run with -xn leaves the normal nodes empty: GL_<map>. }
+        if not LoadGlNodes then
+          raise Exception.CreateFmt('Map %s has no BSP nodes; build it with a node builder (ZDBSP, ZokumBSP, glBSP...)', [FName]);
+      end else
+        LoadVanillaNodes(NodesL, SegsL, SubsL);
     end;
   end;
 end;
@@ -673,6 +679,218 @@ begin
   end;
   WritelnLog('Map', '%s: %s nodes, %d new vertices, %d segs, %d subsectors, %d nodes', [
     FName, Format, NewVerts, NumSegs, NumSubs, NumNodes]);
+end;
+
+{ glBSP GL nodes (glbsp.sourceforge.net/specs.php): a GL_<map> marker
+  (GL_LEVEL with the name inside for names over 5 letters) followed by
+
+    GL_VERT  V1: int16 x, y.  V2, V3: "gNd2" + fixed x, y.  V5: "gNd5" + fixed.
+    GL_SEGS  V1, V2: uint16 v1, v2, line (FFFF = miniseg), side, partner;
+                     v bit 15 = GL vertex.
+             V3: "gNd3" + uint32 v1, v2, uint16 line, side, uint32 partner;
+                 v bit 30 = GL vertex.
+             V5: as V3 without the header, v bit 31 = GL vertex.
+    GL_SSECT V1, V2: uint16 count, first.  V3: "gNd3" + uint32.  V5: uint32.
+    GL_NODES V1-V3: as NODES (uint16 children, bit 15 subsector).
+             V5: int16 x, y, dx, dy, bbox[8], uint32 children (bit 31).
+
+  GL vertices are appended after VERTEXES. The lumps may also come from a
+  .gwa file loaded with -file. }
+function TDoomMap.LoadGlNodes: Boolean;
+var
+  Marker, I, L, Version, N, Base, K, SegSize, Skip: Integer;
+  Lumps: array [0..3] of Integer;
+  P: PByte;
+  Size: Integer;
+  GlFlag, C: Cardinal;
+  Magic: String;
+const
+  GlNames: array [0..3] of String = ('GL_VERT', 'GL_SEGS', 'GL_SSECT', 'GL_NODES');
+
+  function MagicOf(const Lump: Integer): String;
+  var
+    Q: PByte;
+  begin
+    Result := '';
+    if FWad.LumpSize(Lump) < 4 then Exit;
+    Q := FWad.LumpPointer(Lump);
+    Result := Chr(Q[0]) + Chr(Q[1]) + Chr(Q[2]) + Chr(Q[3]);
+  end;
+
+  function MapVertex(const V: Cardinal): Integer;
+  begin
+    if (V and GlFlag) <> 0 then
+      Result := Base + Integer(V and not GlFlag)
+    else
+      Result := Integer(V);
+    if (Result < 0) or (Result > High(Vertices)) then Result := 0;
+  end;
+
+  function ToChild(const C: Cardinal; const SubBit: Cardinal): Integer;
+  begin
+    if (C and SubBit) <> 0 then
+      Result := Integer(C and not SubBit) or NodeSubsector
+    else
+      Result := Integer(C);
+  end;
+
+begin
+  Result := false;
+  if Length(FName) <= 5 then
+    Marker := FWad.FindLump('GL_' + FName)
+  else
+    Marker := -1; { GL_LEVEL markers would need their text lump; rare }
+  if Marker < 0 then Exit;
+  for K := 0 to 3 do
+  begin
+    Lumps[K] := -1;
+    for I := Marker + 1 to Min(Marker + 6, FWad.LumpCount - 1) do
+      if FWad.LumpName(I) = GlNames[K] then
+      begin
+        Lumps[K] := I;
+        Break;
+      end;
+    if Lumps[K] < 0 then
+      raise Exception.CreateFmt('Map %s: GL_%s has no %s lump', [FName, FName, GlNames[K]]);
+  end;
+
+  { Version from the magics. }
+  Magic := MagicOf(Lumps[0]);
+  if Magic = 'gNd5' then Version := 5
+  else if MagicOf(Lumps[1]) = 'gNd3' then Version := 3
+  else if Magic = 'gNd2' then Version := 2
+  else if (Magic = 'gNd4') then
+    raise Exception.CreateFmt('Map %s: glBSP GL nodes version 4 are not supported', [FName])
+  else Version := 1;
+  FNodesFormat := 'GL_V' + IntToStr(Version);
+
+  { GL_VERT }
+  P := FWad.LumpPointer(Lumps[0]);
+  Size := FWad.LumpSize(Lumps[0]);
+  Base := Length(Vertices);
+  if Version = 1 then
+  begin
+    N := Size div 4;
+    SetLength(Vertices, Base + N);
+    for I := 0 to N - 1 do
+    begin
+      Vertices[Base + I].X := PInt16(P + I * 4)^;
+      Vertices[Base + I].Y := PInt16(P + I * 4 + 2)^;
+    end;
+  end else
+  begin
+    N := (Size - 4) div 8;
+    SetLength(Vertices, Base + N);
+    for I := 0 to N - 1 do
+    begin
+      Vertices[Base + I].X := PInt32(P + 4 + I * 8)^ / 65536;
+      Vertices[Base + I].Y := PInt32(P + 4 + I * 8 + 4)^ / 65536;
+    end;
+  end;
+
+  { GL_SEGS }
+  P := FWad.LumpPointer(Lumps[1]);
+  Size := FWad.LumpSize(Lumps[1]);
+  if Version <= 2 then
+  begin
+    SegSize := 10; Skip := 0; GlFlag := $8000;
+  end else
+  begin
+    SegSize := 16; GlFlag := $80000000;
+    if Version = 3 then
+    begin
+      Skip := 4; GlFlag := $40000000;
+    end else
+      Skip := 0;
+  end;
+  N := (Size - Skip) div SegSize;
+  SetLength(Segs, N);
+  for I := 0 to N - 1 do
+  begin
+    if SegSize = 10 then
+    begin
+      Segs[I].V1 := MapVertex(PUInt16(P + Skip + I * 10)^);
+      Segs[I].V2 := MapVertex(PUInt16(P + Skip + I * 10 + 2)^);
+      L := PUInt16(P + Skip + I * 10 + 4)^;
+      Segs[I].Side := PUInt16(P + Skip + I * 10 + 6)^;
+    end else
+    begin
+      Segs[I].V1 := MapVertex(PUInt32(P + Skip + I * 16)^);
+      Segs[I].V2 := MapVertex(PUInt32(P + Skip + I * 16 + 4)^);
+      L := PUInt16(P + Skip + I * 16 + 8)^;
+      Segs[I].Side := PUInt16(P + Skip + I * 16 + 10)^;
+    end;
+    if (L = $FFFF) or (L > High(Linedefs)) then
+      Segs[I].Linedef := -1
+    else
+      Segs[I].Linedef := L;
+    if Segs[I].Side <> 0 then Segs[I].Side := 1;
+    Segs[I].Angle := 0;
+    Segs[I].Offset := 0;
+  end;
+
+  { GL_SSECT }
+  P := FWad.LumpPointer(Lumps[2]);
+  Size := FWad.LumpSize(Lumps[2]);
+  if Version <= 2 then
+  begin
+    N := Size div 4;
+    SetLength(Subsectors, N);
+    for I := 0 to N - 1 do
+    begin
+      Subsectors[I].SegCount := PUInt16(P + I * 4)^;
+      Subsectors[I].FirstSeg := PUInt16(P + I * 4 + 2)^;
+      Subsectors[I].Sector := -1;
+    end;
+  end else
+  begin
+    if Version = 3 then Skip := 4 else Skip := 0;
+    N := (Size - Skip) div 8;
+    SetLength(Subsectors, N);
+    for I := 0 to N - 1 do
+    begin
+      Subsectors[I].SegCount := PUInt32(P + Skip + I * 8)^;
+      Subsectors[I].FirstSeg := PUInt32(P + Skip + I * 8 + 4)^;
+      Subsectors[I].Sector := -1;
+    end;
+  end;
+
+  { GL_NODES }
+  P := FWad.LumpPointer(Lumps[3]);
+  Size := FWad.LumpSize(Lumps[3]);
+  if Version = 5 then
+  begin
+    N := Size div 32;
+    SetLength(Nodes, N);
+    for I := 0 to N - 1 do
+    begin
+      Nodes[I].X := PInt16(P + I * 32)^;
+      Nodes[I].Y := PInt16(P + I * 32 + 2)^;
+      Nodes[I].DX := PInt16(P + I * 32 + 4)^;
+      Nodes[I].DY := PInt16(P + I * 32 + 6)^;
+      for K := 0 to 1 do
+      begin
+        C := PUInt32(P + I * 32 + 24 + K * 4)^;
+        Nodes[I].Children[K] := ToChild(C, $80000000);
+      end;
+    end;
+  end else
+  begin
+    N := Size div 28;
+    SetLength(Nodes, N);
+    for I := 0 to N - 1 do
+    begin
+      Nodes[I].X := PInt16(P + I * 28)^;
+      Nodes[I].Y := PInt16(P + I * 28 + 2)^;
+      Nodes[I].DX := PInt16(P + I * 28 + 4)^;
+      Nodes[I].DY := PInt16(P + I * 28 + 6)^;
+      for K := 0 to 1 do
+        Nodes[I].Children[K] := ToChild(PUInt16(P + I * 28 + 24 + K * 2)^, $8000);
+    end;
+  end;
+  WritelnLog('Map', '%s: glBSP GL nodes V%d, %d GL vertices, %d segs, %d subsectors, %d nodes', [
+    FName, Version, Length(Vertices) - Base, Length(Segs), Length(Subsectors), Length(Nodes)]);
+  Result := true;
 end;
 
 function TDoomMap.SideSector(const LineIndex, SideIndex: Integer): Integer;

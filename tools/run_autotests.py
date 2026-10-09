@@ -221,6 +221,34 @@ def phase2_download_test(exe, out):
     return problems, secs
 
 
+def glbsp_nodes_test(exe, out):
+    """E1M1 with only glBSP GL nodes (V1, V2, V3, V5; tools/make_glnodes.py).
+    Skipped when glbsp is not installed."""
+    if not shutil.which('glbsp'):
+        return [], 0, True
+    wads = os.path.join(out, 'glnodes')
+    subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'make_glnodes.py'),
+                    wads], check=True, stdout=subprocess.DEVNULL)
+    problems = []
+    secs = 0
+    for v in (1, 2, 3, 5):
+        config = os.path.join(out, 'config-glbsp-v%d' % v)
+        shutil.rmtree(config, ignore_errors=True)
+        os.makedirs(config)
+        log, code, s = run_game(exe, out, 'glbsp-v%d' % v, 'E1M1', 'W:0.3,S,Q',
+                                ['-file', os.path.join(wads, 'e1m1_gl_v%d.wad' % v)], config)
+        secs += s
+        if code != 0:
+            problems.append('V%d: exit code %d' % (v, code))
+        # V1 GL vertices are whole map units, so its area is a little off.
+        for rx in (r'glBSP GL nodes V%d, \d+ GL vertices' % v,
+                   r'GL_V%d nodes, 717 subsector polygons, total area 6[67]\d{5}' % v,
+                   r'Saved screenshot 1 at E1M1'):
+            if not re.search(rx, log):
+                problems.append('V%d: missing log line /%s/' % (v, rx))
+    return problems, secs, False
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -241,6 +269,14 @@ def main():
         results.append(('phase2-download', problems, secs))
         print('%-16s %s (%.0f s)%s' % ('phase2-download', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'glbsp-nodes' in only:
+        problems, secs, skipped = glbsp_nodes_test(exe, out)
+        if skipped:
+            print('%-16s skipped (glbsp not installed)' % 'glbsp-nodes', flush=True)
+        else:
+            results.append(('glbsp-nodes', problems, secs))
+            print('%-16s %s (%.0f s)%s' % ('glbsp-nodes', 'FAIL' if problems else 'ok', secs,
+                                            ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)
         results.append(('settings', problems, secs))

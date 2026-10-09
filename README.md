@@ -98,14 +98,15 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   the same file (Options: Export / Import saves, `--export-saves` / `--import-saves`).
 - External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-deh` / `-warp`), PWAD lumps
   overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
-  `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`), so maps built with ZDBSP load too.
+  `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`) and glBSP GL nodes (V1, V2, V3, V5, also from
+  a `.gwa` file), so maps built with ZDBSP or glBSP load too.
 - Music: MUS and MIDI lumps played through an FM synthesizer driven by the WAD's GENMIDI
   instrument bank (the AdLib / Sound Blaster sound of the original), title, level and
   intermission tracks.
 
 ## Not (yet) done
 
-See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no glBSP `GL_` lumps or UDMF maps,
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no UDMF maps,
 DeHackEd patches change numbers (thing stats, ammo, limits, par times) but not frames or
 code pointers, the music synth approximates the OPL2.
 
