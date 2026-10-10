@@ -180,9 +180,9 @@ uses Math, CastleLog, CastleStringUtils, CastleImages, CastleGLUtils, CastleGLSh
 function AtlasMipmapsAvailable: Boolean;
 begin
   Result := UseAtlasMipmaps and InternalUpgradeGlslVersion and (GLFeatures <> nil) and
-    GLFeatures.{$if defined(CASTLE_WEBGL)} VersionWebGL_2
-               {$elseif defined(OpenGLES)} VersionES_3_0
-               {$else} Version_3_1 {$endif};
+    { CASTLE_WEBGL / OpenGLES are CGE's own defines, not set here: the
+      web build is WASI, the desktop builds use desktop OpenGL. }
+    GLFeatures.{$ifdef WASI} VersionWebGL_2 {$else} Version_3_1 {$endif};
 end;
 
 function DoomToCge(const X, Y, Z: Single): TVector3;
