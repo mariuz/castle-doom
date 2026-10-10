@@ -23,7 +23,7 @@ L = several days). Items inside a section are in suggested order.
   textures keep their real sizes (no power-of-two resize). `--no-atlas`
   returns to one shape per texture (with mipmaps).
 - Unit tests for the node formats, the MIDI / MUS parsers and the
-  synthesizers' envelope: `tests/castle_doom_tests.lpr` (16 cases, about
+  synthesizers' envelope: `tests/castle_doom_tests.lpr` (18 cases, about
   20 s) loads E1M1 from every generated node-format PWAD (XNOD, ZNOD,
   XGLN, ZGL2, XGL3, ZGL3 and glBSP V1, V2, V3, V5: format, 682 / 717
   subsectors, the polygon areas, the start sector; the WADs come from
@@ -124,9 +124,29 @@ L = several days). Items inside a section are in suggested order.
   bonus / armor / soulsphere / megasphere limits, armor classes, IDKFA
   armor, BFG cells per shot), "Ammo N" limits and clip sizes, and
   `[PARS]` par times, so Freedoom's own par times now show on the
-  intermission. Frames, code pointers, sprites, sounds, cheats and the
-  old "Text" replacements are counted and logged as not supported.
-  Autotest `dehacked` with `tools/testdata/test.deh`.
+  intermission. Autotest `dehacked` with `tools/testdata/test.deh`.
+- DeHackEd frames and code pointers: `DoomStates` holds vanilla's state
+  table (`tools/make_states.py` generates `doomstates_table.inc` from
+  linuxdoom-1.10's info.c: 967 states, 137 mobjinfo rows, sprite and
+  sound names, every code pointer as `TStateAction`); "Frame N" (sprite
+  number, subnumber, duration, next frame), "Pointer N (Frame M)", BEX
+  `[CODEPTR]` and a thing's frame, sound and bits fields edit it, and
+  `ApplyStateTable` walks each thing's chains into per-frame sequences
+  (sprite, tics, full bright, action) that `TDoomActor.PlayStates` plays.
+  Attacks dispatch on the chain's code pointer (`AttackAction`:
+  A_PosAttack one bullet, A_SPosAttack three, A_TroopAttack the imp
+  fireball, A_SkullAttack the charge, A_VileAttack on the frame carrying
+  it...), so a patch can give a monster another's attack. Side effects:
+  walking animations at vanilla's rate (each frame twice), vanilla pain
+  frames, full-bright muzzle flashes (Freedoom's lump marks the
+  zombieman's and chaingunner's, which now show). Not covered: weapons'
+  frames (the player's weapon animations are still the port's own),
+  "Sprite" / "Sound" renumbering, thing fields of rows this port has no
+  thing for (the player, projectiles), new monsters made from decoration
+  rows (their AI stays the decoration's: none). Unit tests
+  `TestVanillaTable`, `TestDerivedSequences` and the patched expectations
+  in `TestPatchFile`; `test.deh` edits a frame, a pointer and a
+  `[CODEPTR]` line.
 - Windows installer: CI builds `castle-doom-<version>-win64-x86_64.msi`
   with WiX (`tools/make_msi_wxs.py`): Program Files, a Start menu
   shortcut, upgrades replace the older version.
@@ -460,7 +480,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **DeHackEd frames and code pointers**: `-deh` patches already change thing stats, Misc, Ammo and par times; frames, code pointers, sprite / sound names and weapon frames would need vanilla's state table (`info.c` states) behind `TDoomActor`'s frame sequences. | Mods that change behaviour, not just numbers. | `DoomThings`, `DoomActors`, `DoomDehacked` | L |
+| **DeHackEd weapons and projectiles**: frames and code pointers are done (see above); the player's weapon frames ("Weapon N", the `S_PISTOL`... chains with A_FirePistol etc.) and the projectile rows (speed, damage, frames of `MT_TROOPSHOT`...) still come from the port's own tables, as do BEX `[SPRITES]` / `[SOUNDS]` renaming and new monsters built from decoration rows (no AI for them). | The rest of what mods change. | `DoomWorld` weapons, `EffectInfos`, `DoomDehacked` | M |
 | **Browser frame rate**, measured (headless Chromium + SwiftShader on the live page, Chrome CPU profile, `PerfView:` statistics): a frame on E1M1 at the door spot draws 255 shapes = 255 draw calls (map 151 of its 206 per-texture shapes, sprites 104, one scene each); per frame the CPU time is ~94 ms in wasm (game logic 13 ms, the rest CGE's per-shape rendering and the music synth slice) + ~66 ms in the JOB JS bridge (`HaveSharedArrayBuffer`, `decode`, `Invoke_*`, then the WebGL calls: `bindBuffer`, `enable/disableVertexAttribArray`, `activeTexture`, `uniform*`), i.e. about 0.6 ms per shape, so the frame rate is the number of draw calls. Tried and reverted: splitting the static map geometry into 1024-unit cells for frustum culling (151 -> 249 map draw calls: textures repeat per cell and a 90-degree view covers most cells of a flat level). Done: (1) sprites in one scene per (light group, kind), each texture's quads merged by us in one persistent shape (`TSpriteBatch` / `TSpriteShape`; E1M1 door spot: sprites 104 -> 35 draw calls, 104 -> 9 scenes, the whole frame 255 -> 186 draw calls; CGE's own dynamic batching was tried in between: 8 merge slots a pass and shader relinks every frame from its pool shapes); (2) the map in a texture atlas with `fract` wrapping in the shader, padded tiles and no mipmaps (one shape per chunk and page: the frame 186 -> 56 draw calls, 12 for the map alone). Left: in CGE for the web, vertex array objects and cached uniform locations to cut WebGL calls per shape (every call crosses wasm -> JS); and mipmaps for the atlas with explicit gradients (`texture2DGradEXT` on WebGL 1) if far floors shimmer too much. | Playable speed on the Pages site. | `DoomActors`, CGE web renderer, `DoomGeometry` | M each |
 
 ## 3. Audio
@@ -496,10 +516,9 @@ L = several days). Items inside a section are in suggested order.
    frame at E1M1's door is 56 draw calls, from 255), see Presentation;
    what is left is in CGE's web renderer (vertex array objects, cached
    uniform locations), best contributed upstream.
-2. DeHackEd frames and code pointers (L, see Gameplay): the part of
-   `-deh` patches that changes animations and actions, which mods use
-   most after thing stats; it needs vanilla's state table behind the
-   actors' frame sequences.
-3. Atlas mipmaps (S, see Presentation): sample the atlas with explicit
+2. Atlas mipmaps (S, see Presentation): sample the atlas with explicit
    gradients (`texture2DGradEXT` on WebGL 1, `textureGrad` elsewhere) so
    far floors and walls stop shimmering without the per-texture shapes.
+3. DeHackEd weapons and projectiles (M, see Gameplay): drive the
+   player's weapon animations and the projectiles from the state table
+   too, so "Weapon N" and the projectile rows of a patch take effect.

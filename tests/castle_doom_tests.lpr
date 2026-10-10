@@ -19,7 +19,7 @@ program castle_doom_tests;
 
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
-  DoomWad, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, GameGamepad;
+  DoomWad, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad;
 
 function DataPath(const Name: String): String;
 begin
@@ -74,6 +74,12 @@ type
   TTestGamepad = class(TTestCase)
   published
     procedure TestWebPadMapping;
+  end;
+
+  TTestStates = class(TTestCase)
+  published
+    procedure TestVanillaTable;
+    procedure TestDerivedSequences;
   end;
 
 { TTestWad }
@@ -541,6 +547,19 @@ begin
     AssertEquals('Thing 12 (imp) hit points', 1, FindThingInfo(3001)^.Health);
     AssertEquals('Thing 12 width (fixed 20.0)', 20, FindThingInfo(3001)^.Radius);
     AssertEquals('zombieman untouched', 20, FindThingInfo(3004)^.Health);
+    { "Frame 452 Duration = 1": the imp's first attack frame. }
+    AssertEquals('S_TROO_ATK1 tics', 1, States[452].Tics);
+    AssertEquals('imp attack frames', 'EFG', FindThingInfo(3001)^.Seqs[skAttack].Frames);
+    AssertEquals('imp attack first tics', 1, FindThingInfo(3001)^.Seqs[skAttack].Tics[0]);
+    AssertEquals('imp attack second tics', 8, FindThingInfo(3001)^.Seqs[skAttack].Tics[1]);
+    { "Pointer 1 (Frame 454) Codep Frame = 487": the imp bites like a demon. }
+    AssertTrue('imp attack code pointer', FindThingInfo(3001)^.AttackAction = saSargAttack);
+    AssertTrue('imp attack kind', FindThingInfo(3001)^.Attack = akMelee);
+    AssertEquals('imp bite dice', 4, FindThingInfo(3001)^.DamageDice);
+    { "[CODEPTR] FRAME 185 = A_SPosAttack": the zombieman fires three pellets. }
+    AssertTrue('zombie code pointer', FindThingInfo(3004)^.AttackAction = saSPosAttack);
+    AssertEquals('zombie pellets', 3, FindThingInfo(3004)^.Shots);
+    AssertEquals('zombie attack sound', 'DSSHOTGN', FindThingInfo(3004)^.AttackSound);
     AssertTrue('patch par', DehackedParTime('E1M1', Par));
     AssertEquals('patch par seconds', 999, Par);
     S := TDoomStrings.Create(W);
@@ -553,6 +572,91 @@ begin
   finally
     FreeAndNil(W);
   end;
+end;
+
+{ TTestStates }
+
+procedure TTestStates.TestVanillaTable;
+var
+  A: TStateAction;
+begin
+  ResetStates;
+  AssertEquals('states', 967, Length(States));
+  AssertEquals('sprites', 138, Length(Sprites));
+  AssertEquals('things', 137, Length(Mobjs));
+  AssertEquals('sounds', 109, Length(Sounds));
+  AssertEquals('S_NULL sprite', 'TROO', Sprites[States[0].Sprite]);
+  AssertEquals('S_TROO_ATK3 tics', 6, States[454].Tics);
+  AssertTrue('S_TROO_ATK3 action', States[454].Action = saTroopAttack);
+  AssertEquals('S_TROO_ATK3 next is S_TROO_RUN1', 444, States[454].Next);
+  AssertTrue('S_SKULL_ATK2 is full bright', (States[590].Frame and $8000) <> 0);
+  AssertEquals('MT_TROOP doomednum', 3001, Mobjs[11].DoomedNum);
+  AssertEquals('MT_TROOP see sound', 'DSBGSIT1', SoundName(Mobjs[11].SeeSound));
+  AssertEquals('imp mobj row', 11, MobjIndexOf(3001));
+  AssertEquals('no row for 12345', -1, MobjIndexOf(12345));
+  AssertTrue('A_PosAttack by name', ActionByName('A_PosAttack', A) and (A = saPosAttack));
+  AssertTrue('posattack without prefix', ActionByName('posattack', A) and (A = saPosAttack));
+  AssertFalse('unknown action', ActionByName('A_Nothing', A));
+end;
+
+procedure TTestStates.TestDerivedSequences;
+var
+  Imp, Zombie, Sergeant, Spectre, Caco, Keen, Bonus: PThingInfo;
+begin
+  ResetStates;
+  ResetThingInfos;
+  Imp := FindThingInfo(3001);
+  AssertEquals('imp sprite', 'TROO', Imp^.Sprite);
+  AssertEquals('imp idle', 'AB', Imp^.Seqs[skIdle].Frames);
+  AssertEquals('imp idle tics', 10, Imp^.Seqs[skIdle].Tics[0]);
+  AssertTrue('imp idle loops', Imp^.Seqs[skIdle].Loop);
+  { Each walking frame twice, 3 tics each (S_TROO_RUN1..8). }
+  AssertEquals('imp walk', 'AABBCCDD', Imp^.Seqs[skMove].Frames);
+  AssertEquals('imp walk tics', 3, Imp^.Seqs[skMove].Tics[0]);
+  AssertEquals('imp walk legacy string', 'AABBCCDD', Imp^.MoveFrames);
+  AssertEquals('imp attack', 'EFG', Imp^.Seqs[skAttack].Frames);
+  AssertEquals('imp attack tics 1', 8, Imp^.Seqs[skAttack].Tics[0]);
+  AssertEquals('imp attack tics 3', 6, Imp^.Seqs[skAttack].Tics[2]);
+  AssertTrue('imp attack action on G', Imp^.Seqs[skAttack].Actions[2] = saTroopAttack);
+  AssertEquals('imp pain', 'HH', Imp^.Seqs[skPain].Frames);
+  AssertEquals('imp death', 'IJKLM', Imp^.Seqs[skDeath].Frames);
+  AssertTrue('imp corpse stays', Imp^.Seqs[skDeath].Forever);
+  AssertEquals('imp gibs', 'NOPQRSTU', Imp^.Seqs[skXDeath].Frames);
+  AssertEquals('imp raise', 'MLKJI', Imp^.Seqs[skRaise].Frames);
+  AssertEquals('imp legacy strings', 'IJKLM', Imp^.DeathFrames);
+  AssertTrue('imp attack kind', Imp^.Attack = akMissile);
+  AssertTrue('imp code pointer', Imp^.AttackAction = saTroopAttack);
+  Zombie := FindThingInfo(3004);
+  AssertTrue('zombie hitscan', (Zombie^.Attack = akHitscan) and (Zombie^.AttackAction = saPosAttack));
+  AssertEquals('zombie one pellet', 1, Zombie^.Shots);
+  AssertEquals('zombie pistol', 'DSPISTOL', Zombie^.AttackSound);
+  { Vanilla lights only the sergeant's flash (Freedoom's DEHACKED lump
+    adds the zombieman's). }
+  AssertFalse('zombie flash is not bright in vanilla', Zombie^.Seqs[skAttack].Bright[1]);
+  Sergeant := FindThingInfo(9);
+  AssertEquals('sergeant three pellets', 3, Sergeant^.Shots);
+  AssertTrue('sergeant muzzle flash is bright', Sergeant^.Seqs[skAttack].Bright[1]);
+  AssertFalse('sergeant aim frame is not', Sergeant^.Seqs[skAttack].Bright[0]);
+  Spectre := FindThingInfo(58);
+  AssertTrue('spectre shadow', Spectre^.Shadow);
+  AssertFalse('demon no shadow', FindThingInfo(3002)^.Shadow);
+  AssertTrue('demon bites', FindThingInfo(3002)^.Attack = akMelee);
+  Caco := FindThingInfo(3005);
+  AssertTrue('cacodemon floats', Caco^.Floats);
+  AssertEquals('cacodemon pain', 'EEF', Caco^.Seqs[skPain].Frames);
+  Keen := FindThingInfo(72);
+  AssertTrue('Keen hangs', Keen^.Hanging);
+  AssertTrue('Keen has no attack', Keen^.Attack = akNone);
+  AssertEquals('Keen death', 'ABCDEFGHIJKL', Keen^.Seqs[skDeath].Frames);
+  Bonus := FindThingInfo(2014);
+  AssertEquals('health bonus frames', 'ABCDCB', Bonus^.Seqs[skIdle].Frames);
+  AssertEquals('health bonus tics', 6, Bonus^.IdleTics);
+  AssertEquals('barrel', 'AB', FindThingInfo(2035)^.IdleFrames);
+  AssertTrue('barrel solid', FindThingInfo(2035)^.Solid);
+  AssertFalse('candle not solid', FindThingInfo(34)^.Solid);
+  AssertEquals('dead player frame', 'W', FindThingInfo(10)^.IdleFrames);
+  AssertEquals('brain pain tics', 36, FindThingInfo(88)^.Seqs[skPain].Tics[0]);
+  AssertEquals('brain pain sound stays with DoomWorld', '', FindThingInfo(88)^.PainSound);
 end;
 
 { TTestGamepad }
@@ -607,7 +711,7 @@ end;
 var
   App: TTestRunner;
 begin
-  RegisterTests([TTestWad, TTestMap, TTestMusic, TTestDehacked, TTestGamepad]);
+  RegisterTests([TTestWad, TTestMap, TTestMusic, TTestDehacked, TTestGamepad, TTestStates]);
   DefaultFormat := fPlain;
   DefaultRunAllTests := true;
   App := TTestRunner.Create(nil);

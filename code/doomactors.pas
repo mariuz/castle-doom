@@ -21,7 +21,7 @@ interface
 
 uses SysUtils, Classes, Generics.Collections,
   CastleVectors, CastleTransform, CastleScene, CastleBehaviors, X3DNodes, X3DFields,
-  DoomThings, DoomGraphics;
+  DoomThings, DoomGraphics, DoomStates;
 
 type
   TActorState = (asIdle, asChase, asAttack, asPain, asDying, asDead, asEffect, asMissile);
@@ -59,6 +59,14 @@ type
     FSeqTics: Integer;
     FSeqLoop: Boolean;
     FTicsLeft: Integer;
+    { Per-frame data of a sequence from the state table (PlayStates):
+      empty Tics means the uniform PlaySequence kind. }
+    FSeq: TFrameSeq;
+    { The current frame is full bright in the state table. }
+    FFrameBright: Boolean;
+    FLastLight: Integer;
+    { Sprite and brightness of frame FSeqIndex of FSeq. }
+    procedure ApplyFrameData;
     procedure BuildScene;
     procedure SetShown(const Shown: Boolean);
     { Put the quad in the shape it belongs to now (or in none). }
@@ -130,6 +138,12 @@ type
     procedure HideSprite;
     { Start playing a frame sequence like 'ABCD' at TicsPerFrame tics each. }
     procedure PlaySequence(const Frames: String; const TicsPerFrame: Integer; const Loop: Boolean);
+    { Start playing a sequence from the state table: each frame with its
+      own tics, sprite, brightness and action. Loops when Loop or the
+      sequence itself loops. An empty sequence plays frame 'A'. }
+    procedure PlayStates(const Seq: TFrameSeq; const Loop: Boolean);
+    { The current frame's code pointer (saNone for PlaySequence frames). }
+    function CurrentAction: TStateAction;
     { Advance the animation by one Doom tic. }
     procedure AnimateTic;
     { Pick the sprite rotation for a viewer at (ViewerX, ViewerY) in Doom coords. }
@@ -139,9 +153,12 @@ type
     { Sector light level -> sprite brightness. }
     procedure SetLight(const Light: Integer);
     property Frame: Char read FFrame;
-    { Save games: the current frame sequence and position in it. }
+    { Save games: the current frame sequence and position in it (Seq's
+      Tics empty for a PlaySequence animation, else its per-frame data). }
     procedure GetAnimation(out Frames: String; out Index, Tics, TicsLeft: Integer; out Loop: Boolean);
     procedure SetAnimation(const Frames: String; const Index, Tics, TicsLeft: Integer; const Loop: Boolean);
+    procedure GetAnimationSeq(out Seq: TFrameSeq);
+    procedure SetAnimationSeq(const Seq: TFrameSeq; const Index, TicsLeft: Integer; const Loop: Boolean);
     property Scene: TCastleScene read FScene;
   end;
 
@@ -484,7 +501,7 @@ begin
   FSlot := -1;
   FShown := true;
   BuildScene;
-  Fuzz := Info^.Num = 58;
+  Fuzz := Info^.Shadow;
   Billboard := TCastleBillboard.Create(Self);
   Billboard.AxisOfRotation := Vector3(0, 1, 0);
   AddBehavior(Billboard);
@@ -631,13 +648,57 @@ procedure TDoomActor.PlaySequence(const Frames: String; const TicsPerFrame: Inte
 begin
   FSequence := Frames;
   if FSequence = '' then FSequence := 'A';
+  FSeq := Default(TFrameSeq);
   FSeqIndex := 0;
   FSeqTics := Max(1, TicsPerFrame);
   FSeqLoop := Loop;
   FTicsLeft := FSeqTics;
   SequenceDone := false;
   FFrame := FSequence[1];
+  ApplyFrameData;
   ApplySprite;
+end;
+
+procedure TDoomActor.PlayStates(const Seq: TFrameSeq; const Loop: Boolean);
+begin
+  if Length(Seq.Tics) = 0 then
+  begin
+    PlaySequence('A', 6, Loop);
+    Exit;
+  end;
+  FSeq := Seq;
+  FSequence := Seq.Frames;
+  FSeqIndex := 0;
+  FSeqTics := Max(1, Seq.Tics[0]);
+  FSeqLoop := Loop or Seq.Loop;
+  FTicsLeft := FSeqTics;
+  SequenceDone := false;
+  FFrame := FSequence[1];
+  ApplyFrameData;
+  ApplySprite;
+end;
+
+procedure TDoomActor.ApplyFrameData;
+var
+  WasBright: Boolean;
+begin
+  WasBright := FFrameBright;
+  if (FSeqIndex >= 0) and (FSeqIndex < Length(FSeq.Tics)) then
+  begin
+    SpritePrefix := FSeq.Sprites[FSeqIndex];
+    FFrameBright := FSeq.Bright[FSeqIndex];
+  end else
+    FFrameBright := false;
+  if (WasBright <> FFrameBright) and (FGroup <> nil) then
+    SetLight(FLastLight);
+end;
+
+function TDoomActor.CurrentAction: TStateAction;
+begin
+  if (FSeqIndex >= 0) and (FSeqIndex < Length(FSeq.Actions)) then
+    Result := FSeq.Actions[FSeqIndex]
+  else
+    Result := saNone;
 end;
 
 procedure TDoomActor.GetAnimation(out Frames: String; out Index, Tics, TicsLeft: Integer; out Loop: Boolean);
@@ -653,12 +714,38 @@ procedure TDoomActor.SetAnimation(const Frames: String; const Index, Tics, TicsL
 begin
   FSequence := Frames;
   if FSequence = '' then FSequence := 'A';
+  FSeq := Default(TFrameSeq);
   FSeqIndex := Clamped(Index, 0, Length(FSequence) - 1);
   FSeqTics := Max(1, Tics);
   FTicsLeft := Max(1, TicsLeft);
   FSeqLoop := Loop;
   SequenceDone := false;
   FFrame := FSequence[FSeqIndex + 1];
+  ApplyFrameData;
+  ApplySprite;
+end;
+
+procedure TDoomActor.GetAnimationSeq(out Seq: TFrameSeq);
+begin
+  Seq := FSeq;
+end;
+
+procedure TDoomActor.SetAnimationSeq(const Seq: TFrameSeq; const Index, TicsLeft: Integer; const Loop: Boolean);
+begin
+  if (Length(Seq.Tics) = 0) or (Length(Seq.Tics) <> Length(Seq.Frames)) then
+  begin
+    SetAnimation(Seq.Frames, Index, 6, TicsLeft, Loop);
+    Exit;
+  end;
+  FSeq := Seq;
+  FSequence := Seq.Frames;
+  FSeqIndex := Clamped(Index, 0, Length(FSequence) - 1);
+  FSeqTics := Max(1, Seq.Tics[FSeqIndex]);
+  FTicsLeft := Max(1, TicsLeft);
+  FSeqLoop := Loop;
+  SequenceDone := false;
+  FFrame := FSequence[FSeqIndex + 1];
+  ApplyFrameData;
   ApplySprite;
 end;
 
@@ -677,7 +764,6 @@ begin
   Dec(FTicsLeft);
   if FTicsLeft <= 0 then
   begin
-    FTicsLeft := FSeqTics;
     Inc(FSeqIndex);
     if FSeqIndex > Length(FSequence) - 1 then
     begin
@@ -686,11 +772,16 @@ begin
       else
       begin
         FSeqIndex := Length(FSequence) - 1;
+        FTicsLeft := FSeqTics;
         SequenceDone := true;
         Exit;
       end;
     end;
+    if FSeqIndex < Length(FSeq.Tics) then
+      FSeqTics := Max(1, FSeq.Tics[FSeqIndex]);
+    FTicsLeft := FSeqTics;
     FFrame := FSequence[FSeqIndex + 1];
+    ApplyFrameData;
     ApplySprite;
   end;
 end;
@@ -727,10 +818,11 @@ begin
   { The colour itself comes from the light effect (Doom's colormaps by
     distance); spectres stay black (their fuzz), full-bright things use
     colormap 0. The quad goes to the batch scene of its light group. }
+  FLastLight := Light;
   if Fuzz then
     V := Vector2(Light, DoomLightFuzz)
   else
-  if Bright then
+  if Bright or FFrameBright then
     V := Vector2(Light, DoomLightFullBright)
   else
     V := Vector2(Light, DoomLightWall);

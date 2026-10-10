@@ -64,6 +64,61 @@ begin
     Result := nil;
 end;
 
+{ A state-table sequence (TDoomActor.PlayStates): the frame letters and,
+  per frame, the sprite, tics, brightness and code pointer name. }
+function SeqToJson(const Seq: TFrameSeq): TJSONObject;
+var
+  Arr: TJSONArray;
+  I: Integer;
+  Bright: String;
+begin
+  Result := TJSONObject.Create;
+  Result.Add('frames', Seq.Frames);
+  Arr := TJSONArray.Create;
+  for I := 0 to High(Seq.Sprites) do Arr.Add(Seq.Sprites[I]);
+  Result.Add('sprites', Arr);
+  Arr := TJSONArray.Create;
+  for I := 0 to High(Seq.Tics) do Arr.Add(Seq.Tics[I]);
+  Result.Add('tics', Arr);
+  Bright := '';
+  for I := 0 to High(Seq.Bright) do
+    if Seq.Bright[I] then Bright := Bright + '1' else Bright := Bright + '0';
+  Result.Add('bright', Bright);
+  Arr := TJSONArray.Create;
+  for I := 0 to High(Seq.Actions) do Arr.Add(ActionNames[Seq.Actions[I]]);
+  Result.Add('actions', Arr);
+  Result.Add('loop', Seq.Loop);
+  Result.Add('forever', Seq.Forever);
+end;
+
+function SeqFromJson(const J: TJSONObject): TFrameSeq;
+var
+  I, N: Integer;
+  Bright: String;
+  A: TStateAction;
+begin
+  Result := Default(TFrameSeq);
+  Result.Frames := J.Get('frames', '');
+  N := Length(Result.Frames);
+  SetLength(Result.Sprites, N);
+  SetLength(Result.Tics, N);
+  SetLength(Result.Bright, N);
+  SetLength(Result.Actions, N);
+  Bright := J.Get('bright', '');
+  for I := 0 to N - 1 do
+  begin
+    Result.Sprites[I] := ArrayItemStr(ObjArray(J, 'sprites'), I, 'TROO');
+    Result.Tics[I] := ArrayItemInt(ObjArray(J, 'tics'), I, 6);
+    Result.Bright[I] := (I < Length(Bright)) and (Bright[I + 1] = '1');
+    if ActionByName(ArrayItemStr(ObjArray(J, 'actions'), I, ''), A) then
+      Result.Actions[I] := A
+    else
+      Result.Actions[I] := saNone;
+  end;
+  Result.Loop := J.Get('loop', false);
+  Result.Forever := J.Get('forever', false);
+end;
+
 function TDoomWorld.SaveState: TJSONObject;
 var
   PJ, AJ, MJ: TJSONObject;
@@ -78,6 +133,7 @@ var
   K: TDoomKey;
   Saved: {$ifdef FPC}specialize{$endif} TList<TDoomActor>;
   SeqFrames: String;
+  StateSeq: TFrameSeq;
   SeqLoop: Boolean;
 
   function Ref(const X: TDoomActor): Integer;
@@ -294,6 +350,9 @@ begin
       AJ.Add('frameTics', SeqTics);
       AJ.Add('frameTicsLeft', SeqTicsLeft);
       AJ.Add('frameLoop', SeqLoop);
+      A.GetAnimationSeq(StateSeq);
+      if Length(StateSeq.Tics) > 0 then
+        AJ.Add('states', SeqToJson(StateSeq));
       AJ.Add('target', Ref(A.Target));
       AJ.Add('shooter', Ref(A.Shooter));
       AJ.Add('fire', Ref(A.Fire));
@@ -551,6 +610,9 @@ begin
             A.Pickable := AJ.Get('pickable', false);
             A.SetAnimation(AJ.Get('frames', Info^.IdleFrames), AJ.Get('frameIndex', 0),
               AJ.Get('frameTics', 6), AJ.Get('frameTicsLeft', 6), AJ.Get('frameLoop', true));
+            if AJ.Find('states') is TJSONObject then
+              A.SetAnimationSeq(SeqFromJson(TJSONObject(AJ.Find('states'))), AJ.Get('frameIndex', 0),
+                AJ.Get('frameTicsLeft', 6), AJ.Get('frameLoop', true));
             if Info^.Kind in [tkTeleportDest, tkBossSpot] then
               A.HideSprite;
             if A.Sector >= 0 then

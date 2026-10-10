@@ -1,9 +1,14 @@
 { Doom thing types (the "mobjinfo" table from info.c, reduced to what this
   port needs): which sprite a map thing uses, its size, whether it blocks,
-  what picking it up does, and a few monster parameters. }
+  what picking it up does, and a few monster parameters. The frame
+  sequences, sounds and attack kind of every thing with a row in vanilla's
+  table come from the state table (DoomStates, ApplyStateTable), so a
+  DeHackEd patch that edits frames or code pointers changes them. }
 unit DoomThings;
 
 interface
+
+uses DoomStates;
 
 type
   TThingKind = (
@@ -29,6 +34,10 @@ type
   );
 
   TAttackKind = (akNone, akMelee, akHitscan, akMissile);
+
+  { The frame sequences of a thing, walked from its mobjinfo entry states
+    (spawn, see, missile or melee, melee, pain, death, xdeath, raise). }
+  TSeqKind = (skIdle, skMove, skAttack, skMelee, skPain, skDeath, skXDeath, skRaise);
 
   TThingInfo = record
     Num: Integer;
@@ -62,11 +71,31 @@ type
     SeeSound, AttackSound, PainSound, DeathSound: String;
     { Thing type dropped on death (clip, shotgun...), 0 for none. }
     Drop: Integer;
+    { MF_SHADOW: drawn as fuzz (the spectre). }
+    Shadow: Boolean;
+    { The row in vanilla's mobjinfo (DoomStates.Mobjs), -1 for none. }
+    Mobj: Integer;
+    { The sequences from the state table (empty Frames when the thing has
+      no such state); the *Frames strings above are their letters. }
+    Seqs: array [TSeqKind] of TFrameSeq;
+    { The attack code pointers found in the missile (or melee) and melee
+      chains: DoomWorld dispatches on them (A_PosAttack fires one bullet,
+      A_SkullAttack charges...). saNone when there is none. }
+    AttackAction, MeleeAction: TStateAction;
+    { Hitscan pellets per attack (3 for A_SPosAttack). }
+    Shots: Integer;
   end;
   PThingInfo = ^TThingInfo;
 
 { Back to the vanilla table (DeHackEd patches change the entries in place). }
 procedure ResetThingInfos;
+
+{ Derive, for every thing with a mobjinfo row, its sprite, frame
+  sequences, sounds, attack kind and flags from the live state table
+  (DoomStates): called by the table build and again after DeHackEd
+  patches edited the states. Health, speed, size and the like are not
+  touched (DeHackEd sets them directly). }
+procedure ApplyStateTable;
 
 { Lookup by the THINGS lump type number. Returns nil for unknown types. }
 function FindThingInfo(const Num: Integer): PThingInfo;
@@ -97,6 +126,8 @@ begin
   Result.IdleTics := 6;
   Result.PainFrame := #0;
   Result.Mass := 100;
+  Result.Mobj := -1;
+  Result.Shots := 1;
 end;
 
 procedure Add(const Info: TThingInfo);
@@ -184,7 +215,10 @@ begin
   Special(89, tkBossSpot); { boss brain shooter (MT_BOSSSPIT) }
 
   { Monsters: num, sprite, radius, height, hp, speed, pain chance,
-    idle, move, attack, pain, death frames, attack kind, damage, sounds, drop }
+    idle, move, attack, pain, death frames, attack kind, damage, sounds, drop.
+    The frames, sounds and attack kind here are vanilla's and are what
+    ApplyStateTable derives again from the state table (they stay as the
+    fallback for a thing whose states a patch emptied). }
   Monster(3004, 'POSS', 20, 56, 20, 8, 200, 'AB', 'ABCD', 'EF', 'G', 'HIJKL', akHitscan, 3, 5, 'DSPOSIT1', 'DSPISTOL', 'DSPOPAIN', 'DSPODTH1', 2007);
   Monster(9, 'SPOS', 20, 56, 30, 8, 170, 'AB', 'ABCD', 'EF', 'G', 'HIJKL', akHitscan, 3, 5, 'DSPOSIT2', 'DSSHOTGN', 'DSPOPAIN', 'DSPODTH2', 2001);
   Monster(65, 'CPOS', 20, 56, 70, 8, 170, 'AB', 'ABCD', 'EF', 'G', 'HIJKLMN', akHitscan, 3, 5, 'DSPOSIT2', 'DSSHOTGN', 'DSPOPAIN', 'DSPODTH2', 2002);
@@ -334,6 +368,139 @@ begin
   Decor(21, 'SARG', false, 20, 16, 'N');
   Decor(22, 'HEAD', false, 20, 16, 'L');
   Decor(23, 'SKUL', false, 20, 16, 'K');
+  Infos[Index[58]].Shadow := true;
+  ApplyStateTable;
+end;
+
+{ What each attack code pointer does in this port: the attack kind, the
+  damage dice of its bullets or bite, pellets per attack and the sound
+  played at the attack's start when mobjinfo has none (A_PosAttack plays
+  the pistol itself; the fireball monsters' launch sound is their
+  projectile's). }
+procedure AttackOf(const Action: TStateAction; out Kind: TAttackKind;
+  out Dice, Faces, Shots: Integer; out Sound: String);
+begin
+  Kind := akNone;
+  Dice := 0;
+  Faces := 0;
+  Shots := 1;
+  Sound := '';
+  case Action of
+    saPosAttack: begin Kind := akHitscan; Dice := 3; Faces := 5; Sound := 'DSPISTOL'; end;
+    saSPosAttack: begin Kind := akHitscan; Dice := 3; Faces := 5; Shots := 3; Sound := 'DSSHOTGN'; end;
+    saCPosAttack: begin Kind := akHitscan; Dice := 3; Faces := 5; Sound := 'DSSHOTGN'; end;
+    saTroopAttack: begin Kind := akMissile; Dice := 3; Faces := 8; Sound := 'DSFIRSHT'; end;
+    saSargAttack: begin Kind := akMelee; Dice := 4; Faces := 10; end;
+    saHeadAttack: begin Kind := akMissile; Dice := 5; Faces := 8; Sound := 'DSFIRSHT'; end;
+    saBruisAttack: begin Kind := akMissile; Dice := 8; Faces := 8; Sound := 'DSFIRSHT'; end;
+    saSkullAttack: begin Kind := akMissile; Dice := 3; Faces := 8; end;
+    saCyberAttack: begin Kind := akMissile; Dice := 20; Faces := 8; Sound := 'DSRLAUNC'; end;
+    saFatAttack1, saFatAttack2, saFatAttack3: begin Kind := akMissile; Dice := 8; Faces := 8; end;
+    saBspiAttack: begin Kind := akMissile; Dice := 5; Faces := 8; Sound := 'DSPLASMA'; end;
+    saSkelMissile: begin Kind := akMissile; Dice := 10; Faces := 6; end;
+    saSkelFist: begin Kind := akMelee; Dice := 6; Faces := 10; end;
+    saVileAttack: begin Kind := akHitscan; Dice := 8; Faces := 8; end;
+    saPainAttack: begin Kind := akMissile; Dice := 3; Faces := 8; end;
+    else ;
+  end;
+end;
+
+{ The first attack code pointer of a sequence, saNone if none. }
+function AttackActionIn(const Seq: TFrameSeq): TStateAction;
+var
+  I: Integer;
+begin
+  for I := 0 to High(Seq.Actions) do
+    if IsAttackAction(Seq.Actions[I]) then
+      Exit(Seq.Actions[I]);
+  Result := saNone;
+end;
+
+procedure ApplyStateTable;
+const
+  MF_SOLID = 2;
+  MF_SPAWNCEILING = 256;
+  MF_FLOAT = 16384;
+  MF_SHADOW = 262144;
+var
+  I, M: Integer;
+  Info: PThingInfo;
+  Mo: TMobjDef;
+  Stops: array of Integer;
+  Dice, Faces, Shots: Integer;
+  Kind: TAttackKind;
+  Sound: String;
+begin
+  for I := 0 to High(Infos) do
+  begin
+    Info := @Infos[I];
+    M := MobjIndexOf(Info^.Num);
+    Info^.Mobj := M;
+    if M < 0 then Continue;
+    Mo := Mobjs[M];
+    SetLength(Stops, 8);
+    Stops[0] := Mo.Spawn; Stops[1] := Mo.See; Stops[2] := Mo.Pain; Stops[3] := Mo.Melee;
+    Stops[4] := Mo.Missile; Stops[5] := Mo.Death; Stops[6] := Mo.XDeath; Stops[7] := Mo.RaiseState;
+    { Each chain stops where it would enter another entry state. }
+    Info^.Seqs[skIdle] := WalkStates(Mo.Spawn, Stops);
+    Info^.Seqs[skMove] := WalkStates(Mo.See, Stops);
+    if Mo.Missile > 0 then
+      Info^.Seqs[skAttack] := WalkStates(Mo.Missile, Stops)
+    else
+      Info^.Seqs[skAttack] := WalkStates(Mo.Melee, Stops);
+    Info^.Seqs[skMelee] := WalkStates(Mo.Melee, Stops);
+    Info^.Seqs[skPain] := WalkStates(Mo.Pain, Stops);
+    Info^.Seqs[skDeath] := WalkStates(Mo.Death, Stops);
+    Info^.Seqs[skXDeath] := WalkStates(Mo.XDeath, Stops);
+    Info^.Seqs[skRaise] := WalkStates(Mo.RaiseState, Stops);
+    { The sprite and the legacy frame strings. }
+    if Info^.Seqs[skIdle].Frames <> '' then
+    begin
+      Info^.Sprite := Info^.Seqs[skIdle].Sprites[0];
+      Info^.IdleFrames := Info^.Seqs[skIdle].Frames;
+      Info^.IdleTics := Info^.Seqs[skIdle].Tics[0];
+    end;
+    if Info^.Seqs[skMove].Frames <> '' then
+      Info^.MoveFrames := Info^.Seqs[skMove].Frames;
+    if Info^.Kind = tkMonster then
+    begin
+      Info^.AttackFrames := Info^.Seqs[skAttack].Frames;
+      if Info^.Seqs[skPain].Frames <> '' then
+        Info^.PainFrame := Info^.Seqs[skPain].Frames[1]
+      else
+        Info^.PainFrame := #0;
+      if Info^.Seqs[skDeath].Frames <> '' then
+        Info^.DeathFrames := Info^.Seqs[skDeath].Frames;
+      Info^.XDeathFrames := Info^.Seqs[skXDeath].Frames;
+      { Sounds; the attack sound of a code pointer when mobjinfo has none.
+        The boss brain's pain and death sounds play at full volume from
+        DoomWorld, so they stay empty here. }
+      Info^.SeeSound := SoundName(Mo.SeeSound);
+      if Info^.Num <> 88 then
+      begin
+        Info^.PainSound := SoundName(Mo.PainSound);
+        Info^.DeathSound := SoundName(Mo.DeathSound);
+      end;
+      Info^.AttackAction := AttackActionIn(Info^.Seqs[skAttack]);
+      Info^.MeleeAction := AttackActionIn(Info^.Seqs[skMelee]);
+      AttackOf(Info^.AttackAction, Kind, Dice, Faces, Shots, Sound);
+      Info^.Attack := Kind;
+      Info^.DamageDice := Dice;
+      Info^.DamageFaces := Faces;
+      Info^.Shots := Shots;
+      { A_PosAttack and the like play their own sound (A_SPosAttack the
+        shotgun whoever it is given to); the rest use mobjinfo's. }
+      if Sound <> '' then
+        Info^.AttackSound := Sound
+      else
+        Info^.AttackSound := SoundName(Mo.AttackSound);
+    end;
+    { Flags that this port keeps. }
+    Info^.Solid := (Mo.Flags and MF_SOLID) <> 0;
+    Info^.Hanging := (Mo.Flags and MF_SPAWNCEILING) <> 0;
+    Info^.Floats := (Mo.Flags and MF_FLOAT) <> 0;
+    Info^.Shadow := (Mo.Flags and MF_SHADOW) <> 0;
+  end;
 end;
 
 function FindThingInfo(const Num: Integer): PThingInfo;

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- DeHackEd frames and code pointers: vanilla's state table (generated
+  from the Doom source's info.c into the game) is what `-deh` / `-bex`
+  patches and the WADs' `DEHACKED` lumps edit ("Frame N", "Pointer N",
+  BEX `[CODEPTR]`, a thing's frame, sound and bits fields), and every
+  thing's animations, sounds and attack come from it, so a patch that
+  changes a monster's frames, durations, sprite, brightness or attack
+  code pointer takes effect. Monsters animate as in vanilla (walking
+  frames at their original rate, pain frames, full-bright muzzle flashes,
+  including the ones Freedoom's own lump marks).
 - A level, a warp, a loaded game and the title no longer pause for the
   music's first seconds: they are rendered over the first frames and the
   song starts a few frames in.

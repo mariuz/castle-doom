@@ -6,13 +6,23 @@
     C1TEXT, BGFLATE1, CC_ZOMBIE...); TDoomStrings.
   - "[PARS]": par times for the intermission (Freedoom has its own).
   - "Thing N": hit points, speed, width, height, mass and pain chance of the
-    things this port knows (N is info.c's mobjtype + 1).
+    things this port knows (N is info.c's mobjtype + 1), their frames
+    (initial, moving, injury, close / far attack, death, exploding,
+    respawn), sounds (alert, attack, pain, death, action) and bits (solid,
+    float, spawn on the ceiling, shadow are kept).
+  - "Frame N": sprite number, sprite subnumber (frame, bit 15 full bright),
+    duration and next frame of vanilla's state table (DoomStates);
+    "Pointer N (Frame M)" with "Codep Frame = K" gives frame M the code
+    pointer of vanilla's frame K, and BEX "[CODEPTR]" "FRAME M = A_Name"
+    names it. After the patches the things' frame sequences, sounds and
+    attacks are derived again (DoomThings.ApplyStateTable), so changed
+    animations play and a monster given another's attack code pointer
+    attacks that way.
   - "Ammo N": max ammo and the clip size; "Misc": initial health and
     bullets, health / armor limits, armor classes, soul- and megasphere
     health, IDFA / IDKFA armor, BFG cells per shot.
-  Frames, code pointers, sprites, sounds, weapons' frames, cheats and the
-  old "Text" replacements need Doom's state tables, which this port does
-  not have; they are counted and logged as ignored. }
+  Weapons' frames, "Sprite" and "Sound" renumbering, cheats and the old
+  "Text" replacements are counted and logged as ignored. }
 unit DoomDehacked;
 
 interface
@@ -64,27 +74,39 @@ type
 
 implementation
 
-uses SysUtils, Generics.Collections, CastleLog, DoomThings;
+uses SysUtils, Math, Generics.Collections, CastleLog, DoomThings, DoomStates;
 
 var
   DehFileNames, DehFileTexts: TStringList;
   DehPars: {$ifdef FPC}specialize{$endif} TDictionary<String, Integer>;
 
 const
-  { info.c's mobjinfo order: DeHackEd's "Thing N" is MobjDoomedNum[N]
-    (0 = no map number: player, projectiles, effects). }
-  MobjDoomedNum: array [1..137] of Integer = (
-    0, 3004, 9, 64, 0, 66, 0, 0, 67, 0, 65, 3001, 3002, 58, 3005, 3003, 0, 69,
-    3006, 7, 68, 16, 71, 84, 72, 88, 89, 87, 0, 0, 2035, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 14, 0, 2018, 2019, 2014, 2015, 5, 13, 6, 39, 38, 40, 2011, 2012,
-    2013, 2022, 2023, 2024, 2025, 2026, 2045, 83, 2007, 2048, 2010, 2046, 2047,
-    17, 2008, 2049, 8, 2006, 2002, 2005, 2003, 2004, 2001, 82,
-    85, 86, 2028, 30, 31, 32, 33, 37, 36, 41, 42, 43, 44, 45, 46, 55, 56, 57,
-    47, 48, 34, 35, 49, 50, 51, 52, 53, 63, 59, 61, 60, 62, 22, 15, 18, 21, 23,
-    20, 19, 10, 12, 28, 24, 27, 29, 25, 26, 54, 70, 73, 74, 75, 76, 77, 78, 79,
-    80, 81);
   VanillaMaxAmmo: array [0..3] of Integer = (200, 50, 300, 50);
   VanillaClipAmmo: array [0..3] of Integer = (10, 4, 20, 1);
+  { DeHackEd's / BEX's mnemonic bits ("Bits = SOLID+SHOOTABLE"). }
+  BitNames: array [0..27] of String = (
+    'SPECIAL', 'SOLID', 'SHOOTABLE', 'NOSECTOR', 'NOBLOCKMAP', 'AMBUSH', 'JUSTHIT',
+    'JUSTATTACKED', 'SPAWNCEILING', 'NOGRAVITY', 'DROPOFF', 'PICKUP', 'NOCLIP',
+    'SLIDE', 'FLOAT', 'TELEPORT', 'MISSILE', 'DROPPED', 'SHADOW', 'NOBLOOD',
+    'CORPSE', 'INFLOAT', 'COUNTKILL', 'COUNTITEM', 'SKULLFLY', 'NOTDMATCH',
+    'TRANSLATION', 'TRANSLATION2');
+
+{ A "Bits" value: a number, or names joined by + | , or blanks. }
+function BitsValue(const S: String): Integer;
+var
+  Words: TStringArray;
+  W: String;
+  I: Integer;
+begin
+  Result := StrToIntDef(Trim(S), -1);
+  if Result >= 0 then Exit;
+  Result := 0;
+  Words := S.Split(['+', '|', ',', ' ', #9], TStringSplitOptions.ExcludeEmpty);
+  for W in Words do
+    for I := 0 to High(BitNames) do
+      if SameText(W, BitNames[I]) or SameText(W, 'MF_' + BitNames[I]) then
+        Result := Result or (1 shl I);
+end;
 
 procedure ResetDehacked;
 begin
@@ -105,6 +127,7 @@ begin
   DehMaxAmmo := VanillaMaxAmmo;
   DehClipAmmo := VanillaClipAmmo;
   DehPars.Clear;
+  ResetStates;
   ResetThingInfos;
 end;
 
@@ -135,19 +158,53 @@ end;
 procedure ApplyPatch(const Text, SourceName: String);
 var
   Lines: TStringList;
-  I, Eq, N, Value, Changed, Ignored, Par: Integer;
+  I, Eq, N, Value, Changed, Ignored, Par, PointerFrame, Frame: Integer;
   Line, Section, Key, ValueStr: String;
   Words: TStringArray;
   Info: PThingInfo;
+  Action: TStateAction;
 
-  procedure ThingField;
+  { A state number of the table, else -1. }
+  function StateNum(const V: Integer): Integer;
   begin
-    if Info = nil then
+    if (V >= 0) and (V < Length(States)) then Result := V else Result := -1;
+  end;
+
+  function SoundNum(const V: Integer): Integer;
+  begin
+    if (V >= 0) and (V < Length(Sounds)) then Result := V else Result := -1;
+  end;
+
+  { "Thing N": the stats go to the thing table, the frames, sounds and
+    bits to the mobjinfo row (ApplyStateTable derives from it after the
+    patches). Rows without a thing of this port (the player, projectiles)
+    still take their frames and sounds. }
+  procedure ThingField;
+  var
+    M: Integer;
+  begin
+    M := -1;
+    if (N >= 1) and (N <= Length(Mobjs)) then M := N - 1;
+    if SameText(Key, 'Initial frame') then begin if M >= 0 then Mobjs[M].Spawn := StateNum(Value); end
+    else if SameText(Key, 'First moving frame') then begin if M >= 0 then Mobjs[M].See := StateNum(Value); end
+    else if SameText(Key, 'Injury frame') then begin if M >= 0 then Mobjs[M].Pain := StateNum(Value); end
+    else if SameText(Key, 'Close attack frame') then begin if M >= 0 then Mobjs[M].Melee := StateNum(Value); end
+    else if SameText(Key, 'Far attack frame') then begin if M >= 0 then Mobjs[M].Missile := StateNum(Value); end
+    else if SameText(Key, 'Death frame') then begin if M >= 0 then Mobjs[M].Death := StateNum(Value); end
+    else if SameText(Key, 'Exploding frame') then begin if M >= 0 then Mobjs[M].XDeath := StateNum(Value); end
+    else if SameText(Key, 'Respawn frame') then begin if M >= 0 then Mobjs[M].RaiseState := StateNum(Value); end
+    else if SameText(Key, 'Alert sound') then begin if M >= 0 then Mobjs[M].SeeSound := SoundNum(Value); end
+    else if SameText(Key, 'Attack sound') then begin if M >= 0 then Mobjs[M].AttackSound := SoundNum(Value); end
+    else if SameText(Key, 'Pain sound') then begin if M >= 0 then Mobjs[M].PainSound := SoundNum(Value); end
+    else if SameText(Key, 'Death sound') then begin if M >= 0 then Mobjs[M].DeathSound := SoundNum(Value); end
+    else if SameText(Key, 'Action sound') then begin if M >= 0 then Mobjs[M].ActiveSound := SoundNum(Value); end
+    else if SameText(Key, 'Bits') then begin if M >= 0 then Mobjs[M].Flags := BitsValue(ValueStr); end
+    else if Info = nil then
     begin
       Inc(Ignored);
       Exit;
-    end;
-    if SameText(Key, 'Hit points') then Info^.Health := Value
+    end
+    else if SameText(Key, 'Hit points') then Info^.Health := Value
     else if SameText(Key, 'Speed') then Info^.Speed := Value
     else if SameText(Key, 'Width') then Info^.Radius := Value div 65536
     else if SameText(Key, 'Height') then Info^.Height := Value div 65536
@@ -158,7 +215,47 @@ var
       Inc(Ignored);
       Exit;
     end;
+    if M < 0 then
+      Inc(Ignored)
+    else
+      Inc(Changed);
+  end;
+
+  { "Frame N": a row of the state table. }
+  procedure FrameField;
+  begin
+    if (N < 0) or (N >= Length(States)) then
+    begin
+      Inc(Ignored);
+      Exit;
+    end;
+    if SameText(Key, 'Sprite number') then
+    begin
+      if (Value >= 0) and (Value < Length(Sprites)) then States[N].Sprite := Value;
+    end
+    else if SameText(Key, 'Sprite subnumber') then States[N].Frame := Value
+    else if SameText(Key, 'Duration') then States[N].Tics := Value
+    else if SameText(Key, 'Next frame') then States[N].Next := Max(0, StateNum(Value))
+    else if SameText(Key, 'Unknown 1') or SameText(Key, 'Unknown 2') then
+    else
+    begin
+      Inc(Ignored);
+      Exit;
+    end;
     Inc(Changed);
+  end;
+
+  { "Pointer N (Frame M)": "Codep Frame = K" copies vanilla frame K's
+    code pointer to frame M. }
+  procedure PointerField;
+  begin
+    if SameText(Key, 'Codep Frame') and (PointerFrame >= 0) and (PointerFrame < Length(States)) and
+       (Value >= 0) and (Value < VanillaStateCount) then
+    begin
+      States[PointerFrame].Action := VanillaStates[Value].Action;
+      Inc(Changed);
+    end else
+      Inc(Ignored);
   end;
 
   procedure MiscField;
@@ -191,6 +288,7 @@ begin
   Section := '';
   Info := nil;
   N := 0;
+  PointerFrame := -1;
   Lines := TStringList.Create;
   try
     Lines.Text := Text;
@@ -226,13 +324,29 @@ begin
         end;
         Continue;
       end;
-      { [STRINGS] is TDoomStrings' (it reads the same patches); other BEX
-        sections ([CODEPTR], [HELPER], [SPRITES]...) are not supported. }
+      { [STRINGS] is TDoomStrings' (it reads the same patches); [CODEPTR]
+        names code pointers ("FRAME 452 = A_SargAttack"); other BEX
+        sections ([HELPER], [SPRITES]...) are not supported. }
       if (Section <> '') and (Section[1] = '[') then
       begin
         if Pos('=', Line) > 0 then
         begin
-          if Section <> '[STRINGS]' then Inc(Ignored);
+          if Section = '[CODEPTR]' then
+          begin
+            Eq := Pos('=', Line);
+            Words := Trim(Copy(Line, 1, Eq - 1)).Split([' ', #9], TStringSplitOptions.ExcludeEmpty);
+            Frame := -1;
+            if (Length(Words) = 2) and SameText(Words[0], 'FRAME') then
+              Frame := StrToIntDef(Words[1], -1);
+            if (Frame >= 0) and (Frame < Length(States)) and
+               ActionByName(Trim(Copy(Line, Eq + 1, MaxInt)), Action) then
+            begin
+              States[Frame].Action := Action;
+              Inc(Changed);
+            end else
+              Inc(Ignored);
+          end
+          else if Section <> '[STRINGS]' then Inc(Ignored);
           { A value continued with a trailing backslash. }
           while (Line <> '') and (Line[Length(Line)] = '\') and (I < Lines.Count) do
           begin
@@ -256,9 +370,12 @@ begin
         if Length(Words) > 1 then
           N := StrToIntDef(Words[1], 0);
         Info := nil;
-        if (Section = 'thing') and (N >= Low(MobjDoomedNum)) and (N <= High(MobjDoomedNum)) and
-           (MobjDoomedNum[N] <> 0) then
-          Info := FindThingInfo(MobjDoomedNum[N]);
+        if (Section = 'thing') and (N >= 1) and (N <= Length(Mobjs)) and (Mobjs[N - 1].DoomedNum > 0) then
+          Info := FindThingInfo(Mobjs[N - 1].DoomedNum);
+        { "Pointer 123 (Frame 456)": the frame in parentheses is the one changed. }
+        PointerFrame := -1;
+        if (Section = 'pointer') and (Length(Words) >= 4) and SameText(Words[2], '(Frame') then
+          PointerFrame := StrToIntDef(StringReplace(Words[3], ')', '', [rfReplaceAll]), -1);
         if (Section = 'text') and (Length(Words) >= 3) then
         begin
           { Old-style replacement: the next Words[1] + Words[2] characters
@@ -279,6 +396,10 @@ begin
       Value := StrToIntDef(ValueStr, 0);
       if Section = 'thing' then
         ThingField
+      else if Section = 'frame' then
+        FrameField
+      else if Section = 'pointer' then
+        PointerField
       else if Section = 'misc' then
         MiscField
       else if Section = 'ammo' then
@@ -303,7 +424,7 @@ begin
   finally
     FreeAndNil(Lines);
   end;
-  WritelnLog('DeHackEd', '%s: %d values applied, %d not supported (frames, code pointers...)',
+  WritelnLog('DeHackEd', '%s: %d values applied, %d not supported (weapons, sprites, sounds, cheats, text...)',
     [SourceName, Changed, Ignored]);
 end;
 
@@ -328,6 +449,8 @@ begin
         ApplyPatch(LumpText(AWad, I), 'DEHACKED lump');
   for I := 0 to DehFileTexts.Count - 1 do
     ApplyPatch(DehFileTexts[I], DehFileNames[I]);
+  { The things' sequences, sounds and attacks from the patched states. }
+  ApplyStateTable;
 end;
 
 function DehackedParTime(const MapName: String; out Seconds: Integer): Boolean;

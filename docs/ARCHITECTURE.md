@@ -85,7 +85,8 @@ Sizes, for orientation (lines of Pascal):
 | `doommenu.pas` | 420 | Doom's menu from `M_*` graphics |
 | `doomintermission.pas` | 330 | intermission screen |
 | `doomfinale.pas` | 460 | finale text, end pictures, bunny scroller, cast call |
-| `doomdehacked.pas` | 440 | DeHackEd patches (`DEHACKED` lumps, `-deh` files): BEX strings, things, Misc, Ammo, par times |
+| `doomstates.pas` | 230 | vanilla's state table and mobjinfo rows (`doomstates_table.inc`, generated from info.c): what DeHackEd edits and the things' sequences come from |
+| `doomdehacked.pas` | 560 | DeHackEd patches (`DEHACKED` lumps, `-deh` files): BEX strings, things, frames, code pointers, Misc, Ammo, par times |
 | `doomautomap.pas` | 210 | automap drawn with 2D primitives |
 | `doomfont.pas` | 130 | STCFN text |
 | `doomactors.pas` | 248 | sprite billboards with animation |
@@ -1082,12 +1083,38 @@ deploys.
 
 - DeHackEd (`ApplyDehacked`, before each game's world is made): the
   `DEHACKED` lumps, then `-deh` / `-bex` files, reset and then patch the
-  thing table in place (`ResetThingInfos`; "Thing N" goes through
-  `MobjDoomedNum`, info.c's mobjtype order to THINGS numbers), `DehMisc`,
-  `DehMaxAmmo` / `DehClipAmmo` (pickups give a clip, boxes 5, weapons 2)
-  and `[PARS]` (`DehackedParTime`, used by the intermission). Frames, code
-  pointers, sprites, sounds, cheats and "Text" sections are counted as not
-  supported: the port has no vanilla state table.
+  state table (`DoomStates.ResetStates`: "Frame N" sprite, subnumber,
+  duration and next; "Pointer N (Frame M)" and BEX `[CODEPTR]` the code
+  pointer) and the thing table in place (`ResetThingInfos`; "Thing N" is
+  mobjinfo row N - 1: its stats go to `TThingInfo`, its frames, sounds
+  and bits to `DoomStates.Mobjs`), `DehMisc`, `DehMaxAmmo` /
+  `DehClipAmmo` (pickups give a clip, boxes 5, weapons 2) and `[PARS]`
+  (`DehackedParTime`, used by the intermission). Then
+  `ApplyStateTable` derives every thing's sequences again. Weapons'
+  frames, "Sprite" / "Sound" renumbering, cheats and "Text" sections are
+  counted as not supported.
+- The state table (`DoomStates`): `tools/make_states.py` turns
+  linuxdoom-1.10's `info.c`, `info.h` and `sounds.h` into
+  `doomstates_table.inc` (138 sprite names, 967 states with sprite,
+  frame, tics, action and next, 137 mobjinfo rows with their entry
+  states, sounds, stats and flags, 109 sound names; `TStateAction` is
+  every code pointer). `WalkStates` follows a chain from an entry state
+  until S_NULL, a state already seen (`Loop`), another entry state of the
+  same thing or a forever state (`Forever`), giving a `TFrameSeq`: per
+  frame the sprite, letter, tics, full-bright bit and action.
+  `DoomThings.ApplyStateTable` fills each thing's `Seqs[skIdle..skRaise]`
+  (and the legacy `IdleFrames`... strings), its sprite, sounds, flags
+  (solid, float, ceiling, shadow) and, from the attack code pointer found
+  in the missile or melee chain (`AttackAction`), the attack kind, damage
+  dice, pellet count and attack sound (`AttackOf`). `TDoomActor.PlayStates`
+  plays a sequence with each frame's own tics, sprite and brightness and
+  exposes `CurrentAction`; `DoomWorld` dispatches `MonsterAttack`,
+  `SpawnMissile`'s projectile, the hitscan pellets and the Arch-vile's
+  blast frame on those actions instead of on thing numbers, so a patch
+  giving a monster another's code pointer gives it that attack. Walking
+  frames now play as vanilla's chains do (each image twice at 3-4 tics),
+  the pain frames as the table has them, and muzzle flashes are
+  full-bright where the table (or Freedoom's `DEHACKED` lump) marks them.
 - No demo playback. The in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
   `DoomMenu`.
 - Vanilla node format only. A blockmap-free design means all 2D queries scan

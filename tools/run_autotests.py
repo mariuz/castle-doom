@@ -130,7 +130,7 @@ TESTS = [
     # A -deh patch: a 1 HP imp dies to one bullet, Freedoom's DEHACKED lump
     # is read too, the patch's par time (999 s) is what the intermission uses.
     ('dehacked', 'E1M1', 'Y,W:0.3,SAVE:1,SHOTS,P:3001:300,W:0.3,X,W:0.5,Q',
-     [r'DeHackEd: DEHACKED lump: \d+ values applied', r'DeHackEd: test\.deh: 7 values applied',
+     [r'DeHackEd: DEHACKED lump: \d+ values applied', r'DeHackEd: test\.deh: 11 values applied',
       r'Shot: .* hit TROO \(-\d+ health left\)'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'test.deh')],
      check_dehacked),

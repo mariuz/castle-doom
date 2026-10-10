@@ -12,6 +12,12 @@ Duration = 2
 
 Text 5 5
 HELLOWORLD
+Frame 452
+Duration = 1
+
+Pointer 1 (Frame 454)
+Codep Frame = 487
+
 Misc 0
 Initial Health = 50
 Initial Bullets = 20
@@ -19,6 +25,9 @@ Initial Bullets = 20
 Ammo 0 (Bullets)
 Max ammo = 100
 Per ammo = 7
+
+[CODEPTR]
+FRAME 185 = A_SPosAttack
 
 [PARS]
 par 1 1 999

@@ -12,7 +12,7 @@ interface
 
 uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
-  DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting;
+  DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting, DoomStates;
 
 const
   TicRate = 35;
@@ -532,6 +532,24 @@ begin
     3006: Result := 6;
     else Result := 3;
   end;
+end;
+
+{ Play one of the thing's state-table sequences (each frame with its own
+  tics, sprite and brightness); the legacy uniform frames when the table
+  has none for it. }
+procedure PlayInfoSeq(const A: TDoomActor; const Kind: TSeqKind; const Loop: Boolean;
+  const Fallback: String; const FallbackTics: Integer);
+begin
+  if Length(A.Info^.Seqs[Kind].Tics) > 0 then
+    A.PlayStates(A.Info^.Seqs[Kind], Loop)
+  else
+    A.PlaySequence(Fallback, FallbackTics, Loop);
+end;
+
+{ The walking frames (A_Chase). }
+procedure PlayMove(const A: TDoomActor);
+begin
+  PlayInfoSeq(A, skMove, true, A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num));
 end;
 
 function SegmentsIntersect(const AX, AY, BX, BY, CX, CY, DX, DY: Single; out T: Single): Boolean;
@@ -1628,7 +1646,7 @@ begin
         if A.SequenceDone then
         begin
           A.State := asChase;
-          A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
+          PlayMove(A);
         end;
       asAttack:
         begin
@@ -1636,8 +1654,9 @@ begin
             TicCharge(A)
           else
           begin
-            { A_VileAttack happens on frame O of the Arch-vile's attack. }
-            if (A.Info^.Num = 64) and (A.Frame = 'O') and not A.AttackFired then
+            { A_VileAttack happens on the attack frame carrying that code
+              pointer (frame P of the Arch-vile's attack). }
+            if (A.CurrentAction = saVileAttack) and not A.AttackFired then
             begin
               A.AttackFired := true;
               VileAttack(A);
@@ -1650,7 +1669,7 @@ begin
                 A.Fire := nil;
               end;
               A.State := asChase;
-              A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
+              PlayMove(A);
               { A_Chase: on Nightmare monsters may attack again right away
                 (MF_JUSTATTACKED does not make them walk first). }
               if Skill = 4 then A.ReactionTics := Random1(8) else A.ReactionTics := 20 + Random1(35);
@@ -2095,7 +2114,7 @@ begin
       Exit;
     end;
     A.State := asChase;
-    A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
+    PlayMove(A);
     if A.Info^.SeeSound <> '' then
       FSounds.PlayAt(A.Info^.SeeSound, A);
     A.ReactionTics := 10 + Random1(20);
@@ -2367,7 +2386,7 @@ begin
   if A.State = asAttack then
   begin
     A.State := asChase;
-    A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
+    PlayMove(A);
   end;
   A.ReactionTics := 10 + Random1(20);
 end;
@@ -2781,10 +2800,15 @@ begin
     C.Target := nil;
     C.Awake := true;
     C.State := asPain;
-    Frames := '';
-    for I := Length(C.Info^.DeathFrames) downto 1 do
-      Frames := Frames + C.Info^.DeathFrames[I];
-    C.PlaySequence(Frames, 5, false);
+    if Length(C.Info^.Seqs[skRaise].Tics) > 0 then
+      C.PlayStates(C.Info^.Seqs[skRaise], false)
+    else
+    begin
+      Frames := '';
+      for I := Length(C.Info^.DeathFrames) downto 1 do
+        Frames := Frames + C.Info^.DeathFrames[I];
+      C.PlaySequence(Frames, 5, false);
+    end;
     WritelnLog('Raise', 'Arch-vile raised %s', [C.Info^.Sprite]);
     Exit(true);
   end;
@@ -2796,7 +2820,7 @@ var
   F: TDoomActor;
 begin
   A.State := asAttack;
-  A.PlaySequence(A.Info^.AttackFrames, 9, false);
+  PlayInfoSeq(A, skAttack, false, A.Info^.AttackFrames, 9);
   A.AttackFired := false;
   if A.Info^.AttackSound <> '' then FSounds.PlayAt(A.Info^.AttackSound, A);
   if A.Fire <> nil then A.Fire.Removed := true;
@@ -2909,28 +2933,31 @@ procedure TDoomWorld.MonsterAttack(const A: TDoomActor);
 var
   TX, TY, TZ, TR: Single;
 begin
-  case A.Info^.Num of
-    3006:
+  { The attack is what the code pointer in the thing's missile (or melee)
+    frames does, so a DeHackEd patch can give a monster another's attack. }
+  case A.Info^.AttackAction of
+    saSkullAttack:
       begin
         StartSkullCharge(A);
         Exit;
       end;
-    71:
+    saPainAttack:
       begin
         { A_PainAttack: spit a lost soul. }
         A.State := asAttack;
-        A.PlaySequence(A.Info^.AttackFrames, 5, false);
+        PlayInfoSeq(A, skAttack, false, A.Info^.AttackFrames, 5);
         PainShootSkull(A, A.Angle);
         Exit;
       end;
-    64:
+    saVileAttack:
       begin
         VileStartAttack(A);
         Exit;
       end;
+    else ;
   end;
   A.State := asAttack;
-  A.PlaySequence(A.Info^.AttackFrames, 6, false);
+  PlayInfoSeq(A, skAttack, false, A.Info^.AttackFrames, 6);
   case A.Info^.Attack of
     akMelee:
       begin
@@ -2978,8 +3005,7 @@ begin
     Slope := (TZ + TH / 2 - ShootZ) / Dist
   else
     Slope := 0;
-  Shots := 1;
-  if A.Info^.Num in [9, 7] then Shots := 3;
+  Shots := Max(1, A.Info^.Shots);
   for I := 1 to Shots do
   begin
     Ang := Aim + (Random(256) - Random(256)) * 22.4 / 255;
@@ -3083,14 +3109,14 @@ var
   M: TDoomActor;
   DX, DY, DZ, Len, Speed, TX, TY, TZ, TR: Single;
 begin
-  case A.Info^.Num of
-    3001: K := ekBal1;
-    3005, 71: K := ekBal2;
-    3003, 69: K := ekBal7;
-    16: K := ekRocket;
-    66: K := ekRevenantRocket;
-    67: K := ekFatShot;
-    68: K := ekArachPlasma;
+  case A.Info^.AttackAction of
+    saTroopAttack: K := ekBal1;
+    saHeadAttack, saPainAttack: K := ekBal2;
+    saBruisAttack: K := ekBal7;
+    saCyberAttack: K := ekRocket;
+    saSkelMissile: K := ekRevenantRocket;
+    saFatAttack1, saFatAttack2, saFatAttack3: K := ekFatShot;
+    saBspiAttack: K := ekArachPlasma;
     else K := ekBal1;
   end;
   TargetPosition(A, TX, TY, TZ, TR);
@@ -3461,7 +3487,7 @@ begin
     if A.State = asIdle then
     begin
       A.State := asChase;
-      A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
+      PlayMove(A);
     end;
     if (A.Info^.PainFrame <> #0) and (Random(256) < A.Info^.PainChance) then
     begin
@@ -3469,10 +3495,10 @@ begin
       if A.Info^.Num = 88 then
       begin
         { A_BrainPain: BBRN B for 36 tics, the scream at full volume. }
-        A.PlaySequence(A.Info^.PainFrame, 36, false);
+        PlayInfoSeq(A, skPain, false, A.Info^.PainFrame, 36);
         FSounds.Play('DSBOSPN');
       end else
-        A.PlaySequence(A.Info^.PainFrame, 6, false);
+        PlayInfoSeq(A, skPain, false, A.Info^.PainFrame, 6);
       if A.Info^.PainSound <> '' then FSounds.PlayAt(A.Info^.PainSound, A);
     end;
   end;
@@ -3507,11 +3533,11 @@ begin
   if (A.Info^.XDeathFrames <> '') and (A.Health < -A.Info^.Health) then
   begin
     WritelnLog('Gib', '%s at (%.0f, %.0f), health %d', [A.Info^.Sprite, A.DoomX, A.DoomY, A.Health]);
-    A.PlaySequence(A.Info^.XDeathFrames, 5, false);
+    PlayInfoSeq(A, skXDeath, false, A.Info^.XDeathFrames, 5);
     FSounds.PlayAt('DSSLOP', A);
   end else
   begin
-    A.PlaySequence(A.Info^.DeathFrames, 5, false);
+    PlayInfoSeq(A, skDeath, false, A.Info^.DeathFrames, 5);
     if A.Info^.DeathSound <> '' then FSounds.PlayAt(A.Info^.DeathSound, A);
   end;
   if A.Info^.Num = 88 then
@@ -3649,7 +3675,7 @@ begin
         if A.State = asIdle then
         begin
           A.State := asChase;
-          A.PlaySequence(A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num), true);
+          PlayMove(A);
         end;
       end;
     end;
