@@ -6,6 +6,17 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Video options: the title screen's Options panel sets the field of
+  view (60-120, Doom's 90 by default), the UI scale (50-200 %, the text
+  and panels; CastleSettings.xml's reference size divided by it),
+  fullscreen (desktop) and, in the browser, the render resolution
+  (25-100 % of the canvas' pixels: the page's canvas sizing script,
+  patched by `tools/patch_web_page.py` in the Web workflow, multiplies
+  the size by it). They are saved in `settings.json`; `FOV`, `UISCALE`,
+  `RENDERSCALE` and `FULLSCREEN` set them from a demo (autotest
+  `video-settings`). At 50 % SwiftShader draws E1M1 at about three
+  times the frame rate.
+
 - Live thing inspection and profiler sections: the inspector's F9
   auto-select ("Transform") picks the monster or barrel under the
   crosshair (the collision quads are transient, so the actor is what is
@@ -612,7 +623,7 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Video options**: field of view, window / fullscreen toggle, UI scale, v-sync, a resolution scale for slow browsers, in the F4-style options page and `settings.json`. | The most asked-for options after mouse sensitivity. | `GameSettings`, `GameViewMenu`, `GameViewPlay` | S-M |
+| **Video options in the game**: the options are on the title screen's Options panel (see above); Doom's in-game Options page has no video entries yet (it is `M_*` patches, so it needs a text-drawn page), and v-sync is not offered. | Change the field of view without leaving the level. | `DoomMenu`, `GameViewPlay` | S |
 | **Key and button rebinding**: a controls page writing the bindings to `settings.json`; the help panel and `pages/index.html` read them. | Players expect it. | `GameSettings`, `GameViewPlay`, `GameGamepad` | M |
 | **UMAPINFO / MAPINFO**: level names, music, par, next and secret map, sky and episode definitions from PWADs. | Modern PWADs ship them; without it the port falls back to vanilla's progression. | new `DoomMapInfo`, `DoomWorld.NextMapName` | M |
 | **Boom `ANIMATED` and `SWITCHES` lumps**: PWAD-defined texture and flat animations and switch pairs. | Common in community WADs; small. | `DoomGraphics` animation groups | S |
@@ -622,12 +633,12 @@ play.
 
 ## Suggested next three
 
-1. Video options (S-M, see Other suggested improvements): field of view,
-   fullscreen, UI scale and a resolution scale for slow browsers.
-2. Boom `ANIMATED` and `SWITCHES` lumps (S, see Other suggested
+1. Boom `ANIMATED` and `SWITCHES` lumps (S, see Other suggested
    improvements): PWAD-defined texture animations and switch pairs.
-3. Log filtering (S, see Inspectability): `CASTLE_DOOM_LOG=...` to keep
+2. Log filtering (S, see Inspectability): `CASTLE_DOOM_LOG=...` to keep
    only some log categories (the `--profile` summaries are long).
+3. Key and button rebinding (M, see Other suggested improvements): a
+   controls page writing the bindings to `settings.json`.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

@@ -211,6 +211,107 @@
             },
             {
               "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowVideo",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonFovDown",
+                  "Caption": "<",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleLabel",
+                  "Name": "FovLabel",
+                  "Text": [
+                    ""
+                  ],
+                  "FontSize": 22.0,
+                  "ColorPersistent": {
+                    "$$ClassName": "TCastleColorPersistent",
+                    "Red": 1.0,
+                    "Green": 1.0,
+                    "Blue": 1.0,
+                    "Alpha": 1.0
+                  }
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonFovUp",
+                  "Caption": ">",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonUiScaleDown",
+                  "Caption": "<",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleLabel",
+                  "Name": "UiScaleLabel",
+                  "Text": [
+                    ""
+                  ],
+                  "FontSize": 22.0,
+                  "ColorPersistent": {
+                    "$$ClassName": "TCastleColorPersistent",
+                    "Red": 1.0,
+                    "Green": 1.0,
+                    "Blue": 1.0,
+                    "Alpha": 1.0
+                  }
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonUiScaleUp",
+                  "Caption": ">",
+                  "FontSize": 22.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowVideo2",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonFullscreen",
+                  "Caption": "Fullscreen: off",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonRenderScaleDown",
+                  "Caption": "<",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleLabel",
+                  "Name": "RenderScaleLabel",
+                  "Text": [
+                    ""
+                  ],
+                  "FontSize": 22.0,
+                  "ColorPersistent": {
+                    "$$ClassName": "TCastleColorPersistent",
+                    "Red": 1.0,
+                    "Green": 1.0,
+                    "Blue": 1.0,
+                    "Alpha": 1.0
+                  }
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonRenderScaleUp",
+                  "Caption": ">",
+                  "FontSize": 22.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
               "Name": "RowStart",
               "Spacing": 10.0,
               "$Children": [

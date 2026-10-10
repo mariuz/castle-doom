@@ -1135,6 +1135,16 @@ Things that differ on the web and shaped the code:
 - All loading is synchronous from the in-memory data zip, so `Download()` of
   `castle-data:` and the custom protocols work unchanged.
 - Sound uses Web Audio; it needs a user gesture, which the START click is.
+- The render resolution option: CGE's page sizes the canvas to the
+  display's pixels in a ResizeObserver; `tools/patch_web_page.py` (run by
+  the Web workflow on `dist/index.html`) multiplies that by
+  `window.castleDoomScale` and adds `castleDoomSetScale(percent)`, which
+  `GameSettings.ApplyWindowSettings` calls through JOB. CGE sees the
+  smaller drawing buffer and resizes; CSS stretches the canvas back.
+  The other video options (`GameSettings`): the camera's horizontal
+  field of view, the UI scale (CastleSettings.xml's 1600x900 reference
+  size divided by it) and fullscreen (desktop only; the page has its
+  own button).
 - No threads, so music is rendered on the main thread (a few seconds per
   track); the "Loading" overlay is drawn first.
 - Heavy pure-Pascal work is slower: PNG was replaced by TGA for textures.

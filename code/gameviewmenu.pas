@@ -21,6 +21,8 @@ type
     FMapLabel: TCastleLabel;
     FSkillLabel: TCastleLabel;
     FSfxLabel, FMusicLabel: TCastleLabel;
+    FFovLabel, FUiScaleLabel, FRenderScaleLabel: TCastleLabel;
+    FFullscreenButton: TCastleButton;
     FStatus: TCastleLabel;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
@@ -89,6 +91,17 @@ type
     { Apply and remember a volume change (0 sound effects, 1 music). }
     procedure ChangeVolume(const Which, Delta: Integer);
     procedure UpdateVolumeLabels;
+    { The video options (GameSettings): 0 field of view, 1 UI scale,
+      2 render scale, by Delta steps; applied and saved. }
+    procedure ChangeVideo(const Which, Delta: Integer);
+    procedure UpdateVideoLabels;
+    procedure ClickFovDown(Sender: TObject);
+    procedure ClickFovUp(Sender: TObject);
+    procedure ClickUiScaleDown(Sender: TObject);
+    procedure ClickUiScaleUp(Sender: TObject);
+    procedure ClickRenderScaleDown(Sender: TObject);
+    procedure ClickRenderScaleUp(Sender: TObject);
+    procedure ClickFullscreen(Sender: TObject);
     procedure UpdateMapLabel;
     procedure UpdateSkillLabel;
     procedure StartGame;
@@ -194,6 +207,27 @@ begin
   Click('ButtonMusicUp', {$ifdef FPC}@{$endif} ClickMusicUp);
   FMusicLabel := DesignedComponent('MusicLabel') as TCastleLabel;
   UpdateVolumeLabels;
+  { Video: field of view, UI scale, fullscreen (desktop; the page has its
+    own button) and the render resolution (browser only). }
+  Click('ButtonFovDown', {$ifdef FPC}@{$endif} ClickFovDown);
+  Click('ButtonFovUp', {$ifdef FPC}@{$endif} ClickFovUp);
+  FFovLabel := DesignedComponent('FovLabel') as TCastleLabel;
+  Click('ButtonUiScaleDown', {$ifdef FPC}@{$endif} ClickUiScaleDown);
+  Click('ButtonUiScaleUp', {$ifdef FPC}@{$endif} ClickUiScaleUp);
+  FUiScaleLabel := DesignedComponent('UiScaleLabel') as TCastleLabel;
+  Click('ButtonRenderScaleDown', {$ifdef FPC}@{$endif} ClickRenderScaleDown);
+  Click('ButtonRenderScaleUp', {$ifdef FPC}@{$endif} ClickRenderScaleUp);
+  FRenderScaleLabel := DesignedComponent('RenderScaleLabel') as TCastleLabel;
+  FFullscreenButton := DesignedComponent('ButtonFullscreen') as TCastleButton;
+  FFullscreenButton.OnClick := {$ifdef FPC}@{$endif} ClickFullscreen;
+  {$ifdef WASI}
+  FFullscreenButton.Exists := false;
+  {$else}
+  (DesignedComponent('ButtonRenderScaleDown') as TCastleButton).Exists := false;
+  (DesignedComponent('ButtonRenderScaleUp') as TCastleButton).Exists := false;
+  FRenderScaleLabel.Exists := false;
+  {$endif}
+  UpdateVideoLabels;
   Click('ButtonStart', {$ifdef FPC}@{$endif} ClickStart);
   Click('ButtonBack', {$ifdef FPC}@{$endif} ClickBack);
   { Your own WADs (desktop only: needs a native file dialog). }
@@ -598,6 +632,8 @@ begin
       { The settings may have come along. }
       LoadSettings;
       UpdateVolumeLabels;
+      UpdateVideoLabels;
+      ApplyWindowSettings;
       if FSounds <> nil then FSounds.Volume := SfxGain;
       if FMusic <> nil then FMusic.Volume := MusicGain;
     end else
@@ -761,6 +797,63 @@ procedure TViewMenu.UpdateVolumeLabels;
 begin
   FSfxLabel.Caption := Format('Sound volume %d', [Settings.SfxVolume]);
   FMusicLabel.Caption := Format('Music volume %d', [Settings.MusicVolume]);
+end;
+
+procedure TViewMenu.UpdateVideoLabels;
+begin
+  FFovLabel.Caption := Format('Field of view %d', [Settings.FieldOfView]);
+  FUiScaleLabel.Caption := Format('UI scale %d%%', [Settings.UiScale]);
+  FRenderScaleLabel.Caption := Format('Resolution %d%%', [Settings.RenderScale]);
+  FFullscreenButton.Caption := 'Fullscreen: ' + BoolToStr(Settings.Fullscreen, 'on', 'off');
+end;
+
+procedure TViewMenu.ChangeVideo(const Which, Delta: Integer);
+begin
+  case Which of
+    0: Settings.FieldOfView := Clamped(Settings.FieldOfView + 5 * Delta, MinFieldOfView, MaxFieldOfView);
+    1: Settings.UiScale := Clamped(Settings.UiScale + 10 * Delta, MinUiScale, MaxUiScale);
+    2: Settings.RenderScale := Clamped(Settings.RenderScale + 25 * Delta, MinRenderScale, MaxRenderScale);
+  end;
+  SaveSettings;
+  ApplyWindowSettings;
+  UpdateVideoLabels;
+  WritelnLog('Settings', VideoSummary);
+end;
+
+procedure TViewMenu.ClickFovDown(Sender: TObject);
+begin
+  ChangeVideo(0, -1);
+end;
+
+procedure TViewMenu.ClickFovUp(Sender: TObject);
+begin
+  ChangeVideo(0, 1);
+end;
+
+procedure TViewMenu.ClickUiScaleDown(Sender: TObject);
+begin
+  ChangeVideo(1, -1);
+end;
+
+procedure TViewMenu.ClickUiScaleUp(Sender: TObject);
+begin
+  ChangeVideo(1, 1);
+end;
+
+procedure TViewMenu.ClickRenderScaleDown(Sender: TObject);
+begin
+  ChangeVideo(2, -1);
+end;
+
+procedure TViewMenu.ClickRenderScaleUp(Sender: TObject);
+begin
+  ChangeVideo(2, 1);
+end;
+
+procedure TViewMenu.ClickFullscreen(Sender: TObject);
+begin
+  Settings.Fullscreen := not Settings.Fullscreen;
+  ChangeVideo(-1, 0);
 end;
 
 procedure TViewMenu.ChangeVolume(const Which, Delta: Integer);

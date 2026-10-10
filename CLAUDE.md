@@ -146,6 +146,14 @@ Gibs: `D` deals 100000 damage, so it gibs every zombie, sergeant, imp and
 SS (grep `Gib:`); `Y,P:3005:350` from the lift top (`G:160:256,A:0`) shows a
 cacodemon rising out of the pit, and `D` then drops its corpse.
 
+Video options (`GameSettings`, also in `settings.json`): `FOV:deg`,
+`UISCALE:percent`, `RENDERSCALE:percent` and `FULLSCREEN` in a demo
+change and save them like the title screen's Options panel (log
+`Settings: Video: field of view 110, window, UI scale 150%, render scale
+50%`; autotest `video-settings`). The render scale only acts in the
+browser, through the page patch `tools/patch_web_page.py` (test it on a
+downloaded `web-site` artifact: `castleDoomSetScale(50)` in the console
+logs `Drawing buffer width/height changed`).
 Settings (`GameSettings`, `settings.json` next to the saves; the log
 prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
 like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a

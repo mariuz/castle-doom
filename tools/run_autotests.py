@@ -145,6 +145,10 @@ TESTS = [
      [r'Select: TROO_\d+: TROO, state \w+, 60 health, action \w*, \d+ tics left, target player',
       r'- Load E1M1 \(DoomWorld\)', r'- Build geometry', r'- Spawn things'],
      ['--profile'], None),
+    # Video options: field of view, UI scale and render scale, saved.
+    ('video-settings', 'E1M1', 'W:0.3,FOV:110,UISCALE:150,RENDERSCALE:50,W:0.3,S,Q',
+     [r'Settings: Video: field of view 110, window, UI scale 150%, render scale 50%', r'Saved screenshot 1'],
+     [], None),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]

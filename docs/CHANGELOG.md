@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Video options on the title screen's Options panel, remembered between
+  sessions: field of view, UI scale, fullscreen (desktop) and, in the
+  browser, a render resolution for slow machines (25-100 % of the
+  canvas' pixels).
+
 - The inspector (F8) finds the thing you look at: its F9 auto-select
   ("Transform") picks the monster or barrel under the crosshair, and
   things also show their code pointer, tics left, target and reaction

@@ -166,6 +166,7 @@ begin
   end;
   { Volumes and toggles from the last session. }
   LoadSettings;
+  ApplyWindowSettings(true);
   InitializeGamepads;
   { The engine's inspector on F8 in every build: CGE registers the key
     only through ApplicationProperties.InitializeDebug, which the

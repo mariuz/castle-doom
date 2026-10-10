@@ -99,6 +99,8 @@ type
       keeps for itself): pause like Doom's Esc menu would. }
     procedure PointerLockUserCancelled(Sender: TObject);
     procedure PerfLog;
+    { The camera's horizontal field of view from the settings. }
+    procedure ApplyFieldOfView;
     { Select a thing in the engine's inspector (opening it): by name, or
       the one under the crosshair when Name is ''. }
     procedure SelectInInspector(const ThingName: String);
@@ -231,7 +233,7 @@ begin
   Camera.ProjectionNear := 4;
   Camera.ProjectionFar := 0; { automatic / infinite }
   Camera.Perspective.FieldOfViewAxis := faHorizontal;
-  Camera.Perspective.FieldOfView := DegToRad(90);
+  Camera.Perspective.FieldOfView := DegToRad(Settings.FieldOfView);
   FViewport.Items.Add(Camera);
   FViewport.Camera := Camera;
   FViewport.BackgroundColor := Black;
@@ -481,6 +483,24 @@ begin
     ChangeVolume(0, Round(Arg) - Settings.SfxVolume);
     ChangeVolume(1, Round(Arg2) - Settings.MusicVolume);
   end
+  else if (Cmd = 'FOV') or (Cmd = 'UISCALE') or (Cmd = 'RENDERSCALE') or (Cmd = 'FULLSCREEN') then
+  begin
+    { The video options like the title screen's Options panel (saved):
+      FOV:deg, UISCALE:percent, RENDERSCALE:percent (the browser's
+      canvas), FULLSCREEN toggles. }
+    if Cmd = 'FOV' then
+      Settings.FieldOfView := Clamped(Round(Arg), MinFieldOfView, MaxFieldOfView)
+    else if Cmd = 'UISCALE' then
+      Settings.UiScale := Clamped(Round(Arg), MinUiScale, MaxUiScale)
+    else if Cmd = 'RENDERSCALE' then
+      Settings.RenderScale := Clamped(Round(Arg), MinRenderScale, MaxRenderScale)
+    else
+      Settings.Fullscreen := not Settings.Fullscreen;
+    SaveSettings;
+    ApplyWindowSettings;
+    ApplyFieldOfView;
+    WritelnLog('Settings', VideoSummary);
+  end
   else if Cmd = 'SOUNDMENU' then
     OpenSoundMenu
   else if Cmd = 'LINE' then
@@ -660,6 +680,11 @@ end;
 { "PerfView:" line: our own per-frame costs, CGE's frame rate (FPS, and
   "only render" = without waiting for the display) and the last frame's
   render statistics (shapes, scenes, draw calls). }
+procedure TViewPlay.ApplyFieldOfView;
+begin
+  FViewport.Camera.Perspective.FieldOfView := DegToRad(Settings.FieldOfView);
+end;
+
 procedure TViewPlay.SelectInInspector(const ThingName: String);
 var
   Found: TDoomActor;

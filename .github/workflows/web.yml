@@ -133,6 +133,8 @@ jobs:
           export PATH="$TOOLS/pas2js/bin/x86_64-linux:$TOOLS/fpc/bin:$HOME/castle-engine/tools/build-tool:$PATH"
           which pas2js
           castle-engine compile --target=web --mode=release --verbose
+          # The render resolution option (window.castleDoomSetScale).
+          python3 tools/patch_web_page.py castle-engine-output/web/dist/index.html
           ls -l castle-engine-output/web/dist/
 
       - name: Assemble site
