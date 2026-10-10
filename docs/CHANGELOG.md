@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.9.0 (2026-10-10)
 
 - Video options in the game: Esc -> Options -> Video sets the field of
   view, the UI scale and fullscreen (or, in the browser, the render
