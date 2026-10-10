@@ -23,7 +23,7 @@ L = several days). Items inside a section are in suggested order.
   textures keep their real sizes (no power-of-two resize). `--no-atlas`
   returns to one shape per texture (with mipmaps).
 - Unit tests for the node formats, the MIDI / MUS parsers and the
-  synthesizers' envelope: `tests/castle_doom_tests.lpr` (15 cases, about
+  synthesizers' envelope: `tests/castle_doom_tests.lpr` (16 cases, about
   20 s) loads E1M1 from every generated node-format PWAD (XNOD, ZNOD,
   XGLN, ZGL2, XGL3, ZGL3 and glBSP V1, V2, V3, V5: format, 682 / 717
   subsectors, the polygon areas, the start sector; the WADs come from
@@ -80,7 +80,17 @@ L = several days). Items inside a section are in suggested order.
   the way: CGE's `ChangedAll` leaves `TransformationDirty` pointing at the
   freed shape tree, so `TSpriteBatch.Attach` calls `BeforeNodesFree` first.
 - Gamepads and a click prompt: on the desktop (CGE reads controllers on
-  Windows and Linux) the sticks move and look (`UseGameController`), the
+  Windows and Linux) and in the browser (`GameGamepad` polls
+  `navigator.getGamepads()` through JOB every frame, about 45 calls a
+  pad, and feeds CGE's explicit controller backend with the standard
+  mapping: sticks with Y flipped, trigger values, 16 buttons; pads show
+  up after a button press, as the Gamepad API requires; a cross-origin
+  iframe without `allow="gamepad"` is detected through
+  `document.permissionsPolicy` because the call would throw and stop the
+  WebAssembly program; unit test `TestWebPadMapping`, and the Web
+  workflow now builds every branch and uploads the site as the
+  `web-site` artifact so a branch can be tried in a browser before it
+  deploys) the sticks move and look (`UseGameController`), the
   right trigger fires, A / X use, the bumpers switch weapons, View opens
   the automap and Menu Doom's menu; in menus and the intermission the
   D-pad, A and B act as arrows, Enter and Esc (`GameGamepad` turns
@@ -477,7 +487,7 @@ L = several days). Items inside a section are in suggested order.
 | **Replace the in-code UI with editor designs** (`.castle-user-interface`) for the HUD and menu so they can be edited in the CGE editor; keep the generated map geometry in code. | Demonstrates the editor workflow. | `data/*.castle-user-interface`, views | M |
 | **More unit tests**: `DoomGeometry`'s sector chunks (needs the graphics cache without a window), the automap and HUD composition, the save file's round trip through `doomworld_save.inc` on a world without a viewport. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
 | **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
-| **Web gamepads**: CGE has no browser backend for `CastleGameControllers` yet; one reading `navigator.getGamepads()` through JOB (polled each frame, standard mapping) would make the desktop bindings work on the web too. Best contributed to CGE. | Play with a controller in the browser. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
+| **Web gamepads in CGE itself**: the game's `GameGamepad` polls the Gamepad API through JOB (done, see above); a real `CastleInternalGameControllersWeb` backend inside CGE (`gamepadconnected` events, `mapping` other than `standard`) would serve every CGE web game. Best contributed upstream. | One less game-side workaround. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
 | **Performance**: build a static-sector blockmap; merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
 
 ## Suggested next three
@@ -486,10 +496,10 @@ L = several days). Items inside a section are in suggested order.
    frame at E1M1's door is 56 draw calls, from 255), see Presentation;
    what is left is in CGE's web renderer (vertex array objects, cached
    uniform locations), best contributed upstream.
-2. Web gamepads (M): a browser backend for CGE's game controllers
-   (`navigator.getGamepads()`), so the desktop bindings work on the web
-   (see Engine and tooling).
-3. DeHackEd frames and code pointers (L, see Gameplay): the part of
+2. DeHackEd frames and code pointers (L, see Gameplay): the part of
    `-deh` patches that changes animations and actions, which mods use
    most after thing stats; it needs vanilla's state table behind the
    actors' frame sequences.
+3. Atlas mipmaps (S, see Presentation): sample the atlas with explicit
+   gradients (`texture2DGradEXT` on WebGL 1, `textureGrad` elsewhere) so
+   far floors and walls stop shimmering without the per-texture shapes.

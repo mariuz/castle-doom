@@ -17,9 +17,11 @@
   to 56 draw calls, mainly for the browser's frame rate. Map textures keep
   their real sizes and are no longer mipmapped (`--no-atlas` restores the
   old per-texture shapes).
-- Gamepad support in the desktop versions (Windows, Linux): sticks to
-  move and look, right trigger to fire, A to use, bumpers for weapons,
-  and the D-pad, A and B in the menus.
+- Gamepad support (Windows, Linux and the browser): sticks to move and
+  look, right trigger to fire, A to use, bumpers for weapons, and the
+  D-pad, A and B in the menus. In the browser the game polls the Gamepad
+  API itself (Castle Game Engine has no backend for it); the pad appears
+  once a button is pressed on it, as browsers require.
 - In the browser, a "click to look around" prompt shows when the mouse
   is not captured.
 - Unit tests for the WAD, map (every node format), music (MUS and MIDI

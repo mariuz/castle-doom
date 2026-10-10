@@ -61,7 +61,7 @@ its own `XDG_CONFIG_HOME`, failing on exceptions, missing log lines or
 wrong save contents. Add a test there when a feature gets a demo recipe
 below.
 
-Unit tests (FPCUnit, no window, about 20 s, 15 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 16 cases) cover the parsers,
 every node format and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -185,8 +185,20 @@ the pointer lock, so Doom's menu opens over the paused game; log
 
 `CLICKPROMPT` shows the browser's "click to look around" prompt in an
 autotest (it is hidden in autotests otherwise). Gamepads (`GameGamepad`)
-log `Gamepad: Controller N: name` at startup; there is no controller in the
-cloud container, so only their key mapping is exercised by reading code.
+log `Gamepad: Controller N: name` at startup (and on the web whenever the
+pad list changes); there is no controller in the cloud container, so the
+desktop mapping is only read, and the unit test `TestWebPadMapping` feeds
+a fake browser pad through `ApplyWebPads`. The web build polls
+`navigator.getGamepads()` itself (log `Gamepad: Browser Gamepad API`);
+Playwright can fake a pad with `page.addInitScript` replacing
+`navigator.getGamepads` by a function returning `[{id, connected: true,
+mapping: 'standard', axes: [...], buttons: [{pressed, value}, ...]}]`
+(a time-driven script: e.g. the right trigger pressed after 15 s with
+demo `Y,SHOTS` logs `Shot:` lines, Start opens the menu). The Web
+workflow builds every branch; download its `web-site` artifact
+(`gh api repos/mariuz/castle-doom/actions/artifacts` works here, `gh run`
+does not), unzip it into an empty directory, serve it with `python3 -m
+http.server` and point Playwright at `play/?map=...`.
 
 Profiling: `PERF` logs a `PerfView:` line at once (also every 10 s): our
 per-frame costs, CGE's FPS (`only render` = without display waits) and the

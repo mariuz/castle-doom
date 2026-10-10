@@ -18,8 +18,8 @@ program castle_doom_tests;
 {$unitpath ../code}
 
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
-  CastleVectors, CastleUriUtils,
-  DoomWad, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked;
+  CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
+  DoomWad, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, GameGamepad;
 
 function DataPath(const Name: String): String;
 begin
@@ -69,6 +69,11 @@ type
   published
     procedure TestFreedoomLump;
     procedure TestPatchFile;
+  end;
+
+  TTestGamepad = class(TTestCase)
+  published
+    procedure TestWebPadMapping;
   end;
 
 { TTestWad }
@@ -550,10 +555,59 @@ begin
   end;
 end;
 
+{ TTestGamepad }
+
+procedure TTestGamepad.TestWebPadMapping;
+var
+  Pads: TWebPads;
+  C: TGameController;
+begin
+  { A browser pad (standard mapping) as the web build reads it each frame:
+    the left stick a bit right and half forward (the browser's Y points
+    down), the right stick left and fully down, A, D-pad down and Start
+    pressed, the right trigger most of the way in. }
+  Pads := Default(TWebPads);
+  Pads[0].Id := 'Test pad (STANDARD GAMEPAD Vendor: 045e Product: 02ea)';
+  Pads[0].Axes[0] := 0.25;
+  Pads[0].Axes[1] := -0.5;
+  Pads[0].Axes[2] := -0.75;
+  Pads[0].Axes[3] := 1;
+  Pads[0].Pressed[0] := true;
+  Pads[0].Pressed[9] := true;
+  Pads[0].Pressed[13] := true;
+  Pads[0].RightTrigger := 0.8;
+  ApplyWebPads(Pads, 1);
+  AssertEquals('one controller', 1, Controllers.Count);
+  C := Controllers[0];
+  AssertEquals('name', Pads[0].Id, C.Name);
+  AssertEquals('left stick X', 0.25, C.AxisLeft.X, 0.001);
+  AssertEquals('left stick Y (up is forward)', 0.5, C.AxisLeft.Y, 0.001);
+  AssertEquals('right stick X', -0.75, C.AxisRight.X, 0.001);
+  AssertEquals('right stick Y', -1, C.AxisRight.Y, 0.001);
+  AssertEquals('right trigger', 0.8, C.AxisRightTrigger, 0.001);
+  AssertEquals('left trigger', 0, C.AxisLeftTrigger, 0.001);
+  AssertTrue('A is south', C.InternalPressedToReport[gbSouth]);
+  AssertTrue('D-pad down', C.InternalPressedToReport[gbDPadDown]);
+  AssertTrue('Start is menu', C.InternalPressedToReport[gbMenu]);
+  AssertFalse('B released', C.InternalPressedToReport[gbEast]);
+  AssertFalse('D-pad up released', C.InternalPressedToReport[gbDPadUp]);
+  AssertFalse('View released', C.InternalPressedToReport[gbView]);
+  AssertTrue('fire held', GamepadFireHeld);
+  { Buttons let go, then the pad unplugged. }
+  Pads[0].Pressed[0] := false;
+  Pads[0].RightTrigger := 0;
+  ApplyWebPads(Pads, 1);
+  AssertEquals('still one controller', 1, Controllers.Count);
+  AssertFalse('A released', Controllers[0].InternalPressedToReport[gbSouth]);
+  AssertFalse('fire released', GamepadFireHeld);
+  ApplyWebPads(Pads, 0);
+  AssertEquals('unplugged', 0, Controllers.Count);
+end;
+
 var
   App: TTestRunner;
 begin
-  RegisterTests([TTestWad, TTestMap, TTestMusic, TTestDehacked]);
+  RegisterTests([TTestWad, TTestMap, TTestMusic, TTestDehacked, TTestGamepad]);
   DefaultFormat := fPlain;
   DefaultRunAllTests := true;
   App := TTestRunner.Create(nil);

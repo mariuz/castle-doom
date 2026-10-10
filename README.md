@@ -133,8 +133,8 @@ Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 the items resumes; in the browser, Esc releasing the mouse opens it the same way, and a
 "click to look around" prompt shows until a click captures the mouse again).
 
-Gamepad (desktop, Windows and Linux; the browser has no gamepad support in Castle Game Engine
-yet): left stick move / strafe, right stick turn / look, right trigger fire, A / X use,
+Gamepad (Windows, Linux and the browser, where the pad shows up after a button press):
+left stick move / strafe, right stick turn / look, right trigger fire, A / X use,
 LB / RB previous / next weapon, View automap, Menu Doom's menu; in menus the D-pad, A (Enter)
 and B (back).
 
