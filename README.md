@@ -133,7 +133,7 @@ Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `J` music on/off, `F4` sound / music volume, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
 `F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `N`/`P` next/previous map,
 `F5` screenshot, `F8` the engine's inspector (the map, every thing and the game state by name; its `F9` selects the monster under the crosshair), `H` help, `Esc` Doom's menu over the paused game
-(Options: end game, messages, mouse sensitivity, sound volume; `Esc` again or a click beside
+(Options: end game, messages, mouse sensitivity, sound volume, video; `Esc` again or a click beside
 the items resumes; in the browser, Esc releasing the mouse opens it the same way, and a
 "click to look around" prompt shows until a click captures the mouse again). These are the
 default keys: the title screen's Options -> Controls... rebinds moving, turning, running,

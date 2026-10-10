@@ -174,9 +174,23 @@ TESTS = [
       r'Load: E1M3: map parsed', r'Message: Third Test', r'MapInfo: E1M3: no intermission',
       r'Finale: Finale after E1M3 \(stage 2\)'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad')], None),
+    # The in-game Options -> Video page (drawn in the HU font): two steps
+    # of field of view and one of UI scale, applied and saved.
+    ('video-menu', 'E1M1',
+     'W:0.5,KEY:ESCAPE,W:0.2,KEY:DOWN,KEY:ENTER,W:0.2,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:ENTER,'
+     'W:0.2,KEY:RIGHT,KEY:RIGHT,KEY:DOWN,KEY:RIGHT,W:0.2,S,KEY:ESCAPE,KEY:ESCAPE,KEY:ESCAPE,W:0.3,Q',
+     [r'Settings: Video: field of view 100, window, UI scale 110%'], [],
+     lambda config: check_video(config, 100, 110)),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
+
+
+def check_video(config, fov, ui_scale):
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        settings = json.load(f)
+    assert settings['fieldOfView'] == fov and settings['uiScale'] == ui_scale, \
+        'saved video settings %s, %s' % (settings['fieldOfView'], settings['uiScale'])
 
 
 def check_keys(config, action, keys):

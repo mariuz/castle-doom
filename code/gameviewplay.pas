@@ -1088,6 +1088,10 @@ begin
   FSlotScreen.MusicVolume := Settings.MusicVolume;
   FSlotScreen.MouseSensitivity := Settings.MouseSensitivity;
   FSlotScreen.MessagesOn := Settings.ShowMessages;
+  FSlotScreen.VideoFieldOfView := Settings.FieldOfView;
+  FSlotScreen.VideoUiScale := Settings.UiScale;
+  FSlotScreen.VideoRenderScale := Settings.RenderScale;
+  FSlotScreen.VideoFullscreen := Settings.Fullscreen;
   FSlotScreen.Skill := Skill;
   FSlotScreen.DefaultSaveName := AutoSaveName;
   for I := 1 to SaveSlots do
@@ -1148,6 +1152,18 @@ begin
         FNavigation.MouseLookHorizontalSensitivity := MouseLookSensitivity;
         FNavigation.MouseLookVerticalSensitivity := MouseLookSensitivity;
         Settings.ShowMessages := FSlotScreen.MessagesOn;
+        { The Video page (field of view, UI scale, fullscreen / resolution). }
+        if (FSlotScreen.VideoFieldOfView <> Settings.FieldOfView) or (FSlotScreen.VideoUiScale <> Settings.UiScale) or
+           (FSlotScreen.VideoRenderScale <> Settings.RenderScale) or (FSlotScreen.VideoFullscreen <> Settings.Fullscreen) then
+        begin
+          Settings.FieldOfView := FSlotScreen.VideoFieldOfView;
+          Settings.UiScale := FSlotScreen.VideoUiScale;
+          Settings.RenderScale := FSlotScreen.VideoRenderScale;
+          Settings.Fullscreen := FSlotScreen.VideoFullscreen;
+          ApplyWindowSettings;
+          ApplyFieldOfView;
+          WritelnLog('Settings', VideoSummary);
+        end;
         SaveSettings;
         if Settings.ShowMessages <> WasOn then
         begin

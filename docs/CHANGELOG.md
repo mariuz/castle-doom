@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Video options in the game: Esc -> Options -> Video sets the field of
+  view, the UI scale and fullscreen (or, in the browser, the render
+  resolution) without leaving the level.
+
 ## v0.8.0 (2026-10-10)
 
 - UMAPINFO: PWADs with a UMAPINFO lump get their own level names,

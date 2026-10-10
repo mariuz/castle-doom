@@ -146,6 +146,10 @@ Gibs: `D` deals 100000 damage, so it gibs every zombie, sergeant, imp and
 SS (grep `Gib:`); `Y,P:3005:350` from the lift top (`G:160:256,A:0`) shows a
 cacodemon rising out of the pit, and `D` then drops its corpse.
 
+In the game, Esc -> Options -> Video is a text-drawn page of
+`DoomMenu` (`mpVideo`; items named `T:...` are drawn in the HU font):
+`KEY:ESCAPE,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:ENTER`
+reaches it (autotest `video-menu`).
 Video options (`GameSettings`, also in `settings.json`): `FOV:deg`,
 `UISCALE:percent`, `RENDERSCALE:percent` and `FULLSCREEN` in a demo
 change and save them like the title screen's Options panel (log

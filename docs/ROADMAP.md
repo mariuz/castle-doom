@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Video options in the game: Doom's in-game Options page has a "Video"
+  item (the HU font, as Doom has no patch for it) opening a Video page
+  in the style of the sound page: field of view and UI scale
+  thermometers with their values, and fullscreen on / off on the
+  desktop or the render resolution thermometer in the browser. Changes
+  apply at once and are saved (`maSettings`); autotest `video-menu`.
+
 - UMAPINFO: `DoomMapInfo` parses a PWAD's UMAPINFO lump (`ParseUMapInfo`:
   quoted strings, numbers, identifiers, lists, comments; unknown keys
   skipped) and the game asks it first for the next and secret map, the
@@ -660,7 +667,7 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Video options in the game**: the options are on the title screen's Options panel (see above); Doom's in-game Options page has no video entries yet (it is `M_*` patches, so it needs a text-drawn page), and v-sync is not offered. | Change the field of view without leaving the level. | `DoomMenu`, `GameViewPlay` | S |
+| **V-sync and a frame rate cap**: the video options are on the title screen and in the game (see above); v-sync and a frame limit are not offered. | Smoother play on high refresh screens, less power. | `GameSettings` | S |
 | **Gamepad button rebinding and more bindable actions**: keys are rebindable (see above); the gamepad layout is fixed, and weapon selection, the hotkeys (F, M, J...) and the mouse buttons are not bindable yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameGamepad` | S-M |
 | **The rest of UMAPINFO, and ZDoom MAPINFO**: UMAPINFO's per-map keys are done (see above); its `episode` entries for the New Game menu, `bossaction`, patch backdrops, `exitpic` / `enterpic`, and the level name drawn as text on the intermission when there is no `levelpic` are not; nor is ZDoom's MAPINFO syntax. | PWADs with new episodes and boss maps. | `DoomMapInfo`, `DoomMenu`, `DoomIntermission` | M |
 | **Golden screenshots in CI**: compare the autotests' PNGs with stored references (a tolerance for software GL), failing on a changed frame. | Rendering regressions are caught by eye today. | `tools/run_autotests.py`, `build.yml` | M |
@@ -669,12 +676,12 @@ play.
 
 ## Suggested next three
 
-1. Video options in the game (S, see Other suggested improvements):
-   field of view and UI scale from Doom's in-game Options page.
-2. Golden screenshots in CI (M, see Other suggested improvements):
+1. Golden screenshots in CI (M, see Other suggested improvements):
    compare the autotests' PNGs with stored references.
-3. UMAPINFO episodes and boss actions (M, see Other suggested
+2. UMAPINFO episodes and boss actions (M, see Other suggested
    improvements): new episodes in the New Game menu, `bossaction`.
+3. Offline web build (S-M, see Other suggested improvements): a service
+   worker caching the page, the wasm and the data.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

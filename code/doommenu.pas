@@ -17,10 +17,12 @@ uses Classes,
 
 type
   TDoomMenuPage = (mpMain, mpEpisode, mpSkill, mpLoad, mpReadThis1, mpReadThis2, mpSave,
-    mpOptions, mpSound);
+    mpOptions, mpSound, mpVideo);
   { maClose: an overlay's page was left with Esc (the game takes over).
     maEndGame: Options -> End Game, confirmed. maSettings: a slider or
-    toggle changed (SfxVolume, MusicVolume, MouseSensitivity, MessagesOn). }
+    toggle changed (SfxVolume, MusicVolume, MouseSensitivity, MessagesOn,
+    the Video page's VideoFieldOfView, VideoUiScale, VideoFullscreen,
+    VideoRenderScale). }
   TDoomMenuAction = (maNone, maNewGame, maLoadSlot, maOptions, maQuit, maSaveSlot, maClose,
     maEndGame, maSettings);
 
@@ -94,6 +96,11 @@ type
     SfxVolume, MusicVolume: Integer; { 0..15 }
     MouseSensitivity: Integer;       { 0..9 }
     MessagesOn: Boolean;
+    { The Video page (not in Doom: drawn in the HU font): field of view
+      60..120 in steps of 5, UI scale 50..200 % in steps of 10, and
+      fullscreen (desktop) or the render resolution 25..100 % (web). }
+    VideoFieldOfView, VideoUiScale, VideoRenderScale: Integer;
+    VideoFullscreen: Boolean;
     { The save page: the name a new save starts with, and the one typed
       (read it on maSaveSlot). }
     DefaultSaveName: String;
@@ -231,6 +238,14 @@ begin
     MouseSensitivity := Max(0, Min(9, MouseSensitivity + Delta))
   else if Item = 'M_MESSG' then
     MessagesOn := not MessagesOn
+  else if Item = 'T:FIELD OF VIEW' then
+    VideoFieldOfView := Max(60, Min(120, VideoFieldOfView + 5 * Delta))
+  else if Item = 'T:UI SCALE' then
+    VideoUiScale := Max(50, Min(200, VideoUiScale + 10 * Delta))
+  else if Item = 'T:RESOLUTION' then
+    VideoRenderScale := Max(25, Min(100, VideoRenderScale + 25 * Delta))
+  else if Item = 'T:FULLSCREEN' then
+    VideoFullscreen := not VideoFullscreen
   else
     Exit;
   if FSounds <> nil then FSounds.Play('DSSTNMOV');
@@ -293,8 +308,9 @@ begin
   case Page of
     mpMain: Result := Length(FMainItems);
     mpReadThis1, mpReadThis2: Result := 1;
-    mpOptions: Result := 5;
+    mpOptions: Result := 6;
     mpSound: Result := 4;
+    mpVideo: Result := 6;
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
     mpLoad, mpSave: Result := 6;
@@ -307,8 +323,14 @@ const
   SkillItems: array [0..4] of String = ('M_JKILL', 'M_ROUGH', 'M_HURT', 'M_ULTRA', 'M_NMARE');
   { m_menu.c's OptionsDef without detail and screen size; '' rows are the
     thermometers' (not selectable). }
-  OptionItems: array [0..4] of String = ('M_ENDGAM', 'M_MESSG', 'M_MSENS', '', 'M_SVOL');
+  OptionItems: array [0..5] of String = ('M_ENDGAM', 'M_MESSG', 'M_MSENS', '', 'M_SVOL', 'T:VIDEO');
   SoundItems: array [0..3] of String = ('M_SFXVOL', '', 'M_MUSVOL', '');
+  { Items named 'T:...' are drawn as text (no patch for them in Doom). }
+  {$ifdef WASI}
+  VideoItems: array [0..5] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:RESOLUTION', '');
+  {$else}
+  VideoItems: array [0..5] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN', '');
+  {$endif}
 begin
   case Page of
     mpMain: Result := FMainItems[Index];
@@ -316,6 +338,7 @@ begin
     mpSkill: Result := SkillItems[Index];
     mpOptions: Result := OptionItems[Index];
     mpSound: Result := SoundItems[Index];
+    mpVideo: Result := VideoItems[Index];
     else Result := '';
   end;
 end;
@@ -329,6 +352,7 @@ begin
     mpLoad, mpSave: begin X := 80; Y := 54; end;
     mpOptions: begin X := 60; Y := 37; end;
     mpSound: begin X := 80; Y := 64; end;
+    mpVideo: begin X := 60; Y := 40; end;
     { m_menu.c puts the Read This! skull off the 320x200 screen. }
     mpReadThis1, mpReadThis2: begin X := 330; Y := 165; end;
   end;
@@ -370,7 +394,7 @@ begin
         if Assigned(OnAction) then OnAction(maClose);
       end else
         OpenPage(mpMain);
-    mpSound:
+    mpSound, mpVideo:
       if Overlay and (FPage = EntryPage) then
       begin
         if Assigned(OnAction) then OnAction(maClose);
@@ -474,8 +498,13 @@ begin
       if ItemName = 'M_MESSG' then
         ChangeSlider(1)
       else if ItemName = 'M_SVOL' then
-        OpenPage(mpSound);
+        OpenPage(mpSound)
+      else if ItemName = 'T:VIDEO' then
+        OpenPage(mpVideo);
     mpSound: ;
+    mpVideo:
+      if ItemName = 'T:FULLSCREEN' then
+        ChangeSlider(1);
   end;
 end;
 
@@ -836,6 +865,23 @@ begin
         DrawThermo(Img, X, Y + LineHeight * 1, 16, SfxVolume);
         DrawThermo(Img, X, Y + LineHeight * 3, 16, MusicVolume);
       end;
+    mpVideo:
+      begin
+        { Like M_DrawSound, with the title and the values in the HU font. }
+        DrawPatch('M_OPTTTL', 108, 15);
+        Text := Format('%d', [VideoFieldOfView]);
+        DrawDoomText(FGraphics, Img, X + 175, Y + 4, Text);
+        DrawThermo(Img, X, Y + LineHeight * 1, 13, (VideoFieldOfView - 60) div 5);
+        DrawDoomText(FGraphics, Img, X + 175, Y + LineHeight * 2 + 4, Format('%d%%', [VideoUiScale]));
+        DrawThermo(Img, X, Y + LineHeight * 3, 16, (VideoUiScale - 50) div 10);
+        {$ifdef WASI}
+        DrawDoomText(FGraphics, Img, X + 175, Y + LineHeight * 4 + 4, Format('%d%%', [VideoRenderScale]));
+        DrawThermo(Img, X, Y + LineHeight * 5, 4, (VideoRenderScale - 25) div 25);
+        {$else}
+        if VideoFullscreen then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 4)
+        else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 4);
+        {$endif}
+      end;
   end;
 
   if FPage in [mpLoad, mpSave] then
@@ -856,7 +902,10 @@ begin
     end;
   end else
     for I := 0 to ItemCount(FPage) - 1 do
-      if ItemPatch(FPage, I) <> '' then
+      if Copy(ItemPatch(FPage, I), 1, 2) = 'T:' then
+        { A text item, the HU font's capitals in the patches' place. }
+        DrawDoomText(FGraphics, Img, X, Y + LineHeight * I + 4, Copy(ItemPatch(FPage, I), 3, MaxInt))
+      else if ItemPatch(FPage, I) <> '' then
         DrawPatch(ItemPatch(FPage, I), X, Y + LineHeight * I);
 
   { Skull cursor }
