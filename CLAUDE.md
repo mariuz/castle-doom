@@ -379,9 +379,17 @@ autotest only checks the library loads.
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,
   and check the Web workflow log after pushing. JOB's typed calls raise on a
-  JS `null` (use `InvokeJSValueResult` for `localStorage.getItem`). To test
-  the deployed page, open https://mariuz.github.io/castle-doom/play/ in the
-  browser pane; the browser console shows the CGE log.
+  JS `null` (use `InvokeJSValueResult` for `localStorage.getItem`;
+  `InvokeJSObjectResult` / `ReadJSPropertyObject` return `nil` for it),
+  and a `null` read as a value is a `TJOB_Object` whose `Value` is `nil`,
+  so check that before using it (`navigator.getGamepads()` is mostly
+  nulls). `InvokeJSTypeOf` is useless: the JavaScript side maps the
+  typeof *text* through its result mapper, so it always says "string";
+  test for a function with `ReadJSPropertyValue` being a non-nil
+  `TJOB_Object` (`GameGamepad.HasFunction`). To test the deployed page,
+  open https://mariuz.github.io/castle-doom/play/ in the browser pane;
+  the browser console shows the CGE log; a branch's build is the Web
+  workflow's `web-site` artifact (see Gamepads above).
 - **WebGL read-back in CGE**: colour read-back (`SaveScreen_NoFlush`,
   `Container.SaveScreen`) was a "TODO: web" that gave an empty image in the
   browser. castle-engine/castle-engine PR #738 fixed it and is merged into

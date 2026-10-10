@@ -56,7 +56,7 @@ procedure ApplyWebPads(const Pads: TWebPads; const Count: Integer);
 implementation
 
 uses SysUtils, Math,
-  {$ifdef WASI} Job.Js, Job.Shared, CastleInternalJobWeb, CastleApplicationProperties, {$endif}
+  {$ifdef WASI} Job.Js, CastleInternalJobWeb, CastleApplicationProperties, {$endif}
   CastleGameControllers, CastleInternalGameControllersExplicit, CastleVectors,
   CastleLog;
 
@@ -183,7 +183,8 @@ begin
       { Disconnected slots are null: read the element as a generic value
         (a typed read of null raises, which the web build cannot survive). }
       Item := List.ReadJSPropertyValue(IntToStr(I));
-      IsPad := Item is TJOB_Object;
+      { JOB wraps null as a TJOB_Object with a nil Value. }
+      IsPad := (Item is TJOB_Object) and (TJOB_Object(Item).Value <> nil);
       if IsPad then
         Pad := TJOB_Object(Item).Value;
       FreeAndNil(Item);
@@ -219,6 +220,18 @@ begin
   ApplyWebPads(Pads, Count);
 end;
 
+{ Obj.Name is a JavaScript function (or at least an object). JOB's
+  InvokeJSTypeOf cannot tell: its JavaScript side feeds the typeof text
+  itself to the result mapper, so it always answers "string". }
+function HasFunction(const Obj: IJSObject; const Name: String): Boolean;
+var
+  V: TJOB_JSValue;
+begin
+  V := Obj.ReadJSPropertyValue(Name);
+  Result := (V is TJOB_Object) and (TJOB_Object(V).Value <> nil);
+  FreeAndNil(V);
+end;
+
 { navigator.getGamepads exists and the page's permissions policy allows
   it (in a cross-origin iframe without "allow=gamepad" the call throws,
   and a JavaScript exception stops the WebAssembly program). }
@@ -228,13 +241,12 @@ var
 begin
   Result := false;
   Navigator := JSWindow.ReadJSPropertyObject('navigator', TJSObject);
-  if (Navigator = nil) or (Navigator.InvokeJSTypeOf('getGamepads', []) <> JOBResult_Function) then
+  if (Navigator = nil) or (not HasFunction(Navigator, 'getGamepads')) then
     Exit;
   Policy := JSDocument.ReadJSPropertyObject('permissionsPolicy', TJSObject);
   if Policy = nil then
     Policy := JSDocument.ReadJSPropertyObject('featurePolicy', TJSObject);
-  if (Policy <> nil) and
-     (Policy.InvokeJSTypeOf('allowsFeature', []) = JOBResult_Function) and
+  if (Policy <> nil) and HasFunction(Policy, 'allowsFeature') and
      (not Policy.InvokeJSBooleanResult('allowsFeature', [UTF8Decode('gamepad')])) then
     Exit;
   Result := true;
