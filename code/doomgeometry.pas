@@ -370,6 +370,9 @@ begin
   SceneSolid.PreciseCollisions := true;
   ScenePassable := TCastleScene.Create(nil);
   ScenePassable.Collides := false;
+  { Not PreciseCollisions, so a ray would hit the whole chunk's box: the
+    inspector's F9 auto-select (and SELECT) could not reach a thing. }
+  ScenePassable.Pickable := false;
 end;
 
 destructor TMapChunk.Destroy;

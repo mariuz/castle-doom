@@ -264,6 +264,14 @@ need no unique names; owned ones must be unique per owner), new actor or
 world state worth seeing goes into the `published` properties of
 `TDoomActor` or `TDoomWorldStatus` (read-only getters are fine), and
 things belong under the `Things` group, map scenes under `Map`.
+`SELECT` in a demo selects the thing under the crosshair in the
+inspector (what its F9 "Transform" auto-select does), `SELECT:name` one
+by name (log `Select: TROO_12: TROO, state chase, 60 health, action
+A_Chase, ...`); a new map scene that should not block that ray needs
+`Pickable := false` (a scene without `PreciseCollisions` is hit by its
+whole bounding box). `--profile` turns on CGE's profiler (each map load
+logs its stage tree; `PROFILE` in a demo logs the summary); autotest
+`select-thing`.
 
 Sector specials: `LINE:n[:special]` activates linedef n (as another
 special with the same tag if given; `Line:` log). MAP05's donut:

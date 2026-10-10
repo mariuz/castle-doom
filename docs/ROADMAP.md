@@ -6,6 +6,18 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Live thing inspection and profiler sections: the inspector's F9
+  auto-select ("Transform") picks the monster or barrel under the
+  crosshair (the collision quads are transient, so the actor is what is
+  selected; the passable map chunks, which a ray hit by their bounding
+  box, are no longer pickable), and `SELECT` / `SELECT:name` in a demo
+  does it from the camera or by name (log `Select:`). Things publish
+  `ActionName`, `TicsLeft`, `TargetName` and `ReactionTime` too.
+  `--profile` turns on CGE's profiler: each map load logs `Load <map>
+  (DoomWorld)` with `Parse map`, `Build geometry` and `Spawn things`
+  and the engine's work inside them; `PROFILE` logs the summary
+  (autotest `select-thing`).
+
 - DeHackEd weapons and projectiles: `DoomStates.Weapons` (d_items.c's
   weaponinfo: ammo type and up / down / ready / attack / flash states)
   and the player's weapon animation runs on the state table:
@@ -590,8 +602,7 @@ play.
 |---|---|---|---|
 | **Try the designs in the CGE editor** on Windows (the editor is not built in CI): "Restart Editor (With Custom Components)", open `data/play.castle-user-interface` and `data/menu.castle-user-interface`, fix what the editor cannot show (the Doom controls render nothing without a WAD; a `Graphics`-less preview, e.g. a placeholder image, would help). | The editor workflow end to end. | the `Doom*` controls | S |
 | **The map component in the editor**: `TDoomMapTransform` is done (see above); try it in the editor on Windows (it builds in the design's first `Update`), give it published skill and sector-light switches, a bounding box for the editor's camera framing, and gizmo-friendly names for the chunk scenes. | A Freedoom level in the editor's 3D view with nothing to run. | `DoomMapTransform` | S |
-| **Live thing inspection**: `Things` has 200+ entries, so sort them by state or distance, publish the target, the current sequence's name and tics left, and add a `SELECT:n` demo command (CGE's inspector can select a component) and the inspector's F9 auto-select for the thing under the crosshair. | Find the monster you are looking at. | `DoomActors`, `GameViewPlay` | S |
-| **Profiler sections**: wrap the map load stages (parse, geometry, atlas, things, music intro) and the per-tic phases in `Profiler.Start` / `Stop` so the inspector's Profiler tab and `Profiler.Summary` show them next to CGE's own; the `Perf:` lines stay. | One place for timings. | `GameViewPlay`, `DoomWorld` | S |
+| **More profiler sections**: the map load stages are done (see above); the atlas build and the music intro inside them, and the save / load paths, would tell more. Per-tic phases do not fit CGE's profiler tree (one node per call), so they stay in the `Perf:` lines. | Finer load timings. | `DoomGraphics`, `DoomMusic`, `GameViewPlay` | S |
 | **Debug drawing**: toggles that draw the subsector polygons, blocking lines, sector heights, actor radii and the player's line of fire as wireframe scenes under a `Debug` group, each one switched by the inspector's Exists checkbox. | See the simulation, not only the pixels. | new `DoomDebugDraw` | M |
 | **Drop `DynamicBatching`**: the viewport still has it on from before the atlas and the sprite batches, and CGE warns "Consider increasing MergeSlots" on every level; measure the draw calls with it off and remove it if they match. | One warning less, maybe fewer relinks. | `GameViewPlay` | S |
 | **Inspector in the browser**: it is plain CGE UI so it should work on the web; check F8 under pointer lock (the browser keeps Esc, F8 is free) and the inspector's own key handling against the game's. | Debug the live page in place. | `GameViewPlay` | S |
@@ -611,15 +622,12 @@ play.
 
 ## Suggested next three
 
-1. Live thing inspection and profiler sections (S each, see
-   Inspectability): select the thing under the crosshair in the
-   inspector, and the load stages in CGE's profiler. The editor items
-   are done except trying the designs in the editor on Windows (the
-   editor is not built in CI).
-2. Video options (S-M, see Other suggested improvements): field of view,
+1. Video options (S-M, see Other suggested improvements): field of view,
    fullscreen, UI scale and a resolution scale for slow browsers.
-3. Boom `ANIMATED` and `SWITCHES` lumps (S, see Other suggested
+2. Boom `ANIMATED` and `SWITCHES` lumps (S, see Other suggested
    improvements): PWAD-defined texture animations and switch pairs.
+3. Log filtering (S, see Inspectability): `CASTLE_DOOM_LOG=...` to keep
+   only some log categories (the `--profile` summaries are long).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

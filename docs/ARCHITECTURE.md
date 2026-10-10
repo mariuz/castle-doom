@@ -1098,13 +1098,31 @@ the key only in debug builds). What it shows is arranged for it: the
 viewport's items are grouped under `Map` (`Chunk<n>_Solid` /
 `_Passable`, `LineCollision`, `Sky`), `Things` (each `TDoomActor` is
 named `<SPRITE>_<serial>` and publishes `ThingType`, `SpriteName`,
-`CurrentFrame`, `ActorState`, `HitPoints`, `IsAwake`, `DoomPositionX/Y/Z`
-and `DoomSector` for the properties pane) and `Sprites` (the batch
+`CurrentFrame`, `ActorState`, `HitPoints`, `IsAwake`, `DoomPositionX/Y/Z`,
+`DoomSector`, `ActionName` (the frame's code pointer), `TicsLeft`,
+`TargetName` (`player` or another thing's name) and `ReactionTime` for
+the properties pane) and `Sprites` (the batch
 scenes `SpritesLight<n>[_Bright|_Fuzz]`); the views and their controls
 carry names, and `TDoomWorldStatus` (an invisible control in the play
 view) publishes the map, tic, player health, armor, position, angle,
 kills, items, secrets, thing and sector counts. The demo command
 `INSPECTOR` sends F8, so an autotest can screenshot it.
+
+The inspector's F9 "auto-select Transform" picks the monster or barrel
+under the mouse (the screen's centre with mouse look): a thing's
+invisible collision quad is pickable and transient, so the ray's path
+yields the `TDoomActor` itself; the map chunks' `_Passable` scenes (no
+precise collisions, so a ray would hit their whole bounding box) are not
+pickable. The demo command `SELECT` does the same from the camera
+(`TViewPlay.SelectInInspector`, opening the inspector and setting its
+`SelectedComponent`), `SELECT:name` picks a thing by name; both log a
+`Select:` line with the state, health, action, tics left and target.
+
+`--profile` turns on CGE's `Profiler`: `LoadMapCore` measures `Load
+<map> (DoomWorld)` with the stages `Parse map`, `Build geometry` and
+`Spawn things` (the engine's own scene and octree work nests inside)
+and logs the tree after each load; `PROFILE` in a demo logs the whole
+summary. The per-tic costs stay in the `Perf:` / `PerfView:` lines.
 
 ## 16. Platforms: desktop, WebAssembly, CI
 

@@ -1087,6 +1087,7 @@ var
   I: Integer;
   Saved: TPlayerState;
   T0: TDateTime;
+  ProfLoad, ProfStage: TCastleProfilerTime;
 
   function Ms: Integer;
   begin
@@ -1094,6 +1095,10 @@ var
   end;
 
 begin
+  { CGE's profiler (--profile): the load stages, with the engine's own
+    texture and scene loading nested in them. }
+  ProfLoad := Profiler.Start('Load ' + MapName + ' (DoomWorld)');
+  ProfStage := Profiler.Start('Parse map');
   UnloadMap;
   Saved := Player;
   T0 := Now;
@@ -1108,12 +1113,16 @@ begin
   if State <> nil then
     RestoreMapState(State);
   WritelnLog('Load', '%s: map parsed in %d ms', [MapName, Ms]);
+  Profiler.Stop(ProfStage);
+  ProfStage := Profiler.Start('Build geometry');
   FGraphics.BeginLevel;
   FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName));
   FGeometry.AddToWorld(FMapGroup);
   { The previous level's geometry is gone: its textures can go too. }
   FGraphics.ReleaseUnused;
   WritelnLog('Load', '%s: geometry built in %d ms', [MapName, Ms]);
+  Profiler.Stop(ProfStage);
+  ProfStage := Profiler.Start('Spawn things');
   FPlayerEmitter.Name := 'PlayerSound';
   FItems.Add(FPlayerEmitter);
   if KeepInventory and not Saved.Dead then
@@ -1137,6 +1146,7 @@ begin
   if State = nil then
     SpawnThings;
   WritelnLog('Load', '%s: things spawned in %d ms', [MapName, Ms]);
+  Profiler.Stop(ProfStage);
   if not FHaveStart then
   begin
     FDoomStartX := FMap.Vertices[0].X;
@@ -1188,6 +1198,7 @@ begin
   PlayerPushVX := 0; PlayerPushVY := 0; PlayerPushDX := 0; PlayerPushDY := 0;
   if State <> nil then
     RestoreDynamicState(State);
+  Profiler.Stop(ProfLoad, true);
 end;
 
 function TDoomWorld.Random1(const N: Integer): Integer;

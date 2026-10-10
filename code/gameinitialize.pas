@@ -8,7 +8,7 @@ implementation
 uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleKeysMouse,
-  CastleUtils,
+  CastleUtils, CastleTimeUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
   DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameSettings, GameSaveBundle;
 
@@ -66,6 +66,11 @@ begin
     else
     if Parameters[I] = '--atlas' then
       UseTextureAtlas := true
+    else
+    if Parameters[I] = '--profile' then
+      { CGE's profiler: each map load logs its stages (Profiler.Stop
+        with LogSummary), PROFILE in a demo the whole summary. }
+      Profiler.Enabled := true
     else
     if (Parameters[I] = '--demo') and (I + 1 <= Parameters.High) then
     begin

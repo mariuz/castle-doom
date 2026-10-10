@@ -139,6 +139,12 @@ TESTS = [
       r'Shot: .* hit TROO \(-\d+ health left\)'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'test.deh')],
      check_dehacked),
+    # The thing under the crosshair selected in the inspector, and CGE's
+    # profiler with the map load stages (--profile).
+    ('select-thing', 'E1M1', 'Y,P:3001:300,W:0.5,SELECT,W:0.5,S,PROFILE,Q',
+     [r'Select: TROO_\d+: TROO, state \w+, 60 health, action \w*, \d+ tics left, target player',
+      r'- Load E1M1 \(DoomWorld\)', r'- Build geometry', r'- Spawn things'],
+     ['--profile'], None),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]

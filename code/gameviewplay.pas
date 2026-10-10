@@ -99,6 +99,9 @@ type
       keeps for itself): pause like Doom's Esc menu would. }
     procedure PointerLockUserCancelled(Sender: TObject);
     procedure PerfLog;
+    { Select a thing in the engine's inspector (opening it): by name, or
+      the one under the crosshair when Name is ''. }
+    procedure SelectInInspector(const ThingName: String);
     procedure RunDemo(const SecondsPassed: Single);
     procedure LoadPendingMap(Sender: TObject);
     procedure CreateUi;
@@ -149,7 +152,7 @@ implementation
 
 uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
-  CastleDownload, DoomActors,
+  CastleDownload, DoomActors, CastleInternalInspector,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleTimeUtils, CastleRenderContext,
   DoomGeometry, DoomMap, DoomLighting,
   GameViewMenu, GameSaveStorage, GameSettings, GameGamepad;
@@ -602,7 +605,14 @@ begin
       DoomWorldStatus control publish their state. }
     Container.EventPress(InputKey(Container.MousePosition, keyF8, '', []));
     WritelnLog('AutoTest', 'Inspector toggled');
-  end else if Cmd = 'PERF' then
+  end else if Cmd = 'SELECT' then
+    { SELECT selects the thing under the crosshair in the inspector (what
+      its F9 auto-select does with the mouse), SELECT:name one by name. }
+    SelectInInspector(Rest)
+  else if Cmd = 'PROFILE' then
+    { CGE's profiler summary (--profile turns the profiler on). }
+    WritelnLog('Profile', Profiler.Summary)
+  else if Cmd = 'PERF' then
     { Log the render statistics and the frame rate now (the 10 s lines too). }
     PerfLog
   else if Cmd = 'NOSPRITES' then
@@ -650,6 +660,65 @@ end;
 { "PerfView:" line: our own per-frame costs, CGE's frame rate (FPS, and
   "only render" = without waiting for the display) and the last frame's
   render statistics (shapes, scenes, draw calls). }
+procedure TViewPlay.SelectInInspector(const ThingName: String);
+var
+  Found: TDoomActor;
+  A: TDoomActor;
+  Pos, Dir, Up: TVector3;
+  Hit: TRayCollision;
+  I: Integer;
+  Inspector: TCastleInspector;
+begin
+  Found := nil;
+  if ThingName <> '' then
+  begin
+    for A in FWorld.Actors do
+      if SameText(A.Name, ThingName) then
+      begin
+        Found := A;
+        Break;
+      end;
+  end else
+  begin
+    { The same ray as the inspector's F9 auto-select from the screen's
+      centre: monsters and barrels are pickable (their invisible
+      collision quad, transient so the actor itself is what is found). }
+    FViewport.Camera.GetWorldView(Pos, Dir, Up);
+    Hit := FViewport.Items.WorldRay(Pos, Dir);
+    try
+      if Hit <> nil then
+        for I := 0 to Hit.Count - 1 do
+          if Hit[I].Item is TDoomActor then
+          begin
+            Found := TDoomActor(Hit[I].Item);
+            Break;
+          end;
+    finally
+      FreeAndNil(Hit);
+    end;
+  end;
+  if Found = nil then
+  begin
+    WritelnLog('Select', 'Nothing to select (%s)', [ThingName]);
+    Exit;
+  end;
+  Inspector := nil;
+  for I := 0 to Container.Controls.Count - 1 do
+    if Container.Controls[I] is TCastleInspector then
+      Inspector := TCastleInspector(Container.Controls[I]);
+  if Inspector = nil then
+  begin
+    Container.EventPress(InputKey(Container.MousePosition, keyF8, '', []));
+    for I := 0 to Container.Controls.Count - 1 do
+      if Container.Controls[I] is TCastleInspector then
+        Inspector := TCastleInspector(Container.Controls[I]);
+  end;
+  if Inspector <> nil then
+    Inspector.SelectedComponent := Found;
+  WritelnLog('Select', '%s: %s, state %s, %d health, action %s, %d tics left, target %s', [Found.Name,
+    Found.SpriteName, Found.ActorState, Found.Health, Found.ActionName, Found.TicsLeft, Found.TargetName]);
+end;
+
 procedure TViewPlay.PerfLog;
 begin
   WritelnLog('PerfView', '%d frames in %.1f s; ms per frame: world %.2f, status bar %.2f, weapon %.2f; %s; %s',

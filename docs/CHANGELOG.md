@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The inspector (F8) finds the thing you look at: its F9 auto-select
+  ("Transform") picks the monster or barrel under the crosshair, and
+  things also show their code pointer, tics left, target and reaction
+  time. `--profile` turns on Castle Game Engine's profiler, with each
+  map load's stages (parse, geometry, things) in the log.
+
 - DeHackEd weapons and projectiles: the player's weapons animate and
   fire from the state table (the shot falls on the frame with
   A_FirePistol and the like), so a patch's "Weapon N" frames and code

@@ -70,6 +70,8 @@ type
     function GetThingType: Integer;
     function GetCurrentFrame: String;
     function GetActorState: String;
+    function GetActionName: String;
+    function GetTargetName: String;
     procedure BuildScene;
     procedure SetShown(const Shown: Boolean);
     { Put the quad in the shape it belongs to now (or in none). }
@@ -175,6 +177,13 @@ type
     property DoomPositionY: Single read DoomY;
     property DoomPositionZ: Single read DoomZ;
     property DoomSector: Integer read Sector;
+    { The current frame's code pointer (A_Chase...), the tics until the
+      next frame, and whom a monster is after ('player', a thing's name,
+      or '' for things that chase nobody). }
+    property ActionName: String read GetActionName;
+    property TicsLeft: Integer read FTicsLeft;
+    property TargetName: String read GetTargetName;
+    property ReactionTime: Integer read ReactionTics;
   end;
 
   TDoomActorList = {$ifdef FPC}specialize{$endif} TObjectList<TDoomActor>;
@@ -568,6 +577,8 @@ begin
   Root.AddChildren(Shape);
   FScene := TCastleScene.Create(Self);
   FScene.Name := 'Collision';
+  { Hidden from the inspector, so its F9 auto-select picks the actor. }
+  FScene.SetTransient;
   FScene.Load(Root, true);
   FScene.Visible := false;
   Add(FScene);
@@ -714,6 +725,21 @@ end;
 function TDoomActor.GetCurrentFrame: String;
 begin
   Result := FFrame;
+end;
+
+function TDoomActor.GetActionName: String;
+begin
+  Result := ActionNames[CurrentAction];
+end;
+
+function TDoomActor.GetTargetName: String;
+begin
+  if Info^.Kind <> tkMonster then
+    Result := ''
+  else if Target <> nil then
+    Result := Target.Name
+  else
+    Result := 'player';
 end;
 
 function TDoomActor.GetActorState: String;
