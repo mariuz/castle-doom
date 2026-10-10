@@ -386,6 +386,21 @@ end;
   T:deg turn, A:deg absolute angle, G:x:y go to Doom map position,
   U use, X fire, S screenshot, W:sec wait, Q quit, E exit level, N next map,
   K give all weapons/ammo/keys, C:n select weapon n (1-9). }
+{ A demo step's number, Default when the text is not one (KEY:F4,
+  BIND:use:Q). The text is checked first: in the web build a failed
+  conversion inside StrToFloatDef raised and caught an exception, and
+  WebAssembly cannot catch, so KEY and BIND stopped the program. }
+function DemoNumber(const S: String; const Default: Single): Single;
+var
+  I: Integer;
+begin
+  if S = '' then Exit(Default);
+  for I := 1 to Length(S) do
+    if not (S[I] in ['0'..'9', '.', '-', '+']) then
+      Exit(Default);
+  Result := StrToFloatDef(S, Default);
+end;
+
 procedure TViewPlay.RunDemo(const SecondsPassed: Single);
 var
   Step, Cmd, Rest, KeyStr: String;
@@ -421,10 +436,10 @@ begin
     P := Pos(':', Rest);
     if P > 0 then
     begin
-      Arg := StrToFloatDef(Copy(Rest, 1, P - 1), 0);
-      Arg2 := StrToFloatDef(Copy(Rest, P + 1, MaxInt), 0);
+      Arg := DemoNumber(Copy(Rest, 1, P - 1), 0);
+      Arg2 := DemoNumber(Copy(Rest, P + 1, MaxInt), 0);
     end else
-      Arg := StrToFloatDef(Rest, 1);
+      Arg := DemoNumber(Rest, 1);
   end else
   begin
     Cmd := UpperCase(Step);
