@@ -490,7 +490,8 @@ begin
   { Switches get a private batch per line so SW1 -> SW2 flips only that wall. }
   SwitchLine := -1;
   if (Side = 0) and (L.Special <> 0) and
-     ((Copy(Sd.MiddleTex, 1, 2) = 'SW') or (Copy(Sd.UpperTex, 1, 2) = 'SW') or (Copy(Sd.LowerTex, 1, 2) = 'SW')) then
+     ((FOwner.Graphics.SwitchPartner(Sd.MiddleTex) <> '') or (FOwner.Graphics.SwitchPartner(Sd.UpperTex) <> '') or
+      (FOwner.Graphics.SwitchPartner(Sd.LowerTex) <> '')) then
     SwitchLine := Line;
 
   FloorZ := Map.Sectors[Sec].FloorHeight;
@@ -738,7 +739,7 @@ var
   begin
     { Animated textures change their URL and switches are swapped in
       place: they keep their own shapes. }
-    if (Img <> nil) and (Img.AnimGroup = nil) and (Copy(Img.Name, 1, 2) <> 'SW') and
+    if (Img <> nil) and (Img.AnimGroup = nil) and (FGraphics.SwitchPartner(Img.Name) = '') and
        (Img.Name <> SkyTexture) and (Images.IndexOf(Img) < 0) then
       Images.Add(Img);
   end;
@@ -1089,23 +1090,16 @@ var
   C: TMapChunk;
   B: TGeomBatch;
 
-  function Flip(const N: String): String;
-  begin
-    Result := N;
-    if Copy(N, 1, 3) = 'SW1' then Result[3] := '2'
-    else if Copy(N, 1, 3) = 'SW2' then Result[3] := '1';
-  end;
-
 begin
   Sd := FMap.Linedefs[Line].Side[0];
   if Sd < 0 then Exit;
   { Find which of the three textures is the switch and flip it. }
   Name := FMap.Sidedefs[Sd].MiddleTex;
-  if Copy(Name, 1, 2) <> 'SW' then Name := FMap.Sidedefs[Sd].UpperTex;
-  if Copy(Name, 1, 2) <> 'SW' then Name := FMap.Sidedefs[Sd].LowerTex;
-  if Copy(Name, 1, 2) <> 'SW' then Exit;
-  Other := Flip(Name);
-  if not FGraphics.HasTexture(Other) then Exit;
+  if FGraphics.SwitchPartner(Name) = '' then Name := FMap.Sidedefs[Sd].UpperTex;
+  if FGraphics.SwitchPartner(Name) = '' then Name := FMap.Sidedefs[Sd].LowerTex;
+  Other := FGraphics.SwitchPartner(Name);
+  if (Other = '') or not FGraphics.HasTexture(Other) then Exit;
+  WritelnLog('Switch', 'line %d: %s -> %s', [Line, Name, Other]);
   Img := FGraphics.Texture(Other);
   if Img = nil then Exit;
   { Remember the new state in the sidedef, so regenerating keeps it. }

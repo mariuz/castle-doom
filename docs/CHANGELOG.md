@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Boom's `ANIMATED` and `SWITCHES` lumps: PWADs can define their own
+  animated textures and flats (with their own speeds) and switch
+  textures.
+
 ## v0.6.0 (2026-10-10)
 
 - Video options on the title screen's Options panel, remembered between

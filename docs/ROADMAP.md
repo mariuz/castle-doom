@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Boom `ANIMATED` and `SWITCHES` lumps: a PWAD's `ANIMATED` replaces
+  the vanilla animation table (flat and texture ranges, each with its
+  own tics per frame), and its `SWITCHES` pairs (up to the game's
+  episode number) replace the `SW1*` / `SW2*` rule for which textures
+  are switches and what they turn into. `tools/make_boom_wad.py` writes
+  the test PWAD (`tools/testdata/boom.wad`); unit test `TestBoomLumps`,
+  autotest `boom-lumps`.
+
 - Video options: the title screen's Options panel sets the field of
   view (60-120, Doom's 90 by default), the UI scale (50-200 %, the text
   and panels; CastleSettings.xml's reference size divided by it),
@@ -626,19 +634,18 @@ play.
 | **Video options in the game**: the options are on the title screen's Options panel (see above); Doom's in-game Options page has no video entries yet (it is `M_*` patches, so it needs a text-drawn page), and v-sync is not offered. | Change the field of view without leaving the level. | `DoomMenu`, `GameViewPlay` | S |
 | **Key and button rebinding**: a controls page writing the bindings to `settings.json`; the help panel and `pages/index.html` read them. | Players expect it. | `GameSettings`, `GameViewPlay`, `GameGamepad` | M |
 | **UMAPINFO / MAPINFO**: level names, music, par, next and secret map, sky and episode definitions from PWADs. | Modern PWADs ship them; without it the port falls back to vanilla's progression. | new `DoomMapInfo`, `DoomWorld.NextMapName` | M |
-| **Boom `ANIMATED` and `SWITCHES` lumps**: PWAD-defined texture and flat animations and switch pairs. | Common in community WADs; small. | `DoomGraphics` animation groups | S |
 | **Golden screenshots in CI**: compare the autotests' PNGs with stored references (a tolerance for software GL), failing on a changed frame. | Rendering regressions are caught by eye today. | `tools/run_autotests.py`, `build.yml` | M |
 | **Offline web build**: a service worker caching the page, the wasm and the data zip, so the Pages site works offline after one visit. | A big first download, then instant starts. | `web.yml`, `pages/` | S-M |
 | **Crash reporting in release builds**: catch the top-level exception, write the log path and the last 50 lines to a dialog (desktop) or the page (web). | Users can report what happened. | `GameInitialize` | S |
 
 ## Suggested next three
 
-1. Boom `ANIMATED` and `SWITCHES` lumps (S, see Other suggested
-   improvements): PWAD-defined texture animations and switch pairs.
-2. Log filtering (S, see Inspectability): `CASTLE_DOOM_LOG=...` to keep
+1. Log filtering (S, see Inspectability): `CASTLE_DOOM_LOG=...` to keep
    only some log categories (the `--profile` summaries are long).
-3. Key and button rebinding (M, see Other suggested improvements): a
+2. Key and button rebinding (M, see Other suggested improvements): a
    controls page writing the bindings to `settings.json`.
+3. UMAPINFO / MAPINFO (M, see Other suggested improvements): level
+   names, music, par times and progression from PWADs.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

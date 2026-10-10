@@ -19,7 +19,7 @@ program castle_doom_tests;
 
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
-  DoomWad, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad;
+  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad;
 
 function DataPath(const Name: String): String;
 begin
@@ -39,6 +39,7 @@ type
   published
     procedure TestPhase1;
     procedure TestPhase2;
+    procedure TestBoomLumps;
   end;
 
   TTestMap = class(TTestCase)
@@ -83,6 +84,39 @@ type
   end;
 
 { TTestWad }
+
+{ Boom's ANIMATED and SWITCHES lumps of tools/testdata/boom.wad
+  (tools/make_boom_wad.py). }
+procedure TTestWad.TestBoomLumps;
+var
+  W: TDoomWad;
+  Path: String;
+  Anims: TAnimDefs;
+  Switches: TSwitchDefs;
+begin
+  Path := 'tools/testdata/boom.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/boom.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    Anims := ParseAnimatedLump(W.LumpBytes(W.FindLump('ANIMATED')));
+    AssertEquals('animations', 2, Length(Anims));
+    AssertTrue('first is a flat', Anims[0].IsFlat);
+    AssertEquals('first start', 'NUKAGE1', Anims[0].First);
+    AssertEquals('first end', 'NUKAGE3', Anims[0].Last);
+    AssertEquals('first speed', 4, Anims[0].Speed);
+    AssertFalse('second is a texture', Anims[1].IsFlat);
+    AssertEquals('second speed', 16, Anims[1].Speed);
+    Switches := ParseSwitchesLump(W.LumpBytes(W.FindLump('SWITCHES')), 2);
+    AssertEquals('Doom 1 switches', 2, Length(Switches));
+    AssertEquals('switch off', 'SW1BRN1', Switches[0].Off);
+    AssertEquals('switch on', 'STARTAN3', Switches[0].On_);
+    AssertEquals('commercial switches', 3, Length(ParseSwitchesLump(W.LumpBytes(W.FindLump('SWITCHES')), 3)));
+  finally
+    FreeAndNil(W);
+  end;
+end;
 
 procedure TTestWad.TestPhase1;
 var

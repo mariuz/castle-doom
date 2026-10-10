@@ -61,7 +61,7 @@ its own `XDG_CONFIG_HOME`, failing on exceptions, missing log lines or
 wrong save contents. Add a test there when a feature gets a demo recipe
 below.
 
-Unit tests (FPCUnit, no window, about 20 s, 18 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 19 cases) cover the parsers,
 every node format and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -329,6 +329,12 @@ movers"). A good round trip on E1M1:
 state to `TDoomWorld`, `TDoomActor` or `TSectorMover`, add it to
 `doomworld_save.inc` too.
 
+Boom lumps: `tools/testdata/boom.wad` (`tools/make_boom_wad.py`) has an
+`ANIMATED` and a `SWITCHES` lump; with `-file` it logs `Graphics:
+ANIMATED lump: 2 animations` and `SWITCHES lump: 2 switches`, and the
+E1M1 switch at `G:2064:-260,A:90` then `U` logs `Switch: line 753:
+SW1BRN1 -> STARTAN3` (without it, `-> SW2BRN1`); autotest `boom-lumps`,
+unit test `TestBoomLumps`.
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

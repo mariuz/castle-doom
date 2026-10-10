@@ -187,7 +187,9 @@ rotation 2, and the same lump mirrored for rotation 8. `IndexSprites` builds a
 dictionary from `prefix+frame+rotation` to lump and mirror flag; `Sprite()`
 falls back to rotation 0 (all angles) when needed.
 
-Animated flats and walls use Doom's fixed table (`NUKAGE1..3`, `BFALL1..4`...).
+Animated flats and walls use Doom's fixed table (`NUKAGE1..3`, `BFALL1..4`...)
+at 8 tics a frame, or a PWAD's Boom `ANIMATED` lump instead (`ParseAnimatedLump`:
+ranges with their own speed, `TAnimGroup.Speed`).
 Each `TAnimGroup` keeps the list of `TImageTextureNode`s that show one of its
 frames; every 8 tics `AnimationTic` sets a new URL on each of them, which the
 engine picks up from the cache.
@@ -411,8 +413,12 @@ Two-sided lines flagged impassable (fences, ledges) get invisible quads in a
 dedicated collision scene (`Visible = false`, `Pickable = false`,
 `Collides = true`).
 
-Switch textures (`SW1xxx`/`SW2xxx`) get a private batch per line, so
-`FlipSwitch` can change just that wall's node URL.
+Switch textures get a private batch per line, so `FlipSwitch` can change
+just that wall's node URL (log `Switch: line N: A -> B`).
+`TDoomGraphics.SwitchPartner` names the other texture: vanilla's
+`SW1xxx` / `SW2xxx` pairs, or the pairs of a Boom `SWITCHES` lump
+(`ParseSwitchesLump`, up to the game's episode number: 2 for Doom 1,
+3 for Doom 2), which then replaces the rule.
 
 ---
 

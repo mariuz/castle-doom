@@ -71,12 +71,29 @@ type
     Nodes: TImageTextureNodeList;
     Current: Integer;
     IsFlat: Boolean;
+    { Tics per frame (vanilla 8; Boom's ANIMATED lump sets it per group). }
+    Speed: Integer;
     constructor Create;
     destructor Destroy; override;
     procedure Register(const Node: TImageTextureNode);
     procedure Unregister(const Node: TImageTextureNode);
   end;
   TAnimGroupList = {$ifdef FPC}specialize{$endif} TObjectList<TAnimGroup>;
+
+  { One record of Boom's ANIMATED lump: a flat or texture range and its
+    speed in tics per frame. }
+  TAnimDef = record
+    IsFlat: Boolean;
+    First, Last: String;
+    Speed: Integer;
+  end;
+  TAnimDefs = array of TAnimDef;
+
+  { One record of Boom's SWITCHES lump: the off and on textures. }
+  TSwitchDef = record
+    Off, On_: String;
+  end;
+  TSwitchDefs = array of TSwitchDef;
 
   TDoomGraphics = class
   strict private
@@ -93,6 +110,9 @@ type
     FAtlasPages: TDoomImageList;
     FAnimGroups: TAnimGroupList;
     FAnimByName: {$ifdef FPC}specialize{$endif} TDictionary<String, TAnimGroup>;
+    { Switch texture pairs both ways (SWITCHES lump, else SW1* <-> SW2*). }
+    FSwitchPairs: {$ifdef FPC}specialize{$endif} TDictionary<String, String>;
+    FSwitchesFromLump: Boolean;
     FMissing: TDoomImage;
     FLevel: Integer;
     { Palette-mapped lighting's lookup images (DoomLighting): RGB to palette
@@ -108,7 +128,8 @@ type
     procedure IndexFlats;
     procedure IndexSprites;
     procedure SetupAnimations;
-    procedure AddAnimRange(const First, Last: String; const IsFlat: Boolean);
+    procedure AddAnimRange(const First, Last: String; const IsFlat: Boolean; const Speed: Integer = 8);
+    procedure SetupSwitches;
     function ComposeTexture(const Def: TTextureDef): TDoomImage;
     function FindPatchLump(const Name: String): Integer;
     function MissingTexture: TDoomImage;
@@ -156,10 +177,23 @@ type
     procedure AnimationTic(const Tic: Int64);
     { Does the WAD know this wall texture name? }
     function HasTexture(const Name: String): Boolean;
+    { The other texture of a switch (SW1BRN1 -> SW2BRN1, or a pair of the
+      WAD's SWITCHES lump), '' when Name is not a switch texture. }
+    function SwitchPartner(const Name: String): String;
     { Sky texture for the given map (SKY1..SKY4 or Doom 2 ranges). }
     function SkyTextureName(const MapName: String): String;
     property Wad: TDoomWad read FWad;
   end;
+
+{ Boom's ANIMATED lump: 23-byte records (type: 0 flat, 1 texture, bit 1
+  MBF's "decals"; last name, first name, 9 bytes each; speed, int32),
+  ended by type 255. }
+function ParseAnimatedLump(const Data: TBytes): TAnimDefs;
+
+{ Boom's SWITCHES lump: 20-byte records (off name, on name, 9 bytes each;
+  episode, int16: 1 shareware, 2 registered, 3 commercial), ended by
+  episode 0; only pairs up to MaxEpisode are kept. }
+function ParseSwitchesLump(const Data: TBytes; const MaxEpisode: Integer): TSwitchDefs;
 
 implementation
 
@@ -210,6 +244,63 @@ begin
     AnimGroup.Register(Result);
 end;
 
+{ Boom lumps ----------------------------------------------------------------- }
+
+function LumpName9(const Data: TBytes; const Offset: Integer): String;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 0 to 8 do
+  begin
+    if Data[Offset + I] = 0 then Break;
+    Result := Result + Chr(Data[Offset + I]);
+  end;
+  Result := UpperCase(Trim(Result));
+end;
+
+function ParseAnimatedLump(const Data: TBytes): TAnimDefs;
+var
+  P, N: Integer;
+begin
+  Result := nil;
+  N := 0;
+  P := 0;
+  while (P + 23 <= Length(Data)) and (Data[P] <> 255) do
+  begin
+    SetLength(Result, N + 1);
+    Result[N].IsFlat := (Data[P] and 1) = 0;
+    Result[N].Last := LumpName9(Data, P + 1);
+    Result[N].First := LumpName9(Data, P + 10);
+    Result[N].Speed := Data[P + 19] or (Data[P + 20] shl 8) or (Data[P + 21] shl 16) or (Data[P + 22] shl 24);
+    if Result[N].Speed < 1 then Result[N].Speed := 8;
+    Inc(N);
+    Inc(P, 23);
+  end;
+end;
+
+function ParseSwitchesLump(const Data: TBytes; const MaxEpisode: Integer): TSwitchDefs;
+var
+  P, N, Episode: Integer;
+begin
+  Result := nil;
+  N := 0;
+  P := 0;
+  while P + 20 <= Length(Data) do
+  begin
+    Episode := SmallInt(Data[P + 18] or (Data[P + 19] shl 8));
+    if Episode = 0 then Break;
+    if Episode <= MaxEpisode then
+    begin
+      SetLength(Result, N + 1);
+      Result[N].Off := LumpName9(Data, P);
+      Result[N].On_ := LumpName9(Data, P + 9);
+      Inc(N);
+    end;
+    Inc(P, 20);
+  end;
+end;
+
 { TAnimGroup ----------------------------------------------------------------- }
 
 constructor TAnimGroup.Create;
@@ -217,6 +308,7 @@ begin
   inherited;
   Names := TStringList.Create;
   Nodes := TImageTextureNodeList.Create;
+  Speed := 8;
 end;
 
 destructor TAnimGroup.Destroy;
@@ -313,6 +405,7 @@ begin
   FAtlasPages := TDoomImageList.Create;
   FAnimGroups := TAnimGroupList.Create(true);
   FAnimByName := {$ifdef FPC}specialize{$endif} TDictionary<String, TAnimGroup>.Create;
+  FSwitchPairs := {$ifdef FPC}specialize{$endif} TDictionary<String, String>.Create;
 
   RegisterUrlProtocol('doomgfx', {$ifdef FPC}@{$endif} ReadGfx, nil);
   { A new name per WAD: CGE's texture cache must not reuse the lookup
@@ -329,6 +422,7 @@ begin
   IndexFlats;
   IndexSprites;
   SetupAnimations;
+  SetupSwitches;
   WritelnLog('Graphics', '%d wall textures, %d flats, %d sprite lumps, %d animation groups', [
     FTextureDefs.Count, FFlatLumps.Count, FSprites.Count, FAnimGroups.Count]);
 end;
@@ -339,6 +433,7 @@ begin
   FreeAndNil(FIndexLut);
   FreeAndNil(FColormapLut);
   FreeAndNil(FAnimGroups);
+  FreeAndNil(FSwitchPairs);
   FreeAndNil(FAnimByName);
   FreeAndNil(FMissing);
   FreeAndNil(FTextures);
@@ -455,7 +550,7 @@ begin
     WritelnWarning('Graphics', 'No S_START/S_END markers, no sprites');
 end;
 
-procedure TDoomGraphics.AddAnimRange(const First, Last: String; const IsFlat: Boolean);
+procedure TDoomGraphics.AddAnimRange(const First, Last: String; const IsFlat: Boolean; const Speed: Integer);
 var
   Order: TStringList;
   I1, I2, I: Integer;
@@ -467,6 +562,7 @@ begin
   if (I1 < 0) or (I2 < 0) or (I2 <= I1) then Exit;
   G := TAnimGroup.Create;
   G.IsFlat := IsFlat;
+  G.Speed := Max(1, Speed);
   for I := I1 to I2 do
   begin
     G.Names.Add(Order[I]);
@@ -476,7 +572,19 @@ begin
 end;
 
 procedure TDoomGraphics.SetupAnimations;
+var
+  Defs: TAnimDefs;
+  I: Integer;
 begin
+  { Boom's ANIMATED lump (the last one loaded) replaces the table. }
+  if FWad.HasLump('ANIMATED') then
+  begin
+    Defs := ParseAnimatedLump(FWad.LumpBytes(FWad.FindLump('ANIMATED')));
+    for I := 0 to High(Defs) do
+      AddAnimRange(Defs[I].First, Defs[I].Last, Defs[I].IsFlat, Defs[I].Speed);
+    WritelnLog('Graphics', 'ANIMATED lump: %d animations, %d of them in this WAD', [Length(Defs), FAnimGroups.Count]);
+    Exit;
+  end;
   { The vanilla Doom animation table (p_spec.c). }
   AddAnimRange('NUKAGE1', 'NUKAGE3', true);
   AddAnimRange('FWATER1', 'FWATER4', true);
@@ -501,6 +609,43 @@ begin
   AddAnimRange('SFALL1', 'SFALL4', false);
   AddAnimRange('WFALL1', 'WFALL4', false);
   AddAnimRange('DBRAIN1', 'DBRAIN4', false);
+end;
+
+procedure TDoomGraphics.SetupSwitches;
+var
+  Defs: TSwitchDefs;
+  I: Integer;
+begin
+  { Boom's SWITCHES lump: pairs up to this game's episode number
+    (1 shareware, 2 registered, 3 commercial). Without it, vanilla's
+    alphSwitchList is every SW1* / SW2* pair (SwitchPartner). }
+  FSwitchesFromLump := FWad.HasLump('SWITCHES');
+  if not FSwitchesFromLump then Exit;
+  Defs := ParseSwitchesLump(FWad.LumpBytes(FWad.FindLump('SWITCHES')), Iff(FWad.IsDoom2, 3, 2));
+  for I := 0 to High(Defs) do
+  begin
+    FSwitchPairs.AddOrSetValue(Defs[I].Off, Defs[I].On_);
+    FSwitchPairs.AddOrSetValue(Defs[I].On_, Defs[I].Off);
+  end;
+  WritelnLog('Graphics', 'SWITCHES lump: %d switches', [Length(Defs)]);
+end;
+
+function TDoomGraphics.SwitchPartner(const Name: String): String;
+var
+  N: String;
+begin
+  N := UpperCase(Name);
+  if FSwitchesFromLump then
+  begin
+    if not FSwitchPairs.TryGetValue(N, Result) then
+      Result := '';
+    Exit;
+  end;
+  Result := '';
+  if Copy(N, 1, 3) = 'SW1' then Result := 'SW2' + Copy(N, 4, MaxInt)
+  else if Copy(N, 1, 3) = 'SW2' then Result := 'SW1' + Copy(N, 4, MaxInt)
+  else Exit;
+  if not HasTexture(Result) then Result := '';
 end;
 
 function TDoomGraphics.FindPatchLump(const Name: String): Integer;
@@ -1177,11 +1322,11 @@ var
   N: TImageTextureNode;
   NewFrame: Integer;
 begin
-  { Doom switches animation frames every 8 tics. }
+  { Doom switches animation frames every 8 tics (Boom: the group's speed). }
   for G in FAnimGroups do
     if (Length(G.Frames) > 0) and (G.Nodes.Count > 0) then
     begin
-      NewFrame := (Tic div 8) mod Length(G.Frames);
+      NewFrame := (Tic div G.Speed) mod Length(G.Frames);
       if NewFrame <> G.Current then
       begin
         G.Current := NewFrame;

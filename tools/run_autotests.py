@@ -149,6 +149,12 @@ TESTS = [
     ('video-settings', 'E1M1', 'W:0.3,FOV:110,UISCALE:150,RENDERSCALE:50,W:0.3,S,Q',
      [r'Settings: Video: field of view 110, window, UI scale 150%, render scale 50%', r'Saved screenshot 1'],
      [], None),
+    # Boom's ANIMATED and SWITCHES lumps from a PWAD (tools/make_boom_wad.py):
+    # E1M1's line 753 switch turns into STARTAN3.
+    ('boom-lumps', 'E1M1', 'Y,G:2064:-260,A:90,W:0.5,U,W:0.5,S,Q',
+     [r'Graphics: ANIMATED lump: 2 animations, 2 of them in this WAD', r'Graphics: SWITCHES lump: 2 switches',
+      r'Switch: line 753: SW1BRN1 -> STARTAN3'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'boom.wad')], None),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
