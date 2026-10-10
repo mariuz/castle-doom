@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- DeHackEd weapons and projectiles: the player's weapons animate and
+  fire from the state table (the shot falls on the frame with
+  A_FirePistol and the like), so a patch's "Weapon N" frames and code
+  pointers change what a weapon does, and the projectiles' speed, size,
+  damage, sounds and frames come from their thing rows ("Speed",
+  "Width", "Height", "Missile damage"). The chaingun now fires on both
+  of its frames, as in Doom.
+
 - Map textures are mipmapped again, now inside the atlas: far floors and
   walls shimmer less, without seams at the texture repeats (OpenGL 3.1+
   and WebGL 2; `--no-atlas-mipmaps` turns it off).

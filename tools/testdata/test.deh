@@ -26,8 +26,13 @@ Ammo 0 (Bullets)
 Max ammo = 100
 Per ammo = 7
 
+Thing 32 (Imp Fireball)
+Speed = 1310720
+Missile damage = 1
+
 [CODEPTR]
 FRAME 185 = A_SPosAttack
+FRAME 14 = A_FireShotgun
 
 [PARS]
 par 1 1 999

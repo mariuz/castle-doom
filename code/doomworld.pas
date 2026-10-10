@@ -51,10 +51,14 @@ type
     X, Y, Z: Single;
     Angle: Single;
     Sector: Integer;
-    { Weapon animation. }
-    AttackTics: Integer;
+    { Weapon animation: the attack frames' total and tics left, the
+      frame index reached (its code pointer has run), the elapsed tic the
+      gun flash started at (-1 none), the sprites of the weapon and flash
+      frames (from the state table; '' for the weapon's usual sprite). }
+    AttackTics, AttackTotal, AttackFrame, FlashStart: Integer;
     WeaponFrame: Char;
     FlashFrame: Char;
+    WeaponSprite, FlashSprite: String;
     { The gun flash's extra light (A_Light1 / A_Light2), 0..2 light steps. }
     ExtraLight: Integer;
     Refire: Boolean;
@@ -165,6 +169,10 @@ type
     FDoomStartX, FDoomStartY, FDoomStartAngle: Single;
     FHaveStart: Boolean;
     FBfgCountdown: Integer;
+    { The weapons' attack and flash frames from the state table. }
+    FWeaponSeqs, FFlashSeqs: array [TWeapon] of TFrameSeq;
+    { A_ReFire reached with the trigger held: the attack starts over. }
+    FRefirePending: Boolean;
     { Icon of Sin: next spawn spot, A_BrainSpit's "easy" toggle, tics left
       until the dead brain ends the level, and where it was. }
     FBrainTargetIndex: Integer;
@@ -272,6 +280,10 @@ type
       gun-activated lines the shot crossed. Returns the body hit. }
     function PlayerLineAttack(const Angle, Slope, Range: Single; const Damage: Integer): TDoomActor;
     procedure UpdateWeaponAnimation;
+    procedure AdvanceWeaponFrames;
+    procedure UpdateWeaponFlash(const Elapsed: Integer);
+    procedure WeaponAction(const Action: TStateAction);
+    procedure BuildWeaponSeqs;
     function Random1(const N: Integer): Integer;
     function Dice(const Count, Faces: Integer): Integer;
     procedure NoiseAlert;
@@ -429,6 +441,46 @@ const
 
 var
   EffectInfos: array [TEffectKind] of TThingInfo;
+
+procedure InitEffectInfos;
+forward;
+
+{ The projectiles' speed, size, damage, sounds and frames from their
+  mobjinfo rows (DoomStates.Mobjs, after DeHackEd), so a patch's "Thing N"
+  for MT_TROOPSHOT and the like takes effect. }
+procedure SyncProjectileInfos;
+const
+  Rows: array [ekBal1..ekBfgBall] of Integer = (31, 32, 16, 33, 6, 9, 36, 34, 35);
+var
+  K: TEffectKind;
+  Mo: TMobjDef;
+  Fly, Death: TFrameSeq;
+begin
+  for K := ekBal1 to ekBfgBall do
+  begin
+    Mo := Mobjs[Rows[K]];
+    EffectInfos[K].Speed := Mo.Speed;
+    EffectInfos[K].Radius := Mo.Radius;
+    EffectInfos[K].Height := Mo.Height;
+    EffectInfos[K].DamageDice := Mo.Damage;
+    EffectInfos[K].DamageFaces := 8;
+    if SoundName(Mo.SeeSound) <> '' then EffectInfos[K].AttackSound := SoundName(Mo.SeeSound);
+    if SoundName(Mo.DeathSound) <> '' then EffectInfos[K].DeathSound := SoundName(Mo.DeathSound);
+    Fly := WalkStates(Mo.Spawn, [Mo.Death]);
+    Death := WalkStates(Mo.Death, [Mo.Spawn]);
+    if Fly.Frames <> '' then
+    begin
+      EffectInfos[K].Sprite := Fly.Sprites[0];
+      EffectInfos[K].IdleFrames := Fly.Frames;
+    end;
+    if Death.Frames <> '' then
+    begin
+      EffectInfos[K].DeathFrames := Death.Frames;
+      { MoveFrames holds the explosion's sprite for effects. }
+      EffectInfos[K].MoveFrames := Death.Sprites[0];
+    end;
+  end;
+end;
 
 procedure InitEffectInfos;
 
@@ -1045,6 +1097,10 @@ begin
   UnloadMap;
   Saved := Player;
   T0 := Now;
+  { DeHackEd ran before this world was made: weapons and projectiles from
+    the patched state table. }
+  BuildWeaponSeqs;
+  SyncProjectileInfos;
   FMap := TDoomMap.Create(FWad, MapName);
   { Dynamic sectors come from the map's original specials (a saved game may
     have cleared some, but their sectors can still be moving). }
@@ -1184,11 +1240,13 @@ end;
 
 function TDoomWorld.AmmoFor(const W: TWeapon): TAmmoType;
 begin
-  case W of
-    wpPistol, wpChaingun: Result := amClip;
-    wpShotgun, wpSuperShotgun: Result := amShell;
-    wpPlasma, wpBfg: Result := amCell;
-    wpMissile: Result := amMisl;
+  { weaponinfo's ammo (DeHackEd "Weapon N" "Ammo type"): 0 clip, 1 shell,
+    2 cell, 3 rocket, anything else none (5). }
+  case Weapons[Ord(W)].Ammo of
+    0: Result := amClip;
+    1: Result := amShell;
+    2: Result := amCell;
+    3: Result := amMisl;
     else Result := amNoAmmo;
   end;
 end;
@@ -1537,42 +1595,102 @@ begin
   end;
 end;
 
-procedure TDoomWorld.UpdateWeaponAnimation;
-
-  { Doom weapon state tables, reduced: frame letters and durations. }
-  procedure Seq(const Frames: String; const Tics: array of Integer; const FlashFrames: String;
-    const FlashTics: Integer; const Elapsed: Integer);
-  var
-    I, T: Integer;
+{ The attack frames up to the elapsed tic: each newly reached frame's
+  code pointer runs (the shots, the super shotgun's reload sounds); the
+  frame letter and sprite are the current frame's, the gun flash plays
+  from its start (weaponinfo's flashstate) with its A_Light1 / A_Light2. }
+procedure TDoomWorld.AdvanceWeaponFrames;
+var
+  Seq: TFrameSeq;
+  Elapsed, T, I, Index: Integer;
+begin
+  Seq := FWeaponSeqs[Player.Weapon];
+  Elapsed := Player.AttackTotal - Player.AttackTics;
+  Index := High(Seq.Tics);
+  T := 0;
+  for I := 0 to High(Seq.Tics) do
   begin
-    T := 0;
-    Player.WeaponFrame := 'A';
-    for I := 1 to Length(Frames) do
+    if Elapsed < T + Seq.Tics[I] then
     begin
-      if Elapsed < T + Tics[I - 1] then
-      begin
-        Player.WeaponFrame := Frames[I];
-        Break;
-      end;
-      T := T + Tics[I - 1];
+      Index := I;
+      Break;
     end;
-    Player.FlashFrame := #0;
-    Player.ExtraLight := 0;
-    if (FlashFrames <> '') and (Elapsed < FlashTics * Length(FlashFrames)) then
+    T := T + Seq.Tics[I];
+  end;
+  FRefirePending := false;
+  while Player.AttackFrame < Index do
+  begin
+    Inc(Player.AttackFrame);
+    if Seq.Actions[Player.AttackFrame] <> saNone then
+      WeaponAction(Seq.Actions[Player.AttackFrame]);
+    if FRefirePending then
     begin
-      Player.FlashFrame := FlashFrames[1 + Elapsed div FlashTics];
-      { A_Light1 on the first flash frame, A_Light2 on the later ones
-        (the rocket launcher's second frame keeps A_Light1, the plasma
-        gun's flash is A_Light1 only). }
-      Player.ExtraLight := Min(2, 1 + Elapsed div FlashTics);
-      if (Player.Weapon = wpPlasma) or
-         ((Player.Weapon = wpMissile) and (Elapsed div FlashTics = 1)) then
-        Player.ExtraLight := 1;
+      { Back to the first attack frame, its code pointer at once. }
+      FRefirePending := false;
+      Player.AttackTics := Player.AttackTotal;
+      Player.AttackFrame := 0;
+      Index := 0;
+      if Seq.Actions[0] <> saNone then
+        WeaponAction(Seq.Actions[0]);
+      Break;
     end;
   end;
+  if Index >= 0 then
+  begin
+    Player.WeaponFrame := Seq.Frames[Index + 1];
+    Player.WeaponSprite := Seq.Sprites[Index];
+  end;
+  UpdateWeaponFlash(Elapsed);
+end;
 
+procedure TDoomWorld.UpdateWeaponFlash(const Elapsed: Integer);
 var
-  Total, Elapsed: Integer;
+  Seq: TFrameSeq;
+  T, I, Since: Integer;
+begin
+  Player.FlashFrame := #0;
+  Player.FlashSprite := '';
+  Player.ExtraLight := 0;
+  if Player.FlashStart < 0 then Exit;
+  Seq := FFlashSeqs[Player.Weapon];
+  Since := Elapsed - Player.FlashStart;
+  T := 0;
+  for I := 0 to High(Seq.Tics) do
+  begin
+    { A_Light1 / A_Light2 hold until the flash ends (A_Light0). }
+    if Seq.Actions[I] = saLight1 then Player.ExtraLight := 1
+    else if Seq.Actions[I] = saLight2 then Player.ExtraLight := 2
+    else if Seq.Actions[I] = saLight0 then Player.ExtraLight := 0;
+    if Since < T + Seq.Tics[I] then
+    begin
+      Player.FlashFrame := Seq.Frames[I + 1];
+      Player.FlashSprite := Seq.Sprites[I];
+      Exit;
+    end;
+    T := T + Seq.Tics[I];
+  end;
+  { Past the flash: S_LIGHTDONE. }
+  Player.ExtraLight := 0;
+  Player.FlashStart := -1;
+end;
+
+{ The weapons' attack and flash frames from the live state table (after
+  DeHackEd): weaponinfo's atkstate up to the ready / raise / lower states,
+  and its flashstate. }
+procedure TDoomWorld.BuildWeaponSeqs;
+var
+  W: TWeapon;
+  D: TWeaponDef;
+begin
+  for W := Low(TWeapon) to High(TWeapon) do
+  begin
+    D := Weapons[Ord(W)];
+    FWeaponSeqs[W] := WalkStates(D.Attack, [D.Ready, D.Up, D.Down]);
+    FFlashSeqs[W] := WalkStates(D.Flash, [D.Ready, D.Up, D.Down, D.Attack]);
+  end;
+end;
+
+procedure TDoomWorld.UpdateWeaponAnimation;
 begin
   if Player.AttackTics > 0 then
     Dec(Player.AttackTics);
@@ -1603,39 +1721,20 @@ begin
         end;
       end;
   end;
-  case Player.Weapon of
-    wpPistol: Total := 18;
-    wpShotgun: Total := 36;
-    wpChaingun: Total := 8;
-    wpMissile: Total := 32;
-    wpPlasma: Total := 8;
-    wpBfg: Total := 60;
-    wpFist: Total := 20;
-    wpChainsaw: Total := 8;
-    wpSuperShotgun: Total := 56;
-    else Total := 18;
-  end;
   if Player.AttackTics <= 0 then
   begin
+    Player.AttackTics := 0;
     Player.WeaponFrame := 'A';
+    Player.WeaponSprite := '';
     Player.FlashFrame := #0;
+    Player.FlashSprite := '';
     Player.ExtraLight := 0;
+    Player.FlashStart := -1;
     if (Player.Weapon = wpChainsaw) and ((FTic div 4) mod 2 = 1) then
       Player.WeaponFrame := 'B';
     Exit;
   end;
-  Elapsed := Total - Player.AttackTics;
-  case Player.Weapon of
-    wpPistol: Seq('BCBA', [4, 6, 4, 4], 'A', 7, Elapsed);
-    wpShotgun: Seq('BCDCBA', [3, 7, 5, 5, 4, 12], 'AB', 4, Elapsed);
-    wpChaingun: Seq('AB', [4, 4], 'A', 4, Elapsed);
-    wpMissile: Seq('BCBA', [8, 12, 6, 6], 'ABCD', 3, Elapsed);
-    wpPlasma: Seq('BA', [4, 4], 'A', 4, Elapsed);
-    wpBfg: Seq('ABCDA', [20, 10, 10, 10, 10], 'AB', 8, Elapsed);
-    wpFist: Seq('BCDCBA', [4, 4, 5, 4, 3, 0], '', 0, Elapsed);
-    wpChainsaw: Seq('CD', [4, 4], '', 0, Elapsed);
-    wpSuperShotgun: Seq('BCDEFGHA', [7, 7, 7, 7, 7, 6, 6, 9], 'IJ', 5, Elapsed);
-  end;
+  AdvanceWeaponFrames;
 end;
 
 procedure TDoomWorld.TicActors;
@@ -4008,7 +4107,12 @@ begin
   PlayerTurn := PlayerTurn + D;
 end;
 
-procedure TDoomWorld.FireWeapon;
+{ A weapon frame's code pointer (A_Punch, A_FirePistol...): the shot of
+  the frame that carries it, as P_FireWeapon's state machine would run
+  it, so a DeHackEd patch that moves a code pointer moves the shot.
+  Ammo is taken here, like the vanilla actions do (a chaingun cycle
+  fires twice); without enough ammo the action does nothing. }
+procedure TDoomWorld.WeaponAction(const Action: TStateAction);
 var
   Ammo: TAmmoType;
   Cost, I, Dmg: Integer;
@@ -4062,39 +4166,53 @@ var
 
 begin
   if Player.Dead or (FMap = nil) or not FHaveRay then Exit;
-  if Player.AttackTics > 0 then Exit;
-  { A_WeaponReady only: no firing while the weapon goes down or up. }
-  if Player.WeaponSwitch <> 0 then Exit;
-  Ammo := AmmoFor(Player.Weapon);
-  Cost := 1;
-  if Player.Weapon = wpBfg then Cost := DehMisc.BfgCellsPerShot;
-  if Player.Weapon = wpSuperShotgun then Cost := 2;
-  if (Ammo <> amNoAmmo) and (Player.Ammo[Ammo] < Cost) then
+  { A_ReFire: with the trigger still held (Refire stays set while it is,
+    the view clears it on release) the attack starts over at once, so
+    the frames after it (the plasma gun's 20-tic cooldown) only show
+    when the trigger is let go. }
+  if Action = saReFire then
   begin
-    NextWeapon(-1);
+    if Player.Refire and (Player.WeaponSwitch = 0) then
+      FRefirePending := true;
     Exit;
   end;
+  { Sounds of the super shotgun's reload and the BFG's charge. }
+  case Action of
+    saOpenShotgun2: begin FSounds.Play('DSDBOPN'); Exit; end;
+    saLoadShotgun2: begin FSounds.Play('DSDBLOAD'); Exit; end;
+    saCloseShotgun2: begin FSounds.Play('DSDBCLS'); Exit; end;
+    saBFGsound: begin FSounds.Play('DSBFG'); Exit; end;
+    saPunch, saSaw, saFirePistol, saFireShotgun, saFireShotgun2, saFireCGun,
+    saFireMissile, saFirePlasma, saFireBFG: ;
+    else Exit;
+  end;
+  Ammo := AmmoFor(Player.Weapon);
+  Cost := 1;
+  if Action = saFireBFG then Cost := DehMisc.BfgCellsPerShot;
+  if Action = saFireShotgun2 then Cost := 2;
+  if Action in [saPunch, saSaw] then Ammo := amNoAmmo;
+  if (Ammo <> amNoAmmo) and (Player.Ammo[Ammo] < Cost) then Exit;
   if Ammo <> amNoAmmo then
     Player.Ammo[Ammo] := Player.Ammo[Ammo] - Cost;
+  { The gun flash starts with the shot (P_SetPsprite ps_flash). }
+  if not (Action in [saPunch, saSaw]) then
+    Player.FlashStart := Player.AttackTotal - Player.AttackTics;
 
-  NoiseAlert;
-
-  case Player.Weapon of
-    wpFist, wpChainsaw:
+  case Action of
+    saPunch, saSaw:
       begin
         { A_Punch / A_Saw: 2..20 damage (punch x10 with berserk), aimed over
           the melee range (64, the saw 65) with a little spread. }
-        Player.AttackTics := IfThen(Player.Weapon = wpFist, 20, 8);
         Dmg := 2 * (Random(10) + 1);
-        if (Player.Weapon = wpFist) and (Player.BerserkTics > 0) then Dmg := Dmg * 10;
+        if (Action = saPunch) and (Player.BerserkTics > 0) then Dmg := Dmg * 10;
         PlayerLook(Angle, Slope);
         Angle := Angle + Spread(5.6);
         Slope := AimLineAttack(nil, Player.X, Player.Y, Player.Z + PlayerHeight / 2 + 8,
-          Angle, IfThen(Player.Weapon = wpFist, 64, 65), AimTarget);
+          Angle, IfThen(Action = saPunch, 64, 65), AimTarget);
         if AimTarget = nil then PlayerLook(LookAngle, Slope);
-        PlayerLineAttack(Angle, Slope, IfThen(Player.Weapon = wpFist, 64, 65), Dmg);
+        PlayerLineAttack(Angle, Slope, IfThen(Action = saPunch, 64, 65), Dmg);
         { The aim's linetarget decides the sound and turns the player to it. }
-        if Player.Weapon = wpChainsaw then
+        if Action = saSaw then
         begin
           if AimTarget = nil then
             FSounds.Play('DSSAWFUL')
@@ -4111,58 +4229,82 @@ begin
           TurnPlayer(RadToDeg(ArcTan2(AimTarget.DoomY - Player.Y, AimTarget.DoomX - Player.X)));
         end;
       end;
-    wpPistol:
+    saFirePistol:
       begin
-        Player.AttackTics := 18;
         FSounds.Play('DSPISTOL');
         BulletSlope;
         GunShot(not Player.Refire);
       end;
-    wpShotgun:
+    saFireShotgun:
       begin
-        Player.AttackTics := 36;
         FSounds.Play('DSSHOTGN');
         BulletSlope;
         for I := 1 to 7 do
           GunShot(false);
       end;
-    wpSuperShotgun:
+    saFireShotgun2:
       begin
         { A_FireShotgun2: 20 pellets, wider spread and a vertical one. }
-        Player.AttackTics := 56;
         FSounds.Play('DSDSHTGN');
         BulletSlope;
         for I := 1 to 20 do
           PlayerLineAttack(Angle + Spread(11.2),
             Slope + (Random(256) - Random(256)) * 32 / 65536, 2048, 5 * (Random(3) + 1));
       end;
-    wpChaingun:
+    saFireCGun:
       begin
-        Player.AttackTics := 8;
         FSounds.Play('DSPISTOL');
         BulletSlope;
         GunShot(not Player.Refire);
       end;
-    wpMissile:
+    saFireMissile:
       begin
-        Player.AttackTics := 32;
         SpawnPlayerMissile(ekRocket);
       end;
-    wpPlasma:
+    saFirePlasma:
       begin
-        Player.AttackTics := 8;
         SpawnPlayerMissile(ekPlasmaBall);
       end;
-    wpBfg:
-      begin
-        { Doom charges the BFG for 40 tics (sound at the trigger pull),
-          then launches the ball. }
-        Player.AttackTics := 60;
-        FSounds.Play('DSBFG');
-        FBfgCountdown := 40;
-      end;
+    saFireBFG:
+      { A_FireBFG, after the charge frames (A_BFGsound at the trigger). }
+      SpawnPlayerMissile(ekBfgBall);
   end;
+  { A_ReFire's accuracy rule: only a cycle's first bullet is exact. }
   Player.Refire := true;
+end;
+
+{ A_WeaponReady with the trigger held: start the weapon's attack frames
+  (weaponinfo's atkstate, from the state table) and run the first one's
+  code pointer; UpdateWeaponAnimation runs the later ones as their frames
+  come. }
+procedure TDoomWorld.FireWeapon;
+var
+  Ammo: TAmmoType;
+  Cost, I, Total: Integer;
+begin
+  if Player.Dead or (FMap = nil) or not FHaveRay then Exit;
+  if Player.AttackTics > 0 then Exit;
+  { A_WeaponReady only: no firing while the weapon goes down or up. }
+  if Player.WeaponSwitch <> 0 then Exit;
+  Ammo := AmmoFor(Player.Weapon);
+  Cost := 1;
+  if Player.Weapon = wpBfg then Cost := DehMisc.BfgCellsPerShot;
+  if Player.Weapon = wpSuperShotgun then Cost := 2;
+  if (Ammo <> amNoAmmo) and (Player.Ammo[Ammo] < Cost) then
+  begin
+    NextWeapon(-1);
+    Exit;
+  end;
+  Total := 0;
+  for I := 0 to High(FWeaponSeqs[Player.Weapon].Tics) do
+    Total := Total + FWeaponSeqs[Player.Weapon].Tics[I];
+  if Total <= 0 then Exit;
+  NoiseAlert;
+  Player.AttackTotal := Total;
+  Player.AttackTics := Total;
+  Player.AttackFrame := -1;
+  Player.FlashStart := -1;
+  AdvanceWeaponFrames;
 end;
 
 procedure TDoomWorld.CheckPickups;

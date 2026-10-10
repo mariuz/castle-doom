@@ -6,6 +6,23 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- DeHackEd weapons and projectiles: `DoomStates.Weapons` (d_items.c's
+  weaponinfo: ammo type and up / down / ready / attack / flash states)
+  and the player's weapon animation runs on the state table:
+  `BuildWeaponSeqs` walks the attack and flash chains at each map load,
+  `AdvanceWeaponFrames` runs each frame's code pointer as it is reached
+  (the shot on A_FirePistol's frame, the chaingun's two shots a cycle,
+  the SSG's open / load / close sounds, A_ReFire while the trigger is
+  held, A_Light1 / A_Light2 for the flash light), and the HUD shows the
+  frame's sprite. "Weapon N" sets the ammo type and entry frames; the
+  projectiles (imp, cacodemon, baron, revenant, mancubus, arachnotron
+  and cyberdemon shots, the player's rocket, plasma and BFG ball) take
+  speed, size, damage dice, sounds and frames from their mobjinfo rows,
+  which "Thing N" edits ("Speed", "Width", "Height", "Missile damage").
+  `tools/testdata/test.deh` makes the pistol fire the shotgun's seven
+  pellets (`FRAME 14 = A_FireShotgun`) and the imp fireball fast and
+  harmless.
+
 - Atlas mipmaps: tiles sit in 8-aligned blocks padded with 4 texels of
   their wrapped content, so the page's mipmaps up to level 3 keep the
   tiles apart, and the atlas effect samples with `textureGrad` using the
@@ -534,7 +551,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **DeHackEd weapons and projectiles**: frames and code pointers are done (see above); the player's weapon frames ("Weapon N", the `S_PISTOL`... chains with A_FirePistol etc.) and the projectile rows (speed, damage, frames of `MT_TROOPSHOT`...) still come from the port's own tables, as do BEX `[SPRITES]` / `[SOUNDS]` renaming and new monsters built from decoration rows (no AI for them). | The rest of what mods change. | `DoomWorld` weapons, `EffectInfos`, `DoomDehacked` | M |
+| **DeHackEd sprite and sound renaming, new monsters**: frames, code pointers, weapons and projectiles are done (see above); BEX `[SPRITES]` / `[SOUNDS]` renaming, the weapons' bobbing / select / deselect chains (the raise and lower still move the ready sprite by code) and new monsters built from decoration rows (no AI for them) are not. | The rest of what mods change. | `DoomDehacked`, `DoomThings` | M |
 | **Browser frame rate**, measured (headless Chromium + SwiftShader on the live page, Chrome CPU profile, `PerfView:` statistics): a frame on E1M1 at the door spot draws 255 shapes = 255 draw calls (map 151 of its 206 per-texture shapes, sprites 104, one scene each); per frame the CPU time is ~94 ms in wasm (game logic 13 ms, the rest CGE's per-shape rendering and the music synth slice) + ~66 ms in the JOB JS bridge (`HaveSharedArrayBuffer`, `decode`, `Invoke_*`, then the WebGL calls: `bindBuffer`, `enable/disableVertexAttribArray`, `activeTexture`, `uniform*`), i.e. about 0.6 ms per shape, so the frame rate is the number of draw calls. Tried and reverted: splitting the static map geometry into 1024-unit cells for frustum culling (151 -> 249 map draw calls: textures repeat per cell and a 90-degree view covers most cells of a flat level). Done: (1) sprites in one scene per (light group, kind), each texture's quads merged by us in one persistent shape (`TSpriteBatch` / `TSpriteShape`; E1M1 door spot: sprites 104 -> 35 draw calls, 104 -> 9 scenes, the whole frame 255 -> 186 draw calls; CGE's own dynamic batching was tried in between: 8 merge slots a pass and shader relinks every frame from its pool shapes); (2) the map in a texture atlas with `fract` wrapping in the shader, padded tiles and no mipmaps (one shape per chunk and page: the frame 186 -> 56 draw calls, 12 for the map alone). Left: in CGE for the web, vertex array objects and cached uniform locations to cut WebGL calls per shape (every call crosses wasm -> JS); the atlas mipmaps are done (see above). | Playable speed on the Pages site. | `DoomActors`, CGE web renderer, `DoomGeometry` | M each |
 
 ## 3. Audio
@@ -594,16 +611,15 @@ play.
 
 ## Suggested next three
 
-1. DeHackEd weapons and projectiles (M, see Gameplay): drive the
-   player's weapon animations and the projectiles from the state table
-   too, so "Weapon N" and the projectile rows of a patch take effect.
-2. Live thing inspection and profiler sections (S each, see
+1. Live thing inspection and profiler sections (S each, see
    Inspectability): select the thing under the crosshair in the
    inspector, and the load stages in CGE's profiler. The editor items
    are done except trying the designs in the editor on Windows (the
    editor is not built in CI).
-3. Video options (S-M, see Other suggested improvements): field of view,
+2. Video options (S-M, see Other suggested improvements): field of view,
    fullscreen, UI scale and a resolution scale for slow browsers.
+3. Boom `ANIMATED` and `SWITCHES` lumps (S, see Other suggested
+   improvements): PWAD-defined texture animations and switch pairs.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

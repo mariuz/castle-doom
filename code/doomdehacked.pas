@@ -21,8 +21,14 @@
   - "Ammo N": max ammo and the clip size; "Misc": initial health and
     bullets, health / armor limits, armor classes, soul- and megasphere
     health, IDFA / IDKFA armor, BFG cells per shot.
-  Weapons' frames, "Sprite" and "Sound" renumbering, cheats and the old
-  "Text" replacements are counted and logged as ignored. }
+  - "Weapon N": ammo type and the select, deselect, ready, attack and
+    flash frames of the player's weapons; the weapons animate and fire
+    from the state table (a shot happens on the frame carrying A_FirePistol
+    and the like), so changed weapon frames and code pointers take effect.
+    Projectile rows ("Thing N" for MT_TROOPSHOT...) give the projectiles'
+    speed, size, "Missile damage", sounds and frames.
+  "Sprite" and "Sound" renumbering, cheats and the old "Text"
+  replacements are counted and logged as ignored. }
 unit DoomDehacked;
 
 interface
@@ -199,6 +205,12 @@ var
     else if SameText(Key, 'Death sound') then begin if M >= 0 then Mobjs[M].DeathSound := SoundNum(Value); end
     else if SameText(Key, 'Action sound') then begin if M >= 0 then Mobjs[M].ActiveSound := SoundNum(Value); end
     else if SameText(Key, 'Bits') then begin if M >= 0 then Mobjs[M].Flags := BitsValue(ValueStr); end
+    else if SameText(Key, 'Missile damage') then begin if M >= 0 then Mobjs[M].Damage := Value; end
+    else if (Info = nil) and (M >= 0) and SameText(Key, 'Speed') then
+      { Projectiles (no thing of this port): fixed point when large. }
+      begin if Value >= 65536 then Mobjs[M].Speed := Value div 65536 else Mobjs[M].Speed := Value; end
+    else if (Info = nil) and (M >= 0) and SameText(Key, 'Width') then Mobjs[M].Radius := Value div 65536
+    else if (Info = nil) and (M >= 0) and SameText(Key, 'Height') then Mobjs[M].Height := Value div 65536
     else if Info = nil then
     begin
       Inc(Ignored);
@@ -237,6 +249,28 @@ var
     else if SameText(Key, 'Duration') then States[N].Tics := Value
     else if SameText(Key, 'Next frame') then States[N].Next := Max(0, StateNum(Value))
     else if SameText(Key, 'Unknown 1') or SameText(Key, 'Unknown 2') then
+    else
+    begin
+      Inc(Ignored);
+      Exit;
+    end;
+    Inc(Changed);
+  end;
+
+  { "Weapon N" (0 fist .. 8 super shotgun): ammo type and entry frames. }
+  procedure WeaponField;
+  begin
+    if (N < 0) or (N > High(Weapons)) then
+    begin
+      Inc(Ignored);
+      Exit;
+    end;
+    if SameText(Key, 'Ammo type') then Weapons[N].Ammo := Value
+    else if SameText(Key, 'Deselect frame') then Weapons[N].Down := Max(0, StateNum(Value))
+    else if SameText(Key, 'Select frame') then Weapons[N].Up := Max(0, StateNum(Value))
+    else if SameText(Key, 'Bobbing frame') then Weapons[N].Ready := Max(0, StateNum(Value))
+    else if SameText(Key, 'Shooting frame') then Weapons[N].Attack := Max(0, StateNum(Value))
+    else if SameText(Key, 'Firing frame') then Weapons[N].Flash := Max(0, StateNum(Value))
     else
     begin
       Inc(Ignored);
@@ -400,6 +434,8 @@ begin
         FrameField
       else if Section = 'pointer' then
         PointerField
+      else if Section = 'weapon' then
+        WeaponField
       else if Section = 'misc' then
         MiscField
       else if Section = 'ammo' then
@@ -424,7 +460,7 @@ begin
   finally
     FreeAndNil(Lines);
   end;
-  WritelnLog('DeHackEd', '%s: %d values applied, %d not supported (weapons, sprites, sounds, cheats, text...)',
+  WritelnLog('DeHackEd', '%s: %d values applied, %d not supported (sprites, sounds, cheats, text...)',
     [SourceName, Changed, Ignored]);
 end;
 

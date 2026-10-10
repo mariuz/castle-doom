@@ -1169,7 +1169,10 @@ begin
     FlashSuffix := '';
   end;
 
-  SpriteName := FWorld.WeaponSprite(P.Weapon) + P.WeaponFrame + '0';
+  if P.WeaponSprite <> '' then
+    SpriteName := P.WeaponSprite + P.WeaponFrame + '0'
+  else
+    SpriteName := FWorld.WeaponSprite(P.Weapon) + P.WeaponFrame + '0';
   Img := Graphics.Patch(SpriteName);
   if (Img <> nil) and not P.Dead and not FAutomap.Exists then
   begin
@@ -1197,6 +1200,9 @@ begin
     FWeaponImage.Exists := false;
 
   FlashName := '';
+  if (P.FlashFrame <> #0) and (P.FlashSprite <> '') then
+    FlashName := P.FlashSprite + P.FlashFrame + '0'
+  else
   if (P.FlashFrame <> #0) and (FWorld.FlashSprite(P.Weapon) <> '') then
     FlashName := FWorld.FlashSprite(P.Weapon) + P.FlashFrame + '0';
   Img := nil;

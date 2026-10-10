@@ -27,8 +27,18 @@ type
     Loop, Forever: Boolean;
   end;
 
+type
+  { d_items.c's weaponinfo: the ammo (0 clip, 1 shell, 2 cell, 3 rocket,
+    5 none) and the entry states of each weapon, in the port's TWeapon
+    order (fist, pistol, shotgun, chaingun, rocket launcher, plasma, BFG,
+    chainsaw, super shotgun). DeHackEd's "Weapon N". }
+  TWeaponDef = record
+    Ammo, Up, Down, Ready, Attack, Flash: Integer;
+  end;
+
 var
   { The live tables (vanilla after ResetStates, then DeHackEd's edits). }
+  Weapons: array [0..8] of TWeaponDef;
   Sprites: array of String;
   States: array of TStateDef;
   Mobjs: array of TMobjDef;
@@ -61,14 +71,52 @@ function SoundName(const Index: Integer): String;
 { Whether an action attacks (the ones DoomWorld dispatches on). }
 function IsAttackAction(const Action: TStateAction): Boolean;
 
+{ The state with this name (PISTOL1 or S_PISTOL1), -1 if none. }
+function StateByName(const Name: String): Integer;
+
 implementation
 
 uses SysUtils;
+
+const
+  VanillaWeaponStates: array [0..8, 0..4] of String = (
+    ('PUNCHUP', 'PUNCHDOWN', 'PUNCH', 'PUNCH1', 'NULL'),
+    ('PISTOLUP', 'PISTOLDOWN', 'PISTOL', 'PISTOL1', 'PISTOLFLASH'),
+    ('SGUNUP', 'SGUNDOWN', 'SGUN', 'SGUN1', 'SGUNFLASH1'),
+    ('CHAINUP', 'CHAINDOWN', 'CHAIN', 'CHAIN1', 'CHAINFLASH1'),
+    ('MISSILEUP', 'MISSILEDOWN', 'MISSILE', 'MISSILE1', 'MISSILEFLASH1'),
+    ('PLASMAUP', 'PLASMADOWN', 'PLASMA', 'PLASMA1', 'PLASMAFLASH1'),
+    ('BFGUP', 'BFGDOWN', 'BFG', 'BFG1', 'BFGFLASH1'),
+    ('SAWUP', 'SAWDOWN', 'SAW', 'SAW1', 'NULL'),
+    ('DSGUNUP', 'DSGUNDOWN', 'DSGUN', 'DSGUN1', 'DSGUNFLASH1'));
+  VanillaWeaponAmmo: array [0..8] of Integer = (5, 0, 1, 0, 3, 2, 2, 5, 1);
+
+function StateByName(const Name: String): Integer;
+var
+  I: Integer;
+  N: String;
+begin
+  N := UpperCase(Name);
+  if Copy(N, 1, 2) = 'S_' then N := Copy(N, 3, MaxInt);
+  for I := 0 to VanillaStateCount - 1 do
+    if VanillaStateNames[I] = N then
+      Exit(I);
+  Result := -1;
+end;
 
 procedure ResetStates;
 var
   I: Integer;
 begin
+  for I := 0 to 8 do
+  begin
+    Weapons[I].Ammo := VanillaWeaponAmmo[I];
+    Weapons[I].Up := StateByName(VanillaWeaponStates[I, 0]);
+    Weapons[I].Down := StateByName(VanillaWeaponStates[I, 1]);
+    Weapons[I].Ready := StateByName(VanillaWeaponStates[I, 2]);
+    Weapons[I].Attack := StateByName(VanillaWeaponStates[I, 3]);
+    Weapons[I].Flash := StateByName(VanillaWeaponStates[I, 4]);
+  end;
   SetLength(Sprites, VanillaSpriteCount);
   for I := 0 to VanillaSpriteCount - 1 do
     Sprites[I] := VanillaSprites[I];

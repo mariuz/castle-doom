@@ -108,7 +108,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 ## Not (yet) done
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines: no UDMF maps,
-DeHackEd patches change things, frames and code pointers but not the weapons' frames,
+DeHackEd patches cannot rename sprites or sounds (BEX `[SPRITES]` / `[SOUNDS]`),
 the browser's music is the approximate FM model (no OPL3 emulator there).
 
 ## Build and run

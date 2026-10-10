@@ -641,8 +641,17 @@ and ceilings;
 rockets add 128-unit splash damage, the BFG ball launches after Doom's 40-tic
 charge and on impact sprays 40 tracers over 90° from the player (`BfgSpray`,
 15d7 each, with the green `BFE2` flash on every target). Weapon animation
-frames and muzzle flashes are small per-weapon state tables in
-`UpdateWeaponAnimation`.
+runs from the state table: `BuildWeaponSeqs` walks each weapon's attack
+and flash chains (`DoomStates.Weapons`, d_items.c's weaponinfo, which
+DeHackEd's "Weapon N" edits) at map load; `FireWeapon` starts the attack
+sequence and `AdvanceWeaponFrames` runs the action of each frame as it is
+reached (`WeaponAction`: A_FirePistol, A_FireShotgun2, A_FireMissile,
+A_FireBFG..., the SSG's open / load / close sounds, A_ReFire restarting
+the attack while the trigger is held), so the shot falls on the frame
+that carries the code pointer and a patched pointer changes what the
+weapon fires. The flash sequence's A_Light1 / A_Light2 / A_Light0 set
+the extra light. The projectiles' speed, size, damage dice, sounds and
+frames come from their mobjinfo rows (`SyncProjectileInfos`).
 
 The player record (`TPlayerState`) holds health, armour, ammo, weapons, keys,
 powerup timers, messages, screen-flash intensities and the status-bar face
@@ -1155,9 +1164,11 @@ deploys.
   and bits to `DoomStates.Mobjs`), `DehMisc`, `DehMaxAmmo` /
   `DehClipAmmo` (pickups give a clip, boxes 5, weapons 2) and `[PARS]`
   (`DehackedParTime`, used by the intermission). Then
-  `ApplyStateTable` derives every thing's sequences again. Weapons'
-  frames, "Sprite" / "Sound" renumbering, cheats and "Text" sections are
-  counted as not supported.
+  `ApplyStateTable` derives every thing's sequences again. "Weapon N"
+  sets a weapon's ammo type and entry frames; projectile rows (things
+  this port has no thing for) also take "Speed", "Width", "Height" and
+  "Missile damage" (any row). "Sprite" / "Sound" renumbering, cheats
+  and "Text" sections are counted as not supported.
 - The state table (`DoomStates`): `tools/make_states.py` turns
   linuxdoom-1.10's `info.c`, `info.h` and `sounds.h` into
   `doomstates_table.inc` (138 sprite names, 967 states with sprite,

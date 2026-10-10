@@ -560,6 +560,10 @@ begin
     AssertTrue('zombie code pointer', FindThingInfo(3004)^.AttackAction = saSPosAttack);
     AssertEquals('zombie pellets', 3, FindThingInfo(3004)^.Shots);
     AssertEquals('zombie attack sound', 'DSSHOTGN', FindThingInfo(3004)^.AttackSound);
+    AssertTrue('pistol shot code pointer', States[14].Action = saFireShotgun);
+    AssertEquals('imp fireball speed (fixed 20.0)', 20, Mobjs[31].Speed);
+    AssertEquals('imp fireball damage', 1, Mobjs[31].Damage);
+    AssertEquals('pistol attack state', StateByName('PISTOL1'), Weapons[1].Attack);
     AssertTrue('patch par', DehackedParTime('E1M1', Par));
     AssertEquals('patch par seconds', 999, Par);
     S := TDoomStrings.Create(W);
