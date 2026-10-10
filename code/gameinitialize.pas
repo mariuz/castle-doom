@@ -10,7 +10,7 @@ uses SysUtils,
   CastleKeysMouse,
   CastleUtils, CastleTimeUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
-  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameSettings, GameSaveBundle, GameLogFilter;
+  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameSettings, GameSaveBundle, GameLogFilter, GameCrash;
 
 var
   Window: TCastleWindow;
@@ -193,6 +193,8 @@ initialization
   InitializeLog;
   { CASTLE_DOOM_LOG=Load,Music: a filtered copy of the log (GameLogFilter). }
   StartLogFilter;
+  { Uncaught exceptions: logged and shown with the log's last lines. }
+  InstallCrashReporter;
   Application.OnInitialize := @ApplicationInitialize;
   Window := TCastleWindow.Create(Application);
   Window.Caption := 'Castle DOOM';

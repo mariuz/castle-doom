@@ -1189,6 +1189,12 @@ Things that differ on the web and shaped the code:
 - All loading is synchronous from the in-memory data zip, so `Download()` of
   `castle-data:` and the custom protocols work unchanged.
 - Sound uses Web Audio; it needs a user gesture, which the START click is.
+- Crash report: the page patch also wraps `console.log` before the
+  game's script loads (keeping the last 40 lines) and shows them in an
+  overlay (`castle-doom-crash`) on the window's error event, which a
+  stopped WebAssembly program raises. On the desktop `GameCrash` is the
+  `Application.OnException` handler: the report in the log and a
+  continue / quit dialog.
 - Offline: `pages/sw.js` is the site's service worker (registered by
   both pages; the play page's registration comes from
   `tools/patch_web_page.py`). It fetches the game's own files on install,

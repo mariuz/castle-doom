@@ -210,6 +210,12 @@ Pause / pointer lock: `UNLOCK` does what the browser's Esc does (cancels
 the pointer lock, so Doom's menu opens over the paused game; log
 `PointerLock:`), `RESUME` closes it like Esc or a click beside it. The save's `tic` must not move while paused.
 
+Crash reports: `CRASH` in a demo raises a test exception; on the
+desktop `GameCrash` logs `Warning: Crash: Castle DOOM ... stopped on an
+error:` with the last log lines and exits with code 1 in autotests
+(else a continue / quit dialog; autotest `crash-report`). In the browser
+`play/?map=E1M1&demo=W:2,CRASH` stops the program and the page shows the
+`castle-doom-crash` overlay with the last 40 console lines.
 Offline web build: `pages/sw.js` (service worker; the play page
 registers it through `tools/patch_web_page.py`). Test it on a `web-site`
 artifact with `pages/index.html` and `pages/sw.js` copied in (the CI

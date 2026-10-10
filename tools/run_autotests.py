@@ -333,6 +333,23 @@ def run_test(exe, out, test):
     return problems, secs
 
 
+def crash_test(exe, out):
+    """The CRASH demo command raises: the report (GameCrash) is logged with
+    the last log lines and the game exits with code 1."""
+    config = os.path.join(out, 'config-crash-report')
+    shutil.rmtree(config, ignore_errors=True)
+    os.makedirs(config)
+    log, code, secs = run_game(exe, out, 'crash-report', 'E1M1', 'W:0.3,CRASH,W:1,Q', [], config)
+    problems = []
+    if code != 1:
+        problems.append('exit code %d, expected 1' % code)
+    for rx in [r'Warning: Crash: Castle DOOM [\d.]+ stopped on an error:',
+               r'Exception: Test crash from the CRASH demo command', r'its last lines:\n  ']:
+        if not re.search(rx, log):
+            problems.append('missing log line /%s/' % rx)
+    return problems, secs
+
+
 def settings_test(exe, out):
     """Volumes set in one run are loaded by the next."""
     config = os.path.join(out, 'config-settings')
@@ -435,6 +452,11 @@ def main():
             results.append(('glbsp-nodes', problems, secs))
             print('%-16s %s (%.0f s)%s' % ('glbsp-nodes', 'FAIL' if problems else 'ok', secs,
                                             ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'crash-report' in only:
+        problems, secs = crash_test(exe, out)
+        results.append(('crash-report', problems, secs))
+        print('%-16s %s (%.0f s)%s' % ('crash-report', 'FAIL' if problems else 'ok', secs,
+                                        ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)
         results.append(('settings', problems, secs))

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Crash reports: an unexpected error now shows what happened, where the
+  log is and its last lines (a dialog on the desktop, an overlay in the
+  browser), ready for a bug report.
 - The web version works offline after one visit: a service worker keeps
   the page, the game and its data (and Freedoom Phase 2 once played).
 

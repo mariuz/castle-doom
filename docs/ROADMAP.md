@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Crash reporting in release builds: `GameCrash` sets
+  `Application.OnException`, so an uncaught exception on the desktop is
+  logged (`Warning: Crash: ...`) with the log file's place and its last
+  lines and shown in a dialog that offers to continue or quit (autotests
+  log it and exit with code 1). In the browser, where any exception stops
+  the WebAssembly program, the page (patched by
+  `tools/patch_web_page.py`) keeps the last 40 console lines and shows
+  them over the page on the window's error event. The demo command
+  `CRASH` raises a test exception; autotest `crash-report`.
+
 - Offline web build: `pages/sw.js`, a service worker at the site root
   (the Web workflow copies it; the home page and the play page, through
   `tools/patch_web_page.py`, register it), fetches the game's files when
@@ -703,16 +713,15 @@ play.
 | **The rest of UMAPINFO, and ZDoom MAPINFO**: UMAPINFO's keys are done (see above) except patch backdrops, `exitpic` / `enterpic` and the level name drawn as text on the intermission when there is no `levelpic`; ZDoom's MAPINFO syntax is not read. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
 | **More golden screenshots**: 28 still screenshots are compared (see above); fights, moving players and timed animations vary between runs, so they would need a fixed frame time in autotests (step the world by whole tics per frame) before they can be compared too. | Cover the rendering of monsters and effects. | `GameViewPlay` (autotest timing), `tools/run_autotests.py` | M |
 | **Installable web app**: the site works offline (see above); a web app manifest and icons would let browsers install it as an app with its own window. | A desktop-like start without the native package. | `pages/`, `web.yml` | S |
-| **Crash reporting in release builds**: catch the top-level exception, write the log path and the last 50 lines to a dialog (desktop) or the page (web). | Users can report what happened. | `GameInitialize` | S |
+| **Longer crash reports**: the desktop dialog shows CGE's last 10 log lines (`CastleLog.LastLog`), the web overlay 40; a game-side ring buffer (fed by `ApplicationProperties.OnLog`) and a "copy to clipboard" button would make reports more complete. | Better bug reports. | `GameCrash`, `tools/patch_web_page.py` | S |
 
 ## Suggested next three
 
-1. Crash reporting in release builds (S, see Other suggested
-   improvements): the log's last lines in a dialog or on the page.
-2. More golden screenshots (M, see Other suggested improvements): a
+1. More golden screenshots (M, see Other suggested improvements): a
    fixed frame time in autotests so moving scenes compare too.
-3. Installable web app (S, see Other suggested improvements): a web app
+2. Installable web app (S, see Other suggested improvements): a web app
    manifest and icons.
+3. Gamepad button rebinding (S-M, see Other suggested improvements).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

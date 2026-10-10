@@ -523,6 +523,10 @@ begin
       settings.json: forward, use...; key as KeyToStr names it: F, Space,
       Up; None clears the first slot); RESETKEYS restores the defaults. }
     DemoBind(Rest)
+  else if Cmd = 'CRASH' then
+    { A test exception for the crash report (GameCrash; in the browser
+      the page's own report). }
+    raise Exception.Create('Test crash from the CRASH demo command')
   else if Cmd = 'RESETKEYS' then
   begin
     ResetKeys;
