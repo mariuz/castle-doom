@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.8.0 (2026-10-10)
 
 - UMAPINFO: PWADs with a UMAPINFO lump get their own level names,
   music, skies, par times, map order and secret exits, story texts after
