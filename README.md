@@ -184,6 +184,7 @@ code/gameviewmenu.pas   title screen: Doom menu and options
 code/gameviewplay.pas   viewport, navigation, input; the 2D layer comes from data/play.castle-user-interface
 code/doomworldstatus.pas  the game's state as published properties (the inspector)
 data/play.castle-user-interface  the play view's HUD, texts and screens: a CGE editor design
+data/menu.castle-user-interface  the title screen, Doom's menu and the Options panel: a CGE editor design
 ```
 
 Freedoom is Copyright (c) 2001-2024 Contributors to the Freedoom project, BSD licence

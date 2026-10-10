@@ -225,11 +225,13 @@ draw-call counts and a CDP CPU profile (wasm vs JS glue time), not its FPS.
 `LOOK:deg` pitches the view (negative looks down), for sky and floor
 screenshots.
 
-The play view's 2D layer is `data/play.castle-user-interface` (a CGE
-editor design: drawing order is the children's order, anchors are
-`HorizontalAnchorParent/Self` + `TranslationPersistent`); `CreateUi`
-takes the controls by name with `DesignedComponent` and wires the WAD
-graphics. A new control must be registered (`RegisterSerializableComponent`
+The play view's 2D layer is `data/play.castle-user-interface` and the
+menu view's screen `data/menu.castle-user-interface` (CGE editor
+designs: drawing order is the children's order, anchors are
+`HorizontalAnchorParent/Self` + `TranslationPersistent`, a button's
+handler is assigned in code); `CreateUi` / `TViewMenu.Start` take the
+controls by name with `DesignedComponent` and wire the WAD graphics and
+the handlers. A new control must be registered (`RegisterSerializableComponent`
 in its unit's `initialization`) or the design will not load, and a
 design-time class needs a `Create(AOwner)` constructor that works without
 a WAD. `editor_units` in the manifest lists those units; on Windows,
@@ -237,7 +239,8 @@ a WAD. `editor_units` in the manifest lists those units; on Windows,
 builds an editor that shows them (CI does not build the editor). Check a
 layout change with a before / after screenshot comparison (PIL
 `ImageChops.difference`): the HUD must stay pixel-identical except the
-face and the scene behind the help panel.
+face and the scene behind the help panel, and the `MENU`, `MENUOPTIONS`
+and `MENUTITLE` screenshots entirely.
 
 The engine's inspector: `INSPECTOR` in a demo sends F8 (`W:1,INSPECTOR,
 W:1.5,S` screenshots it; autotest `inspector`). F8 works in release builds

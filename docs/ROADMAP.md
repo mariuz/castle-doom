@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- The menu view is a design too: `data/menu.castle-user-interface` holds
+  the black background, Doom's menu (`TDoomMenuScreen`), the Options
+  panel (the WAD / map / skill / volume rows of buttons and labels, the
+  own-WADs and save-transfer rows, the WAD and licence lines) and the
+  Phase 2 download line; `TViewMenu.Start` only assigns the handlers and
+  the run-time texts. The title, menu and Options screenshots are
+  pixel-identical to the code-built ones. Both views now come from
+  designs; the viewport and navigation stay in code.
 - The project opens in the CGE editor: the game's controls
   (`TDoomStatusBar`, `TDoomFontText`, `TDoomMenuScreen`, `TDoomAutomap`,
   `TDoomIntermission`, `TDoomFinale`, `TDoomWipe`, `TDoomWorldStatus`) are
@@ -542,7 +550,7 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **The menu view as a design** too: the title screen's `TDoomMenuScreen`, the options panel's buttons and labels, the WAD status lines (the play view is done, see above); then try the designs in the editor on Windows (the editor is not built in CI). | The whole UI editable in the editor. | `data/menu.castle-user-interface`, `GameViewMenu` | S-M |
+| **Try the designs in the CGE editor** on Windows (the editor is not built in CI): "Restart Editor (With Custom Components)", open `data/play.castle-user-interface` and `data/menu.castle-user-interface`, fix what the editor cannot show (the Doom controls render nothing without a WAD; a `Graphics`-less preview, e.g. a placeholder image, would help). | The editor workflow end to end. | the `Doom*` controls | S |
 | **A Doom map component for the editor**: a `TCastleTransform` descendant with published `Wad` and `Map` properties that builds the level geometry (and static billboards for the things) when placed in a design, so the editor's 3D view shows a Freedoom level with its lighting and the atlas. | Levels become inspectable without running the game; a showcase for CGE. | `DoomGeometry`, `DoomGraphics` behind a design-time component | M-L |
 | **Live thing inspection**: `Things` has 200+ entries, so sort them by state or distance, publish the target, the current sequence's name and tics left, and add a `SELECT:n` demo command (CGE's inspector can select a component) and the inspector's F9 auto-select for the thing under the crosshair. | Find the monster you are looking at. | `DoomActors`, `GameViewPlay` | S |
 | **Profiler sections**: wrap the map load stages (parse, geometry, atlas, things, music intro) and the per-tic phases in `Profiler.Start` / `Stop` so the inspector's Profiler tab and `Profiler.Summary` show them next to CGE's own; the `Perf:` lines stay. | One place for timings. | `GameViewPlay`, `DoomWorld` | S |
@@ -565,9 +573,10 @@ play.
 
 ## Suggested next three
 
-1. The menu view as a design (S-M, see Inspectability), finishing the
-   editor work the play view started; then a Doom map component for the
-   editor.
+1. A Doom map component for the editor (M-L, see Inspectability): a
+   transform that builds a level from a WAD inside a design, so the
+   editor's 3D view shows Freedoom maps; try the designs in the editor on
+   Windows first.
 2. Atlas mipmaps (S, see Presentation): sample the atlas with explicit
    gradients (`texture2DGradEXT` on WebGL 1, `textureGrad` elsewhere) so
    far floors and walls stop shimmering without the per-texture shapes.

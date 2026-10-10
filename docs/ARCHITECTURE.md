@@ -902,7 +902,12 @@ command line, creates both views and shows the menu.
 
 `TViewMenu` loads a WAD set (`TDoomWad`, `TDoomGraphics`, `TDoomSounds`,
 `TDoomMusic`), plays the title track and shows Doom's menu,
-`TDoomMenuScreen` (`doommenu.pas`). Like the status bar and the intermission
+`TDoomMenuScreen` (`doommenu.pas`). Its screen is the design
+`data/menu.castle-user-interface` (`DesignUrl`): the black background,
+the menu screen, the Options panel (a `TCastleVerticalGroup` of rows of
+`TCastleButton`s and `TCastleLabel`s named `ButtonPhase1`, `MapLabel`...)
+and the Phase 2 download line; `Start` takes them by name and assigns
+the click handlers and the run-time texts. Like the status bar and the intermission
 it composes a 320x200 `TRGBAlphaImage` (dimmed `TITLEPIC`, then `M_*`
 patches drawn with their offsets like `V_DrawPatch`) and shows it 4:3 with
 `SmoothScaling := false`; it is recomposed only when something changes (the

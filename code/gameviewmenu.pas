@@ -153,219 +153,63 @@ begin
   FFetchPwads := TStringList.Create;
   FFetchSlot := -1;
   FSkill := 2;
+  DesignUrl := 'castle-data:/menu.castle-user-interface';
 end;
 
 procedure TViewMenu.Start;
-var
-  Back: TCastleRectangleControl;
-  B: TCastleButton;
-  Row: TCastleHorizontalGroup;
-  Header: TCastleLabel;
+
+  procedure Click(const ButtonName: String; const Handler: TNotifyEvent);
+  begin
+    (DesignedComponent(ButtonName) as TCastleButton).OnClick := Handler;
+  end;
+
 begin
   inherited;
   if CmdSkill >= 0 then FSkill := CmdSkill;
 
-  Back := TCastleRectangleControl.Create(FreeAtStop);
-  Back.Name := 'Background';
-  Back.FullSize := true;
-  Back.Color := Black;
-  InsertFront(Back);
-
-  { Doom's menu over TITLEPIC, 320x200 shown 4:3 (sized in Update). }
-  FDoomMenu := TDoomMenuScreen.Create(FreeAtStop);
-  FDoomMenu.Name := 'DoomMenu';
-  FDoomMenu.Anchor(hpMiddle);
-  FDoomMenu.Anchor(vpMiddle);
+  { The whole screen is data/menu.castle-user-interface (a CGE editor
+    design): the black background, Doom's menu over TITLEPIC (320x200
+    shown 4:3, sized in Update), the Options panel (the WAD / map / skill
+    / volume picker, your own WADs, the save transfer, the WAD and
+    licence lines) and the Phase 2 download line. Only the handlers and
+    the run-time texts are set here. }
+  FDoomMenu := DesignedComponent('DoomMenu') as TDoomMenuScreen;
   FDoomMenu.OnAction := {$ifdef FPC}@{$endif} DoomMenuAction;
-  InsertFront(FDoomMenu);
-
-  { Options: the WAD / map / skill picker. }
-  FOptions := TCastleRectangleControl.Create(FreeAtStop);
-  FOptions.Name := 'OptionsPanel';
-  FOptions.FullSize := true;
-  FOptions.Color := Vector4(0.05, 0.02, 0.02, 0.92);
-  FOptions.Exists := false;
-  InsertFront(FOptions);
-
-  FButtons := TCastleVerticalGroup.Create(FreeAtStop);
-  FButtons.Name := 'OptionsButtons';
-  FButtons.Anchor(hpMiddle);
-  FButtons.Anchor(vpMiddle);
-  FButtons.Spacing := 10;
-  FButtons.Alignment := hpMiddle;
-  FOptions.InsertFront(FButtons);
-
-  Header := TCastleLabel.Create(FreeAtStop);
-  Header.Caption := 'CASTLE DOOM  -  Doom levels in Castle Game Engine';
-  Header.Color := Vector4(1, 0.3, 0.15, 1);
-  Header.FontSize := 30;
-  FButtons.InsertFront(Header);
-
-  Row := TCastleHorizontalGroup.Create(FreeAtStop);
-  Row.Spacing := 10;
-  FButtons.InsertFront(Row);
-
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'Freedoom Phase 1 (Doom 1 episodes)';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickPhase1;
-  Row.InsertFront(B);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'Freedoom Phase 2 (Doom 2 maps)';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickPhase2;
-  Row.InsertFront(B);
-
-  Row := TCastleHorizontalGroup.Create(FreeAtStop);
-  Row.Spacing := 10;
-  FButtons.InsertFront(Row);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := '<';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickPrevMap;
-  Row.InsertFront(B);
-  FMapLabel := TCastleLabel.Create(FreeAtStop);
-  FMapLabel.Color := White;
-  FMapLabel.FontSize := 22;
-  FMapLabel.Caption := 'E1M1';
-  Row.InsertFront(FMapLabel);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := '>';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickNextMap;
-  Row.InsertFront(B);
-
-  Row := TCastleHorizontalGroup.Create(FreeAtStop);
-  Row.Spacing := 10;
-  FButtons.InsertFront(Row);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := '<';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickPrevSkill;
-  Row.InsertFront(B);
-  FSkillLabel := TCastleLabel.Create(FreeAtStop);
-  FSkillLabel.Color := White;
-  FSkillLabel.FontSize := 22;
-  Row.InsertFront(FSkillLabel);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := '>';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickNextSkill;
-  Row.InsertFront(B);
-
+  FOptions := DesignedComponent('OptionsPanel') as TCastleRectangleControl;
+  FButtons := DesignedComponent('OptionsButtons') as TCastleVerticalGroup;
+  Click('ButtonPhase1', {$ifdef FPC}@{$endif} ClickPhase1);
+  Click('ButtonPhase2', {$ifdef FPC}@{$endif} ClickPhase2);
+  Click('ButtonPrevMap', {$ifdef FPC}@{$endif} ClickPrevMap);
+  Click('ButtonNextMap', {$ifdef FPC}@{$endif} ClickNextMap);
+  FMapLabel := DesignedComponent('MapLabel') as TCastleLabel;
+  Click('ButtonPrevSkill', {$ifdef FPC}@{$endif} ClickPrevSkill);
+  Click('ButtonNextSkill', {$ifdef FPC}@{$endif} ClickNextSkill);
+  FSkillLabel := DesignedComponent('SkillLabel') as TCastleLabel;
   { Volumes, the same settings as the F4 menu in the game. }
-  Row := TCastleHorizontalGroup.Create(FreeAtStop);
-  Row.Spacing := 10;
-  FButtons.InsertFront(Row);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := '<';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickSfxDown;
-  Row.InsertFront(B);
-  FSfxLabel := TCastleLabel.Create(FreeAtStop);
-  FSfxLabel.Color := White;
-  FSfxLabel.FontSize := 22;
-  Row.InsertFront(FSfxLabel);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := '>';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickSfxUp;
-  Row.InsertFront(B);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := '<';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickMusicDown;
-  Row.InsertFront(B);
-  FMusicLabel := TCastleLabel.Create(FreeAtStop);
-  FMusicLabel.Color := White;
-  FMusicLabel.FontSize := 22;
-  Row.InsertFront(FMusicLabel);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := '>';
-  B.FontSize := 22;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickMusicUp;
-  Row.InsertFront(B);
+  Click('ButtonSfxDown', {$ifdef FPC}@{$endif} ClickSfxDown);
+  Click('ButtonSfxUp', {$ifdef FPC}@{$endif} ClickSfxUp);
+  FSfxLabel := DesignedComponent('SfxLabel') as TCastleLabel;
+  Click('ButtonMusicDown', {$ifdef FPC}@{$endif} ClickMusicDown);
+  Click('ButtonMusicUp', {$ifdef FPC}@{$endif} ClickMusicUp);
+  FMusicLabel := DesignedComponent('MusicLabel') as TCastleLabel;
   UpdateVolumeLabels;
-
-  Row := TCastleHorizontalGroup.Create(FreeAtStop);
-  Row.Spacing := 10;
-  FButtons.InsertFront(Row);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'START  (Enter)';
-  B.FontSize := 26;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickStart;
-  Row.InsertFront(B);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'Back  (Esc)';
-  B.FontSize := 26;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickBack;
-  Row.InsertFront(B);
-
+  Click('ButtonStart', {$ifdef FPC}@{$endif} ClickStart);
+  Click('ButtonBack', {$ifdef FPC}@{$endif} ClickBack);
   { Your own WADs (desktop only: needs a native file dialog). }
-  Row := TCastleHorizontalGroup.Create(FreeAtStop);
-  Row.Spacing := 10;
-  FButtons.InsertFront(Row);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'Open IWAD...';
-  B.FontSize := 18;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickOpenIwad;
-  Row.InsertFront(B);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'Add PWAD...';
-  B.FontSize := 18;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickAddPwad;
-  Row.InsertFront(B);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'Last WADs';
-  B.FontSize := 18;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickLastWads;
-  B.Exists := UserConfig.GetValue('wads/iwad', '') <> '';
-  Row.InsertFront(B);
-  FContinueButton := TCastleButton.Create(FreeAtStop);
-  FContinueButton.Caption := 'Continue (quick save)';
-  FContinueButton.FontSize := 18;
+  Click('ButtonOpenIwad', {$ifdef FPC}@{$endif} ClickOpenIwad);
+  Click('ButtonAddPwad', {$ifdef FPC}@{$endif} ClickAddPwad);
+  Click('ButtonLastWads', {$ifdef FPC}@{$endif} ClickLastWads);
+  (DesignedComponent('ButtonLastWads') as TCastleButton).Exists := UserConfig.GetValue('wads/iwad', '') <> '';
+  FContinueButton := DesignedComponent('ButtonContinue') as TCastleButton;
   FContinueButton.OnClick := {$ifdef FPC}@{$endif} ClickContinue;
-  Row.InsertFront(FContinueButton);
-
   { Moving saves between computers / the web build (GameSaveBundle). }
-  Row := TCastleHorizontalGroup.Create(FreeAtStop);
-  Row.Spacing := 10;
-  FButtons.InsertFront(Row);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'Export saves...';
-  B.FontSize := 18;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickExportSaves;
-  Row.InsertFront(B);
-  B := TCastleButton.Create(FreeAtStop);
-  B.Caption := 'Import saves...';
-  B.FontSize := 18;
-  B.OnClick := {$ifdef FPC}@{$endif} ClickImportSaves;
-  Row.InsertFront(B);
-
-  FWadsLabel := TCastleLabel.Create(FreeAtStop);
-  FWadsLabel.Color := Vector4(0.8, 0.8, 0.8, 1);
-  FWadsLabel.FontSize := 16;
-  FWadsLabel.Alignment := hpMiddle;
-  FButtons.InsertFront(FWadsLabel);
-
-  FStatus := TCastleLabel.Create(FreeAtStop);
-  FStatus.Color := Vector4(0.8, 0.8, 0.8, 1);
-  FStatus.FontSize := 16;
-  FStatus.Anchor(hpMiddle);
-  FStatus.Anchor(vpBottom, 16);
-  FStatus.Alignment := hpMiddle;
-  FStatus.Caption := 'Freedoom (BSD licence) by the Freedoom project. Castle Game Engine https://castle-engine.io';
-  FOptions.InsertFront(FStatus);
+  Click('ButtonExportSaves', {$ifdef FPC}@{$endif} ClickExportSaves);
+  Click('ButtonImportSaves', {$ifdef FPC}@{$endif} ClickImportSaves);
+  FWadsLabel := DesignedComponent('WadsLabel') as TCastleLabel;
+  FStatus := DesignedComponent('StatusLabel') as TCastleLabel;
   UpdateSkillLabel;
-
   { Download progress of Freedoom Phase 2 (web), over the menu and Options. }
-  FFetchLabel := TCastleLabel.Create(FreeAtStop);
-  FFetchLabel.Color := Vector4(1, 0.8, 0.3, 1);
-  FFetchLabel.FontSize := 22;
-  FFetchLabel.Anchor(hpMiddle);
-  FFetchLabel.Anchor(vpBottom, 48);
-  FFetchLabel.Exists := false;
-  InsertFront(FFetchLabel);
+  FFetchLabel := DesignedComponent('FetchLabel') as TCastleLabel;
 
   if FNewGameRequested and (FWad <> nil) then
   begin

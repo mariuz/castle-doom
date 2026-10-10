@@ -1,0 +1,352 @@
+{
+  "$$ClassName": "TCastleUserInterface",
+  "Name": "MenuUi",
+  "FullSize": true,
+  "$Children": [
+    {
+      "$$ClassName": "TCastleRectangleControl",
+      "Name": "Background",
+      "FullSize": true,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 0.0,
+        "Green": 0.0,
+        "Blue": 0.0,
+        "Alpha": 1.0
+      }
+    },
+    {
+      "$$ClassName": "TDoomMenuScreen",
+      "Name": "DoomMenu",
+      "HorizontalAnchorParent": "hpMiddle",
+      "HorizontalAnchorSelf": "hpMiddle",
+      "VerticalAnchorParent": "vpMiddle",
+      "VerticalAnchorSelf": "vpMiddle"
+    },
+    {
+      "$$ClassName": "TCastleRectangleControl",
+      "Name": "OptionsPanel",
+      "FullSize": true,
+      "Exists": false,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 0.05,
+        "Green": 0.02,
+        "Blue": 0.02,
+        "Alpha": 0.92
+      },
+      "$Children": [
+        {
+          "$$ClassName": "TCastleVerticalGroup",
+          "Name": "OptionsButtons",
+          "Spacing": 10.0,
+          "Alignment": "hpMiddle",
+          "HorizontalAnchorParent": "hpMiddle",
+          "HorizontalAnchorSelf": "hpMiddle",
+          "VerticalAnchorParent": "vpMiddle",
+          "VerticalAnchorSelf": "vpMiddle",
+          "$Children": [
+            {
+              "$$ClassName": "TCastleLabel",
+              "Name": "Header",
+              "Text": [
+                "CASTLE DOOM  -  Doom levels in Castle Game Engine"
+              ],
+              "FontSize": 30.0,
+              "ColorPersistent": {
+                "$$ClassName": "TCastleColorPersistent",
+                "Red": 1.0,
+                "Green": 0.3,
+                "Blue": 0.15,
+                "Alpha": 1.0
+              }
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowWads",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonPhase1",
+                  "Caption": "Freedoom Phase 1 (Doom 1 episodes)",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonPhase2",
+                  "Caption": "Freedoom Phase 2 (Doom 2 maps)",
+                  "FontSize": 22.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowMap",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonPrevMap",
+                  "Caption": "<",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleLabel",
+                  "Name": "MapLabel",
+                  "Text": [
+                    "E1M1"
+                  ],
+                  "FontSize": 22.0,
+                  "ColorPersistent": {
+                    "$$ClassName": "TCastleColorPersistent",
+                    "Red": 1.0,
+                    "Green": 1.0,
+                    "Blue": 1.0,
+                    "Alpha": 1.0
+                  }
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonNextMap",
+                  "Caption": ">",
+                  "FontSize": 22.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowSkill",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonPrevSkill",
+                  "Caption": "<",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleLabel",
+                  "Name": "SkillLabel",
+                  "Text": [
+                    ""
+                  ],
+                  "FontSize": 22.0,
+                  "ColorPersistent": {
+                    "$$ClassName": "TCastleColorPersistent",
+                    "Red": 1.0,
+                    "Green": 1.0,
+                    "Blue": 1.0,
+                    "Alpha": 1.0
+                  }
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonNextSkill",
+                  "Caption": ">",
+                  "FontSize": 22.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowVolume",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonSfxDown",
+                  "Caption": "<",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleLabel",
+                  "Name": "SfxLabel",
+                  "Text": [
+                    ""
+                  ],
+                  "FontSize": 22.0,
+                  "ColorPersistent": {
+                    "$$ClassName": "TCastleColorPersistent",
+                    "Red": 1.0,
+                    "Green": 1.0,
+                    "Blue": 1.0,
+                    "Alpha": 1.0
+                  }
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonSfxUp",
+                  "Caption": ">",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonMusicDown",
+                  "Caption": "<",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleLabel",
+                  "Name": "MusicLabel",
+                  "Text": [
+                    ""
+                  ],
+                  "FontSize": 22.0,
+                  "ColorPersistent": {
+                    "$$ClassName": "TCastleColorPersistent",
+                    "Red": 1.0,
+                    "Green": 1.0,
+                    "Blue": 1.0,
+                    "Alpha": 1.0
+                  }
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonMusicUp",
+                  "Caption": ">",
+                  "FontSize": 22.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowStart",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonStart",
+                  "Caption": "START  (Enter)",
+                  "FontSize": 26.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonBack",
+                  "Caption": "Back  (Esc)",
+                  "FontSize": 26.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowOwnWads",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonOpenIwad",
+                  "Caption": "Open IWAD...",
+                  "FontSize": 18.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonAddPwad",
+                  "Caption": "Add PWAD...",
+                  "FontSize": 18.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonLastWads",
+                  "Caption": "Last WADs",
+                  "FontSize": 18.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonContinue",
+                  "Caption": "Continue (quick save)",
+                  "FontSize": 18.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowSaves",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonExportSaves",
+                  "Caption": "Export saves...",
+                  "FontSize": 18.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonImportSaves",
+                  "Caption": "Import saves...",
+                  "FontSize": 18.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleLabel",
+              "Name": "WadsLabel",
+              "Text": [
+                ""
+              ],
+              "FontSize": 16.0,
+              "ColorPersistent": {
+                "$$ClassName": "TCastleColorPersistent",
+                "Red": 0.8,
+                "Green": 0.8,
+                "Blue": 0.8,
+                "Alpha": 1.0
+              },
+              "Alignment": "hpMiddle"
+            }
+          ]
+        },
+        {
+          "$$ClassName": "TCastleLabel",
+          "Name": "StatusLabel",
+          "Text": [
+            "Freedoom (BSD licence) by the Freedoom project. Castle Game Engine https://castle-engine.io"
+          ],
+          "FontSize": 16.0,
+          "ColorPersistent": {
+            "$$ClassName": "TCastleColorPersistent",
+            "Red": 0.8,
+            "Green": 0.8,
+            "Blue": 0.8,
+            "Alpha": 1.0
+          },
+          "Alignment": "hpMiddle",
+          "HorizontalAnchorParent": "hpMiddle",
+          "HorizontalAnchorSelf": "hpMiddle",
+          "VerticalAnchorParent": "vpBottom",
+          "VerticalAnchorSelf": "vpBottom",
+          "TranslationPersistent": {
+            "$$ClassName": "TCastleVector2Persistent",
+            "X": 0.0,
+            "Y": 16.0
+          }
+        }
+      ]
+    },
+    {
+      "$$ClassName": "TCastleLabel",
+      "Name": "FetchLabel",
+      "Text": [
+        ""
+      ],
+      "FontSize": 22.0,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 1.0,
+        "Green": 0.8,
+        "Blue": 0.3,
+        "Alpha": 1.0
+      },
+      "Exists": false,
+      "HorizontalAnchorParent": "hpMiddle",
+      "HorizontalAnchorSelf": "hpMiddle",
+      "VerticalAnchorParent": "vpBottom",
+      "VerticalAnchorSelf": "vpBottom",
+      "TranslationPersistent": {
+        "$$ClassName": "TCastleVector2Persistent",
+        "X": 0.0,
+        "Y": 48.0
+      }
+    }
+  ]
+}
