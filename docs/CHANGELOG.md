@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.13.0 (2026-10-10)
 
 - V-sync and a frame rate cap (35, 60, 120, 144 FPS or none) on the
   desktop, in the title screen's Options and the in-game Video page.
