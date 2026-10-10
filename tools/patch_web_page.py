@@ -64,7 +64,7 @@ CRASH_NEW = """
       const lines = [];
       const log = console.log.bind(console);
       console.log = function (...args) {
-        lines.push(args.join(' '));
+        lines.push(args.join(' ').replace(/\\s+$/, ''));
         if (lines.length > 40) lines.shift();
         log(...args);
       };
