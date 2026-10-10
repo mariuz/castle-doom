@@ -56,7 +56,7 @@ procedure ApplyWebPads(const Pads: TWebPads; const Count: Integer);
 implementation
 
 uses SysUtils, Math,
-  {$ifdef WASI} Job.Js, CastleInternalJobWeb, CastleApplicationProperties, {$endif}
+  {$ifdef WASI} Job.Js, Job.Shared, CastleInternalJobWeb, CastleApplicationProperties, {$endif}
   CastleGameControllers, CastleInternalGameControllersExplicit, CastleVectors,
   CastleLog;
 
