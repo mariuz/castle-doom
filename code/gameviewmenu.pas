@@ -10,7 +10,7 @@ interface
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
   CastleDownload, CastleZip,
-  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked, GameSettings;
+  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked, DoomMapInfo, GameSettings;
 
 type
   TViewMenu = class(TCastleView)
@@ -292,10 +292,11 @@ begin
   end;
   if Copy(AutoTestMap, 1, 4) = 'MENU' then
   begin
+    { -file PWADs too (a UMAPINFO's episodes in MENUEPISODE / MENUKEYS). }
     if AutoTestMap = 'MENUDOOM2' then
-      LoadWads(Freedoom2, nil)
+      LoadWads(Freedoom2, CmdPwads)
     else
-      LoadWads(Freedoom1, nil);
+      LoadWads(Freedoom1, CmdPwads);
     AutoTestMenu;
     Exit;
   end;
@@ -530,6 +531,8 @@ begin
       Episodes := E;
   FreeAndNil(FStrings);
   FStrings := TDoomStrings.Create(FWad);
+  { UMAPINFO episodes join the menu (DoomMenu.SetupEpisodes). }
+  LoadMapInfo(FWad);
   FDoomMenu.Setup(FGraphics, FSounds, Episodes, FStrings);
   FDoomMenu.Skill := FSkill;
   RefreshSlots;
@@ -568,10 +571,10 @@ begin
       begin
         FSkill := FDoomMenu.Skill;
         UpdateSkillLabel;
-        { G_DeferedInitNew: ExM1 for the chosen episode, else the first map. }
-        if FDoomMenu.Episode > 0 then
-          MapName := Format('E%dM1', [FDoomMenu.Episode])
-        else
+        { G_DeferedInitNew: the chosen episode's first map (ExM1, or a
+          UMAPINFO episode's), else MAP01. }
+        MapName := FDoomMenu.EpisodeMap;
+        if MapName = '' then
           MapName := 'MAP01';
         I := FWad.MapNames.IndexOf(MapName);
         if I < 0 then I := 0;

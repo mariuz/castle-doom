@@ -42,6 +42,9 @@ type
     FPromptAction: TDoomMenuAction;
     FStrings: TDoomStrings;
     FEpisodes: Integer;
+    { The episode page: an M_EPIn patch or 'T:NAME' text per episode, and
+      the map each one starts. }
+    FEpisodeItems, FEpisodeMaps: array of String;
     FSlots: array [1..6] of String;
     { The saves' own names (FSlots may show more, like the time). }
     FSlotNames: array [1..6] of String;
@@ -73,11 +76,12 @@ type
     procedure StartPrompt(const Text: String; const Action: TDoomMenuAction);
     procedure Move(const Delta: Integer);
     procedure Back;
+    procedure SetupEpisodes(const VanillaCount: Integer);
     function DoomPoint(const ScreenPos: TVector2; out DX, DY: Single): Boolean;
     function ItemAt(const DX, DY: Single): Integer;
   public
     { Results of the last action. }
-    Episode: Integer; { 1..4, 0 for Doom 2 (no episode menu) }
+    Episode: Integer; { 1.., 0 when there is no episode menu (Doom 2) }
     Skill: Integer;   { 0..4 }
     Slot: Integer;    { 1..6 }
     OnAction: TDoomMenuEvent;
@@ -107,6 +111,8 @@ type
     SaveName: String;
     constructor Create(AOwner: TComponent); override;
     { Set up for a WAD: graphics, sounds, how many episodes (0 = Doom 2). }
+    { The map the chosen Episode starts ('' for none: Doom 2's MAP01). }
+    function EpisodeMap: String;
     procedure Setup(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds; const AEpisodes: Integer;
       const AStrings: TDoomStrings);
     { Descriptions shown on the load page ('' = empty slot). }
@@ -139,7 +145,7 @@ implementation
 
 uses SysUtils, Math,
   CastleRectangles, CastleUtils,
-  DoomHud, DoomFont, CastleComponentSerialize;
+  DoomHud, DoomFont, DoomMapInfo, CastleComponentSerialize;
 
 const
   LineHeight = 16;
@@ -164,13 +170,58 @@ begin
   FDirty := true;
 end;
 
+{ Vanilla's episodes (ExM1 with M_EPIn), then UMAPINFO's: "episode =
+  clear" drops the ones before it, each "episode = patch, name, key"
+  adds the entry's map, shown as its patch or else its name. }
+procedure TDoomMenuScreen.SetupEpisodes(const VanillaCount: Integer);
+var
+  I, N: Integer;
+  E: TMapInfoEntry;
+begin
+  SetLength(FEpisodeItems, VanillaCount);
+  SetLength(FEpisodeMaps, VanillaCount);
+  for I := 0 to VanillaCount - 1 do
+  begin
+    FEpisodeItems[I] := 'M_EPI' + IntToStr(I + 1);
+    FEpisodeMaps[I] := Format('E%dM1', [I + 1]);
+  end;
+  for I := 0 to MapInfoEntries.Count - 1 do
+  begin
+    E := MapInfoEntries[I];
+    if not E.EpisodeSet then Continue;
+    if E.EpisodeClear then
+    begin
+      SetLength(FEpisodeItems, 0);
+      SetLength(FEpisodeMaps, 0);
+      Continue;
+    end;
+    N := Length(FEpisodeItems);
+    SetLength(FEpisodeItems, N + 1);
+    SetLength(FEpisodeMaps, N + 1);
+    if (E.EpisodePatch <> '') and (FGraphics <> nil) and (FGraphics.Patch(E.EpisodePatch) <> nil) then
+      FEpisodeItems[N] := E.EpisodePatch
+    else
+      FEpisodeItems[N] := 'T:' + UpperCase(E.EpisodeName);
+    FEpisodeMaps[N] := E.MapName;
+  end;
+  FEpisodes := Length(FEpisodeItems);
+end;
+
+function TDoomMenuScreen.EpisodeMap: String;
+begin
+  if (Episode >= 1) and (Episode <= Length(FEpisodeMaps)) then
+    Result := FEpisodeMaps[Episode - 1]
+  else
+    Result := '';
+end;
+
 procedure TDoomMenuScreen.Setup(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds; const AEpisodes: Integer;
   const AStrings: TDoomStrings);
 begin
   FStrings := AStrings;
   FGraphics := AGraphics;
   FSounds := ASounds;
-  FEpisodes := AEpisodes;
+  SetupEpisodes(AEpisodes);
   FPage := mpMain;
   FPrompt := false;
   { m_menu.c: Doom 2 has no Read This! in the main menu (F1 still works). }
@@ -334,7 +385,7 @@ const
 begin
   case Page of
     mpMain: Result := FMainItems[Index];
-    mpEpisode: Result := 'M_EPI' + IntToStr(Index + 1);
+    mpEpisode: Result := FEpisodeItems[Index];
     mpSkill: Result := SkillItems[Index];
     mpOptions: Result := OptionItems[Index];
     mpSound: Result := SoundItems[Index];

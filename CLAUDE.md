@@ -360,7 +360,12 @@ story text after the intermission); E1M3 skips the intermission and
 ends with the bunny. With `-file` the log says `MapInfo: UMAPINFO: 2
 maps` and a summary line per map; autotest `umapinfo`, unit test
 `TestUMapInfo` (which reloads plain Freedoom at the end: the entries are
-global).
+global). It also adds a fifth New Game episode, "TEST EPISODE" in text,
+starting E1M3 (`--autotest MENUKEYS p -file ... --menukeys
+"E,D,D,D,D,E,E"`; `MENU*` autotests load `-file` PWADs too), and makes
+the last imp's death on E1M1 lower sector 98 to -124 (`BossDeath: ...
+UMAPINFO special 23 on tag 1`); autotests `umapinfo-episode`,
+`umapinfo-boss`.
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

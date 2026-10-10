@@ -148,6 +148,17 @@ begin
     AssertTrue('label clear', List[0].LabelClear);
     AssertEquals('text lines', 'a' + #10 + 'b', List[0].InterText);
     AssertTrue('endgame false', List[0].EndGame = meNo);
+    List.Clear;
+    ParseUMapInfo('MAP E2M1 { episode = "M_EPI9", "Fifth", "f" bossaction = BaronOfHell, 23, 666' + LineEnding +
+      '  bossaction = 16, 11, 0 } MAP E3M1 { episode = clear bossaction = clear }', List, Errors);
+    AssertEquals('episode patch', 'M_EPI9', List[0].EpisodePatch);
+    AssertEquals('episode name', 'Fifth', List[0].EpisodeName);
+    AssertEquals('boss actions', 2, Length(List[0].BossActions));
+    AssertEquals('baron by class name', 3003, List[0].BossActions[0].ThingType);
+    AssertEquals('cyberdemon by number', 16, List[0].BossActions[1].ThingType);
+    AssertEquals('special', 11, List[0].BossActions[1].Special);
+    AssertTrue('episode clear', List[1].EpisodeClear);
+    AssertTrue('boss actions cleared', List[1].BossActionsSet and (Length(List[1].BossActions) = 0));
   finally
     FreeAndNil(Errors);
     FreeAndNil(List);

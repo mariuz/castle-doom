@@ -3,11 +3,12 @@
   intermission's name picture, music, sky, par time, the next and secret
   maps, the story text after a map (with its backdrop and music), the end
   of the game (a picture, the bunny or the cast call) and skipping the
-  intermission. LoadMapInfo reads the lump of the loaded WADs (the last
-  one wins, like any lump); DoomWorld, DoomDehacked, DoomMusic,
+  intermission, new episodes for the New Game menu (DoomMenu) and boss
+  actions (what the death of the last monster of a type does,
+  DoomWorld.BossDeath). LoadMapInfo reads the lump of the loaded WADs
+  (the last one wins, like any lump); DoomWorld, DoomDehacked, DoomMusic,
   DoomGraphics, DoomIntermission and DoomFinale ask MapInfoFor before
-  their vanilla tables. The "episode" and "bossaction" keys are read but
-  not used yet. }
+  their vanilla tables. }
 unit DoomMapInfo;
 
 interface
@@ -16,6 +17,12 @@ uses Classes, Generics.Collections, DoomWad;
 
 type
   TMapInfoEndGame = (meUnset, meNo, meYes);
+
+  { "bossaction = BaronOfHell, 23, 666": when the last monster of the
+    THINGS type ThingType dies, line special Special acts on Tag. }
+  TMapInfoBossAction = record
+    ThingType, Special, Tag: Integer;
+  end;
 
   TMapInfoEntry = class
     MapName: String;
@@ -33,6 +40,15 @@ type
     EndPic: String;
     EndBunny, EndCast: Boolean;
     NoIntermission: Boolean;
+    { "episode = patch, name, key": this map starts a New Game episode;
+      EpisodeClear ("episode = clear") drops the episodes defined before
+      (vanilla's included). }
+    EpisodeSet, EpisodeClear: Boolean;
+    EpisodePatch, EpisodeName, EpisodeKey: String;
+    { Boss actions replace the vanilla ones of the map once any is given
+      ("bossaction = clear" gives none). }
+    BossActionsSet: Boolean;
+    BossActions: array of TMapInfoBossAction;
     { Text for the key (the levelname... value), for the log and tests. }
     function Summary: String;
   end;
@@ -49,6 +65,13 @@ procedure LoadMapInfo(const AWad: TDoomWad);
 
 { The entry for this map (E1M1, MAP01...), nil when UMAPINFO has none. }
 function MapInfoFor(const MapName: String): TMapInfoEntry;
+
+{ All entries, in the lump's order (for the episodes). }
+function MapInfoEntries: TMapInfoList;
+
+{ The THINGS type of a ZDoom class name used by bossaction (BaronOfHell
+  -> 3003), 0 for an unknown one; a number is taken as a type. }
+function MapInfoThingType(const ClassName: String): Integer;
 
 { The next map by UMAPINFO: True with Next set when the entry names one
   ("nextsecret" for the secret exit, else "next"). }
@@ -250,7 +273,32 @@ var
     else if SameText(Key, 'endpic') then E.EndPic := UpperCase(First)
     else if SameText(Key, 'endbunny') then E.EndBunny := AsBool
     else if SameText(Key, 'endcast') then E.EndCast := AsBool
-    else if SameText(Key, 'nointermission') then E.NoIntermission := AsBool;
+    else if SameText(Key, 'nointermission') then E.NoIntermission := AsBool
+    else if SameText(Key, 'episode') then
+    begin
+      E.EpisodeSet := true;
+      if IsClear then E.EpisodeClear := true else
+      begin
+        E.EpisodeClear := false;
+        E.EpisodePatch := UpperCase(First);
+        if Values.Count > 1 then E.EpisodeName := Values[1];
+        if Values.Count > 2 then E.EpisodeKey := Values[2];
+      end;
+    end
+    else if SameText(Key, 'bossaction') then
+    begin
+      E.BossActionsSet := true;
+      if IsClear then
+        SetLength(E.BossActions, 0)
+      else if (Values.Count >= 3) and (MapInfoThingType(Values[0]) > 0) then
+      begin
+        SetLength(E.BossActions, Length(E.BossActions) + 1);
+        E.BossActions[High(E.BossActions)].ThingType := MapInfoThingType(Values[0]);
+        E.BossActions[High(E.BossActions)].Special := StrToIntDef(Values[1], 0);
+        E.BossActions[High(E.BossActions)].Tag := StrToIntDef(Values[2], 0);
+      end else
+        Error('bossaction needs a known thing, a special and a tag');
+    end;
     { Other keys (author, episode, bossaction, exitpic, enterpic...) are
       accepted and ignored. }
   end;
@@ -368,6 +416,28 @@ begin
     if Entries[I].MapName = N then
       Exit(Entries[I]);
   Result := nil;
+end;
+
+function MapInfoEntries: TMapInfoList;
+begin
+  Result := Entries;
+end;
+
+function MapInfoThingType(const ClassName: String): Integer;
+const
+  Names: array [0..19] of String = ('ZombieMan', 'ShotgunGuy', 'ChaingunGuy', 'DoomImp', 'Demon',
+    'Spectre', 'LostSoul', 'Cacodemon', 'HellKnight', 'BaronOfHell', 'Arachnotron', 'PainElemental',
+    'Revenant', 'Fatso', 'Archvile', 'SpiderMastermind', 'Cyberdemon', 'WolfensteinSS',
+    'CommanderKeen', 'BossBrain');
+  Types: array [0..19] of Integer = (3004, 9, 65, 3001, 3002, 58, 3006, 3005, 69, 3003, 68, 71,
+    66, 67, 64, 7, 16, 84, 72, 88);
+var
+  I: Integer;
+begin
+  for I := 0 to High(Names) do
+    if SameText(Names[I], ClassName) then
+      Exit(Types[I]);
+  Result := StrToIntDef(ClassName, 0);
 end;
 
 function MapInfoNext(const MapName: String; const Secret: Boolean; out Next: String): Boolean;

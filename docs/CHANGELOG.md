@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- UMAPINFO episodes and boss actions: a PWAD can add episodes to the
+  New Game menu (or replace them) and say what the death of the last
+  monster of a type does on a map.
 - CI compares 28 of the autotests' screenshots with stored references,
   so a rendering change in the menus, the palette effects or a map view
   fails the build.

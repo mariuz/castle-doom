@@ -3736,12 +3736,49 @@ end;
 procedure TDoomWorld.BossDeath(const A: TDoomActor);
 var
   O: TDoomActor;
-  Num, S, Tag: Integer;
+  Num, S, Tag, I, Orig, OrigTag: Integer;
   MapName: String;
   Action: String;
+  Info: TMapInfoEntry;
+  Act: TActivation;
+  Matched, Done: Boolean;
 begin
   Num := A.Info^.Num;
   MapName := FMap.Name;
+  Info := MapInfoFor(MapName);
+  if (Info <> nil) and Info.BossActionsSet then
+  begin
+    { UMAPINFO's boss actions replace the vanilla ones of this map: when
+      the last monster of the type dies, the line special acts on the tag
+      (run through line 0 with that special and tag, like LINE:n:special). }
+    Matched := false;
+    for I := 0 to High(Info.BossActions) do
+      if Info.BossActions[I].ThingType = Num then
+        Matched := true;
+    if not Matched then Exit;
+    for O in FActors do
+      if (O <> A) and (not O.Removed) and (O.Info^.Num = Num) and
+         (O.State in [asIdle, asChase, asAttack, asPain]) then
+        Exit;
+    if Length(FMap.Linedefs) = 0 then Exit;
+    for I := 0 to High(Info.BossActions) do
+      if Info.BossActions[I].ThingType = Num then
+      begin
+        WritelnLog('BossDeath', '%s: all %s dead, UMAPINFO special %d on tag %d', [MapName, A.Info^.Sprite,
+          Info.BossActions[I].Special, Info.BossActions[I].Tag]);
+        Orig := FMap.Linedefs[0].Special;
+        OrigTag := FMap.Linedefs[0].Tag;
+        FMap.Linedefs[0].Special := Info.BossActions[I].Special;
+        FMap.Linedefs[0].Tag := Info.BossActions[I].Tag;
+        Done := false;
+        for Act := Low(TActivation) to High(TActivation) do
+          if not Done then
+            Done := ApplySpecial(0, Act, false);
+        FMap.Linedefs[0].Special := Orig;
+        FMap.Linedefs[0].Tag := OrigTag;
+      end;
+    Exit;
+  end;
   Action := '';
   Tag := 666;
   if FWad.IsDoom2 then

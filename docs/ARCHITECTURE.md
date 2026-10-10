@@ -854,8 +854,13 @@ one) or `endgame = true`, `MapInfoDecidesFinale` is true: the text comes
 after the intermission in Doom 1 too, on `interbackdrop` (a flat) with
 `intermusic`, then the game ends with `endpic`, `endbunny` or `endcast`,
 or goes on to the next map. `endgame = false` turns a Doom 1 ExM8 into
-an ordinary exit, `nointermission` skips the stats screen. The episode
-menu (`episode`), `bossaction` and patch backdrops are not supported.
+an ordinary exit, `nointermission` skips the stats screen. `episode`
+entries extend (or, after `episode = clear`, replace) the New Game
+episode list (`TDoomMenuScreen.SetupEpisodes`, built after vanilla's
+ExM1 / `M_EPIn` episodes; a missing patch shows the name as text) and
+`EpisodeMap` gives the start map. `bossaction` entries replace a map's
+vanilla `BossDeath` table: the last monster of the type runs the line
+special on the tag through line 0. Patch backdrops are not supported.
 
 The texts are not in Doom's WADs but in the executable; Freedoom puts its
 own (BSD-licensed) story, background flats and cast names in a `DEHACKED`

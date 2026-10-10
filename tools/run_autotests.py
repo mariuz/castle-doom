@@ -190,9 +190,25 @@ TESTS = [
      'W:0.2,KEY:RIGHT,KEY:RIGHT,KEY:DOWN,KEY:RIGHT,W:0.2,S,KEY:ESCAPE,KEY:ESCAPE,KEY:ESCAPE,W:0.3,Q',
      [r'Settings: Video: field of view 100, window, UI scale 110%'], [],
      lambda config: check_video(config, 100, 110)),
+    # UMAPINFO episodes and boss actions: New Game's fifth (text) episode
+    # starts E1M3; killing E1M1's imps lowers sector 98 (tag 1, special 23).
+    ('umapinfo-episode', 'MENUKEYS', 'W:1,S,Q', [r'Load: E1M3: map parsed', r'Message: Third Test'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad'),
+      '--menukeys', 'E,D,D,D,D,E,E'], None),
+    ('umapinfo-boss', 'E1M1', 'Y,W:0.5,D,W:4,SAVE:1,Q',
+     [r'BossDeath: E1M1: all TROO dead, UMAPINFO special 23 on tag 1'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad')],
+     lambda config: check_floor(config, 98, -124)),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
+
+
+def check_floor(config, sector, height):
+    with open(os.path.join(config, 'castle-doom', 'save1.json')) as f:
+        save = json.load(f)
+    assert abs(save['sectorFloor'][sector] - height) < 0.5, \
+        'sector %d floor %s, expected %s' % (sector, save['sectorFloor'][sector], height)
 
 
 def check_video(config, fov, ui_scale):
