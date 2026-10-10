@@ -1082,6 +1082,12 @@ there is no writable file system.
 
 ## 15. Testing without a human
 
+`tools/run_autotests.py` also compares 28 still screenshots with the
+golden references in `tools/golden/` (320x180, from CI's software GL;
+`--update-golden` rewrites them from a run's output directory): more
+than 1.5 % of the pixels off by more than 40 fails the `golden` row and
+leaves `golden-diff-NAME.png`.
+
 The game can drive itself for smoke tests and screenshots:
 
 ```

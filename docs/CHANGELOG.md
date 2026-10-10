@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- CI compares 28 of the autotests' screenshots with stored references,
+  so a rendering change in the menus, the palette effects or a map view
+  fails the build.
+
 ## v0.9.0 (2026-10-10)
 
 - Video options in the game: Esc -> Options -> Video sets the field of

@@ -59,7 +59,16 @@ run under `xvfb-run -a -s "-screen 0 1280x800x24" ./castle-doom --autotest ...`
 (the CI `autotest` job does exactly this under `xvfb-run`): each test in
 its own `XDG_CONFIG_HOME`, failing on exceptions, missing log lines or
 wrong save contents. Add a test there when a feature gets a demo recipe
-below.
+below. It then compares the screenshots listed in `GOLDEN` with
+`tools/golden/` (row `golden`; needs Pillow, CI installs `python3-pil`).
+A change that alters one of those pictures on purpose needs new
+references: download CI's `autotest-output` artifact of the change
+(`gh api repos/mariuz/castle-doom/actions/runs/RUN/artifacts`, then
+`.../actions/artifacts/ID/zip`), unzip it and run `python3 -c "import
+sys; sys.argv=['x']; sys.path.insert(0,'tools'); import run_autotests as r;
+r.golden_compare('DIR', update=True)"` (or the harness with
+`--update-golden`), so the references stay CI's own rendering; a local
+xvfb run matches them too.
 
 Unit tests (FPCUnit, no window, about 20 s, 21 cases) cover the parsers,
 every node format and both music synthesizers:

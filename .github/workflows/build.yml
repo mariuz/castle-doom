@@ -182,7 +182,7 @@ jobs:
         timeout-minutes: 10
         run: |
           sudo apt-get update
-          sudo apt-get install -y fpc libgtk-3-dev libgtk2.0-dev libopenal1 libpng-dev xvfb libgl1-mesa-dri glbsp
+          sudo apt-get install -y fpc libgtk-3-dev libgtk2.0-dev libopenal1 libpng-dev xvfb libgl1-mesa-dri glbsp python3-pil
 
       - name: Build the Castle Game Engine build tool (snapshot)
         timeout-minutes: 10

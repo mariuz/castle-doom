@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Golden screenshots in CI: `tools/run_autotests.py` compares 28 of the
+  autotests' screenshots (the menus, the title and Read This! pages,
+  the Controls page, the map component, the palette effects, fuzz, the
+  node formats, the in-game menus, Boom and UMAPINFO maps...) with
+  320x180 references in `tools/golden/`, made from CI's own screenshots
+  (`--update-golden`). A screenshot fails when more than 1.5 % of its
+  pixels differ by more than 40 in a channel, which software GL's small
+  run-to-run differences (at most 0.6 %, the FPS text) stay under; the
+  failure writes `golden-diff-NAME.png`, which CI uploads with the rest.
+
 - Video options in the game: Doom's in-game Options page has a "Video"
   item (the HU font, as Doom has no patch for it) opening a Video page
   in the style of the sound page: field of view and UI scale
@@ -670,18 +680,18 @@ play.
 | **V-sync and a frame rate cap**: the video options are on the title screen and in the game (see above); v-sync and a frame limit are not offered. | Smoother play on high refresh screens, less power. | `GameSettings` | S |
 | **Gamepad button rebinding and more bindable actions**: keys are rebindable (see above); the gamepad layout is fixed, and weapon selection, the hotkeys (F, M, J...) and the mouse buttons are not bindable yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameGamepad` | S-M |
 | **The rest of UMAPINFO, and ZDoom MAPINFO**: UMAPINFO's per-map keys are done (see above); its `episode` entries for the New Game menu, `bossaction`, patch backdrops, `exitpic` / `enterpic`, and the level name drawn as text on the intermission when there is no `levelpic` are not; nor is ZDoom's MAPINFO syntax. | PWADs with new episodes and boss maps. | `DoomMapInfo`, `DoomMenu`, `DoomIntermission` | M |
-| **Golden screenshots in CI**: compare the autotests' PNGs with stored references (a tolerance for software GL), failing on a changed frame. | Rendering regressions are caught by eye today. | `tools/run_autotests.py`, `build.yml` | M |
+| **More golden screenshots**: 28 still screenshots are compared (see above); fights, moving players and timed animations vary between runs, so they would need a fixed frame time in autotests (step the world by whole tics per frame) before they can be compared too. | Cover the rendering of monsters and effects. | `GameViewPlay` (autotest timing), `tools/run_autotests.py` | M |
 | **Offline web build**: a service worker caching the page, the wasm and the data zip, so the Pages site works offline after one visit. | A big first download, then instant starts. | `web.yml`, `pages/` | S-M |
 | **Crash reporting in release builds**: catch the top-level exception, write the log path and the last 50 lines to a dialog (desktop) or the page (web). | Users can report what happened. | `GameInitialize` | S |
 
 ## Suggested next three
 
-1. Golden screenshots in CI (M, see Other suggested improvements):
-   compare the autotests' PNGs with stored references.
-2. UMAPINFO episodes and boss actions (M, see Other suggested
+1. UMAPINFO episodes and boss actions (M, see Other suggested
    improvements): new episodes in the New Game menu, `bossaction`.
-3. Offline web build (S-M, see Other suggested improvements): a service
+2. Offline web build (S-M, see Other suggested improvements): a service
    worker caching the page, the wasm and the data.
+3. Crash reporting in release builds (S, see Other suggested
+   improvements): the log's last lines in a dialog or on the page.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

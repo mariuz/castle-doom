@@ -9,6 +9,15 @@ saves and settings never leak between tests or into the developer's own.
 A test fails when the game exits with an error, logs an exception, misses an
 expected log line, or a check on its saved game fails. Logs and screenshots
 end up in the output directory (CI keeps them as an artifact).
+
+Golden screenshots: the screenshots named in GOLDEN are compared with the
+references in tools/golden/ (320x180 PNGs, scaled down from CI's own
+1600x900 screenshots, so the comparison tolerates software GL's small
+differences and the FPS text); a screenshot fails when more than
+GOLDEN_MAX_CHANGED of its pixels differ by more than GOLDEN_PIXEL in some
+channel, and writes golden-diff-NAME.png next to it. Needs Pillow (CI
+installs python3-pil); without it the comparison is skipped.
+    run_autotests.py EXE OUT --update-golden     # write OUT's screenshots as references
 """
 
 import json
@@ -208,6 +217,58 @@ def check_log_filtered(config):
         assert not re.search(rx, log, re.M), 'filtered category still logged: %s' % rx
 
 
+GOLDEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'golden')
+GOLDEN_SIZE = (320, 180)
+GOLDEN_PIXEL = 40
+GOLDEN_MAX_CHANGED = 0.015
+# Screenshots that come out the same on every run (menus, still views,
+# map loads): the ones of fights, moving players or timed animations vary.
+GOLDEN = [
+    'menu_menu.png', 'title-pages_menutitle.png', 'read-this_menureadthis.png',
+    'controls-page_menucontrols.png', 'map-component_design.png',
+    'palette_1.png', 'palette_2.png', 'palette_3.png', 'fuzz_1.png', 'fuzz_2.png',
+    'glbsp-v2_1.png', 'glbsp-v5_1.png', 'boom-lumps_1.png', 'umapinfo_1.png',
+    'click-prompt_1.png', 'door-crush_1.png', 'ingame-options_1.png', 'ingame-options_2.png',
+    'ingame-save-load_1.png', 'ingame-save-load_2.png', 'typed-save-name_1.png',
+    'pointer-lock-pause_1.png', 'texture-memory_1.png', 'video-menu_1.png',
+    'video-settings_1.png', 'settings-1_1.png', 'phase2-download_1.png', 'arch-vile_1.png',
+]
+
+
+def golden_compare(out, update=False):
+    """Compare OUT's golden screenshots with tools/golden (or write them).
+    Returns a list of (name, problem) for the ones that differ."""
+    try:
+        from PIL import Image, ImageChops
+    except ImportError:
+        print('golden screenshots skipped (no Pillow)')
+        return []
+    problems = []
+    for name in GOLDEN:
+        shot = os.path.join(out, name)
+        ref = os.path.join(GOLDEN_DIR, name)
+        if not os.path.exists(shot):
+            continue  # its test did not run
+        small = Image.open(shot).convert('RGB').resize(GOLDEN_SIZE, Image.BILINEAR)
+        if update:
+            os.makedirs(GOLDEN_DIR, exist_ok=True)
+            small.save(ref, optimize=True)
+            continue
+        if not os.path.exists(ref):
+            problems.append((name, 'no reference in tools/golden'))
+            continue
+        diff = ImageChops.difference(small, Image.open(ref).convert('RGB'))
+        r, g, b = diff.split()
+        worst = ImageChops.lighter(ImageChops.lighter(r, g), b)
+        hist = worst.histogram()
+        changed = sum(hist[GOLDEN_PIXEL + 1:]) / float(GOLDEN_SIZE[0] * GOLDEN_SIZE[1])
+        if changed > GOLDEN_MAX_CHANGED:
+            worst.point(lambda v: 255 if v > GOLDEN_PIXEL else 0).save(
+                os.path.join(out, 'golden-diff-' + name))
+            problems.append((name, '%.1f%% of the pixels changed (golden-diff-%s)' % (100 * changed, name)))
+    return problems
+
+
 def run_game(exe, out, name, mapname, demo, extra, config):
     args = [exe, '--autotest', mapname, os.path.join(out, name)]
     if demo:
@@ -334,7 +395,8 @@ def main():
         print(__doc__)
         return 2
     exe, out = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
-    only = sys.argv[3:]
+    only = [a for a in sys.argv[3:] if not a.startswith('--')]
+    update_golden = '--update-golden' in sys.argv[3:]
     os.makedirs(out, exist_ok=True)
     results = []
     for test in TESTS:
@@ -362,6 +424,13 @@ def main():
         results.append(('settings', problems, secs))
         print('%-16s %s (%.0f s)%s' % ('settings', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
+    golden = golden_compare(out, update_golden)
+    if update_golden:
+        print('golden screenshots written to %s' % GOLDEN_DIR)
+    else:
+        results.append(('golden', ['%s: %s' % g for g in golden], 0))
+        print('%-16s %s%s' % ('golden', 'FAIL' if golden else 'ok',
+                              ''.join('\n    %s: %s' % g for g in golden)), flush=True)
     failed = [r for r in results if r[1]]
     summary = os.environ.get('GITHUB_STEP_SUMMARY')
     if summary:
