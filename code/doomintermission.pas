@@ -51,7 +51,7 @@ function ParTime(const MapName: String; const IsDoom2: Boolean): Integer;
 
 implementation
 
-uses SysUtils, Math,
+uses SysUtils, Math, DoomMapInfo,
   CastleVectors, CastleUIControls,
   DoomHud, DoomDehacked, CastleComponentSerialize;
 
@@ -67,8 +67,12 @@ const
 function ParTime(const MapName: String; const IsDoom2: Boolean): Integer;
 var
   E, M: Integer;
+  Info: TMapInfoEntry;
 begin
-  { A DeHackEd [PARS] section (Freedoom has its own times) wins. }
+  { UMAPINFO's partime, then a DeHackEd [PARS] section (Freedoom has its
+    own times). }
+  Info := MapInfoFor(MapName);
+  if (Info <> nil) and Info.ParTimeSet then Exit(Info.ParTime);
   if DehackedParTime(MapName, Result) then Exit;
   Result := 0;
   if IsDoom2 then
@@ -199,7 +203,16 @@ end;
 function TDoomIntermission.LevelNamePatch(const MapName: String): TDoomImage;
 var
   E, M: Integer;
+  Info: TMapInfoEntry;
 begin
+  { UMAPINFO: its levelpic; a renamed level without one shows no picture
+    (the vanilla one would name another level). }
+  Info := MapInfoFor(MapName);
+  if Info <> nil then
+  begin
+    if Info.LevelPic <> '' then Exit(FGraphics.Patch(Info.LevelPic));
+    if Info.LevelName <> '' then Exit(nil);
+  end;
   if FIsDoom2 then
     Result := FGraphics.Patch(Format('CWILV%2.2d', [StrToIntDef(Copy(MapName, 4, 2), 1) - 1]))
   else

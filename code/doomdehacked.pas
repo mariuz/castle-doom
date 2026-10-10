@@ -80,7 +80,7 @@ type
 
 implementation
 
-uses SysUtils, Math, Generics.Collections, CastleLog, DoomThings, DoomStates;
+uses SysUtils, Math, Generics.Collections, CastleLog, DoomThings, DoomStates, DoomMapInfo;
 
 var
   DehFileNames, DehFileTexts: TStringList;
@@ -588,7 +588,21 @@ end;
 function TDoomStrings.LevelName(const MapName: String; const IsDoom2: Boolean): String;
 var
   N: Integer;
+  Info: TMapInfoEntry;
 begin
+  { UMAPINFO: "label: levelname" (the map lump's name without a label,
+    only the level name with "label = clear"). }
+  Info := MapInfoFor(MapName);
+  if (Info <> nil) and (Info.LevelName <> '') then
+  begin
+    if Info.LabelClear then
+      Result := Info.LevelName
+    else if Info.LabelSet then
+      Result := Info.LabelText + ': ' + Info.LevelName
+    else
+      Result := UpperCase(MapName) + ': ' + Info.LevelName;
+    Exit;
+  end;
   if IsDoom2 and (Copy(MapName, 1, 3) = 'MAP') then
   begin
     N := StrToIntDef(Copy(MapName, 4, 2), 0);

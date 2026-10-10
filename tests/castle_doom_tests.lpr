@@ -19,7 +19,7 @@ program castle_doom_tests;
 
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
-  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameLogFilter;
+  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale;
 
 function DataPath(const Name: String): String;
 begin
@@ -41,6 +41,7 @@ type
     procedure TestPhase2;
     procedure TestBoomLumps;
     procedure TestLogFilter;
+    procedure TestUMapInfo;
   end;
 
   TTestMap = class(TTestCase)
@@ -115,6 +116,70 @@ begin
     AssertEquals('switch on', 'STARTAN3', Switches[0].On_);
     AssertEquals('commercial switches', 3, Length(ParseSwitchesLump(W.LumpBytes(W.FindLump('SWITCHES')), 3)));
   finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ UMAPINFO parsing (DoomMapInfo) and the lookups that use it, on
+  tools/testdata/umapinfo.wad (tools/make_umapinfo_wad.py). }
+procedure TTestWad.TestUMapInfo;
+var
+  W: TDoomWad;
+  Path: String;
+  List: TMapInfoList;
+  Errors: TStringList;
+  Strings: TDoomStrings;
+begin
+  List := TMapInfoList.Create(true);
+  Errors := TStringList.Create;
+  try
+    AssertEquals('blocks', 2, ParseUMapInfo(
+      'map MAP07 { levelname = "Dead Simple" /* c */ label = clear' + LineEnding +
+      '  intertext = "a", "b"  // comment' + LineEnding +
+      '  endgame = false  unknownkey = 5, 6 }' + LineEnding +
+      'MAP MAP07 { levelname = "Again" next = "map09" nextsecret = "MAP31" partime = 30 }', List, Errors));
+    AssertEquals('later block replaces', 1, List.Count);
+    AssertEquals('replaced name', 'Again', List[0].LevelName);
+    AssertEquals('next upper-cased', 'MAP09', List[0].Next);
+    AssertEquals('par', 30, List[0].ParTime);
+    AssertEquals('no errors', 0, Errors.Count);
+    List.Clear;
+    ParseUMapInfo('MAP E1M2 { levelname = "X" label = clear intertext = "a", "b" endgame = false }', List, Errors);
+    AssertTrue('label clear', List[0].LabelClear);
+    AssertEquals('text lines', 'a' + #10 + 'b', List[0].InterText);
+    AssertTrue('endgame false', List[0].EndGame = meNo);
+  finally
+    FreeAndNil(Errors);
+    FreeAndNil(List);
+  end;
+
+  Path := 'tools/testdata/umapinfo.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/umapinfo.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    LoadMapInfo(W);
+    AssertEquals('next from UMAPINFO', 'E1M3', NextMapName('E1M1', false, false));
+    AssertEquals('secret exit falls back to next', 'E1M3', NextMapName('E1M1', true, false));
+    AssertEquals('vanilla next elsewhere', 'E1M5', NextMapName('E1M4', false, false));
+    AssertEquals('par', 123, ParTime('E1M1', false));
+    AssertTrue('E1M1 text decides the finale', MapInfoDecidesFinale('E1M1', false));
+    AssertTrue('E1M1 has a finale', HasFinale('E1M1', false, false));
+    AssertTrue('E1M3 ends the game', HasFinale('E1M3', false, false));
+    AssertFalse('E1M2 has none', HasFinale('E1M2', false, false));
+    Strings := TDoomStrings.Create(W);
+    try
+      AssertEquals('label: name', 'T1: Test Hangar', Strings.LevelName('E1M1', false));
+      AssertEquals('label cleared', 'Third Test', Strings.LevelName('E1M3', false));
+    finally
+      FreeAndNil(Strings);
+    end;
+  finally
+    { Back to no UMAPINFO for the other tests. }
+    FreeAndNil(W);
+    W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+    LoadMapInfo(W);
     FreeAndNil(W);
   end;
 end;

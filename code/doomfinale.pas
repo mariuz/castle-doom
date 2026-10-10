@@ -61,9 +61,13 @@ type
   30, and MAP15 / MAP31 by their secret exits. }
 function HasFinale(const MapName: String; const IsDoom2, Secret: Boolean): Boolean;
 
+{ A PWAD's UMAPINFO decides this map's finale (a story text, or the end
+  of the game): it then comes after the intermission in Doom 1 too. }
+function MapInfoDecidesFinale(const MapName: String; const Secret: Boolean): Boolean;
+
 implementation
 
-uses SysUtils, Math,
+uses SysUtils, Math, DoomMapInfo,
   CastleVectors, CastleUtils,
   DoomHud, DoomFont, DoomThings, CastleComponentSerialize;
 
@@ -113,10 +117,48 @@ begin
   Result := M > 0;
 end;
 
+{ UMAPINFO's story text for leaving MapName ("intertextsecret" for the
+  secret exit, else "intertext"); False when the entry sets none. }
+function MapInfoText(const Info: TMapInfoEntry; const Secret: Boolean; out Text: String): Boolean;
+begin
+  Text := '';
+  Result := false;
+  if Info = nil then Exit;
+  if Secret and Info.InterTextSecretSet then
+  begin
+    Text := Info.InterTextSecret;
+    Result := true;
+  end else
+  if Info.InterTextSet then
+  begin
+    Text := Info.InterText;
+    Result := true;
+  end;
+end;
+
+function MapInfoDecidesFinale(const MapName: String; const Secret: Boolean): Boolean;
+var
+  Info: TMapInfoEntry;
+  Text: String;
+begin
+  Info := MapInfoFor(MapName);
+  Result := (Info <> nil) and (MapInfoText(Info, Secret, Text) or (Info.EndGame = meYes));
+end;
+
 function HasFinale(const MapName: String; const IsDoom2, Secret: Boolean): Boolean;
 var
   E, M: Integer;
+  Info: TMapInfoEntry;
+  Text: String;
 begin
+  Info := MapInfoFor(MapName);
+  if MapInfoDecidesFinale(MapName, Secret) then
+  begin
+    MapInfoText(Info, Secret, Text);
+    Exit((Text <> '') or (Info.EndGame = meYes));
+  end;
+  if (Info <> nil) and (Info.EndGame = meNo) and not IsDoom2 then
+    Exit(false); { ExM8 continues to the next map without its text }
   Result := false;
   if not MapNumbers(MapName, E, M) then Exit;
   if IsDoom2 then
@@ -140,6 +182,7 @@ const
   Doom1Flats: array [1..4] of String = ('FLOOR4_8', 'SFLR6_1', 'MFLR8_4', 'MFLR8_3');
 var
   E, M, I, Key: Integer;
+  Info: TMapInfoEntry;
 begin
   Result := HasFinale(AMapName, AIsDoom2, Secret);
   if not Result then Exit;
@@ -153,6 +196,52 @@ begin
   SetLength(FCastNames, Length(Cast));
   for I := 0 to High(Cast) do
     FCastNames[I] := UpperCase(AStrings.Get(Cast[I].NameKey, Cast[I].DefaultName));
+
+  Info := MapInfoFor(AMapName);
+  if MapInfoDecidesFinale(AMapName, Secret) then
+  begin
+    { UMAPINFO: its text on its backdrop (a flat) with its music, then
+      the end of the game it names (a picture, the bunny, the cast call)
+      or the next map. }
+    MapInfoText(Info, Secret, FText);
+    FFlat := Info.InterBackdrop;
+    if (FFlat = '') or (FGraphics.Flat(FFlat) = nil) then
+    begin
+      if AIsDoom2 then FFlat := 'SLIME16' else FFlat := 'FLOOR4_8';
+    end;
+    if Info.EndGame = meYes then
+    begin
+      FContinues := false;
+      if Info.EndCast then
+        FAfterText := fsCast
+      else if Info.EndBunny then
+        FAfterText := fsBunny
+      else
+      begin
+        FAfterText := fsPicture;
+        FPicture := Info.EndPic;
+        if (FPicture = '') or (FGraphics.Patch(FPicture) = nil) then
+        begin
+          if FGraphics.Patch('CREDIT') <> nil then FPicture := 'CREDIT' else FPicture := 'HELP2';
+        end;
+      end;
+    end else
+    begin
+      FContinues := true;
+      FAfterText := fsDone;
+    end;
+    if FMusic <> nil then
+    begin
+      if (Info.InterMusic <> '') and FMusic.HasLump(Info.InterMusic) then
+        FMusic.Play(Info.InterMusic)
+      else if AIsDoom2 then
+        FMusic.Play('D_READ_M')
+      else
+        FMusic.Play('D_VICTOR');
+    end;
+    if FText <> '' then SetStage(fsText) else SetStage(FAfterText);
+    Exit;
+  end;
 
   if AIsDoom2 then
   begin

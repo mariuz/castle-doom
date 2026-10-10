@@ -61,7 +61,7 @@ its own `XDG_CONFIG_HOME`, failing on exceptions, missing log lines or
 wrong save contents. Add a test there when a feature gets a demo recipe
 below.
 
-Unit tests (FPCUnit, no window, about 20 s, 20 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 21 cases) cover the parsers,
 every node format and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -341,6 +341,13 @@ ANIMATED lump: 2 animations` and `SWITCHES lump: 2 switches`, and the
 E1M1 switch at `G:2064:-260,A:90` then `U` logs `Switch: line 753:
 SW1BRN1 -> STARTAN3` (without it, `-> SW2BRN1`); autotest `boom-lumps`,
 unit test `TestBoomLumps`.
+UMAPINFO: `tools/testdata/umapinfo.wad` (`tools/make_umapinfo_wad.py`)
+renames E1M1 to `T1: Test Hangar` (next E1M3, par 123, D_E1M5, SKY2, a
+story text after the intermission); E1M3 skips the intermission and
+ends with the bunny. With `-file` the log says `MapInfo: UMAPINFO: 2
+maps` and a summary line per map; autotest `umapinfo`, unit test
+`TestUMapInfo` (which reloads plain Freedoom at the end: the entries are
+global).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

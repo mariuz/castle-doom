@@ -197,7 +197,7 @@ function ParseSwitchesLump(const Data: TBytes; const MaxEpisode: Integer): TSwit
 
 implementation
 
-uses Math, CastleLog, CastleStringUtils, CastleUtils, CastleDownload, DoomLighting;
+uses Math, CastleLog, CastleStringUtils, CastleUtils, CastleDownload, DoomLighting, DoomMapInfo;
 
 var
   LutCounter: Integer;
@@ -1340,7 +1340,12 @@ end;
 function TDoomGraphics.SkyTextureName(const MapName: String): String;
 var
   N: Integer;
+  Info: TMapInfoEntry;
 begin
+  { UMAPINFO's skytexture first. }
+  Info := MapInfoFor(MapName);
+  if (Info <> nil) and (Info.SkyTexture <> '') and HasTexture(Info.SkyTexture) then
+    Exit(Info.SkyTexture);
   if FWad.IsDoom2 then
   begin
     N := StrToIntDef(Copy(MapName, 4, 2), 1);

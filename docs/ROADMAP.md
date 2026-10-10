@@ -6,6 +6,15 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- UMAPINFO: `DoomMapInfo` parses a PWAD's UMAPINFO lump (`ParseUMapInfo`:
+  quoted strings, numbers, identifiers, lists, comments; unknown keys
+  skipped) and the game asks it first for the next and secret map, the
+  level name and label, par time, music, sky, the intermission's name
+  picture, the story text after a map (with its backdrop and music),
+  the end of the game (picture, bunny, cast call), `endgame = false` and
+  `nointermission`. `tools/make_umapinfo_wad.py` writes the test PWAD;
+  unit test `TestUMapInfo`, autotest `umapinfo`.
+
 - Key rebinding: `GameSettings` holds two keys for each action (move
   forward / backward, strafe, turn, run, fire, use, automap), saved in
   `settings.json`'s `keys`. The title screen's Options -> Controls...
@@ -653,19 +662,19 @@ play.
 |---|---|---|---|
 | **Video options in the game**: the options are on the title screen's Options panel (see above); Doom's in-game Options page has no video entries yet (it is `M_*` patches, so it needs a text-drawn page), and v-sync is not offered. | Change the field of view without leaving the level. | `DoomMenu`, `GameViewPlay` | S |
 | **Gamepad button rebinding and more bindable actions**: keys are rebindable (see above); the gamepad layout is fixed, and weapon selection, the hotkeys (F, M, J...) and the mouse buttons are not bindable yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameGamepad` | S-M |
-| **UMAPINFO / MAPINFO**: level names, music, par, next and secret map, sky and episode definitions from PWADs. | Modern PWADs ship them; without it the port falls back to vanilla's progression. | new `DoomMapInfo`, `DoomWorld.NextMapName` | M |
+| **The rest of UMAPINFO, and ZDoom MAPINFO**: UMAPINFO's per-map keys are done (see above); its `episode` entries for the New Game menu, `bossaction`, patch backdrops, `exitpic` / `enterpic`, and the level name drawn as text on the intermission when there is no `levelpic` are not; nor is ZDoom's MAPINFO syntax. | PWADs with new episodes and boss maps. | `DoomMapInfo`, `DoomMenu`, `DoomIntermission` | M |
 | **Golden screenshots in CI**: compare the autotests' PNGs with stored references (a tolerance for software GL), failing on a changed frame. | Rendering regressions are caught by eye today. | `tools/run_autotests.py`, `build.yml` | M |
 | **Offline web build**: a service worker caching the page, the wasm and the data zip, so the Pages site works offline after one visit. | A big first download, then instant starts. | `web.yml`, `pages/` | S-M |
 | **Crash reporting in release builds**: catch the top-level exception, write the log path and the last 50 lines to a dialog (desktop) or the page (web). | Users can report what happened. | `GameInitialize` | S |
 
 ## Suggested next three
 
-1. UMAPINFO / MAPINFO (M, see Other suggested improvements): level
-   names, music, par times and progression from PWADs.
-2. Video options in the game (S, see Other suggested improvements):
+1. Video options in the game (S, see Other suggested improvements):
    field of view and UI scale from Doom's in-game Options page.
-3. Golden screenshots in CI (M, see Other suggested improvements):
+2. Golden screenshots in CI (M, see Other suggested improvements):
    compare the autotests' PNGs with stored references.
+3. UMAPINFO episodes and boss actions (M, see Other suggested
+   improvements): new episodes in the New Game menu, `bossaction`.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

@@ -166,6 +166,14 @@ TESTS = [
     ('key-bindings', 'E1M1', 'Y,SHOTS,BIND:fire:F,BIND:forward:I,W:0.3,F:1,KEY:F,W:0.3,S,Q',
      [r'Settings: Keys: forward I / Up;.* fire F;', r'Shot: ', r'Saved screenshot 1 at E1M1 \(player -[1-3]\d\d\.'],
      [], lambda config: check_keys(config, 'fire', ['F', 'None'])),
+    # UMAPINFO from a PWAD (tools/make_umapinfo_wad.py): E1M1 renamed with a
+    # story text after its intermission, then E1M3 without intermission
+    # ending the game with the bunny.
+    ('umapinfo', 'E1M1', 'Y,W:0.5,E,W:2,U,U,U,U,U,W:1,U,W:0.5,U,W:3,E,W:2,S,Q',
+     [r'MapInfo: UMAPINFO: 2 maps', r'Message: T1: Test Hangar', r'Finale: Finale after E1M1',
+      r'Load: E1M3: map parsed', r'Message: Third Test', r'MapInfo: E1M3: no intermission',
+      r'Finale: Finale after E1M3 \(stage 2\)'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad')], None),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]

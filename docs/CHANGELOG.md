@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- UMAPINFO: PWADs with a UMAPINFO lump get their own level names,
+  music, skies, par times, map order and secret exits, story texts after
+  a map and endings (a picture, the bunny or the cast call).
+
 ## v0.7.0 (2026-10-10)
 
 - Rebindable keys: Options -> Controls... on the title screen sets two

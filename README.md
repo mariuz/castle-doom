@@ -102,7 +102,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
   `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`) and glBSP GL nodes (V1, V2, V3, V5, also from
   a `.gwa` file), so maps built with ZDBSP or glBSP load too. Boom's `ANIMATED` and
-  `SWITCHES` lumps give PWADs their own animated textures and switches.
+  `SWITCHES` lumps give PWADs their own animated textures and switches, and a `UMAPINFO`
+  lump their level names, music, skies, par times, map order, story texts and endings.
 - Music: MUS and MIDI lumps played on an emulated OPL3 (Nuked OPL3, loaded as a shared
   library packaged with the game) driven by the WAD's GENMIDI instrument bank, the AdLib /
   Sound Blaster sound of the original; a built-in FM model plays when the library is

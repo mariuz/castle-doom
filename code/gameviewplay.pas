@@ -163,7 +163,7 @@ uses Math, JsonParser,
   CastleDownload, DoomActors, CastleInternalInspector,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleTimeUtils, CastleRenderContext,
   DoomGeometry, DoomMap, DoomLighting,
-  GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs;
+  GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs, DoomMapInfo;
 
 type
   { Opens TCastleNavigation.Move (protected) to push the player. }
@@ -347,6 +347,8 @@ begin
   { DeHackEd patches (the WADs' DEHACKED lumps, -deh files) before any
     thing is spawned: they change the thing table in place. }
   ApplyDehacked(Wad);
+  { A PWAD's UMAPINFO: level names, music, sky, par times, progression. }
+  LoadMapInfo(Wad);
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
   FWorld.Skill := Skill;
   FWorldStatus.World := FWorld;
@@ -1478,7 +1480,7 @@ begin
   { The intermission stays visible until StartMap / StartFinale has
     captured it for the melt. }
   { Doom 2 (G_WorldDone): the story text comes after the intermission. }
-  if Wad.IsDoom2 and StartFinale then Exit;
+  if (Wad.IsDoom2 or MapInfoDecidesFinale(FMapName, FWorld.SecretExit)) and StartFinale then Exit;
   Next := NextMapName(FMapName, FWorld.SecretExit, Wad.IsDoom2);
   if not Wad.HasLump(Next) then
     Next := Wad.MapNames[0];
@@ -1569,6 +1571,7 @@ end;
 
 procedure TViewPlay.Update(const SecondsPassed: Single; var HandleInput: Boolean);
 var
+  Info: TMapInfoEntry;
   Lift, MaxEye: Single;
   Sec: Integer;
   CamPos, CamDir, TurnPos, TurnDir, TurnUp: TVector3;
@@ -1816,8 +1819,18 @@ begin
 
   if FWorld.ExitRequested then
   begin
-    { Doom 1 (G_DoCompleted): ExM8 goes straight to the finale. }
-    if Wad.IsDoom2 or not StartFinale then
+    Info := MapInfoFor(FMapName);
+    if (Info <> nil) and Info.NoIntermission then
+    begin
+      { UMAPINFO "nointermission": no stats screen, on to the story text
+        or the next map. }
+      FWorld.ExitRequested := false;
+      WritelnLog('MapInfo', '%s: no intermission', [FMapName]);
+      FinishIntermission;
+    end else
+    { Doom 1 (G_DoCompleted): ExM8 goes straight to the finale (a
+      UMAPINFO text comes after the intermission). }
+    if Wad.IsDoom2 or MapInfoDecidesFinale(FMapName, FWorld.SecretExit) or not StartFinale then
       StartIntermission;
   end;
 end;

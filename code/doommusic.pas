@@ -80,6 +80,8 @@ type
     function LumpForMap(const MapName: String): String;
     function TitleLump: String;
     function IntermissionLump: String;
+    { The WADs have this music lump. }
+    function HasLump(const LumpName: String): Boolean;
     property Current: String read FCurrent;
     property Enabled: Boolean read FEnabled write SetEnabled;
     property Volume: Single read FVolume write SetVolume;
@@ -113,7 +115,7 @@ var
 
 implementation
 
-uses Math, CastleDownload, CastleLog, CastleUriUtils, CastleUtils, DoomOpl3;
+uses Math, CastleDownload, CastleLog, CastleUriUtils, CastleUtils, DoomOpl3, DoomMapInfo;
 
 const
   SampleRate = 22050;
@@ -1730,7 +1732,12 @@ const
     'D_ADRIAN', 'D_MESSG2', 'D_ROMER2', 'D_TENSE', 'D_SHAWN3', 'D_OPENIN', 'D_EVIL', 'D_ULTIMA');
 var
   N: Integer;
+  Info: TMapInfoEntry;
 begin
+  { UMAPINFO's music first. }
+  Info := MapInfoFor(MapName);
+  if (Info <> nil) and (Info.Music <> '') and (FWad.FindLump(Info.Music) >= 0) then
+    Exit(Info.Music);
   if FWad.IsDoom2 then
   begin
     N := StrToIntDef(Copy(MapName, 4, 2), 1);
@@ -1741,6 +1748,11 @@ begin
   begin
     if FWad.IsDoom2 then Result := 'D_RUNNIN' else Result := 'D_E1M1';
   end;
+end;
+
+function TDoomMusic.HasLump(const LumpName: String): Boolean;
+begin
+  Result := FWad.FindLump(UpperCase(LumpName)) >= 0;
 end;
 
 function TDoomMusic.TitleLump: String;

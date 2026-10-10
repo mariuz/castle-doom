@@ -87,7 +87,8 @@ Sizes, for orientation (lines of Pascal):
 | `gameviewmenu.pas` | 780 | title screen: Doom menu and options |
 | `doommenu.pas` | 420 | Doom's menu from `M_*` graphics |
 | `doomintermission.pas` | 330 | intermission screen |
-| `doomfinale.pas` | 460 | finale text, end pictures, bunny scroller, cast call |
+| `doomfinale.pas` | 520 | finale text, end pictures, bunny scroller, cast call |
+| `doommapinfo.pas` | 380 | UMAPINFO: per-map names, music, sky, par, next maps, story texts, endings |
 | `doomstates.pas` | 230 | vanilla's state table and mobjinfo rows (`doomstates_table.inc`, generated from info.c): what DeHackEd edits and the things' sequences come from |
 | `doomdehacked.pas` | 560 | DeHackEd patches (`DEHACKED` lumps, `-deh` files): BEX strings, things, frames, code pointers, Misc, Ammo, par times |
 | `doomautomap.pas` | 210 | automap drawn with 2D primitives |
@@ -840,6 +841,21 @@ front-facing at (160, 170) with their walk frames, an attack every 12
 frames, the death frames on a key, then the next one, the name centred at
 y = 180. After a Doom 2 text the view loads the next map; after the end
 picture, the bunny or the cast (Esc) it returns to the title.
+
+A PWAD's UMAPINFO lump (`DoomMapInfo`, read by `LoadMapInfo` when the
+play view starts, after DeHackEd) is asked first everywhere these tables
+are: `NextMapName` (`next`, `nextsecret`, which falls back to `next`),
+`TDoomStrings.LevelName` (`label: levelname`, `label = clear` for the
+name alone), `ParTime`, `TDoomMusic.LumpForMap`, `SkyTextureName` and
+the intermission's name picture (`levelpic`; a renamed level without
+one shows none rather than the vanilla level's). When an entry sets a
+story text (`intertext` / `intertextsecret`, `clear` removes a default
+one) or `endgame = true`, `MapInfoDecidesFinale` is true: the text comes
+after the intermission in Doom 1 too, on `interbackdrop` (a flat) with
+`intermusic`, then the game ends with `endpic`, `endbunny` or `endcast`,
+or goes on to the next map. `endgame = false` turns a Doom 1 ExM8 into
+an ordinary exit, `nointermission` skips the stats screen. The episode
+menu (`episode`), `bossaction` and patch backdrops are not supported.
 
 The texts are not in Doom's WADs but in the executable; Freedoom puts its
 own (BSD-licensed) story, background flats and cast names in a `DEHACKED`

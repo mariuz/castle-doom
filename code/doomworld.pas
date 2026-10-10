@@ -425,7 +425,7 @@ function NextMapName(const Current: String; const Secret: Boolean; const IsDoom2
 
 implementation
 
-uses Math, CastleLog, CastleStringUtils, CastleBehaviors, CastleTimeUtils;
+uses Math, CastleLog, CastleStringUtils, CastleBehaviors, CastleTimeUtils, DoomMapInfo;
 
 const
   DoorSpeed = 2;
@@ -541,6 +541,8 @@ function NextMapName(const Current: String; const Secret: Boolean; const IsDoom2
 var
   E, M, N: Integer;
 begin
+  { A PWAD's UMAPINFO "next" / "nextsecret" first. }
+  if MapInfoNext(Current, Secret, Result) then Exit;
   if IsDoom2 then
   begin
     N := StrToIntDef(Copy(Current, 4, 2), 1);
