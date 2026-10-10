@@ -91,7 +91,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   volume page (`M_*` graphics, thermometer sliders) over the paused game; saves get a typed
   name (Doom's `_` cursor; the map, kills and time by default).
   The Options page picks WADs, map and skill, and the video options: field of view
-  (Doom's 90 by default), UI scale for the text and panels, fullscreen on the desktop and,
+  (Doom's 90 by default), UI scale for the text and panels, fullscreen, v-sync and a frame
+  rate cap on the desktop and,
   in the browser, the render resolution (25-100% of the canvas' pixels, for slow machines).
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used

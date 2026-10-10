@@ -105,6 +105,9 @@ type
       fullscreen (desktop) or the render resolution 25..100 % (web). }
     VideoFieldOfView, VideoUiScale, VideoRenderScale: Integer;
     VideoFullscreen: Boolean;
+    { Desktop: v-sync and the frame rate cap (GameSettings.FrameCaps). }
+    VideoVSync: Boolean;
+    VideoFrameCap: Integer;
     { The save page: the name a new save starts with, and the one typed
       (read it on maSaveSlot). }
     DefaultSaveName: String;
@@ -274,6 +277,19 @@ begin
     ((FPage in [mpLoad, mpSave]) or (ItemPatch(FPage, Item) <> ''));
 end;
 
+{ The Video page's frame rate choices (GameSettings.FrameCaps: 0 = no cap). }
+function NextCap(const Cap, Steps: Integer): Integer;
+const
+  Caps: array [0..4] of Integer = (35, 60, 120, 144, 0);
+var
+  I: Integer;
+begin
+  I := 0;
+  while (I < Length(Caps)) and (Caps[I] <> Cap) do Inc(I);
+  if I = Length(Caps) then I := 2;
+  Result := Caps[((I + Steps) mod Length(Caps) + Length(Caps)) mod Length(Caps)];
+end;
+
 { The sliders' routines (M_SfxVol, M_MusicVol, M_ChangeSensitivity) and
   M_ChangeMessages. }
 procedure TDoomMenuScreen.ChangeSlider(const Delta: Integer);
@@ -297,6 +313,10 @@ begin
     VideoRenderScale := Max(25, Min(100, VideoRenderScale + 25 * Delta))
   else if Item = 'T:FULLSCREEN' then
     VideoFullscreen := not VideoFullscreen
+  else if Item = 'T:V-SYNC' then
+    VideoVSync := not VideoVSync
+  else if Item = 'T:FRAME RATE' then
+    VideoFrameCap := NextCap(VideoFrameCap, Delta)
   else
     Exit;
   if FSounds <> nil then FSounds.Play('DSSTNMOV');
@@ -361,7 +381,7 @@ begin
     mpReadThis1, mpReadThis2: Result := 1;
     mpOptions: Result := 6;
     mpSound: Result := 4;
-    mpVideo: Result := 6;
+    mpVideo: Result := {$ifdef WASI} 6 {$else} 7 {$endif};
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
     mpLoad, mpSave: Result := 6;
@@ -380,7 +400,8 @@ const
   {$ifdef WASI}
   VideoItems: array [0..5] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:RESOLUTION', '');
   {$else}
-  VideoItems: array [0..5] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN', '');
+  VideoItems: array [0..6] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN',
+    'T:V-SYNC', 'T:FRAME RATE');
   {$endif}
 begin
   case Page of
@@ -554,7 +575,7 @@ begin
         OpenPage(mpVideo);
     mpSound: ;
     mpVideo:
-      if ItemName = 'T:FULLSCREEN' then
+      if (ItemName = 'T:FULLSCREEN') or (ItemName = 'T:V-SYNC') or (ItemName = 'T:FRAME RATE') then
         ChangeSlider(1);
   end;
 end;
@@ -931,6 +952,10 @@ begin
         {$else}
         if VideoFullscreen then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 4)
         else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 4);
+        if VideoVSync then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 5)
+        else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 5);
+        if VideoFrameCap > 0 then Text := IntToStr(VideoFrameCap) else Text := 'NONE';
+        DrawDoomText(FGraphics, Img, X + 175, Y + LineHeight * 6 + 4, Text);
         {$endif}
       end;
   end;

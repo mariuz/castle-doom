@@ -1213,6 +1213,10 @@ Things that differ on the web and shaped the code:
   `window.castleDoomScale` and adds `castleDoomSetScale(percent)`, which
   `GameSettings.ApplyWindowSettings` calls through JOB. CGE sees the
   smaller drawing buffer and resizes; CSS stretches the canvas back.
+  On the desktop `GameSettings.ApplyWindowSettings` also sets the frame
+  rate cap (`ApplicationProperties.LimitFPS`) and v-sync, through
+  `wglSwapIntervalEXT` or `glXSwapIntervalMESA` / `EXT` (CGE does it only
+  on macOS).
   The other video options (`GameSettings`): the camera's horizontal
   field of view, the UI scale (CastleSettings.xml's 1600x900 reference
   size divided by it) and fullscreen (desktop only; the page has its

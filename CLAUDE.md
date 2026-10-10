@@ -163,7 +163,8 @@ In the game, Esc -> Options -> Video is a text-drawn page of
 `KEY:ESCAPE,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:ENTER`
 reaches it (autotest `video-menu`).
 Video options (`GameSettings`, also in `settings.json`): `FOV:deg`,
-`UISCALE:percent`, `RENDERSCALE:percent` and `FULLSCREEN` in a demo
+`UISCALE:percent`, `RENDERSCALE:percent`, `FULLSCREEN`, `VSYNC` and
+`FPSCAP:n` (0 = no cap) in a demo
 change and save them like the title screen's Options panel (log
 `Settings: Video: field of view 110, window, UI scale 150%, render scale
 50%`; autotest `video-settings`). The render scale only acts in the

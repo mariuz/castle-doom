@@ -21,7 +21,8 @@ type
     FMapLabel: TCastleLabel;
     FSkillLabel: TCastleLabel;
     FSfxLabel, FMusicLabel: TCastleLabel;
-    FFovLabel, FUiScaleLabel, FRenderScaleLabel: TCastleLabel;
+    FFovLabel, FUiScaleLabel, FRenderScaleLabel, FFrameCapLabel: TCastleLabel;
+    FVSyncButton: TCastleButton;
     FFullscreenButton: TCastleButton;
     { The Controls page: a button per action and slot; the one waiting
       for a key (FWaitSlot -1: none). }
@@ -108,6 +109,9 @@ type
     procedure ClickRenderScaleDown(Sender: TObject);
     procedure ClickRenderScaleUp(Sender: TObject);
     procedure ClickFullscreen(Sender: TObject);
+    procedure ClickVSync(Sender: TObject);
+    procedure ClickFrameCapDown(Sender: TObject);
+    procedure ClickFrameCapUp(Sender: TObject);
     procedure ClickControls(Sender: TObject);
     procedure ClickControlsBack(Sender: TObject);
     procedure ClickKeysDefaults(Sender: TObject);
@@ -239,8 +243,16 @@ begin
   FRenderScaleLabel := DesignedComponent('RenderScaleLabel') as TCastleLabel;
   FFullscreenButton := DesignedComponent('ButtonFullscreen') as TCastleButton;
   FFullscreenButton.OnClick := {$ifdef FPC}@{$endif} ClickFullscreen;
+  { V-sync and the frame rate cap (desktop: the browser draws on its own
+    refresh). }
+  FVSyncButton := DesignedComponent('ButtonVSync') as TCastleButton;
+  FVSyncButton.OnClick := {$ifdef FPC}@{$endif} ClickVSync;
+  Click('ButtonFrameCapDown', {$ifdef FPC}@{$endif} ClickFrameCapDown);
+  Click('ButtonFrameCapUp', {$ifdef FPC}@{$endif} ClickFrameCapUp);
+  FFrameCapLabel := DesignedComponent('FrameCapLabel') as TCastleLabel;
   {$ifdef WASI}
   FFullscreenButton.Exists := false;
+  (DesignedComponent('RowVideo3') as TCastleHorizontalGroup).Exists := false;
   {$else}
   (DesignedComponent('ButtonRenderScaleDown') as TCastleButton).Exists := false;
   (DesignedComponent('ButtonRenderScaleUp') as TCastleButton).Exists := false;
@@ -834,6 +846,11 @@ begin
   FUiScaleLabel.Caption := Format('UI scale %d%%', [Settings.UiScale]);
   FRenderScaleLabel.Caption := Format('Resolution %d%%', [Settings.RenderScale]);
   FFullscreenButton.Caption := 'Fullscreen: ' + BoolToStr(Settings.Fullscreen, 'on', 'off');
+  FVSyncButton.Caption := 'V-sync: ' + BoolToStr(Settings.VSync, 'on', 'off');
+  if Settings.FrameCap > 0 then
+    FFrameCapLabel.Caption := Format('Frame rate cap %d', [Settings.FrameCap])
+  else
+    FFrameCapLabel.Caption := 'No frame rate cap';
 end;
 
 procedure TViewMenu.ChangeVideo(const Which, Delta: Integer);
@@ -877,6 +894,24 @@ end;
 procedure TViewMenu.ClickRenderScaleUp(Sender: TObject);
 begin
   ChangeVideo(2, 1);
+end;
+
+procedure TViewMenu.ClickVSync(Sender: TObject);
+begin
+  Settings.VSync := not Settings.VSync;
+  ChangeVideo(-1, 0);
+end;
+
+procedure TViewMenu.ClickFrameCapDown(Sender: TObject);
+begin
+  Settings.FrameCap := NextFrameCap(Settings.FrameCap, -1);
+  ChangeVideo(-1, 0);
+end;
+
+procedure TViewMenu.ClickFrameCapUp(Sender: TObject);
+begin
+  Settings.FrameCap := NextFrameCap(Settings.FrameCap, 1);
+  ChangeVideo(-1, 0);
 end;
 
 procedure TViewMenu.ClickFullscreen(Sender: TObject);

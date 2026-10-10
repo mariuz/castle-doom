@@ -318,6 +318,46 @@
             },
             {
               "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowVideo3",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonVSync",
+                  "Caption": "V-sync: off",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonFrameCapDown",
+                  "Caption": "<",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleLabel",
+                  "Name": "FrameCapLabel",
+                  "Text": [
+                    ""
+                  ],
+                  "FontSize": 22.0,
+                  "ColorPersistent": {
+                    "$$ClassName": "TCastleColorPersistent",
+                    "Red": 1.0,
+                    "Green": 1.0,
+                    "Blue": 1.0,
+                    "Alpha": 1.0
+                  }
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonFrameCapUp",
+                  "Caption": ">",
+                  "FontSize": 22.0
+                }
+              ]
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
               "Name": "RowStart",
               "Spacing": 10.0,
               "$Children": [

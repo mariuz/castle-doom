@@ -31,6 +31,11 @@ type
     Fullscreen: Boolean;
     UiScale: Integer;
     RenderScale: Integer;
+    { Desktop: v-sync (the driver's swap interval) and the frame rate cap
+      (ApplicationProperties.LimitFPS; 0 = none). The browser always
+      draws on its own refresh. }
+    VSync: Boolean;
+    FrameCap: Integer;
     { Key bindings: two keys per action (keyNone = unused). }
     Keys: array [TGameAction, 0..1] of TKey;
   end;
@@ -43,6 +48,8 @@ const
   MaxUiScale = 200;
   MinRenderScale = 25;
   MaxRenderScale = 100;
+  { The frame rate cap's choices (0 = no cap); 120 is CGE's default. }
+  FrameCaps: array [0..4] of Integer = (35, 60, 120, 144, 0);
 
 const
   ActionNames: array [TGameAction] of String = (
@@ -82,6 +89,11 @@ procedure ApplyWindowSettings(const Startup: Boolean = false);
 { The video options for the log. }
 function VideoSummary: String;
 
+{ The frame cap Steps choices further in FrameCaps (wrapping). }
+function NextFrameCap(const Cap, Steps: Integer): Integer;
+{ "60 FPS", "no cap". }
+function FrameCapText(const Cap: Integer): String;
+
 { Key bindings. }
 procedure ResetKeys;
 { Key is bound to Action (either slot). }
@@ -100,7 +112,8 @@ function KeysSummary: String;
 
 implementation
 
-uses SysUtils, Math, FpJson, JsonParser, CastleLog, CastleUtils, CastleWindow,
+uses SysUtils, Math, FpJson, JsonParser, CastleLog, CastleUtils, CastleWindow, CastleApplicationProperties,
+  {$ifndef WASI} CastleGL, {$endif}
   {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
   GameSaveStorage;
 
@@ -197,6 +210,8 @@ begin
   Settings.Fullscreen := false;
   Settings.UiScale := 100;
   Settings.RenderScale := 100;
+  Settings.VSync := false;
+  Settings.FrameCap := 120;
   ResetKeys;
 end;
 
@@ -265,6 +280,8 @@ begin
     Settings.Fullscreen := J.Get('fullscreen', Settings.Fullscreen);
     Settings.UiScale := Clamped(J.Get('uiScale', Settings.UiScale), MinUiScale, MaxUiScale);
     Settings.RenderScale := Clamped(J.Get('renderScale', Settings.RenderScale), MinRenderScale, MaxRenderScale);
+    Settings.VSync := J.Get('vsync', Settings.VSync);
+    Settings.FrameCap := Clamped(J.Get('frameCap', Settings.FrameCap), 0, 1000);
     if J.Find('keys', KeysJ) then
       ReadKeys(KeysJ);
   finally
@@ -294,6 +311,8 @@ begin
     J.Add('fullscreen', Settings.Fullscreen);
     J.Add('uiScale', Settings.UiScale);
     J.Add('renderScale', Settings.RenderScale);
+    J.Add('vsync', Settings.VSync);
+    J.Add('frameCap', Settings.FrameCap);
     J.Add('keys', WriteKeys);
     SaveStorageWrite(SettingsUrl, J.FormatJSON(AsCompressedJSON));
   finally
@@ -322,9 +341,29 @@ end;
 
 function VideoSummary: String;
 begin
-  Result := Format('Video: field of view %d, %s, UI scale %d%%, render scale %d%%', [
+  Result := Format('Video: field of view %d, %s, UI scale %d%%, render scale %d%%, v-sync %s, %s', [
     Settings.FieldOfView, BoolToStr(Settings.Fullscreen, 'fullscreen', 'window'),
-    Settings.UiScale, Settings.RenderScale]);
+    Settings.UiScale, Settings.RenderScale, BoolToStr(Settings.VSync, 'on', 'off'),
+    FrameCapText(Settings.FrameCap)]);
+end;
+
+function NextFrameCap(const Cap, Steps: Integer): Integer;
+var
+  I, N: Integer;
+begin
+  N := Length(FrameCaps);
+  I := 0;
+  while (I < N) and (FrameCaps[I] <> Cap) do Inc(I);
+  if I = N then I := 2; { an unusual value from settings.json: from 120 }
+  Result := FrameCaps[((I + Steps) mod N + N) mod N];
+end;
+
+function FrameCapText(const Cap: Integer): String;
+begin
+  if Cap <= 0 then
+    Result := 'no frame cap'
+  else
+    Result := Format('%d FPS cap', [Cap]);
 end;
 
 {$ifdef WASI}
@@ -340,9 +379,55 @@ begin
 end;
 {$endif}
 
+{$ifndef WASI}
+{ The driver's swap interval through the WGL / GLX extensions CGE's
+  OpenGL unit loads (CGE sets it itself only on macOS). Returns how, or
+  why not, for the log. }
+function ApplySwapInterval(const Interval: Integer): String;
+{$ifdef LINUX}
+type
+  TglXSwapIntervalMESA = function (Interval: Cardinal): Integer; cdecl;
+  TglXGetCurrentDisplay = function: Pointer; cdecl;
+  TglXGetCurrentDrawable = function: PtrUInt; cdecl;
+var
+  SwapMesa: TglXSwapIntervalMESA;
+  GetDisplay: TglXGetCurrentDisplay;
+  GetDrawable: TglXGetCurrentDrawable;
+{$endif}
+begin
+  Result := 'not available';
+  {$ifdef MSWINDOWS}
+  if Assigned(wglSwapIntervalEXT) then
+  begin
+    if wglSwapIntervalEXT(Interval) then Result := 'wglSwapIntervalEXT' else Result := 'wglSwapIntervalEXT failed';
+  end;
+  {$endif}
+  {$ifdef LINUX}
+  Pointer(SwapMesa) := dglGetProcAddress('glXSwapIntervalMESA');
+  if Assigned(SwapMesa) then
+  begin
+    if SwapMesa(Interval) = 0 then Exit('glXSwapIntervalMESA');
+    Result := 'glXSwapIntervalMESA failed';
+  end;
+  Pointer(GetDisplay) := dglGetProcAddress('glXGetCurrentDisplay');
+  Pointer(GetDrawable) := dglGetProcAddress('glXGetCurrentDrawable');
+  if Assigned(glXSwapIntervalEXT) and Assigned(GetDisplay) and Assigned(GetDrawable) and
+     (GetDisplay() <> nil) and (GetDrawable() <> 0) then
+  begin
+    glXSwapIntervalEXT(GetDisplay(), GetDrawable(), Interval);
+    Result := 'glXSwapIntervalEXT';
+  end;
+  {$endif}
+end;
+{$endif}
+
+var
+  AppliedVSync: Integer = -1;
+
 procedure ApplyWindowSettings(const Startup: Boolean);
 var
   Window: TCastleWindow;
+  How: String;
 begin
   Window := Application.MainWindow;
   if Window = nil then Exit;
@@ -357,6 +442,15 @@ begin
   { The browser's fullscreen is the page's button (it needs a click). }
   if (Window.FullScreen <> Settings.Fullscreen) and (Settings.Fullscreen or not Startup) then
     Window.FullScreen := Settings.Fullscreen;
+  ApplicationProperties.LimitFPS := Settings.FrameCap;
+  { The swap interval only when it changes (and once at startup: the
+    driver's default may be either). }
+  if AppliedVSync <> Ord(Settings.VSync) then
+  begin
+    How := ApplySwapInterval(Ord(Settings.VSync));
+    AppliedVSync := Ord(Settings.VSync);
+    WritelnLog('Settings', 'V-sync %s (%s)', [BoolToStr(Settings.VSync, 'on', 'off'), How]);
+  end;
   {$endif}
 end;
 

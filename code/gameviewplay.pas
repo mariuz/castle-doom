@@ -503,7 +503,8 @@ begin
     ChangeVolume(0, Round(Arg) - Settings.SfxVolume);
     ChangeVolume(1, Round(Arg2) - Settings.MusicVolume);
   end
-  else if (Cmd = 'FOV') or (Cmd = 'UISCALE') or (Cmd = 'RENDERSCALE') or (Cmd = 'FULLSCREEN') then
+  else if (Cmd = 'FOV') or (Cmd = 'UISCALE') or (Cmd = 'RENDERSCALE') or (Cmd = 'FULLSCREEN') or
+    (Cmd = 'VSYNC') or (Cmd = 'FPSCAP') then
   begin
     { The video options like the title screen's Options panel (saved):
       FOV:deg, UISCALE:percent, RENDERSCALE:percent (the browser's
@@ -514,6 +515,10 @@ begin
       Settings.UiScale := Clamped(Round(Arg), MinUiScale, MaxUiScale)
     else if Cmd = 'RENDERSCALE' then
       Settings.RenderScale := Clamped(Round(Arg), MinRenderScale, MaxRenderScale)
+    else if Cmd = 'VSYNC' then
+      Settings.VSync := not Settings.VSync
+    else if Cmd = 'FPSCAP' then
+      Settings.FrameCap := Max(0, Round(Arg))
     else
       Settings.Fullscreen := not Settings.Fullscreen;
     SaveSettings;
@@ -1101,6 +1106,8 @@ begin
   FSlotScreen.VideoUiScale := Settings.UiScale;
   FSlotScreen.VideoRenderScale := Settings.RenderScale;
   FSlotScreen.VideoFullscreen := Settings.Fullscreen;
+  FSlotScreen.VideoVSync := Settings.VSync;
+  FSlotScreen.VideoFrameCap := Settings.FrameCap;
   FSlotScreen.Skill := Skill;
   FSlotScreen.DefaultSaveName := AutoSaveName;
   for I := 1 to SaveSlots do
@@ -1163,12 +1170,15 @@ begin
         Settings.ShowMessages := FSlotScreen.MessagesOn;
         { The Video page (field of view, UI scale, fullscreen / resolution). }
         if (FSlotScreen.VideoFieldOfView <> Settings.FieldOfView) or (FSlotScreen.VideoUiScale <> Settings.UiScale) or
-           (FSlotScreen.VideoRenderScale <> Settings.RenderScale) or (FSlotScreen.VideoFullscreen <> Settings.Fullscreen) then
+           (FSlotScreen.VideoRenderScale <> Settings.RenderScale) or (FSlotScreen.VideoFullscreen <> Settings.Fullscreen) or
+           (FSlotScreen.VideoVSync <> Settings.VSync) or (FSlotScreen.VideoFrameCap <> Settings.FrameCap) then
         begin
           Settings.FieldOfView := FSlotScreen.VideoFieldOfView;
           Settings.UiScale := FSlotScreen.VideoUiScale;
           Settings.RenderScale := FSlotScreen.VideoRenderScale;
           Settings.Fullscreen := FSlotScreen.VideoFullscreen;
+          Settings.VSync := FSlotScreen.VideoVSync;
+          Settings.FrameCap := FSlotScreen.VideoFrameCap;
           ApplyWindowSettings;
           ApplyFieldOfView;
           WritelnLog('Settings', VideoSummary);

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- V-sync and a frame rate cap (35, 60, 120, 144 FPS or none) on the
+  desktop, in the title screen's Options and the in-game Video page.
+
 ## v0.12.0 (2026-10-10)
 
 - The web version can be installed as an app (a web app manifest and an

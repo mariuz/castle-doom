@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- V-sync and a frame rate cap (desktop): `GameSettings.VSync` and
+  `FrameCap` (35, 60, 120, 144 or none; `ApplicationProperties.LimitFPS`)
+  in `settings.json`, on the title screen's Options panel and the
+  in-game Video page. CGE sets the swap interval itself only on macOS,
+  so `ApplySwapInterval` calls `wglSwapIntervalEXT` (Windows) or
+  `glXSwapIntervalMESA` / `glXSwapIntervalEXT` (Linux) through CGE's
+  OpenGL unit and logs which (`Settings: V-sync on (glXSwapIntervalEXT)`
+  under xvfb). The browser always draws on its own refresh. Demo
+  commands `VSYNC` and `FPSCAP:n`.
+
 - Installable web app: `pages/manifest.webmanifest` (name, start
   `play/`, standalone display, colours) with icons made from Freedoom's
   status bar face by `tools/make_web_icons.py`, linked from the home
@@ -725,7 +735,6 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **V-sync and a frame rate cap**: the video options are on the title screen and in the game (see above); v-sync and a frame limit are not offered. | Smoother play on high refresh screens, less power. | `GameSettings` | S |
 | **Gamepad button rebinding and more bindable actions**: keys are rebindable (see above); the gamepad layout is fixed, and weapon selection, the hotkeys (F, M, J...) and the mouse buttons are not bindable yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameGamepad` | S-M |
 | **The rest of UMAPINFO, and ZDoom MAPINFO**: UMAPINFO's keys are done (see above) except patch backdrops, `exitpic` / `enterpic` and the level name drawn as text on the intermission when there is no `levelpic`; ZDoom's MAPINFO syntax is not read. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
 | **Fixed step everywhere**: `--fixed-step` makes 7 moving-scene autotests reproducible (see above); running the whole suite with it would make every screenshot comparable but triples its real time (software GL draws about 12 frames a second, each now a single tic). | Every screenshot a regression check. | `tools/run_autotests.py` | S |
@@ -734,9 +743,10 @@ play.
 ## Suggested next three
 
 1. Gamepad button rebinding (S-M, see Other suggested improvements).
-2. V-sync and a frame rate cap (S, see Other suggested improvements).
-3. Fixed step for the whole autotest suite (S, see Other suggested
+2. Fixed step for the whole autotest suite (S, see Other suggested
    improvements), so every screenshot is compared.
+3. Longer crash reports (S, see Other suggested improvements): a game-side
+   log ring buffer and a copy button.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,
