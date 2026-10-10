@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The web version works offline after one visit: a service worker keeps
+  the page, the game and its data (and Freedoom Phase 2 once played).
+
 ## v0.10.0 (2026-10-10)
 
 - UMAPINFO episodes and boss actions: a PWAD can add episodes to the

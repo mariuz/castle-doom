@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Patch the web build's play page (castle-engine-output/web/dist/index.html,
-CGE's template) for the game's render resolution option.
+CGE's template) for the game's render resolution option and for offline
+play (it registers the site's service worker, ../sw.js, which the Web
+workflow copies from pages/sw.js).
 
 CGE's page sizes the canvas to the display's pixels in a ResizeObserver
 callback. The patch multiplies that size by window.castleDoomScale (1 by
@@ -36,6 +38,15 @@ NEW = """      window.castleDoomCanvasSize = [width, height];
     };"""
 
 
+SW_OLD = """    rtl.showUncaughtExceptions=true;"""
+
+SW_NEW = """    /* Offline play after one visit (pages/sw.js at the site root). */
+    if ('serviceWorker' in navigator)
+      navigator.serviceWorker.register('../sw.js').catch(e => console.log('Service worker not registered:', e));
+
+    rtl.showUncaughtExceptions=true;"""
+
+
 def main():
     if len(sys.argv) != 2:
         print(__doc__)
@@ -43,16 +54,19 @@ def main():
     path = sys.argv[1]
     with open(path, encoding='utf-8') as f:
         text = f.read()
-    if 'castleDoomSetScale' in text:
-        print('%s: already patched' % path)
-        return
-    if text.count(OLD) != 1:
-        print('%s: the canvas sizing code was not found, cannot patch' % path)
-        sys.exit(1)
-    text = text.replace(OLD, NEW)
+    done = []
+    for marker, before, after, what in [('castleDoomSetScale', OLD, NEW, 'render scale'),
+                                        ('serviceWorker', SW_OLD, SW_NEW, 'service worker')]:
+        if marker in text:
+            continue
+        if text.count(before) != 1:
+            print('%s: the code for the %s patch was not found, cannot patch' % (path, what))
+            sys.exit(1)
+        text = text.replace(before, after)
+        done.append(what)
     with open(path, 'w', encoding='utf-8', newline='\n') as f:
         f.write(text)
-    print('%s: patched for the render scale' % path)
+    print('%s: patched (%s)' % (path, ', '.join(done) or 'already patched'))
 
 
 if __name__ == '__main__':

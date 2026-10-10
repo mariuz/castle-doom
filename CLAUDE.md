@@ -210,6 +210,13 @@ Pause / pointer lock: `UNLOCK` does what the browser's Esc does (cancels
 the pointer lock, so Doom's menu opens over the paused game; log
 `PointerLock:`), `RESUME` closes it like Esc or a click beside it. The save's `tic` must not move while paused.
 
+Offline web build: `pages/sw.js` (service worker; the play page
+registers it through `tools/patch_web_page.py`). Test it on a `web-site`
+artifact with `pages/index.html` and `pages/sw.js` copied in (the CI
+artifact already has them): load `play/?map=E1M1` with Playwright, wait
+for `navigator.serviceWorker.ready`, `context.setOffline(true)`, then
+`play/?map=E1M2` must log `Load: E1M2`.
+
 `CLICKPROMPT` shows the browser's "click to look around" prompt in an
 autotest (it is hidden in autotests otherwise). Gamepads (`GameGamepad`)
 log `Gamepad: Controller N: name` at startup (and on the web whenever the

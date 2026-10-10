@@ -82,7 +82,7 @@
       <kbd>J</kbd> music on/off, <kbd>F4</kbd> sound / music volume, <kbd>Tab</kbd> automap (<kbd>+</kbd>/<kbd>-</kbd> zoom, <kbd>G</kbd> grid), <kbd>F2</kbd> / <kbd>F3</kbd> save / load (<kbd>F6</kbd> / <kbd>F9</kbd> quick), <kbd>N</kbd> / <kbd>P</kbd> next / previous map, <kbd>H</kbd> help, <kbd>Esc</kbd> Doom's menu over the paused game (Options, sound volume, save / load; <kbd>Esc</kbd> again or a click beside it resumes and captures the mouse again).
       Gamepad (press a button on it first in the browser): left stick move, right stick look, right trigger fire, A use, bumpers weapons, View automap, Menu Doom's menu.
       Title screen: any key opens Doom's menu (arrows and <kbd>Enter</kbd>, or the mouse; <kbd>Esc</kbd> back), <kbd>F1</kbd> Read This!; Options picks the WAD, map and skill, the video options and, under Controls..., the keys for moving, firing, using and the automap (the defaults are listed here).
-      Saves are kept in your browser's local storage for this site.
+      Saves are kept in your browser's local storage for this site, and after one visit the game also plays offline.
     </p>
   </section>
 
@@ -219,6 +219,11 @@
 
   refresh();
 })();
+</script>
+<script>
+/* Offline play after one visit (sw.js: network first, cached copies when offline). */
+if ('serviceWorker' in navigator)
+  navigator.serviceWorker.register('sw.js').catch(e => console.log('Service worker not registered:', e));
 </script>
 </body>
 </html>

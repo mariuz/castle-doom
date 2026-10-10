@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Offline web build: `pages/sw.js`, a service worker at the site root
+  (the Web workflow copies it; the home page and the play page, through
+  `tools/patch_web_page.py`, register it), fetches the game's files when
+  it installs (the first visit's page loaded them before the worker saw
+  the requests) and then answers every same-site and Bootstrap CDN GET
+  network first, keeping a copy, and from the copy when the network
+  fails (query strings ignored, a directory as its `index.html`). Tested
+  with Playwright: after one online visit, E1M2 and the home page load
+  with the browser offline.
+
 - UMAPINFO episodes and boss actions: `episode = patch, name, key` adds
   a New Game episode starting at that map (its patch, or the name in
   the HU font when the patch is missing), `episode = clear` drops the
@@ -692,17 +702,17 @@ play.
 | **Gamepad button rebinding and more bindable actions**: keys are rebindable (see above); the gamepad layout is fixed, and weapon selection, the hotkeys (F, M, J...) and the mouse buttons are not bindable yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameGamepad` | S-M |
 | **The rest of UMAPINFO, and ZDoom MAPINFO**: UMAPINFO's keys are done (see above) except patch backdrops, `exitpic` / `enterpic` and the level name drawn as text on the intermission when there is no `levelpic`; ZDoom's MAPINFO syntax is not read. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
 | **More golden screenshots**: 28 still screenshots are compared (see above); fights, moving players and timed animations vary between runs, so they would need a fixed frame time in autotests (step the world by whole tics per frame) before they can be compared too. | Cover the rendering of monsters and effects. | `GameViewPlay` (autotest timing), `tools/run_autotests.py` | M |
-| **Offline web build**: a service worker caching the page, the wasm and the data zip, so the Pages site works offline after one visit. | A big first download, then instant starts. | `web.yml`, `pages/` | S-M |
+| **Installable web app**: the site works offline (see above); a web app manifest and icons would let browsers install it as an app with its own window. | A desktop-like start without the native package. | `pages/`, `web.yml` | S |
 | **Crash reporting in release builds**: catch the top-level exception, write the log path and the last 50 lines to a dialog (desktop) or the page (web). | Users can report what happened. | `GameInitialize` | S |
 
 ## Suggested next three
 
-1. Offline web build (S-M, see Other suggested improvements): a service
-   worker caching the page, the wasm and the data.
-2. Crash reporting in release builds (S, see Other suggested
+1. Crash reporting in release builds (S, see Other suggested
    improvements): the log's last lines in a dialog or on the page.
-3. More golden screenshots (M, see Other suggested improvements): a
+2. More golden screenshots (M, see Other suggested improvements): a
    fixed frame time in autotests so moving scenes compare too.
+3. Installable web app (S, see Other suggested improvements): a web app
+   manifest and icons.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

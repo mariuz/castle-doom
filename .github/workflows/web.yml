@@ -141,7 +141,7 @@ jobs:
         run: |
           set -eux
           mkdir -p _site/play _site/docs
-          cp pages/index.html _site/
+          cp pages/index.html pages/sw.js _site/
           cp docs/*.png _site/docs/
           cp -R castle-engine-output/web/dist/* _site/play/
           cp ondemand/freedoom2.zip _site/play/

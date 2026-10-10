@@ -1189,6 +1189,11 @@ Things that differ on the web and shaped the code:
 - All loading is synchronous from the in-memory data zip, so `Download()` of
   `castle-data:` and the custom protocols work unchanged.
 - Sound uses Web Audio; it needs a user gesture, which the START click is.
+- Offline: `pages/sw.js` is the site's service worker (registered by
+  both pages; the play page's registration comes from
+  `tools/patch_web_page.py`). It fetches the game's own files on install,
+  then serves GETs network first and keeps a copy of each, which it
+  returns when the network fails.
 - The render resolution option: CGE's page sizes the canvas to the
   display's pixels in a ResizeObserver; `tools/patch_web_page.py` (run by
   the Web workflow on `dist/index.html`) multiplies that by
