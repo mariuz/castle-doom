@@ -189,7 +189,7 @@ end;
 
 initialization
   ApplicationProperties.ApplicationName := 'castle-doom';
-  ApplicationProperties.Version := '0.6.0';
+  ApplicationProperties.Version := '0.7.0';
   InitializeLog;
   { CASTLE_DOOM_LOG=Load,Music: a filtered copy of the log (GameLogFilter). }
   StartLogFilter;

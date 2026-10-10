@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.7.0 (2026-10-10)
 
 - Rebindable keys: Options -> Controls... on the title screen sets two
   keys for moving, strafing, turning, running, firing, using and the
