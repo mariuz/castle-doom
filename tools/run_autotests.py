@@ -155,17 +155,36 @@ TESTS = [
      [r'Graphics: ANIMATED lump: 2 animations, 2 of them in this WAD', r'Graphics: SWITCHES lump: 2 switches',
       r'Switch: line 753: SW1BRN1 -> STARTAN3'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'boom.wad')], None),
+    # CASTLE_DOOM_LOG writes a log of only some categories (GameLogFilter).
+    ('log-filter', 'E1M1', 'Y,SHOTS,W:0.3,X,W:0.3,Q',
+     [r'Log: Categories Load,Shot \(CASTLE_DOOM_LOG\) also go to', r'Shot: '],
+     ['ENV:CASTLE_DOOM_LOG=Load,Shot'], lambda config: check_log_filtered(config)),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
+
+
+def check_log_filtered(config):
+    with open(os.path.join(config, 'castle-doom', 'castle-doom-filtered.log')) as f:
+        log = f.read()
+    for rx in [r'^Load: E1M1: map parsed', r'^Shot: ']:
+        assert re.search(rx, log, re.M), 'missing in the filtered log: %s' % rx
+    for rx in [r'^Graphics: ', r'^Music: ', r'^Things: ']:
+        assert not re.search(rx, log, re.M), 'filtered category still logged: %s' % rx
 
 
 def run_game(exe, out, name, mapname, demo, extra, config):
     args = [exe, '--autotest', mapname, os.path.join(out, name)]
     if demo:
         args += ['--demo', demo]
-    args += extra
     env = dict(os.environ, XDG_CONFIG_HOME=config)
+    # 'ENV:NAME=value' items of a test's extra arguments set the environment.
+    for item in extra:
+        if item.startswith('ENV:'):
+            key, _, value = item[4:].partition('=')
+            env[key] = value
+        else:
+            args.append(item)
     start = time.time()
     try:
         p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

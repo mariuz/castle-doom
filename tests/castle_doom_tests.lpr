@@ -19,7 +19,7 @@ program castle_doom_tests;
 
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
-  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad;
+  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameLogFilter;
 
 function DataPath(const Name: String): String;
 begin
@@ -40,6 +40,7 @@ type
     procedure TestPhase1;
     procedure TestPhase2;
     procedure TestBoomLumps;
+    procedure TestLogFilter;
   end;
 
   TTestMap = class(TTestCase)
@@ -115,6 +116,29 @@ begin
     AssertEquals('commercial switches', 3, Length(ParseSwitchesLump(W.LumpBytes(W.FindLump('SWITCHES')), 3)));
   finally
     FreeAndNil(W);
+  end;
+end;
+
+{ GameLogFilter's line rules (CASTLE_DOOM_LOG). }
+procedure TTestWad.TestLogFilter;
+var
+  Categories: TStringList;
+begin
+  Categories := TStringList.Create;
+  try
+    Categories.CaseSensitive := false;
+    Categories.Add('Load');
+    Categories.Add('Shot');
+    AssertEquals('category', 'Load', LogLineCategory('Load: E1M1: map parsed in 3 ms'));
+    AssertEquals('no category', '', LogLineCategory('  Version: 0.6.0.'));
+    AssertEquals('not a word', '', LogLineCategory('0.12 [0.12] - Load E1M1: x'));
+    AssertTrue('listed', LogLineKept('load: E1M1', Categories, false));
+    AssertFalse('not listed', LogLineKept('Music: Playing D_E1M1', Categories, true));
+    AssertTrue('warning', LogLineKept('Warning: Music: no device', Categories, false));
+    AssertTrue('continues a kept line', LogLineKept('> 0.09 [0.09] - Build geometry', Categories, true));
+    AssertFalse('continues a dropped line', LogLineKept('> 0.09 [0.09] - Build geometry', Categories, false));
+  finally
+    FreeAndNil(Categories);
   end;
 end;
 
