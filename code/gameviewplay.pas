@@ -12,6 +12,44 @@ uses Classes, SysUtils, FpJson,
   DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu;
 
 type
+  { An invisible control named DoomWorldStatus in the play view whose
+    published properties show the game's state in the engine's inspector
+    (F8, or the INSPECTOR demo command): select it in the hierarchy. }
+  TDoomWorldStatus = class(TCastleUserInterface)
+  strict private
+    function GetTic: Integer;
+    function GetHealth: Integer;
+    function GetArmor: Integer;
+    function GetPlayerX: Single;
+    function GetPlayerY: Single;
+    function GetPlayerZ: Single;
+    function GetPlayerAngle: Single;
+    function GetKills: Integer;
+    function GetTotalKills: Integer;
+    function GetItemsFound: Integer;
+    function GetSecretsFound: Integer;
+    function GetThings: Integer;
+    function GetSectors: Integer;
+  public
+    World: TDoomWorld;
+    MapName: String;
+  published
+    property Map: String read MapName;
+    property Tic: Integer read GetTic;
+    property PlayerHealth: Integer read GetHealth;
+    property PlayerArmor: Integer read GetArmor;
+    property PlayerX: Single read GetPlayerX;
+    property PlayerY: Single read GetPlayerY;
+    property PlayerZ: Single read GetPlayerZ;
+    property PlayerAngle: Single read GetPlayerAngle;
+    property Kills: Integer read GetKills;
+    property TotalKills: Integer read GetTotalKills;
+    property ItemsFound: Integer read GetItemsFound;
+    property SecretsFound: Integer read GetSecretsFound;
+    property Things: Integer read GetThings;
+    property Sectors: Integer read GetSectors;
+  end;
+
   TViewPlay = class(TCastleView)
   strict private
     FViewport: TCastleViewport;
@@ -24,6 +62,7 @@ type
     FPaletteFlash: TCastleRectangleControl;
     FPaletteTints: array [0..13] of TVector4;
     FInfoLabel, FHelpLabel: TCastleLabel;
+    FWorldStatus: TDoomWorldStatus;
     FMessageText, FLoadingText, FAutomapTitle: TDoomFontText;
     { "Click to look around" while mouse look is wanted but the browser
       released the pointer (Esc, another window). }
@@ -215,8 +254,10 @@ var
   TintAmount: Single;
 begin
   FViewport := TCastleViewport.Create(FreeAtStop);
+  FViewport.Name := 'Viewport';
   FViewport.FullSize := true;
   Camera := TCastleCamera.Create(FViewport);
+  Camera.Name := 'Camera';
   Camera.ProjectionNear := 4;
   Camera.ProjectionFar := 0; { automatic / infinite }
   Camera.Perspective.FieldOfViewAxis := faHorizontal;
@@ -230,16 +271,19 @@ begin
 
   { The subclass only opens Move for the knockback. }
   FNavigation := TWalkNavigationAccess.Create(FreeAtStop);
+  FNavigation.Name := 'Navigation';
   FViewport.InsertFront(FNavigation);
   SetupNavigation;
 
   { Automap, drawn over the 3D view and under the HUD. }
   FAutomap := TDoomAutomap.Create(FreeAtStop);
+  FAutomap.Name := 'Automap';
   FAutomap.Exists := false;
   InsertFront(FAutomap);
 
   { Screen flashes. }
   FPaletteFlash := TCastleRectangleControl.Create(FreeAtStop);
+  FPaletteFlash.Name := 'PaletteFlash';
   FPaletteFlash.FullSize := true;
   FPaletteFlash.Color := Vector4(0, 0, 0, 0);
   InsertFront(FPaletteFlash);
@@ -253,22 +297,28 @@ begin
 
   { Weapon sprite and muzzle flash. }
   FWeaponImage := TCastleImageControl.Create(FreeAtStop);
+  FWeaponImage.Name := 'WeaponImage';
   FWeaponImage.SmoothScaling := false;
   FWeaponImage.Stretch := true;
   InsertFront(FWeaponImage);
   FFlashImage := TCastleImageControl.Create(FreeAtStop);
+  FFlashImage.Name := 'WeaponFlash';
   FFlashImage.SmoothScaling := false;
   FFlashImage.Stretch := true;
   InsertFront(FFlashImage);
 
   FStatusBar := TDoomStatusBar.Create(FreeAtStop, Graphics);
+  FStatusBar.Name := 'StatusBar';
+  FStatusBar.Name := 'StatusBar';
   InsertFront(FStatusBar);
 
   FCrosshair := TCastleCrosshair.Create(FreeAtStop);
+  FCrosshair.Name := 'Crosshair';
   InsertFront(FCrosshair);
 
   { Player messages in Doom's own STCFN font. }
   FMessageText := TDoomFontText.Create(FreeAtStop);
+  FMessageText.Name := 'MessageText';
   FMessageText.Graphics := Graphics;
   FMessageText.Anchor(hpLeft, 8);
   FMessageText.Anchor(vpTop, -8);
@@ -276,6 +326,7 @@ begin
   InsertFront(FMessageText);
 
   FClickPrompt := TDoomFontText.Create(FreeAtStop);
+  FClickPrompt.Name := 'ClickPrompt';
   FClickPrompt.Graphics := Graphics;
   FClickPrompt.Anchor(hpMiddle);
   FClickPrompt.Anchor(vpMiddle, 40);
@@ -285,19 +336,28 @@ begin
 
   { The level title at the bottom left of the automap (AM_drawTitle). }
   FAutomapTitle := TDoomFontText.Create(FreeAtStop);
+  FAutomapTitle.Name := 'AutomapTitle';
   FAutomapTitle.Graphics := Graphics;
   FAutomapTitle.Anchor(hpLeft, 8);
   FAutomapTitle.Exists := false;
   InsertFront(FAutomapTitle);
 
   FInfoLabel := TCastleLabel.Create(FreeAtStop);
+  FInfoLabel.Name := 'InfoLabel';
   FInfoLabel.Color := Vector4(1, 1, 0.6, 0.9);
   FInfoLabel.FontSize := 18;
   FInfoLabel.Anchor(hpRight, -16);
   FInfoLabel.Anchor(vpTop, -12);
   InsertFront(FInfoLabel);
 
+  FWorldStatus := TDoomWorldStatus.Create(FreeAtStop);
+  FWorldStatus.Name := 'DoomWorldStatus';
+  FWorldStatus.Width := 0;
+  FWorldStatus.Height := 0;
+  InsertFront(FWorldStatus);
+
   FHelpLabel := TCastleLabel.Create(FreeAtStop);
+  FHelpLabel.Name := 'HelpLabel';
   FHelpLabel.Color := Vector4(0.9, 0.9, 0.9, 0.9);
   FHelpLabel.FontSize := 18;
   FHelpLabel.Frame := true;
@@ -321,23 +381,27 @@ begin
   FHelpVisible := true;
 
   FIntermissionBack := TCastleRectangleControl.Create(FreeAtStop);
+  FIntermissionBack.Name := 'IntermissionBack';
   FIntermissionBack.FullSize := true;
   FIntermissionBack.Color := Vector4(0, 0, 0, 1);
   FIntermissionBack.Exists := false;
   InsertFront(FIntermissionBack);
   { The real Doom intermission screen (320x200, kept 4:3 and centred). }
   FIntermissionScreen := TDoomIntermission.Create(FreeAtStop);
+  FIntermissionScreen.Name := 'Intermission';
   FIntermissionScreen.Anchor(hpMiddle);
   FIntermissionScreen.Anchor(vpMiddle);
   FIntermissionScreen.Exists := false;
   InsertFront(FIntermissionScreen);
 
   FFinaleScreen := TDoomFinale.Create(FreeAtStop);
+  FFinaleScreen.Name := 'Finale';
   FFinaleScreen.Anchor(hpMiddle);
   FFinaleScreen.Anchor(vpMiddle);
   FFinaleScreen.Exists := false;
   InsertFront(FFinaleScreen);
   FLoadingText := TDoomFontText.Create(FreeAtStop);
+  FLoadingText.Name := 'LoadingText';
   FLoadingText.Graphics := Graphics;
   FLoadingText.Anchor(hpMiddle);
   FLoadingText.Anchor(vpMiddle);
@@ -346,11 +410,13 @@ begin
 
   { Doom's menu over the game (Esc, F2, F3, F4) on a dark panel. }
   FSlotMenuBack := TCastleRectangleControl.Create(FreeAtStop);
+  FSlotMenuBack.Name := 'SlotMenuBack';
   FSlotMenuBack.FullSize := true;
   FSlotMenuBack.Color := Vector4(0, 0, 0, 0.7);
   FSlotMenuBack.Exists := false;
   InsertFront(FSlotMenuBack);
   FSlotScreen := TDoomMenuScreen.Create(FreeAtStop);
+  FSlotScreen.Name := 'SlotMenu';
   FSlotScreen.Overlay := true;
   FSlotScreen.Anchor(hpMiddle);
   FSlotScreen.Anchor(vpMiddle);
@@ -361,6 +427,7 @@ begin
 
   { The screen melt, above everything. }
   FWipe := TDoomWipe.Create(FreeAtStop);
+  FWipe.Name := 'Wipe';
   FWipe.Exists := false;
   InsertFront(FWipe);
 end;
@@ -407,6 +474,86 @@ begin
   FNavigation.Input_Run.Assign(keyShift, keyNone);
 end;
 
+{ TDoomWorldStatus }
+
+function TDoomWorldStatus.GetTic: Integer;
+begin
+  if World = nil then Exit(0);
+  Result := World.Tic;
+end;
+
+function TDoomWorldStatus.GetHealth: Integer;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.Health;
+end;
+
+function TDoomWorldStatus.GetArmor: Integer;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.Armor;
+end;
+
+function TDoomWorldStatus.GetPlayerX: Single;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.X;
+end;
+
+function TDoomWorldStatus.GetPlayerY: Single;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.Y;
+end;
+
+function TDoomWorldStatus.GetPlayerZ: Single;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.Z;
+end;
+
+function TDoomWorldStatus.GetPlayerAngle: Single;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.Angle;
+end;
+
+function TDoomWorldStatus.GetKills: Integer;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.Kills;
+end;
+
+function TDoomWorldStatus.GetTotalKills: Integer;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.TotalKills;
+end;
+
+function TDoomWorldStatus.GetItemsFound: Integer;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.Items;
+end;
+
+function TDoomWorldStatus.GetSecretsFound: Integer;
+begin
+  if World = nil then Exit(0);
+  Result := World.Player.Secrets;
+end;
+
+function TDoomWorldStatus.GetThings: Integer;
+begin
+  if World = nil then Exit(0);
+  Result := World.Actors.Count;
+end;
+
+function TDoomWorldStatus.GetSectors: Integer;
+begin
+  if (World = nil) or (World.Map = nil) then Exit(0);
+  Result := Length(World.Map.Sectors);
+end;
+
 procedure TViewPlay.Start;
 var
   Url: String;
@@ -419,6 +566,7 @@ begin
   ApplyDehacked(Wad);
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
   FWorld.Skill := Skill;
+  FWorldStatus.World := FWorld;
   FreeAndNil(FStrings);
   FStrings := TDoomStrings.Create(Wad);
   FWorld.Strings := FStrings;
@@ -443,6 +591,7 @@ begin
   FreeAndNil(FPendingSave);
   FSlotMenu := SlotMenuNone;
   FreeAndNil(FDemoSteps);
+  FWorldStatus.World := nil;
   FreeAndNil(FWorld);
   FreeAndNil(FStrings);
   FreeAndNil(FPendingWipe);
@@ -668,6 +817,13 @@ begin
     {$endif}
     WritelnLog('AutoTest', 'Saved screenshot %d at %s (player %f %f %f)', [FAutoTestShots, FMapName,
       FWorld.Player.X, FWorld.Player.Y, FWorld.Player.Z]);
+  end else if Cmd = 'INSPECTOR' then
+  begin
+    { The engine's inspector (F8): the hierarchy under the viewport is
+      grouped and named (Map, Things, Sprites), the things and the
+      DoomWorldStatus control publish their state. }
+    Container.EventPress(InputKey(Container.MousePosition, keyF8, '', []));
+    WritelnLog('AutoTest', 'Inspector toggled');
   end else if Cmd = 'PERF' then
     { Log the render statistics and the frame rate now (the 10 s lines too). }
     PerfLog
@@ -753,6 +909,7 @@ begin
   KeepInventory := FPendingKeepInventory;
   FPendingMap := '';
   FMapName := MapName;
+  FWorldStatus.MapName := MapName;
   Restored := false;
   if FPendingSave <> nil then
   begin

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The engine's inspector (F8) works in every build, not only debug ones,
+  and shows a named tree: the map chunks, every thing with its type,
+  sprite, frame, state, hit points and position, the sprite batches,
+  the views' controls and a `DoomWorldStatus` entry with the map, tic,
+  player and kill counts.
 - DeHackEd frames and code pointers: vanilla's state table (generated
   from the Doom source's info.c into the game) is what `-deh` / `-bex`
   patches and the WADs' `DEHACKED` lumps edit ("Frame N", "Pointer N",

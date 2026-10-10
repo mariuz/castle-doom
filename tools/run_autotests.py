@@ -99,6 +99,8 @@ TESTS = [
      [r'Line: line 269 special 74'], [], check_crusher),
     # The Nuked OPL3 library (data/lib, built by tools/build_nuked_opl3.sh)
     # loads and renders the intro of the level's song.
+    ('inspector', 'E1M1', 'W:1,INSPECTOR,W:1.5,S,INSPECTOR,W:0.3,Q',
+     [r'AutoTest: Inspector toggled', r'AutoTest: Saved screenshot 1'], [], None),
     ('music-opl3', 'E1M1', 'W:6,Q',
      [r'Music: Nuked OPL3 loaded from', r'Playing the first \d+\.\d s of D_E1M1'], [], None),
     ('title-pages', 'MENUTITLE', None, [r'Menu screenshot MENUTITLE'], [], None),

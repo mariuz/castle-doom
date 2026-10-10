@@ -225,6 +225,16 @@ draw-call counts and a CDP CPU profile (wasm vs JS glue time), not its FPS.
 `LOOK:deg` pitches the view (negative looks down), for sky and floor
 screenshots.
 
+The engine's inspector: `INSPECTOR` in a demo sends F8 (`W:1,INSPECTOR,
+W:1.5,S` screenshots it; autotest `inspector`). F8 works in release builds
+only because `GameInitialize` sets `TCastleContainer.InputInspector.Key`
+(CGE registers it in `InitializeDebug`, debug builds only). Keep the tree
+readable: new scenes and transforms get a `Name` (owner-less components
+need no unique names; owned ones must be unique per owner), new actor or
+world state worth seeing goes into the `published` properties of
+`TDoomActor` or `TDoomWorldStatus` (read-only getters are fine), and
+things belong under the `Things` group, map scenes under `Map`.
+
 Sector specials: `LINE:n[:special]` activates linedef n (as another
 special with the same tag if given; `Line:` log). MAP05's donut:
 `Y,G:-64:408,A:-90,W:0.3,U,W:9,SAVE:2` (grep `Donut:`; sectors 54 and 53

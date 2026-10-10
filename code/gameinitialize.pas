@@ -7,6 +7,7 @@ implementation
 
 uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
+  CastleKeysMouse,
   CastleUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
   DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
@@ -158,13 +159,20 @@ begin
   { Volumes and toggles from the last session. }
   LoadSettings;
   InitializeGamepads;
+  { The engine's inspector on F8 in every build: CGE registers the key
+    only through ApplicationProperties.InitializeDebug, which the
+    generated program calls in debug builds alone. The hierarchy it shows
+    is grouped and named (Map, Things, Sprites, DoomWorldStatus). }
+  TCastleContainer.InputInspector.Key := keyF8;
   { CASTLE_DOOM_LOG_SHADERS=1 logs every shader compile and link (CGE's
     LogShaders): a count that keeps growing during play means GL
     resources are being recreated, which is slow in the browser. }
   LogShaders := GetEnvironmentVariable('CASTLE_DOOM_LOG_SHADERS') <> '';
   DoomLightingInstance.Diminish := Settings.Diminish;
   ViewMenu := TViewMenu.Create(Application);
+  ViewMenu.Name := 'ViewMenu';
   ViewPlay := TViewPlay.Create(Application);
+  ViewPlay.Name := 'ViewPlay';
   Window.Container.View := ViewMenu;
 end;
 

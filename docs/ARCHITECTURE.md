@@ -1032,6 +1032,22 @@ the player position.
 
 ---
 
+### The engine's inspector
+
+F8 opens Castle Game Engine's inspector in every build (`GameInitialize`
+sets `TCastleContainer.InputInspector.Key`; the engine itself registers
+the key only in debug builds). What it shows is arranged for it: the
+viewport's items are grouped under `Map` (`Chunk<n>_Solid` /
+`_Passable`, `LineCollision`, `Sky`), `Things` (each `TDoomActor` is
+named `<SPRITE>_<serial>` and publishes `ThingType`, `SpriteName`,
+`CurrentFrame`, `ActorState`, `HitPoints`, `IsAwake`, `DoomPositionX/Y/Z`
+and `DoomSector` for the properties pane) and `Sprites` (the batch
+scenes `SpritesLight<n>[_Bright|_Fuzz]`); the views and their controls
+carry names, and `TDoomWorldStatus` (an invisible control in the play
+view) publishes the map, tic, player health, armor, position, angle,
+kills, items, secrets, thing and sector counts. The demo command
+`INSPECTOR` sends F8, so an autotest can screenshot it.
+
 ## 16. Platforms: desktop, WebAssembly, CI
 
 The same code builds for Windows, Linux and the browser. `castle-engine
@@ -1159,5 +1175,6 @@ Where each engine feature is used, as a map for learning the engine:
 | FPC `fpjson` / `jsonparser` (`TJSONObject`, `GetJSON`) | doomworld_save.inc, GameViewPlay | save game format |
 | `TCastleUserInterface.Render`, `DrawPrimitive2D`, `DrawRectangle`, `RenderRect` | DoomAutomap | immediate-mode 2D drawing |
 | `Container.Fps`, `WritelnLog`, `WritelnWarning`, `Application.MainWindow.SaveScreen` | GameViewPlay, everywhere | diagnostics and screenshots |
+| `TCastleContainer.InputInspector.Key`, `Container.EventPress(InputKey(...))`, component `Name`s, `published` properties on `TCastleTransform` / `TCastleUserInterface` descendants | GameInitialize, DoomWorld, DoomActors, GameViewPlay | the F8 inspector in every build and what it shows |
 | `TGLRenderToTexture` (`tbNone`), `Container.RenderControl`, `SaveScreen_NoFlush`, `TDrawableImage.Draw(ScreenRect, ImageRect)`, `TCastleUserInterface.Render` / `RenderRect` | GameViewPlay, DoomWipe | the screen melt (off-screen capture works under WebGL) |
 | `castle-engine compile/package/generate-program`, `--target=web` | CI | builds |

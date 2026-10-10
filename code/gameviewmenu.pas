@@ -166,12 +166,14 @@ begin
   if CmdSkill >= 0 then FSkill := CmdSkill;
 
   Back := TCastleRectangleControl.Create(FreeAtStop);
+  Back.Name := 'Background';
   Back.FullSize := true;
   Back.Color := Black;
   InsertFront(Back);
 
   { Doom's menu over TITLEPIC, 320x200 shown 4:3 (sized in Update). }
   FDoomMenu := TDoomMenuScreen.Create(FreeAtStop);
+  FDoomMenu.Name := 'DoomMenu';
   FDoomMenu.Anchor(hpMiddle);
   FDoomMenu.Anchor(vpMiddle);
   FDoomMenu.OnAction := {$ifdef FPC}@{$endif} DoomMenuAction;
@@ -179,12 +181,14 @@ begin
 
   { Options: the WAD / map / skill picker. }
   FOptions := TCastleRectangleControl.Create(FreeAtStop);
+  FOptions.Name := 'OptionsPanel';
   FOptions.FullSize := true;
   FOptions.Color := Vector4(0.05, 0.02, 0.02, 0.92);
   FOptions.Exists := false;
   InsertFront(FOptions);
 
   FButtons := TCastleVerticalGroup.Create(FreeAtStop);
+  FButtons.Name := 'OptionsButtons';
   FButtons.Anchor(hpMiddle);
   FButtons.Anchor(vpMiddle);
   FButtons.Spacing := 10;

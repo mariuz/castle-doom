@@ -138,6 +138,10 @@ type
     FMap: TDoomMap;
     FGeometry: TDoomGeometry;
     FItems: TCastleRootTransform;
+    { The viewport's tree as the engine's inspector (F8) shows it: the map
+      scenes under "Map", the things under "Things", the sprite batch
+      scenes under "Sprites". }
+    FMapGroup, FThingsGroup, FSpritesGroup: TCastleTransform;
     { The scenes the things are drawn in (DoomActors). }
     FSpriteBatch: TSpriteBatch;
     FActors: TDoomActorList;
@@ -581,6 +585,7 @@ begin
   Phase := mpMoving;
   { A sound emitter in the middle of the sector. }
   Emitter := TCastleTransform.Create(nil);
+  Emitter.Name := Format('SectorSound%d', [Sector]);
   CX := 0; CY := 0; N := 0;
   for Sub in World.Map.Sectors[Sector].Subsectors do
     for I := 0 to High(World.Map.Subsectors[Sub].Poly) do
@@ -763,7 +768,16 @@ begin
   FGraphics := AGraphics;
   FSounds := ASounds;
   FItems := AItems;
-  FSpriteBatch := TSpriteBatch.Create(FItems);
+  FMapGroup := TCastleTransform.Create(nil);
+  FMapGroup.Name := 'Map';
+  FItems.Add(FMapGroup);
+  FThingsGroup := TCastleTransform.Create(nil);
+  FThingsGroup.Name := 'Things';
+  FItems.Add(FThingsGroup);
+  FSpritesGroup := TCastleTransform.Create(nil);
+  FSpritesGroup.Name := 'Sprites';
+  FItems.Add(FSpritesGroup);
+  FSpriteBatch := TSpriteBatch.Create(FSpritesGroup);
   FActors := TDoomActorList.Create(true);
   FMovers := TSectorMoverList.Create(true);
   FPlayerEmitter := TCastleTransform.Create(nil);
@@ -778,6 +792,9 @@ begin
   FreeAndNil(FMovers);
   FreeAndNil(FActors);
   FreeAndNil(FSpriteBatch);
+  FreeAndNil(FSpritesGroup);
+  FreeAndNil(FThingsGroup);
+  FreeAndNil(FMapGroup);
   inherited;
 end;
 
@@ -997,7 +1014,7 @@ begin
     A.SetLight(FMap.Sectors[Sec].LightLevel);
     A.UpdateTransform;
     FActors.Add(A);
-    FItems.Add(A);
+    FThingsGroup.Add(A);
     { The boss brain has no MF_COUNTKILL. }
     if (Info^.Kind = tkMonster) and (Info^.Num <> 88) then Inc(Player.TotalKills);
     if (Info^.Kind = tkPickup) and (Info^.Pickup in [pkStimpack, pkMedikit, pkHealthBonus, pkArmorBonus,
@@ -1037,10 +1054,11 @@ begin
   WritelnLog('Load', '%s: map parsed in %d ms', [MapName, Ms]);
   FGraphics.BeginLevel;
   FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName));
-  FGeometry.AddToWorld(FItems);
+  FGeometry.AddToWorld(FMapGroup);
   { The previous level's geometry is gone: its textures can go too. }
   FGraphics.ReleaseUnused;
   WritelnLog('Load', '%s: geometry built in %d ms', [MapName, Ms]);
+  FPlayerEmitter.Name := 'PlayerSound';
   FItems.Add(FPlayerEmitter);
   if KeepInventory and not Saved.Dead then
   begin
@@ -2351,7 +2369,7 @@ begin
   Result.SetLight(FMap.Sectors[Sec].LightLevel);
   Result.UpdateTransform;
   FActors.Add(Result);
-  FItems.Add(Result);
+  FThingsGroup.Add(Result);
 end;
 
 { A_SkullAttack: fly at the target's middle at 20 units per tic. }
@@ -2502,7 +2520,7 @@ begin
   Result.PlaySequence(EffectInfos[Kind].IdleFrames, Tics, false);
   Result.UpdateTransform;
   FActors.Add(Result);
-  FItems.Add(Result);
+  FThingsGroup.Add(Result);
 end;
 
 { Icon of Sin (p_enemy.c A_BrainAwake / A_BrainSpit / A_SpawnFly /
@@ -2588,7 +2606,7 @@ begin
   Cube.PlaySequence('ABCD', 3, true);
   Cube.UpdateTransform;
   FActors.Add(Cube);
-  FItems.Add(Cube);
+  FThingsGroup.Add(Cube);
   FSounds.Play('DSBOSPIT');
   WritelnLog('BrainSpit', 'Cube to (%f, %f), %d tics', [Targ.DoomX, Targ.DoomY, Cube.ReactionTics]);
 end;
@@ -2695,7 +2713,7 @@ begin
   Result.PlaySequence('ABABCDEFGHIJ', 6, false);
   Result.UpdateTransform;
   FActors.Add(Result);
-  FItems.Add(Result);
+  FThingsGroup.Add(Result);
   FSounds.PlayAt('DSTELEPT', Result);
 end;
 
@@ -2835,7 +2853,7 @@ begin
   A.Fire := F;
   FollowVileFire(F);
   FActors.Add(F);
-  FItems.Add(F);
+  FThingsGroup.Add(F);
   FSounds.PlayAt('DSFLAMST', F);
 end;
 
@@ -3147,7 +3165,7 @@ begin
   M.SetLight(255);
   M.UpdateTransform;
   FActors.Add(M);
-  FItems.Add(M);
+  FThingsGroup.Add(M);
   if EffectInfos[K].AttackSound <> '' then
     FSounds.PlayAt(EffectInfos[K].AttackSound, A);
 end;
@@ -3317,7 +3335,7 @@ begin
   M.SetLight(255);
   M.UpdateTransform;
   FActors.Add(M);
-  FItems.Add(M);
+  FThingsGroup.Add(M);
   if EffectInfos[Kind].AttackSound <> '' then
     FSounds.Play(EffectInfos[Kind].AttackSound);
 end;
@@ -3373,7 +3391,7 @@ begin
       Fx.PlaySequence('ABCD', 4, false);
       Fx.UpdateTransform;
       FActors.Add(Fx);
-      FItems.Add(Fx);
+      FThingsGroup.Add(Fx);
     end;
   end;
 end;
@@ -3464,7 +3482,7 @@ begin
     Blood.PlaySequence('CBA', 8, false);
     Blood.UpdateTransform;
     FActors.Add(Blood);
-    FItems.Add(Blood);
+    FThingsGroup.Add(Blood);
   end;
   if A.Health <= 0 then
   begin
@@ -3572,7 +3590,7 @@ begin
       Drop.SetLight(FMap.Sectors[Max(0, A.Sector)].LightLevel);
       Drop.UpdateTransform;
       FActors.Add(Drop);
-      FItems.Add(Drop);
+      FThingsGroup.Add(Drop);
     end;
   end;
 end;
@@ -3754,7 +3772,7 @@ begin
   Puff.PlaySequence('ABCD', 4, false);
   Puff.UpdateTransform;
   FActors.Add(Puff);
-  FItems.Add(Puff);
+  FThingsGroup.Add(Puff);
 end;
 
 function TDoomWorld.Shootable(const O: TDoomActor): Boolean;
@@ -4791,7 +4809,7 @@ begin
         Fog.PlaySequence('ABABCDEFGHIJ', 6, false);
         Fog.UpdateTransform;
         FActors.Add(Fog);
-        FItems.Add(Fog);
+        FThingsGroup.Add(Fog);
         FSounds.PlayAt('DSTELEPT', Fog);
 
         PlayerTeleported := true;
@@ -4818,7 +4836,7 @@ begin
         Fog.PlaySequence('ABABCDEFGHIJ', 6, false);
         Fog.UpdateTransform;
         FActors.Add(Fog);
-        FItems.Add(Fog);
+        FThingsGroup.Add(Fog);
         FSounds.Play('DSTELEPT');
         Exit;
       end;

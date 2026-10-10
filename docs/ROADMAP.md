@@ -6,6 +6,22 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Inspectable in Castle Game Engine's tools: the F8 inspector works in
+  every build (CGE registers its key only through `InitializeDebug`,
+  which the generated program calls in debug builds alone, so the
+  release packages had no inspector; `GameInitialize` sets
+  `TCastleContainer.InputInspector.Key`). Its hierarchy is grouped and
+  named: the viewport holds `Map` (`Chunk<n>_Solid` / `_Passable`,
+  `LineCollision`, `Sky`), `Things` (every `TDoomActor` named
+  `<SPRITE>_<n>`, with published `ThingType`, `SpriteName`,
+  `CurrentFrame`, `ActorState`, `HitPoints`, `IsAwake`, `DoomPosition*`,
+  `DoomSector` in the properties pane) and `Sprites`
+  (`SpritesLight<n>[_Bright|_Fuzz]` batch scenes); the views and their
+  controls (`Viewport`, `Camera`, `Navigation`, `StatusBar`, `Automap`,
+  `HelpLabel`...) carry names, and the invisible `DoomWorldStatus`
+  control publishes the map, tic, player health / armor / position,
+  kills, items, secrets, thing and sector counts. Demo command
+  `INSPECTOR` (sends F8), autotest `inspector` screenshots it.
 - Map texture atlas: each level's wall textures and flats are packed into
   atlas pages (2048 wide, trimmed to a power-of-two height, more pages
   when full; E1M1: 150 images in one 2048x1024 page) with a 1-texel
@@ -510,15 +526,48 @@ L = several days). Items inside a section are in suggested order.
 | **Web gamepads in CGE itself**: the game's `GameGamepad` polls the Gamepad API through JOB (done, see above); a real `CastleInternalGameControllersWeb` backend inside CGE (`gamepadconnected` events, `mapping` other than `standard`) would serve every CGE web game. Best contributed upstream. | One less game-side workaround. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
 | **Performance**: build a static-sector blockmap; merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
 
+## 6. Inspectability (Castle Game Engine's tools)
+
+What the F8 inspector shows is done (see above). The rest makes the
+project at home in the CGE editor and the inspector more useful during
+play.
+
+| Item | Why | Where | Size |
+|---|---|---|---|
+| **Open the project in the CGE editor**: register the game's controls (`TDoomStatusBar`, `TDoomFontText`, `TDoomMenuScreen`, `TDoomAutomap`, `TDoomWorldStatus`) with `RegisterSerializableComponent` in an `editor_units` unit named in `CastleEngineManifest.xml`, so `castle-engine editor` lists them and designs can hold them; a first `data/play.castle-user-interface` with the HUD layout. | The editor workflow instead of code-only layout; needed by the designs row below. | new `GameEditorComponents` unit, manifest | M |
+| **A Doom map component for the editor**: a `TCastleTransform` descendant with published `Wad` and `Map` properties that builds the level geometry (and static billboards for the things) when placed in a design, so the editor's 3D view shows a Freedoom level with its lighting and the atlas. | Levels become inspectable without running the game; a showcase for CGE. | `DoomGeometry`, `DoomGraphics` behind a design-time component | M-L |
+| **Live thing inspection**: `Things` has 200+ entries, so sort them by state or distance, publish the target, the current sequence's name and tics left, and add a `SELECT:n` demo command (CGE's inspector can select a component) and the inspector's F9 auto-select for the thing under the crosshair. | Find the monster you are looking at. | `DoomActors`, `GameViewPlay` | S |
+| **Profiler sections**: wrap the map load stages (parse, geometry, atlas, things, music intro) and the per-tic phases in `Profiler.Start` / `Stop` so the inspector's Profiler tab and `Profiler.Summary` show them next to CGE's own; the `Perf:` lines stay. | One place for timings. | `GameViewPlay`, `DoomWorld` | S |
+| **Debug drawing**: toggles that draw the subsector polygons, blocking lines, sector heights, actor radii and the player's line of fire as wireframe scenes under a `Debug` group, each one switched by the inspector's Exists checkbox. | See the simulation, not only the pixels. | new `DoomDebugDraw` | M |
+| **Drop `DynamicBatching`**: the viewport still has it on from before the atlas and the sprite batches, and CGE warns "Consider increasing MergeSlots" on every level; measure the draw calls with it off and remove it if they match. | One warning less, maybe fewer relinks. | `GameViewPlay` | S |
+| **Inspector in the browser**: it is plain CGE UI so it should work on the web; check F8 under pointer lock (the browser keeps Esc, F8 is free) and the inspector's own key handling against the game's. | Debug the live page in place. | `GameViewPlay` | S |
+| **Log filtering**: `CASTLE_DOOM_LOG=Load,Music` (or `--log-categories`) to keep only some `WritelnLog` categories, so the inspector's Log tab and the autotest logs stay readable on long runs. | Signal over noise. | `GameInitialize` | S |
+
+## 7. Other suggested improvements
+
+| Item | Why | Where | Size |
+|---|---|---|---|
+| **Video options**: field of view, window / fullscreen toggle, UI scale, v-sync, a resolution scale for slow browsers, in the F4-style options page and `settings.json`. | The most asked-for options after mouse sensitivity. | `GameSettings`, `GameViewMenu`, `GameViewPlay` | S-M |
+| **Key and button rebinding**: a controls page writing the bindings to `settings.json`; the help panel and `pages/index.html` read them. | Players expect it. | `GameSettings`, `GameViewPlay`, `GameGamepad` | M |
+| **UMAPINFO / MAPINFO**: level names, music, par, next and secret map, sky and episode definitions from PWADs. | Modern PWADs ship them; without it the port falls back to vanilla's progression. | new `DoomMapInfo`, `DoomWorld.NextMapName` | M |
+| **Boom `ANIMATED` and `SWITCHES` lumps**: PWAD-defined texture and flat animations and switch pairs. | Common in community WADs; small. | `DoomGraphics` animation groups | S |
+| **Golden screenshots in CI**: compare the autotests' PNGs with stored references (a tolerance for software GL), failing on a changed frame. | Rendering regressions are caught by eye today. | `tools/run_autotests.py`, `build.yml` | M |
+| **Offline web build**: a service worker caching the page, the wasm and the data zip, so the Pages site works offline after one visit. | A big first download, then instant starts. | `web.yml`, `pages/` | S-M |
+| **Crash reporting in release builds**: catch the top-level exception, write the log path and the last 50 lines to a dialog (desktop) or the page (web). | Users can report what happened. | `GameInitialize` | S |
+
 ## Suggested next three
 
-1. Browser frame rate (M): sprites merged and the map in an atlas (a
-   frame at E1M1's door is 56 draw calls, from 255), see Presentation;
-   what is left is in CGE's web renderer (vertex array objects, cached
-   uniform locations), best contributed upstream.
+1. Open the project in the CGE editor (M, see Inspectability): register
+   the game's controls as editor components and put the HUD in a first
+   `.castle-user-interface` design, the step the other editor items
+   build on.
 2. Atlas mipmaps (S, see Presentation): sample the atlas with explicit
    gradients (`texture2DGradEXT` on WebGL 1, `textureGrad` elsewhere) so
    far floors and walls stop shimmering without the per-texture shapes.
 3. DeHackEd weapons and projectiles (M, see Gameplay): drive the
    player's weapon animations and the projectiles from the state table
    too, so "Weapon N" and the projectile rows of a patch take effect.
+
+Still worth doing but out of this repository's hands: the browser frame
+rate's remaining cost is in CGE's web renderer (vertex array objects,
+cached uniform locations), best contributed upstream.

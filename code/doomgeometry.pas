@@ -341,7 +341,6 @@ begin
   Name := AName;
   FBatches := TGeomBatchDict.Create([doOwnsValues]);
   SceneSolid := TCastleScene.Create(nil);
-  SceneSolid.Name := '';
   SceneSolid.PreciseCollisions := true;
   ScenePassable := TCastleScene.Create(nil);
   ScenePassable.Collides := false;
@@ -992,13 +991,21 @@ end;
 procedure TDoomGeometry.AddToWorld(const Parent: TCastleTransform);
 var
   C: TMapChunk;
+  I: Integer;
 begin
   FVisible := true;
-  for C in FChunks do
+  { Names for the engine's inspector (F8): the scenes have no owner, so
+    they are free to carry any. }
+  for I := 0 to FChunks.Count - 1 do
   begin
+    C := FChunks[I];
+    C.SceneSolid.Name := Format('Chunk%d_Solid', [I]);
+    C.ScenePassable.Name := Format('Chunk%d_Passable', [I]);
     Parent.Add(C.SceneSolid);
     Parent.Add(C.ScenePassable);
   end;
+  FCollisionScene.Name := 'LineCollision';
+  FSkyScene.Name := 'Sky';
   Parent.Add(FCollisionScene);
   Parent.Add(FSkyScene);
 end;

@@ -67,6 +67,9 @@ type
     FLastLight: Integer;
     { Sprite and brightness of frame FSeqIndex of FSeq. }
     procedure ApplyFrameData;
+    function GetThingType: Integer;
+    function GetCurrentFrame: String;
+    function GetActorState: String;
     procedure BuildScene;
     procedure SetShown(const Shown: Boolean);
     { Put the quad in the shape it belongs to now (or in none). }
@@ -160,6 +163,18 @@ type
     procedure GetAnimationSeq(out Seq: TFrameSeq);
     procedure SetAnimationSeq(const Seq: TFrameSeq; const Index, TicsLeft: Integer; const Loop: Boolean);
     property Scene: TCastleScene read FScene;
+  published
+    { For the engine's inspector (F8): what the thing is and how it is. }
+    property ThingType: Integer read GetThingType;
+    property SpriteName: String read SpritePrefix;
+    property CurrentFrame: String read GetCurrentFrame;
+    property ActorState: String read GetActorState;
+    property HitPoints: Integer read Health;
+    property IsAwake: Boolean read Awake;
+    property DoomPositionX: Single read DoomX;
+    property DoomPositionY: Single read DoomY;
+    property DoomPositionZ: Single read DoomZ;
+    property DoomSector: Integer read Sector;
   end;
 
   TDoomActorList = {$ifdef FPC}specialize{$endif} TObjectList<TDoomActor>;
@@ -231,6 +246,10 @@ implementation
 
 uses Math, CastleUtils, CastleLog, CastleRenderOptions, CastleSceneCore,
   DoomGeometry, DoomLighting;
+
+var
+  { Numbers the actors' inspector names. }
+  ActorSerial: Integer;
 
 { TSpriteShape --------------------------------------------------------------- }
 
@@ -438,7 +457,11 @@ begin
     LightField.Value := Vector2((Light div 16) * 16, Kind);
     Result.Root := TX3DRootNode.Create;
     Result.Scene := TCastleScene.Create(nil);
-    Result.Scene.Name := '';
+    case Kind of
+      1: Result.Scene.Name := Format('SpritesLight%d_Bright', [(Light div 16) * 16]);
+      2: Result.Scene.Name := Format('SpritesLight%d_Fuzz', [(Light div 16) * 16]);
+      else Result.Scene.Name := Format('SpritesLight%d', [(Light div 16) * 16]);
+    end;
     Result.Scene.Collides := false;
     Result.Scene.Pickable := false;
     Result.Scene.CastShadows := false;
@@ -496,6 +519,10 @@ begin
   Info := AInfo;
   SpritePrefix := Info^.Sprite;
   Health := Info^.Health;
+  { A name for the engine's inspector: sprite and a serial number (no
+    owner, so uniqueness is not enforced, but it helps telling things apart). }
+  Inc(ActorSerial);
+  Name := Format('%s_%d', [Info^.Sprite, ActorSerial]);
   FRot := 1;
   FFrame := 'A';
   FSlot := -1;
@@ -540,6 +567,7 @@ begin
   Root := TX3DRootNode.Create;
   Root.AddChildren(Shape);
   FScene := TCastleScene.Create(Self);
+  FScene.Name := 'Collision';
   FScene.Load(Root, true);
   FScene.Visible := false;
   Add(FScene);
@@ -676,6 +704,24 @@ begin
   FFrame := FSequence[1];
   ApplyFrameData;
   ApplySprite;
+end;
+
+function TDoomActor.GetThingType: Integer;
+begin
+  Result := Info^.Num;
+end;
+
+function TDoomActor.GetCurrentFrame: String;
+begin
+  Result := FFrame;
+end;
+
+function TDoomActor.GetActorState: String;
+const
+  Names: array [TActorState] of String = (
+    'idle', 'chase', 'attack', 'pain', 'dying', 'dead', 'effect', 'missile');
+begin
+  Result := Names[State];
 end;
 
 procedure TDoomActor.ApplyFrameData;
