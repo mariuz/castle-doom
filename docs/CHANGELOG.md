@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.6.0 (2026-10-10)
 
 - Video options on the title screen's Options panel, remembered between
   sessions: field of view, UI scale, fullscreen (desktop) and, in the
