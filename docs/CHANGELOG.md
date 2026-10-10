@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.10.0 (2026-10-10)
 
 - UMAPINFO episodes and boss actions: a PWAD can add episodes to the
   New Game menu (or replace them) and say what the death of the last
