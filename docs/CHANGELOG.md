@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.12.0 (2026-10-10)
 
 - The web version can be installed as an app (a web app manifest and an
   icon with Freedoom's face), with its own window and start menu entry.
