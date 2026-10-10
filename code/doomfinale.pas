@@ -65,7 +65,7 @@ implementation
 
 uses SysUtils, Math,
   CastleVectors, CastleUtils,
-  DoomHud, DoomFont, DoomThings;
+  DoomHud, DoomFont, DoomThings, CastleComponentSerialize;
 
 const
   TextSpeed = 3;   { tics per character }
@@ -454,4 +454,6 @@ begin
   Image := Img;
 end;
 
+initialization
+  RegisterSerializableComponent(TDoomFinale, 'Doom Finale');
 end.

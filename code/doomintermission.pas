@@ -53,7 +53,7 @@ implementation
 
 uses SysUtils, Math,
   CastleVectors, CastleUIControls,
-  DoomHud, DoomDehacked;
+  DoomHud, DoomDehacked, CastleComponentSerialize;
 
 const
   Doom1Pars: array [1..3, 1..9] of Integer = (
@@ -333,4 +333,6 @@ begin
   Image := Img;
 end;
 
+initialization
+  RegisterSerializableComponent(TDoomIntermission, 'Doom Intermission');
 end.

@@ -38,7 +38,7 @@ implementation
 
 uses SysUtils, Math,
   CastleVectors, CastleStringUtils, CastleUIControls,
-  DoomHud;
+  DoomHud, CastleComponentSerialize;
 
 const
   SpaceWidth = 4;
@@ -147,4 +147,6 @@ begin
   end;
 end;
 
+initialization
+  RegisterSerializableComponent(TDoomFontText, 'Doom Font Text');
 end.

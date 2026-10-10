@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The play view's 2D layer (status bar, weapon, messages, help, the
+  intermission and finale screens, Doom's menu, the melt) is a Castle
+  Game Engine design, `data/play.castle-user-interface`, and the game's
+  own controls are registered as editor components, so the project opens
+  in the CGE editor with them ("Restart Editor (With Custom Components)").
 - The engine's inspector (F8) works in every build, not only debug ones,
   and shows a named tree: the map chunks, every thing with its type,
   sprite, frame, state, hit points and position, the sprite batches,

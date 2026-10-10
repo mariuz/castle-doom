@@ -78,7 +78,8 @@ Sizes, for orientation (lines of Pascal):
 | `doomopl3.pas` | 170 | Nuked OPL3 as a runtime-loaded shared library |
 | `doomgeometry.pas` | 930 | map to X3D scenes |
 | `doomgraphics.pas` | 765 | WAD graphics decoding, texture URLs |
-| `gameviewplay.pas` | 688 | viewport, navigation, HUD, input, test harness |
+| `gameviewplay.pas` | 2000 | viewport, navigation, the 2D layer from `data/play.castle-user-interface`, input, test harness |
+| `doomworldstatus.pas` | 130 | `TDoomWorldStatus`: the game's state as published properties for the inspector |
 | `doommap.pas` | 677 | map lumps, BSP queries, subsector polygons |
 | `doomthings.pas` | 363 | thing type table (info.c reduced) |
 | `gameviewmenu.pas` | 780 | title screen: Doom menu and options |
@@ -936,11 +937,27 @@ the WAD objects to `TViewPlay` and sets `Container.View`. (A view cannot
 change the container's view from inside its own `Start`; the autotest path
 uses `WaitForRenderAndCall` for that.)
 
-`TViewPlay.Start` builds the UI in code (no `.castle-user-interface` design
-file, to keep everything visible in Pascal): `TCastleViewport` with a
-`TCastleCamera` (90° horizontal field of view, near plane 4 units), the
-`TCastleWalkNavigation`, the HUD controls and a
-`TCastleCrosshair`. It then calls `StartMap`, which shows a "Loading" overlay
+`TViewPlay` has `DesignUrl = castle-data:/play.castle-user-interface`:
+CGE loads that design before `Start` and inserts its root into the view.
+The design is the whole 2D layer, in drawing order: the automap, the
+palette flash rectangle, the weapon and its muzzle flash, the status bar
+(`TDoomStatusBar`), the crosshair, the message / click prompt / automap
+title texts (`TDoomFontText`), the info and help labels, the
+`TDoomWorldStatus` entry for the inspector, the intermission and finale
+screens, the loading text, Doom's in-game menu on its dark panel
+(`TDoomMenuScreen`) and the screen melt (`TDoomWipe`). The game's own
+controls are registered with `RegisterSerializableComponent` in their
+units' `initialization` (needed to load the design, and what lets the CGE
+editor place them; `editor_units` in `CastleEngineManifest.xml` lists the
+units, so "Restart Editor (With Custom Components)" builds an editor that
+knows them). `CreateUi` creates in code what is not layout: the
+`TCastleViewport` with a `TCastleCamera` (90° horizontal field of view,
+near plane 4 units), inserted behind the design, and the
+`TCastleWalkNavigation`; it takes the design's controls by name
+(`DesignedComponent`) and wires the run-time parts (the WAD graphics into
+the status bar and texts, the menu's `OnAction`). A control that needs the
+WAD renders nothing without it, so the design opens in the editor as
+boxes. It then calls `StartMap`, which shows a "Loading" overlay
 for one frame (`WaitForRenderAndCall`) before the synchronous
 `DoomWorld.LoadMap`, places the camera at the player start, and starts the
 level music. `Update` converts the camera to Doom coordinates, runs the world,

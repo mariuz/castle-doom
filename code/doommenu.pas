@@ -132,7 +132,7 @@ implementation
 
 uses SysUtils, Math,
   CastleRectangles, CastleUtils,
-  DoomHud, DoomFont;
+  DoomHud, DoomFont, CastleComponentSerialize;
 
 const
   LineHeight = 16;
@@ -865,4 +865,6 @@ begin
   Image := Img;
 end;
 
+initialization
+  RegisterSerializableComponent(TDoomMenuScreen, 'Doom Menu Screen');
 end.

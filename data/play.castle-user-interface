@@ -1,0 +1,218 @@
+{
+  "$$ClassName": "TCastleUserInterface",
+  "Name": "PlayUi",
+  "FullSize": true,
+  "$Children": [
+    {
+      "$$ClassName": "TDoomAutomap",
+      "Name": "Automap",
+      "Exists": false,
+      "FullSize": true
+    },
+    {
+      "$$ClassName": "TCastleRectangleControl",
+      "Name": "PaletteFlash",
+      "FullSize": true,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 0.0,
+        "Green": 0.0,
+        "Blue": 0.0,
+        "Alpha": 0.0
+      }
+    },
+    {
+      "$$ClassName": "TCastleImageControl",
+      "Name": "WeaponImage",
+      "SmoothScaling": false,
+      "Stretch": true
+    },
+    {
+      "$$ClassName": "TCastleImageControl",
+      "Name": "WeaponFlash",
+      "SmoothScaling": false,
+      "Stretch": true
+    },
+    {
+      "$$ClassName": "TDoomStatusBar",
+      "Name": "StatusBar",
+      "SmoothScaling": false,
+      "Stretch": true,
+      "HorizontalAnchorParent": "hpMiddle",
+      "HorizontalAnchorSelf": "hpMiddle",
+      "VerticalAnchorParent": "vpBottom",
+      "VerticalAnchorSelf": "vpBottom"
+    },
+    {
+      "$$ClassName": "TCastleCrosshair",
+      "Name": "Crosshair"
+    },
+    {
+      "$$ClassName": "TDoomFontText",
+      "Name": "MessageText",
+      "Exists": false,
+      "VerticalAnchorParent": "vpTop",
+      "VerticalAnchorSelf": "vpTop",
+      "TranslationPersistent": {
+        "$$ClassName": "TCastleVector2Persistent",
+        "X": 8.0,
+        "Y": -8.0
+      }
+    },
+    {
+      "$$ClassName": "TDoomFontText",
+      "Name": "ClickPrompt",
+      "Exists": false,
+      "HorizontalAnchorParent": "hpMiddle",
+      "HorizontalAnchorSelf": "hpMiddle",
+      "VerticalAnchorParent": "vpMiddle",
+      "VerticalAnchorSelf": "vpMiddle",
+      "TranslationPersistent": {
+        "$$ClassName": "TCastleVector2Persistent",
+        "X": 0.0,
+        "Y": 40.0
+      }
+    },
+    {
+      "$$ClassName": "TDoomFontText",
+      "Name": "AutomapTitle",
+      "Exists": false,
+      "TranslationPersistent": {
+        "$$ClassName": "TCastleVector2Persistent",
+        "X": 8.0,
+        "Y": 0.0
+      }
+    },
+    {
+      "$$ClassName": "TCastleLabel",
+      "Name": "InfoLabel",
+      "FontSize": 18.0,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 1.0,
+        "Green": 1.0,
+        "Blue": 0.6,
+        "Alpha": 0.9
+      },
+      "HorizontalAnchorParent": "hpRight",
+      "HorizontalAnchorSelf": "hpRight",
+      "VerticalAnchorParent": "vpTop",
+      "VerticalAnchorSelf": "vpTop",
+      "TranslationPersistent": {
+        "$$ClassName": "TCastleVector2Persistent",
+        "X": -16.0,
+        "Y": -12.0
+      }
+    },
+    {
+      "$$ClassName": "TDoomWorldStatus",
+      "Name": "DoomWorldStatus",
+      "Width": 0.0,
+      "Height": 0.0
+    },
+    {
+      "$$ClassName": "TCastleLabel",
+      "Name": "HelpLabel",
+      "FontSize": 18.0,
+      "Frame": true,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 0.9,
+        "Green": 0.9,
+        "Blue": 0.9,
+        "Alpha": 0.9
+      },
+      "Text": [
+        "WASD / arrows: move   Shift: run",
+        "Mouse: look   LMB / Ctrl: fire",
+        "E / Space: use (doors, switches)",
+        "1-7, wheel: weapons",
+        "Tab: automap   + / -: zoom   G: grid   I: reveal map",
+        "F: light diminishing on/off   M: mouse look",
+        "N / P: next / previous map   J: music on/off   F4: volume",
+        "F2 / F3: save / load   F6 / F9: quick save / load",
+        "F5: screenshot   F1: Read This! (title menu)",
+        "F8: Castle Game Engine inspector",
+        "H: hide this help   Esc: menu (pauses; Esc again resumes)",
+        "Gamepad: sticks move / look, RT fire, A use, LB / RB weapons,",
+        "  View automap, Menu menu (D-pad, A, B in menus)"
+      ],
+      "HorizontalAnchorParent": "hpRight",
+      "HorizontalAnchorSelf": "hpRight",
+      "VerticalAnchorParent": "vpTop",
+      "VerticalAnchorSelf": "vpTop",
+      "TranslationPersistent": {
+        "$$ClassName": "TCastleVector2Persistent",
+        "X": -16.0,
+        "Y": -44.0
+      }
+    },
+    {
+      "$$ClassName": "TCastleRectangleControl",
+      "Name": "IntermissionBack",
+      "Exists": false,
+      "FullSize": true,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 0.0,
+        "Green": 0.0,
+        "Blue": 0.0,
+        "Alpha": 1.0
+      }
+    },
+    {
+      "$$ClassName": "TDoomIntermission",
+      "Name": "Intermission",
+      "Exists": false,
+      "HorizontalAnchorParent": "hpMiddle",
+      "HorizontalAnchorSelf": "hpMiddle",
+      "VerticalAnchorParent": "vpMiddle",
+      "VerticalAnchorSelf": "vpMiddle"
+    },
+    {
+      "$$ClassName": "TDoomFinale",
+      "Name": "Finale",
+      "Exists": false,
+      "HorizontalAnchorParent": "hpMiddle",
+      "HorizontalAnchorSelf": "hpMiddle",
+      "VerticalAnchorParent": "vpMiddle",
+      "VerticalAnchorSelf": "vpMiddle"
+    },
+    {
+      "$$ClassName": "TDoomFontText",
+      "Name": "LoadingText",
+      "Exists": false,
+      "HorizontalAnchorParent": "hpMiddle",
+      "HorizontalAnchorSelf": "hpMiddle",
+      "VerticalAnchorParent": "vpMiddle",
+      "VerticalAnchorSelf": "vpMiddle"
+    },
+    {
+      "$$ClassName": "TCastleRectangleControl",
+      "Name": "SlotMenuBack",
+      "Exists": false,
+      "FullSize": true,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 0.0,
+        "Green": 0.0,
+        "Blue": 0.0,
+        "Alpha": 0.7
+      }
+    },
+    {
+      "$$ClassName": "TDoomMenuScreen",
+      "Name": "SlotMenu",
+      "Exists": false,
+      "HorizontalAnchorParent": "hpMiddle",
+      "HorizontalAnchorSelf": "hpMiddle",
+      "VerticalAnchorParent": "vpMiddle",
+      "VerticalAnchorSelf": "vpMiddle"
+    },
+    {
+      "$$ClassName": "TDoomWipe",
+      "Name": "Wipe",
+      "Exists": false
+    }
+  ]
+}

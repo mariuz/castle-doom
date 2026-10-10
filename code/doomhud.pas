@@ -20,9 +20,11 @@ type
       const Prefix: String; const Digits: Integer; const Percent: Boolean);
     function FaceName(const Player: TPlayerState): String;
   public
-    constructor Create(AOwner: TComponent; const AGraphics: TDoomGraphics); reintroduce;
+    constructor Create(AOwner: TComponent); override;
     { Rebuild the bar if the shown values changed. }
     procedure Refresh(const World: TDoomWorld; const SecondsPassed: Single);
+    { The WAD's graphics (set at run time; a design has none). }
+    property Graphics: TDoomGraphics read FGraphics write FGraphics;
   end;
 
 { Copy a decoded Doom graphic onto a CGE image at Doom coordinates
@@ -31,7 +33,7 @@ procedure BlitDoomImage(const Dest: TRGBAlphaImage; const Img: TDoomImage; const
 
 implementation
 
-uses Math, CastleUtils, CastleColors,
+uses Math, CastleUtils, CastleColors, CastleComponentSerialize,
   DoomThings;
 
 procedure BlitDoomImage(const Dest: TRGBAlphaImage; const Img: TDoomImage; const X, Y: Integer);
@@ -58,10 +60,9 @@ end;
 
 { TDoomStatusBar ------------------------------------------------------------- }
 
-constructor TDoomStatusBar.Create(AOwner: TComponent; const AGraphics: TDoomGraphics);
+constructor TDoomStatusBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FGraphics := AGraphics;
   SmoothScaling := false;
   Stretch := true;
   Anchor(hpMiddle);
@@ -127,6 +128,7 @@ const
   ArmsWeapons: array [0..5] of TWeapon = (wpPistol, wpShotgun, wpChaingun, wpMissile, wpPlasma, wpBfg);
   AmmoY: array [TAmmoType] of Integer = (173, 179, 185, 191, 0);
 begin
+  if FGraphics = nil then Exit;
   P := World.Player;
   FFaceTimer := FFaceTimer - SecondsPassed;
   if FFaceTimer <= 0 then
@@ -193,4 +195,6 @@ begin
   Image := Img; { the control owns and frees it }
 end;
 
+initialization
+  RegisterSerializableComponent(TDoomStatusBar, 'Doom Status Bar');
 end.

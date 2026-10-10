@@ -181,7 +181,9 @@ code/doomdehacked.pas   DeHackEd patches: BEX strings, things, frames, code poin
 code/doomwipe.pas       the screen melt
 code/doommenu.pas       Doom's menu (M_* graphics): title pages, main, episode, skill, load / save, Read This
 code/gameviewmenu.pas   title screen: Doom menu and options
-code/gameviewplay.pas   viewport, navigation, HUD, input
+code/gameviewplay.pas   viewport, navigation, input; the 2D layer comes from data/play.castle-user-interface
+code/doomworldstatus.pas  the game's state as published properties (the inspector)
+data/play.castle-user-interface  the play view's HUD, texts and screens: a CGE editor design
 ```
 
 Freedoom is Copyright (c) 2001-2024 Contributors to the Freedoom project, BSD licence

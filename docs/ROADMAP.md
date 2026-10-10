@@ -6,6 +6,15 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- The project opens in the CGE editor: the game's controls
+  (`TDoomStatusBar`, `TDoomFontText`, `TDoomMenuScreen`, `TDoomAutomap`,
+  `TDoomIntermission`, `TDoomFinale`, `TDoomWipe`, `TDoomWorldStatus`) are
+  registered with `RegisterSerializableComponent` and listed as
+  `editor_units` in the manifest, and the play view's whole 2D layer is
+  `data/play.castle-user-interface` (loaded through `DesignUrl`, the
+  viewport inserted behind it in code); `TDoomStatusBar` got a default
+  constructor and a `Graphics` property for it. The screenshots are
+  pixel-identical to the code-built layout. The menu view is still code.
 - Inspectable in Castle Game Engine's tools: the F8 inspector works in
   every build (CGE registers its key only through `InitializeDebug`,
   which the generated program calls in debug builds alone, so the
@@ -520,7 +529,6 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Replace the in-code UI with editor designs** (`.castle-user-interface`) for the HUD and menu so they can be edited in the CGE editor; keep the generated map geometry in code. | Demonstrates the editor workflow. | `data/*.castle-user-interface`, views | M |
 | **More unit tests**: `DoomGeometry`'s sector chunks (needs the graphics cache without a window), the automap and HUD composition, the save file's round trip through `doomworld_save.inc` on a world without a viewport. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
 | **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
 | **Web gamepads in CGE itself**: the game's `GameGamepad` polls the Gamepad API through JOB (done, see above); a real `CastleInternalGameControllersWeb` backend inside CGE (`gamepadconnected` events, `mapping` other than `standard`) would serve every CGE web game. Best contributed upstream. | One less game-side workaround. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
@@ -534,7 +542,7 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Open the project in the CGE editor**: register the game's controls (`TDoomStatusBar`, `TDoomFontText`, `TDoomMenuScreen`, `TDoomAutomap`, `TDoomWorldStatus`) with `RegisterSerializableComponent` in an `editor_units` unit named in `CastleEngineManifest.xml`, so `castle-engine editor` lists them and designs can hold them; a first `data/play.castle-user-interface` with the HUD layout. | The editor workflow instead of code-only layout; needed by the designs row below. | new `GameEditorComponents` unit, manifest | M |
+| **The menu view as a design** too: the title screen's `TDoomMenuScreen`, the options panel's buttons and labels, the WAD status lines (the play view is done, see above); then try the designs in the editor on Windows (the editor is not built in CI). | The whole UI editable in the editor. | `data/menu.castle-user-interface`, `GameViewMenu` | S-M |
 | **A Doom map component for the editor**: a `TCastleTransform` descendant with published `Wad` and `Map` properties that builds the level geometry (and static billboards for the things) when placed in a design, so the editor's 3D view shows a Freedoom level with its lighting and the atlas. | Levels become inspectable without running the game; a showcase for CGE. | `DoomGeometry`, `DoomGraphics` behind a design-time component | M-L |
 | **Live thing inspection**: `Things` has 200+ entries, so sort them by state or distance, publish the target, the current sequence's name and tics left, and add a `SELECT:n` demo command (CGE's inspector can select a component) and the inspector's F9 auto-select for the thing under the crosshair. | Find the monster you are looking at. | `DoomActors`, `GameViewPlay` | S |
 | **Profiler sections**: wrap the map load stages (parse, geometry, atlas, things, music intro) and the per-tic phases in `Profiler.Start` / `Stop` so the inspector's Profiler tab and `Profiler.Summary` show them next to CGE's own; the `Perf:` lines stay. | One place for timings. | `GameViewPlay`, `DoomWorld` | S |
@@ -557,10 +565,9 @@ play.
 
 ## Suggested next three
 
-1. Open the project in the CGE editor (M, see Inspectability): register
-   the game's controls as editor components and put the HUD in a first
-   `.castle-user-interface` design, the step the other editor items
-   build on.
+1. The menu view as a design (S-M, see Inspectability), finishing the
+   editor work the play view started; then a Doom map component for the
+   editor.
 2. Atlas mipmaps (S, see Presentation): sample the atlas with explicit
    gradients (`texture2DGradEXT` on WebGL 1, `textureGrad` elsewhere) so
    far floors and walls stop shimmering without the per-texture shapes.

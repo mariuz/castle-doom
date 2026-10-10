@@ -33,7 +33,7 @@ type
 implementation
 
 uses SysUtils, Math,
-  CastleRectangles, CastleLog;
+  CastleRectangles, CastleLog, CastleComponentSerialize;
 
 const
   WipeHeight = 200;
@@ -127,4 +127,6 @@ begin
   end;
 end;
 
+initialization
+  RegisterSerializableComponent(TDoomWipe, 'Doom Screen Melt');
 end.

@@ -33,7 +33,7 @@ implementation
 
 uses SysUtils, Math,
   CastleGLUtils, CastleRectangles, CastleRenderOptions, CastleUtils,
-  DoomMap;
+  DoomMap, CastleComponentSerialize;
 
 const
   ColorWall: TCastleColor = (X: 1.0; Y: 0.0; Z: 0.0; W: 1.0);        { one-sided / secret }
@@ -197,4 +197,6 @@ begin
   DrawPrimitive2D(pmLines, Arrow, ColorPlayer, bsSrcAlpha, bdOneMinusSrcAlpha, false, 2);
 end;
 
+initialization
+  RegisterSerializableComponent(TDoomAutomap, 'Doom Automap');
 end.
