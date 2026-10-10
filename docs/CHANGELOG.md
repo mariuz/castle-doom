@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.11.0 (2026-10-10)
 
 - Crash reports: an unexpected error now shows what happened, where the
   log is and its last lines (a dialog on the desktop, an overlay in the
