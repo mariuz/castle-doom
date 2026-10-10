@@ -6,7 +6,7 @@ unit GameViewPlay;
 interface
 
 uses Classes, SysUtils, FpJson,
-  CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
+  CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleTimeUtils,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages, CastleGLImages,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
   DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu, DoomWorldStatus, GameSettings;
@@ -46,6 +46,9 @@ type
     { Frame time spent in the world update, the status bar and the weapon
       sprite, logged as "PerfView:" every 10 s (see also TDoomWorld "Perf:"). }
     FPerfWorld, FPerfStatusBar, FPerfWeapon, FPerfClock: Double;
+    { --fixed-step: when the last frame began. }
+    FFixedStepLast: TTimerResult;
+    FFixedStepStarted: Boolean;
     FPerfFrames: Integer;
     FStrings: TDoomStrings;
     FIntermissionTicAccum: Single;
@@ -161,7 +164,7 @@ implementation
 uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
   CastleDownload, DoomActors, CastleInternalInspector,
-  CastleUriUtils, X3DNodes, CastleRectangles, CastleTimeUtils, CastleRenderContext,
+  CastleUriUtils, X3DNodes, CastleRectangles, CastleRenderContext,
   DoomGeometry, DoomMap, DoomLighting,
   GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs, DoomMapInfo;
 
@@ -923,6 +926,8 @@ begin
     Restored := true;
   end else
   begin
+    { --fixed-step: the same random numbers on every run. }
+    if AutoTestFixedStep then RandSeed := 1;
     FWorld.LoadMap(MapName, KeepInventory);
     PlacePlayer(FWorld.StartX, FWorld.StartY, FWorld.Player.Z, FWorld.StartAngle);
     FLevelTime := 0;
@@ -1598,8 +1603,23 @@ var
   Feet: TVector3;
   P: TPlayerState;
   PerfT: TTimerResult;
+  Elapsed: Double;
 begin
   inherited;
+  if AutoTestFixedStep then
+  begin
+    { --fixed-step: frames last at least a tic, so CGE's capped
+      SecondsPassed (MaxSensibleSecondsPassed, GameInitialize) is always
+      exactly 1/35 s. }
+    if FFixedStepStarted then
+    begin
+      Elapsed := TimerSeconds(Timer, FFixedStepLast);
+      if Elapsed < 1 / 35 then
+        Sleep(Ceil((1 / 35 - Elapsed) * 1000) + 1);
+    end;
+    FFixedStepLast := Timer;
+    FFixedStepStarted := true;
+  end;
   if FWorld = nil then Exit;
   { Songs are rendered a slice per frame (no freeze at a level start). }
   if Music <> nil then Music.Update;

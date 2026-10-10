@@ -6,6 +6,15 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Fixed-step autotests: `--fixed-step` caps CGE's `SecondsPassed` at one
+  tic (`Fps.MaxSensibleSecondsPassed`), keeps every frame at least a
+  tic long (`TViewPlay.Update` sleeps the rest) and seeds `Random` the
+  same way at each map load, so the world, the walk navigation and the
+  demo's waits advance exactly 1/35 s a frame and two runs give the same
+  screenshots (apart from the FPS text). The save round trip, knockback,
+  melee turn, donut, select-thing and key-bindings autotests use it, and
+  their 7 screenshots joined the golden ones (35 now).
+
 - Crash reporting in release builds: `GameCrash` sets
   `Application.OnException`, so an uncaught exception on the desktop is
   logged (`Warning: Crash: ...`) with the log file's place and its last
@@ -711,17 +720,16 @@ play.
 | **V-sync and a frame rate cap**: the video options are on the title screen and in the game (see above); v-sync and a frame limit are not offered. | Smoother play on high refresh screens, less power. | `GameSettings` | S |
 | **Gamepad button rebinding and more bindable actions**: keys are rebindable (see above); the gamepad layout is fixed, and weapon selection, the hotkeys (F, M, J...) and the mouse buttons are not bindable yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameGamepad` | S-M |
 | **The rest of UMAPINFO, and ZDoom MAPINFO**: UMAPINFO's keys are done (see above) except patch backdrops, `exitpic` / `enterpic` and the level name drawn as text on the intermission when there is no `levelpic`; ZDoom's MAPINFO syntax is not read. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
-| **More golden screenshots**: 28 still screenshots are compared (see above); fights, moving players and timed animations vary between runs, so they would need a fixed frame time in autotests (step the world by whole tics per frame) before they can be compared too. | Cover the rendering of monsters and effects. | `GameViewPlay` (autotest timing), `tools/run_autotests.py` | M |
+| **Fixed step everywhere**: `--fixed-step` makes 7 moving-scene autotests reproducible (see above); running the whole suite with it would make every screenshot comparable but triples its real time (software GL draws about 12 frames a second, each now a single tic). | Every screenshot a regression check. | `tools/run_autotests.py` | S |
 | **Installable web app**: the site works offline (see above); a web app manifest and icons would let browsers install it as an app with its own window. | A desktop-like start without the native package. | `pages/`, `web.yml` | S |
 | **Longer crash reports**: the desktop dialog shows CGE's last 10 log lines (`CastleLog.LastLog`), the web overlay 40; a game-side ring buffer (fed by `ApplicationProperties.OnLog`) and a "copy to clipboard" button would make reports more complete. | Better bug reports. | `GameCrash`, `tools/patch_web_page.py` | S |
 
 ## Suggested next three
 
-1. More golden screenshots (M, see Other suggested improvements): a
-   fixed frame time in autotests so moving scenes compare too.
-2. Installable web app (S, see Other suggested improvements): a web app
+1. Installable web app (S, see Other suggested improvements): a web app
    manifest and icons.
-3. Gamepad button rebinding (S-M, see Other suggested improvements).
+2. Gamepad button rebinding (S-M, see Other suggested improvements).
+3. V-sync and a frame rate cap (S, see Other suggested improvements).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

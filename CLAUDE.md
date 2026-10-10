@@ -68,7 +68,10 @@ references: download CI's `autotest-output` artifact of the change
 sys; sys.argv=['x']; sys.path.insert(0,'tools'); import run_autotests as r;
 r.golden_compare('DIR', update=True)"` (or the harness with
 `--update-golden`), so the references stay CI's own rendering; a local
-xvfb run matches them too.
+xvfb run matches them too. Screenshots of moving scenes need
+`--fixed-step` in the test's extra arguments (each frame then advances
+exactly one tic and the random seed is fixed, so two runs agree; the
+waits take about 3x longer in real time under software GL).
 
 Unit tests (FPCUnit, no window, about 20 s, 21 cases) cover the parsers,
 every node format and both music synthesizers:

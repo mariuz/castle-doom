@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Autotests can run with a fixed time step (`--fixed-step`), so the
+  screenshots of moving scenes are compared with references too (35 in
+  all).
+
 ## v0.11.0 (2026-10-10)
 
 - Crash reports: an unexpected error now shows what happened, where the

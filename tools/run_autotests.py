@@ -87,19 +87,19 @@ TESTS = [
     ('menu', 'MENU', None, [r'AutoTest'], [], None),
     ('save-round-trip', 'E1M1',
      'K,D,W:1.5,G:480:712,A:0,U,W:0.6,X,SAVE:1,S,LOAD:1,W:0.3,S,Q',
-     [r'Save: E1M1: restored \d+ actors', r'Gib: '], [], None),
+     [r'Save: E1M1: restored \d+ actors', r'Gib: '], ['--fixed-step'], None),
     ('knockback', 'E1M1', 'K,SHOTS,C:5,W:1,A:180,W:0.3,X,W:1.5,S,Q',
-     [r'Push: player by \d+ damage'], [], None),
+     [r'Push: player by \d+ damage'], ['--fixed-step'], None),
     ('door-crush', 'E1M1', 'Y,G:480:712,A:0,U,W:1.5,CORPSE:3004:72,W:7,S,Q',
      [r'Crush: POSS .* crushed to gibs'], [], None),
     ('melee-turn', 'E1M1', 'Y,K,SHOTS,C:1,W:1,A:0,P:3001:55,T:12,W:0.1,X,W:0.3,S,Q',
-     [r'Turn: from'], [], None),
+     [r'Turn: from'], ['--fixed-step'], None),
     ('arch-vile', 'E1M1', 'Y,P:3001:250,D,W:2,P:64:200,W:4,S,Q',
      [r'Raise: Arch-vile raised TROO'], [], None),
     ('texture-memory', 'E1M1', 'W:0.5,N,W:2,S,Q',
      [r'Graphics: Freed [1-9]\d* textures'], [], None),
     ('donut', 'MAP05', 'Y,G:-64:408,A:-90,W:0.3,U,W:9,SAVE:2,S,Q',
-     [r'Donut: pillar 54 and ring 53'], [], check_donut),
+     [r'Donut: pillar 54 and ring 53'], ['--fixed-step'], check_donut),
     ('crusher', 'MAP04',
      # A barrel under it (not the player: the camera's collision with a
      # descending ceiling depends on the frame rate).
@@ -153,7 +153,7 @@ TESTS = [
     ('select-thing', 'E1M1', 'Y,P:3001:300,W:0.5,SELECT,W:0.5,S,PROFILE,Q',
      [r'Select: TROO_\d+: TROO, state \w+, 60 health, action \w*, \d+ tics left, target player',
       r'- Load E1M1 \(DoomWorld\)', r'- Build geometry', r'- Spawn things'],
-     ['--profile'], None),
+     ['--profile', '--fixed-step'], None),
     # Video options: field of view, UI scale and render scale, saved.
     ('video-settings', 'E1M1', 'W:0.3,FOV:110,UISCALE:150,RENDERSCALE:50,W:0.3,S,Q',
      [r'Settings: Video: field of view 110, window, UI scale 150%, render scale 50%', r'Saved screenshot 1'],
@@ -174,7 +174,7 @@ TESTS = [
      lambda config: check_keys(config, 'use', ['Q', 'Space'])),
     ('key-bindings', 'E1M1', 'Y,SHOTS,BIND:fire:F,BIND:forward:I,W:0.3,F:1,KEY:F,W:0.3,S,Q',
      [r'Settings: Keys: forward I / Up;.* fire F;', r'Shot: ', r'Saved screenshot 1 at E1M1 \(player -[1-3]\d\d\.'],
-     [], lambda config: check_keys(config, 'fire', ['F', 'None'])),
+     ['--fixed-step'], lambda config: check_keys(config, 'fire', ['F', 'None'])),
     # UMAPINFO from a PWAD (tools/make_umapinfo_wad.py): E1M1 renamed with a
     # story text after its intermission, then E1M3 without intermission
     # ending the game with the bunny.
@@ -237,8 +237,9 @@ GOLDEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'golden')
 GOLDEN_SIZE = (320, 180)
 GOLDEN_PIXEL = 40
 GOLDEN_MAX_CHANGED = 0.015
-# Screenshots that come out the same on every run (menus, still views,
-# map loads): the ones of fights, moving players or timed animations vary.
+# Screenshots that come out the same on every run: menus, still views,
+# map loads, and the moving scenes of the tests run with --fixed-step
+# (one tic a frame, a fixed random seed).
 GOLDEN = [
     'menu_menu.png', 'title-pages_menutitle.png', 'read-this_menureadthis.png',
     'controls-page_menucontrols.png', 'map-component_design.png',
@@ -248,6 +249,8 @@ GOLDEN = [
     'ingame-save-load_1.png', 'ingame-save-load_2.png', 'typed-save-name_1.png',
     'pointer-lock-pause_1.png', 'texture-memory_1.png', 'video-menu_1.png',
     'video-settings_1.png', 'settings-1_1.png', 'phase2-download_1.png', 'arch-vile_1.png',
+    'save-round-trip_1.png', 'save-round-trip_2.png', 'knockback_1.png', 'melee-turn_1.png',
+    'donut_1.png', 'select-thing_1.png', 'key-bindings_1.png',
 ]
 
 

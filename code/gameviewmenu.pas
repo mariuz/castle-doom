@@ -145,6 +145,10 @@ var
   AutoTestMap: String;
   AutoTestPrefix: String;
   AutoTestDemo: String;
+  { --fixed-step: every frame advances exactly one Doom tic (1/35 s) and
+    each map starts with the same random seed, so autotest screenshots of
+    moving scenes come out the same on every run (golden screenshots). }
+  AutoTestFixedStep: Boolean;
   { --autotest MENUKEYS PREFIX --menukeys "D,D,E,...": drive the Doom menu
     (U up, D down, E enter, X escape, Y / N, S screenshot); a started game
     then runs --demo. }

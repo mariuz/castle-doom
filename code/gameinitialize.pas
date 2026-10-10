@@ -67,6 +67,9 @@ begin
     if Parameters[I] = '--atlas' then
       UseTextureAtlas := true
     else
+    if Parameters[I] = '--fixed-step' then
+      AutoTestFixedStep := true
+    else
     if Parameters[I] = '--profile' then
       { CGE's profiler: each map load logs its stages (Profiler.Stop
         with LogSummary), PROFILE in a demo the whole summary. }
@@ -157,6 +160,14 @@ begin
     WritelnLog('Web', 'Page URL options: map "%s", demo "%s", warp "%s"', [AutoTestMap, AutoTestDemo, CmdWarp]);
   {$endif}
   Window.Container.LoadSettings('castle-data:/CastleSettings.xml');
+  { --fixed-step: no frame advances more than a tic (TViewPlay.Update
+    also keeps frames from being shorter), so the world, the walk
+    navigation and the demo's waits all move by exactly 1/35 s a frame. }
+  if AutoTestFixedStep then
+  begin
+    Window.Container.Fps.MaxSensibleSecondsPassed := 1 / 35;
+    WritelnLog('AutoTest', 'Fixed step: 1/35 s a frame');
+  end;
   { Remembered WAD paths live in the user config (castle-config:/). }
   UserConfig.Load;
   if (ExportSaves <> '') or (ImportSaves <> '') then
