@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Map textures are mipmapped again, now inside the atlas: far floors and
+  walls shimmer less, without seams at the texture repeats (OpenGL 3.1+
+  and WebGL 2; `--no-atlas-mipmaps` turns it off).
 - A Doom level as a Castle Game Engine component: `TDoomMapTransform`
   ("Doom Map" in the editor) builds a map from a WAD inside any design
   (its geometry, lighting and things), so the CGE editor's 3D view can
@@ -41,8 +44,7 @@
   and each level's wall textures and flats go into one texture atlas, so
   a map chunk is one draw call: a frame at E1M1's first door went from 255
   to 56 draw calls, mainly for the browser's frame rate. Map textures keep
-  their real sizes and are no longer mipmapped (`--no-atlas` restores the
-  old per-texture shapes).
+  their real sizes (`--no-atlas` restores the old per-texture shapes).
 - Gamepad support (Windows, Linux and the browser): sticks to move and
   look, right trigger to fire, A to use, bumpers for weapons, and the
   D-pad, A and B in the menus. In the browser the game polls the Gamepad

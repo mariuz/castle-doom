@@ -226,7 +226,22 @@ const
       texture2D to texture on newer GLSL, which it would shadow. }
     'void PLUG_texture_color(inout vec4 texture_color, const in sampler2D atlas, const in vec4 tex_coord)' + NL +
     '{' + NL +
+    { With GLSL 1.40 / 3.00 es (CGE upgrades the shaders on OpenGL 3.1+
+      and WebGL 2), sample the page's mipmaps with the gradients of the
+      unwrapped coordinates: fract's jump at a repeat would otherwise
+      pick the smallest mipmap along every seam. The gradients are
+      clamped to level 3, the deepest the tiles' padding keeps apart. }
+    '#ifdef CASTLE_GLSL_VERSION_UPGRADE' + NL +
+    '  vec2 doom_c = tex_coord.xy * doom_tile_v.zw;' + NL +
+    '  vec2 doom_dx = dFdx(doom_c);' + NL +
+    '  vec2 doom_dy = dFdy(doom_c);' + NL +
+    '  vec2 doom_size = vec2(textureSize(atlas, 0));' + NL +
+    '  float doom_m = max(length(doom_dx * doom_size), length(doom_dy * doom_size));' + NL +
+    '  if (doom_m > 8.0) { doom_dx *= 8.0 / doom_m; doom_dy *= 8.0 / doom_m; }' + NL +
+    '  texture_color = textureGrad(atlas, doom_tile_v.xy + fract(tex_coord.xy) * doom_tile_v.zw, doom_dx, doom_dy);' + NL +
+    '#else' + NL +
     '  texture_color = texture2D(atlas, doom_tile_v.xy + fract(tex_coord.xy) * doom_tile_v.zw);' + NL +
+    '#endif' + NL +
     '}';
   GeometryFragmentInput =
     'varying vec3 doom_light_info;' + NL;

@@ -787,12 +787,25 @@ function TDoomGraphics.BuildAtlas(const Images: TDoomImageList; const BaseName: 
 const
   PageWidth = 2048;
   MaxHeight = 2048;
+  { Every tile sits in a block whose origin and size are multiples of
+    Align, filled around the image with its wrapped content (Pad texels
+    on the left / bottom, at least that much on the right / top). The
+    page's mipmaps up to level 3 (8x8 texels) then never average two
+    tiles, and a linear sample at a tile's edge on level 3 still reads
+    the tile's own wrapped texels. }
+  Pad = 4;
+  Align = 8;
 var
   Sorted: TDoomImageList;
   Page: TRGBAlphaImage;
   PageHeight, ShelfY, ShelfH, X, I, J, W, H, Placed: Integer;
   Img, PageImg: TDoomImage;
   AnyAlpha: Boolean;
+
+  function BlockSize(const Size: Integer): Integer;
+  begin
+    Result := ((Size + 2 * Pad + Align - 1) div Align) * Align;
+  end;
 
   function Higher(const A, B: TDoomImage): Boolean;
   begin
@@ -851,26 +864,29 @@ var
     AnyAlpha := false;
   end;
 
-  { The image with its wrapped 1-texel border at (X, ShelfY). }
+  { The image's block at (X, ShelfY): the image at (Pad, Pad) inside it,
+    the rest of the block its wrapped continuation. }
   procedure Place(const Img: TDoomImage);
   var
     S: TRGBAlphaImage;
-    PX, PY: Integer;
+    PX, PY, BW, BH, BX, BY, SX, SY: Integer;
   begin
     S := Img.Image;
     W := Img.Width;
     H := Img.Height;
-    PX := X + 1;
-    PY := ShelfY + 1;
-    Page.DrawFrom(S, PX, PY, dmOverwrite);
-    Page.DrawFrom(S, PX - 1, PY, W - 1, 0, 1, H, dmOverwrite);  { left border: the last column }
-    Page.DrawFrom(S, PX + W, PY, 0, 0, 1, H, dmOverwrite);      { right border: the first column }
-    Page.DrawFrom(S, PX, PY - 1, 0, H - 1, W, 1, dmOverwrite);  { bottom border: the top row }
-    Page.DrawFrom(S, PX, PY + H, 0, 0, W, 1, dmOverwrite);      { top border: the bottom row }
-    Page.DrawFrom(S, PX - 1, PY - 1, W - 1, H - 1, 1, 1, dmOverwrite);
-    Page.DrawFrom(S, PX + W, PY - 1, 0, H - 1, 1, 1, dmOverwrite);
-    Page.DrawFrom(S, PX - 1, PY + H, W - 1, 0, 1, 1, dmOverwrite);
-    Page.DrawFrom(S, PX + W, PY + H, 0, 0, 1, 1, dmOverwrite);
+    PX := X + Pad;
+    PY := ShelfY + Pad;
+    BW := BlockSize(W);
+    BH := BlockSize(H);
+    for BY := 0 to BH - 1 do
+    begin
+      SY := ((BY - Pad) mod H + H) mod H;
+      for BX := 0 to BW - 1 do
+      begin
+        SX := ((BX - Pad) mod W + W) mod W;
+        PVector4Byte(Page.PixelPtr(X + BX, ShelfY + BY))^ := PVector4Byte(S.PixelPtr(SX, SY))^;
+      end;
+    end;
     Img.AtlasPage := FAtlasPages.Count;
     Img.AtlasRect := Vector4(PX / PageWidth, PY / PageHeight, W / PageWidth, H / PageHeight);
     AnyAlpha := AnyAlpha or Img.HasAlpha;
@@ -892,7 +908,7 @@ begin
   try
     for I := 0 to Images.Count - 1 do
       if (Images[I] <> nil) and (Images[I].Image <> nil) and (Sorted.IndexOf(Images[I]) < 0) and
-         (Images[I].Width + 2 <= PageWidth) and (Images[I].Height + 2 <= MaxHeight) then
+         (BlockSize(Images[I].Width) <= PageWidth) and (BlockSize(Images[I].Height) <= MaxHeight) then
         Sorted.Add(Images[I]);
     { Insertion sort by height, then width (a few hundred images). }
     for I := 1 to Sorted.Count - 1 do
@@ -913,8 +929,8 @@ begin
     for I := 0 to Sorted.Count - 1 do
     begin
       Img := Sorted[I];
-      W := Img.Width + 2;
-      H := Img.Height + 2;
+      W := BlockSize(Img.Width);
+      H := BlockSize(Img.Height);
       if X + W > PageWidth then
       begin
         { Next shelf. }
@@ -930,7 +946,7 @@ begin
         ShelfH := H;
       end;
       Place(Img);
-      X := X + W;
+      X := X + BlockSize(Img.Width);
     end;
     FinishPage;
   finally

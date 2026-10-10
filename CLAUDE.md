@@ -209,7 +209,10 @@ about 56 shapes: 21 map (one per chunk and atlas page; `--no-atlas` gives
 the old 151, one per texture per chunk) and 35 sprites (the 104 visible
 quads merged per texture and light group by `TSpriteBatch`; before it
 they were 104 in 104 scenes). The log's `Atlas:` lines give the page
-count and sizes (E1M1: 150 images, one 2048x1024 page). `SPRITESTATS` logs how many sprites are shown and how many
+count and sizes (E1M1: 150 images, one 2048x1024 page; `, mipmapped`
+when the shaders are upgraded to GLSL 1.40 / 3.00 es, so the atlas
+samples its mipmaps with `textureGrad`; `--no-atlas-mipmaps` for the old
+unmipmapped look). `SPRITESTATS` logs how many sprites are shown and how many
 distinct texture|light group|kind combinations they have (the sprite
 draw calls if all were in view: 208 and 87 on E1M1).
 `CASTLE_DOOM_LOG_SHADERS=1` logs every shader compile and link; during

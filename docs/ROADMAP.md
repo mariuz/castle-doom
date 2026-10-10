@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Atlas mipmaps: tiles sit in 8-aligned blocks padded with 4 texels of
+  their wrapped content, so the page's mipmaps up to level 3 keep the
+  tiles apart, and the atlas effect samples with `textureGrad` using the
+  gradients of the unwrapped coordinate (clamped to level 3), so the
+  repeat seam does not pick the smallest mipmap. On when CGE upgrades the
+  shaders (OpenGL 3.1+, OpenGL ES 3, WebGL 2), log `Atlas: ... page(s),
+  mipmapped`; `--no-atlas-mipmaps` turns it off. Far floors and gratings
+  shimmer less (E1M1's start room grating), with no visible seams.
 - A Doom level as a CGE component: `TDoomMapTransform`
   (`doommaptransform.pas`, registered as "Doom Map" for the editor) is a
   `TCastleTransform` with published `Wad` and `MapName` (and `Things`)
@@ -62,9 +70,8 @@ L = several days). Items inside a section are in suggested order.
   vertex's tile rectangle and a texture effect (`PLUG_texture_color`)
   samples at `tile.xy + fract(uv) * tile.zw`, so walls and flats repeat
   as before. Switches, scrolling walls and animated textures keep their
-  own shapes; the pages have no mipmaps (a mipmap would blend tiles, and
-  the wrap seam breaks its derivatives), nearest up close and linear far
-  away, which is also closer to Doom's own look. E1M1 door spot: map 151
+  own shapes; nearest up close and, since the atlas mipmaps (below),
+  trilinear far away. E1M1 door spot: map 151
   -> 21 draw calls (12 with everything in view), the frame 186 -> 56,
   geometry built in 63 ms instead of 96-244 (fewer shapes), and the
   textures keep their real sizes (no power-of-two resize). `--no-atlas`
@@ -528,7 +535,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **DeHackEd weapons and projectiles**: frames and code pointers are done (see above); the player's weapon frames ("Weapon N", the `S_PISTOL`... chains with A_FirePistol etc.) and the projectile rows (speed, damage, frames of `MT_TROOPSHOT`...) still come from the port's own tables, as do BEX `[SPRITES]` / `[SOUNDS]` renaming and new monsters built from decoration rows (no AI for them). | The rest of what mods change. | `DoomWorld` weapons, `EffectInfos`, `DoomDehacked` | M |
-| **Browser frame rate**, measured (headless Chromium + SwiftShader on the live page, Chrome CPU profile, `PerfView:` statistics): a frame on E1M1 at the door spot draws 255 shapes = 255 draw calls (map 151 of its 206 per-texture shapes, sprites 104, one scene each); per frame the CPU time is ~94 ms in wasm (game logic 13 ms, the rest CGE's per-shape rendering and the music synth slice) + ~66 ms in the JOB JS bridge (`HaveSharedArrayBuffer`, `decode`, `Invoke_*`, then the WebGL calls: `bindBuffer`, `enable/disableVertexAttribArray`, `activeTexture`, `uniform*`), i.e. about 0.6 ms per shape, so the frame rate is the number of draw calls. Tried and reverted: splitting the static map geometry into 1024-unit cells for frustum culling (151 -> 249 map draw calls: textures repeat per cell and a 90-degree view covers most cells of a flat level). Done: (1) sprites in one scene per (light group, kind), each texture's quads merged by us in one persistent shape (`TSpriteBatch` / `TSpriteShape`; E1M1 door spot: sprites 104 -> 35 draw calls, 104 -> 9 scenes, the whole frame 255 -> 186 draw calls; CGE's own dynamic batching was tried in between: 8 merge slots a pass and shader relinks every frame from its pool shapes); (2) the map in a texture atlas with `fract` wrapping in the shader, padded tiles and no mipmaps (one shape per chunk and page: the frame 186 -> 56 draw calls, 12 for the map alone). Left: in CGE for the web, vertex array objects and cached uniform locations to cut WebGL calls per shape (every call crosses wasm -> JS); and mipmaps for the atlas with explicit gradients (`texture2DGradEXT` on WebGL 1) if far floors shimmer too much. | Playable speed on the Pages site. | `DoomActors`, CGE web renderer, `DoomGeometry` | M each |
+| **Browser frame rate**, measured (headless Chromium + SwiftShader on the live page, Chrome CPU profile, `PerfView:` statistics): a frame on E1M1 at the door spot draws 255 shapes = 255 draw calls (map 151 of its 206 per-texture shapes, sprites 104, one scene each); per frame the CPU time is ~94 ms in wasm (game logic 13 ms, the rest CGE's per-shape rendering and the music synth slice) + ~66 ms in the JOB JS bridge (`HaveSharedArrayBuffer`, `decode`, `Invoke_*`, then the WebGL calls: `bindBuffer`, `enable/disableVertexAttribArray`, `activeTexture`, `uniform*`), i.e. about 0.6 ms per shape, so the frame rate is the number of draw calls. Tried and reverted: splitting the static map geometry into 1024-unit cells for frustum culling (151 -> 249 map draw calls: textures repeat per cell and a 90-degree view covers most cells of a flat level). Done: (1) sprites in one scene per (light group, kind), each texture's quads merged by us in one persistent shape (`TSpriteBatch` / `TSpriteShape`; E1M1 door spot: sprites 104 -> 35 draw calls, 104 -> 9 scenes, the whole frame 255 -> 186 draw calls; CGE's own dynamic batching was tried in between: 8 merge slots a pass and shader relinks every frame from its pool shapes); (2) the map in a texture atlas with `fract` wrapping in the shader, padded tiles and no mipmaps (one shape per chunk and page: the frame 186 -> 56 draw calls, 12 for the map alone). Left: in CGE for the web, vertex array objects and cached uniform locations to cut WebGL calls per shape (every call crosses wasm -> JS); the atlas mipmaps are done (see above). | Playable speed on the Pages site. | `DoomActors`, CGE web renderer, `DoomGeometry` | M each |
 
 ## 3. Audio
 
@@ -587,17 +594,16 @@ play.
 
 ## Suggested next three
 
-1. Atlas mipmaps (S, see Presentation): sample the atlas with explicit
-   gradients (`texture2DGradEXT` on WebGL 1, `textureGrad` elsewhere) so
-   far floors and walls stop shimmering without the per-texture shapes.
-2. DeHackEd weapons and projectiles (M, see Gameplay): drive the
+1. DeHackEd weapons and projectiles (M, see Gameplay): drive the
    player's weapon animations and the projectiles from the state table
    too, so "Weapon N" and the projectile rows of a patch take effect.
-3. Live thing inspection and profiler sections (S each, see
+2. Live thing inspection and profiler sections (S each, see
    Inspectability): select the thing under the crosshair in the
    inspector, and the load stages in CGE's profiler. The editor items
    are done except trying the designs in the editor on Windows (the
    editor is not built in CI).
+3. Video options (S-M, see Other suggested improvements): field of view,
+   fullscreen, UI scale and a resolution scale for slow browsers.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

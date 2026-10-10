@@ -20,6 +20,17 @@ function DoomToCge(const X, Y, Z: Single): TVector3; inline;
 function CgeToDoom(const V: TVector3): TVector3; inline;
 
 var
+  { Mipmaps for the atlas pages when the shaders can sample them with
+    explicit gradients (AtlasMipmapsAvailable); --no-atlas-mipmaps turns
+    them off. }
+  UseAtlasMipmaps: Boolean = true;
+
+{ The atlas pages get mipmaps: UseAtlasMipmaps and CGE upgrades the
+  shaders to GLSL 1.40 / 3.00 es (OpenGL 3.1+, OpenGL ES 3, WebGL 2),
+  which have textureGrad. }
+function AtlasMipmapsAvailable: Boolean;
+
+var
   { Draw each chunk's walls and flats from one texture atlas page (one
     draw call per chunk and page) instead of one shape per texture: the
     browser's frame rate is the number of draw calls. Switches, scrolling
@@ -164,7 +175,15 @@ type
 
 implementation
 
-uses Math, CastleLog, CastleStringUtils, CastleImages;
+uses Math, CastleLog, CastleStringUtils, CastleImages, CastleGLUtils, CastleGLShaders;
+
+function AtlasMipmapsAvailable: Boolean;
+begin
+  Result := UseAtlasMipmaps and InternalUpgradeGlslVersion and (GLFeatures <> nil) and
+    GLFeatures.{$if defined(CASTLE_WEBGL)} VersionWebGL_2
+               {$elseif defined(OpenGLES)} VersionES_3_0
+               {$else} Version_3_1 {$endif};
+end;
 
 function DoomToCge(const X, Y, Z: Single): TVector3;
 begin
@@ -294,8 +313,15 @@ begin
       wrap seam breaks the derivatives it needs); the effect wraps the
       coordinates inside each vertex's tile. }
     TexNode := Img.MakeTextureNode(true);
-    (TexNode.TextureProperties as TTexturePropertiesNode).MinificationFilter := minLinear;
-    (TexNode.TextureProperties as TTexturePropertiesNode).GenerateMipMaps := false;
+    if AtlasMipmapsAvailable then
+    begin
+      (TexNode.TextureProperties as TTexturePropertiesNode).MinificationFilter := minLinearMipmapLinear;
+      (TexNode.TextureProperties as TTexturePropertiesNode).GenerateMipMaps := true;
+    end else
+    begin
+      (TexNode.TextureProperties as TTexturePropertiesNode).MinificationFilter := minLinear;
+      (TexNode.TextureProperties as TTexturePropertiesNode).GenerateMipMaps := false;
+    end;
     (TexNode.TextureProperties as TTexturePropertiesNode).AnisotropicDegree := 1;
     TexNode.SetEffects([DoomLightingInstance.AtlasTextureEffect]);
     Appearance.Texture := TexNode;
@@ -731,7 +757,10 @@ begin
         Collect(FGraphics.Flat(FMap.Sectors[I].CeilingTex));
     end;
     Pages := FGraphics.BuildAtlas(Images, FMap.Name);
-    WritelnLog('Atlas', '%s: %d textures and flats in %d page(s)', [FMap.Name, Images.Count, Pages]);
+    if AtlasMipmapsAvailable then
+      WritelnLog('Atlas', '%s: %d textures and flats in %d page(s), mipmapped', [FMap.Name, Images.Count, Pages])
+    else
+      WritelnLog('Atlas', '%s: %d textures and flats in %d page(s)', [FMap.Name, Images.Count, Pages]);
     for I := 0 to Pages - 1 do
       WritelnLog('Atlas', '  page %d: %dx%d', [I, FGraphics.AtlasPage(I).Width, FGraphics.AtlasPage(I).Height]);
   finally

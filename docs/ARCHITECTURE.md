@@ -283,17 +283,25 @@ one per texture with `--no-atlas`. Each batch becomes one `TShapeNode` with:
 
 The atlas (`TDoomGraphics.BuildAtlas`, called by `TDoomGeometry.Create`
 with every texture and flat the map's sidedefs and sectors name): pages
-2048 wide, shelves of decreasing image height, each image with a 1-texel
-border copied from its opposite edges (so linear filtering at a tile's edge
-sees the wrapped neighbour), trimmed to a power-of-two height, a new page
-when one is full (Freedoom's largest map needs 2.9 M texels, one page);
-served as `doomgfx:/atlas/<map>_<n>.tga`. The page's `TImageTextureNode`
-clamps, has no mipmaps (a mipmap would blend tiles, and the wrap seam
-breaks the derivatives it needs; nearest magnification, linear
-minification: close to Doom's own unfiltered look) and carries
-`TDoomLighting.AtlasTextureEffect`, a `PLUG_texture_color` that samples at
-`tile.xy + fract(uv) * tile.zw` (a texture-level effect: group effects are
-plugged before CGE adds the texture code). E1M1 at the door: 21 map draw
+2048 wide, shelves of decreasing image height, each image in a block
+whose origin and size are multiples of 8 texels, the image 4 texels in
+and the rest of the block its wrapped continuation (so filtering at a
+tile's edge sees the wrapped neighbour, and the page's mipmaps up to
+level 3 never average two tiles), trimmed to a power-of-two height, a new
+page when one is full (Freedoom's largest map needs about 3 M texels, one
+page); served as `doomgfx:/atlas/<map>_<n>.tga`. The page's
+`TImageTextureNode` clamps, magnifies with nearest (Doom's unfiltered
+look up close) and carries `TDoomLighting.AtlasTextureEffect`, a
+`PLUG_texture_color` that samples at `tile.xy + fract(uv) * tile.zw` (a
+texture-level effect: group effects are plugged before CGE adds the
+texture code). When CGE upgrades the shaders to GLSL 1.40 / 3.00 es
+(OpenGL 3.1+, OpenGL ES 3, WebGL 2: `AtlasMipmapsAvailable`) the page
+has mipmaps with trilinear minification and the effect samples with
+`textureGrad`, the gradients taken from the unwrapped coordinate
+(`uv * tile.zw`) so `fract`'s jump does not select the smallest mipmap
+along every seam, clamped to level 3; otherwise (and with
+`--no-atlas-mipmaps`) there are no mipmaps and plain `texture2D`
+samples, linear when minified. E1M1 at the door: 21 map draw
 calls instead of 151, geometry built in 63 ms instead of 96-244.
 
 `Generate` fills the batch lists and either builds nodes and calls

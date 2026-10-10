@@ -61,6 +61,9 @@ begin
     if Parameters[I] = '--no-atlas' then
       UseTextureAtlas := false
     else
+    if Parameters[I] = '--no-atlas-mipmaps' then
+      UseAtlasMipmaps := false
+    else
     if Parameters[I] = '--atlas' then
       UseTextureAtlas := true
     else
