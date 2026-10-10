@@ -2,7 +2,9 @@
 """Patch the web build's play page (castle-engine-output/web/dist/index.html,
 CGE's template) for the game's render resolution option, for offline
 play (it registers the site's service worker, ../sw.js, which the Web
-workflow copies from pages/sw.js) and for a crash report: the last 40
+workflow copies from pages/sw.js, and links the web app manifest,
+../manifest.webmanifest, so browsers can install the site) and for a crash
+report: the last 40
 console lines (the game's log) shown over the page when the WebAssembly
 program stops (any exception does: FPC's wasm32 target cannot catch
 them), e.g. after the CRASH demo command (play/?map=E1M1&demo=W:2,CRASH).
@@ -89,6 +91,14 @@ CRASH_NEW = """
   </script>"""
 
 
+MANIFEST_TAG = re.compile(r'(  <title>[^<]*</title>\n)')
+
+MANIFEST_NEW = """  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="icon" href="../icon-192.png">
+  <meta name="theme-color" content="#280808">
+"""
+
+
 def main():
     if len(sys.argv) != 2:
         print(__doc__)
@@ -103,6 +113,12 @@ def main():
             sys.exit(1)
         text = CRASH_TAG.sub(lambda m: CRASH_NEW + m.group(1), text)
         done.append('crash report')
+    if 'manifest.webmanifest' not in text:
+        if len(MANIFEST_TAG.findall(text)) != 1:
+            print('%s: the title was not found, cannot link the manifest' % path)
+            sys.exit(1)
+        text = MANIFEST_TAG.sub(lambda m: m.group(1) + MANIFEST_NEW, text)
+        done.append('manifest')
     for marker, before, after, what in [('castleDoomSetScale', OLD, NEW, 'render scale'),
                                         ('serviceWorker', SW_OLD, SW_NEW, 'service worker')]:
         if marker in text:

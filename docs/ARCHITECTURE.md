@@ -1199,6 +1199,9 @@ Things that differ on the web and shaped the code:
   stopped WebAssembly program raises. On the desktop `GameCrash` is the
   `Application.OnException` handler: the report in the log and a
   continue / quit dialog.
+- Installable: `pages/manifest.webmanifest` and the icons
+  (`tools/make_web_icons.py`) are linked from both pages (the play
+  page's link comes from `tools/patch_web_page.py`).
 - Offline: `pages/sw.js` is the site's service worker (registered by
   both pages; the play page's registration comes from
   `tools/patch_web_page.py`). It fetches the game's own files on install,

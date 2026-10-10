@@ -7,13 +7,13 @@
    Query strings are ignored when matching (castle-doom.js?random_suffix).
    Registered by pages/index.html and the play page (tools/patch_web_page.py). */
 
-const CACHE = 'castle-doom-offline-v1';
+const CACHE = 'castle-doom-offline-v2';
 
 /* The game's own files, fetched when the worker installs: the first
    visit's page loaded them before the worker could see the requests.
    (Bootstrap from the CDN and Phase 2 are kept when they are next loaded.) */
-const PRECACHE = ['index.html', 'play/index.html', 'play/castle-doom.js',
-  'play/castle-doom.wasm', 'play/castle-doom_data.zip'];
+const PRECACHE = ['index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
+  'play/index.html', 'play/castle-doom.js', 'play/castle-doom.wasm', 'play/castle-doom_data.zip'];
 
 self.addEventListener('install', event => {
   self.skipWaiting();

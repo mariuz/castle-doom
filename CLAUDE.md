@@ -224,7 +224,9 @@ registers it through `tools/patch_web_page.py`). Test it on a `web-site`
 artifact with `pages/index.html` and `pages/sw.js` copied in (the CI
 artifact already has them): load `play/?map=E1M1` with Playwright, wait
 for `navigator.serviceWorker.ready`, `context.setOffline(true)`, then
-`play/?map=E1M2` must log `Load: E1M2`.
+`play/?map=E1M2` must log `Load: E1M2`. Installable: `pages/manifest.webmanifest`
+and `pages/icon-*.png` (`tools/make_web_icons.py`); check with a CDP
+session's `Page.getInstallabilityErrors` (an empty list) on both pages.
 
 `CLICKPROMPT` shows the browser's "click to look around" prompt in an
 autotest (it is hidden in autotests otherwise). Gamepads (`GameGamepad`)

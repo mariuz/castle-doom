@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The web version can be installed as an app (a web app manifest and an
+  icon with Freedoom's face), with its own window and start menu entry.
 - Autotests can run with a fixed time step (`--fixed-step`), so the
   screenshots of moving scenes are compared with references too (35 in
   all).

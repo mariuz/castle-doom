@@ -1,0 +1,14 @@
+{
+  "name": "Castle DOOM",
+  "short_name": "Castle DOOM",
+  "description": "Freedoom's levels played in Castle Game Engine, in the browser and offline.",
+  "start_url": "play/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#280808",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

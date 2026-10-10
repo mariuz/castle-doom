@@ -3,7 +3,8 @@
 [![Build](https://github.com/mariuz/castle-doom/actions/workflows/build.yml/badge.svg)](https://github.com/mariuz/castle-doom/actions/workflows/build.yml)
 [![Web](https://github.com/mariuz/castle-doom/actions/workflows/web.yml/badge.svg)](https://github.com/mariuz/castle-doom/actions/workflows/web.yml)
 
-**Play in the browser: https://mariuz.github.io/castle-doom/** (WebAssembly build)
+**Play in the browser: https://mariuz.github.io/castle-doom/** (WebAssembly build; it plays
+offline after one visit and can be installed as an app from the browser's menu)
 &middot; **Downloads: [Releases](https://github.com/mariuz/castle-doom/releases)** (Windows installer or zip, Linux, macOS) &middot; [Changelog](docs/CHANGELOG.md)
 
 Doom levels, rendered and played with [Castle Game Engine](https://castle-engine.io/)
