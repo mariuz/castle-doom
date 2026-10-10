@@ -9,7 +9,7 @@ uses SysUtils,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
-  DoomLighting, DoomDehacked, DoomMusic, GameGamepad, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
+  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
 
 var
   Window: TCastleWindow;
@@ -56,6 +56,12 @@ begin
     end else
     if Parameters[I] = '--fm-synth' then
       ForceFmSynth := true
+    else
+    if Parameters[I] = '--no-atlas' then
+      UseTextureAtlas := false
+    else
+    if Parameters[I] = '--atlas' then
+      UseTextureAtlas := true
     else
     if (Parameters[I] = '--demo') and (I + 1 <= Parameters.High) then
     begin

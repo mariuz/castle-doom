@@ -32,6 +32,13 @@ type
     { Textures and flats: the last level (TDoomGraphics.BeginLevel count)
       that asked for this image; older ones are freed by ReleaseUnused. }
     LastLevel: Integer;
+    { Where this level's texture atlas holds the image (BuildAtlas): the
+      page (-1 = not in it) and the image's rectangle in the page as
+      texture coordinates (x, y, width, height), inside the 1-texel wrap
+      border. }
+    AtlasPage: Integer;
+    AtlasRect: TVector4;
+    constructor Create;
     destructor Destroy; override;
     { A new ImageTexture node showing this image. Repeating (walls, flats)
       or clamped (sprites, sky). The caller (its scene) owns the node. }
@@ -39,6 +46,7 @@ type
   end;
 
   TDoomImageDict = {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TDoomImage>;
+  TDoomImageList = {$ifdef FPC}specialize{$endif} TList<TDoomImage>;
 
   TSpriteLumpRef = record
     Lump: Integer;
@@ -80,6 +88,9 @@ type
     FFlatOrder: TStringList;
     FSprites: TSpriteDict;
     FTextures, FFlats, FPatches: TDoomImageDict;
+    { The level's texture atlas pages (BuildAtlas), 'atlas/NAME'. }
+    FAtlases: TDoomImageDict;
+    FAtlasPages: TDoomImageList;
     FAnimGroups: TAnimGroupList;
     FAnimByName: {$ifdef FPC}specialize{$endif} TDictionary<String, TAnimGroup>;
     FMissing: TDoomImage;
@@ -103,6 +114,7 @@ type
     function MissingTexture: TDoomImage;
     function ReadGfx(const Url: String; out MimeType: String): TStream;
     procedure ResolveAnim(const Img: TDoomImage; const IsFlat: Boolean);
+    procedure ResetAtlasPlacement;
   public
     constructor Create(const AWad: TDoomWad);
     destructor Destroy; override;
@@ -131,6 +143,15 @@ type
       again through doomgfx: for any that is needed later). Sprites and
       other patches stay, the HUD and menus keep using them. }
     procedure ReleaseUnused;
+    { Pack the level's wall textures and flats into atlas pages (2048 wide,
+      as high as needed up to 2048, more pages when full), each image with
+      a 1-texel border of its wrapped edges so that linear filtering at a
+      tile's edge sees the right neighbours. Sets every image's AtlasPage
+      and AtlasRect (-1 for the ones that did not fit: too big, or none
+      left); the previous atlas is dropped. Returns the page count. }
+    function BuildAtlas(const Images: TDoomImageList; const BaseName: String): Integer;
+    function AtlasPage(const Index: Integer): TDoomImage;
+    function AtlasPageCount: Integer;
     { Advance animated textures. Call once per Doom tic (35 Hz). }
     procedure AnimationTic(const Tic: Int64);
     { Does the WAD know this wall texture name? }
@@ -148,6 +169,12 @@ var
   LutCounter: Integer;
 
 { TDoomImage ----------------------------------------------------------------- }
+
+constructor TDoomImage.Create;
+begin
+  inherited Create;
+  AtlasPage := -1;
+end;
 
 destructor TDoomImage.Destroy;
 begin
@@ -282,6 +309,8 @@ begin
   FTextures := TDoomImageDict.Create([doOwnsValues]);
   FFlats := TDoomImageDict.Create([doOwnsValues]);
   FPatches := TDoomImageDict.Create([doOwnsValues]);
+  FAtlases := TDoomImageDict.Create([doOwnsValues]);
+  FAtlasPages := TDoomImageList.Create;
   FAnimGroups := TAnimGroupList.Create(true);
   FAnimByName := {$ifdef FPC}specialize{$endif} TDictionary<String, TAnimGroup>.Create;
 
@@ -315,6 +344,8 @@ begin
   FreeAndNil(FTextures);
   FreeAndNil(FFlats);
   FreeAndNil(FPatches);
+  FreeAndNil(FAtlasPages);
+  FreeAndNil(FAtlases);
   FreeAndNil(FSprites);
   FreeAndNil(FFlatLumps);
   FreeAndNil(FFlatOrder);
@@ -533,6 +564,10 @@ begin
   else if Kind = 'flat' then Img := Flat(Name)
   else if Kind = 'patch' then Img := Patch(Name)
   else if Kind = 'missing' then Img := MissingTexture
+  else if Kind = 'atlas' then
+  begin
+    if not FAtlases.TryGetValue(Name, Img) then Img := nil;
+  end
   else if Kind = 'lut' then
   begin
     MakeLuts;
@@ -736,6 +771,185 @@ begin
   ReleaseFrom(FFlats, Count, Bytes);
   WritelnLog('Graphics', 'Freed %d textures and flats of earlier levels (%d KB); %d textures, %d flats, %d patches cached', [
     Count, Bytes div 1024, FTextures.Count, FFlats.Count, FPatches.Count]);
+end;
+
+{ Every texture and flat out of the atlas (a for-in loop cannot sit in
+  BuildAtlas: FPC refuses loop counters in a routine with nested ones). }
+procedure TDoomGraphics.ResetAtlasPlacement;
+var
+  Img: TDoomImage;
+begin
+  for Img in FTextures.Values do Img.AtlasPage := -1;
+  for Img in FFlats.Values do Img.AtlasPage := -1;
+end;
+
+function TDoomGraphics.BuildAtlas(const Images: TDoomImageList; const BaseName: String): Integer;
+const
+  PageWidth = 2048;
+  MaxHeight = 2048;
+var
+  Sorted: TDoomImageList;
+  Page: TRGBAlphaImage;
+  PageHeight, ShelfY, ShelfH, X, I, J, W, H, Placed: Integer;
+  Img, PageImg: TDoomImage;
+  AnyAlpha: Boolean;
+
+  function Higher(const A, B: TDoomImage): Boolean;
+  begin
+    Result := (A.Height > B.Height) or ((A.Height = B.Height) and (A.Width > B.Width));
+  end;
+
+  { Close the page: trim it to a power of two height and register it. }
+  procedure FinishPage;
+  var
+    Used, Trimmed, K: Integer;
+    Final: TRGBAlphaImage;
+  begin
+    if Placed = 0 then
+    begin
+      FreeAndNil(Page);
+      Exit;
+    end;
+    Used := ShelfY + ShelfH;
+    Trimmed := 64;
+    while Trimmed < Used do Trimmed := Trimmed * 2;
+    if Trimmed < PageHeight then
+    begin
+      Final := TRGBAlphaImage.Create(PageWidth, Trimmed);
+      Final.DrawFrom(Page, 0, 0, 0, 0, PageWidth, Trimmed, dmOverwrite);
+      FreeAndNil(Page);
+      Page := Final;
+    end;
+    PageImg := TDoomImage.Create;
+    PageImg.Name := Format('%s_%d', [BaseName, FAtlasPages.Count]);
+    PageImg.Url := 'doomgfx:/atlas/' + PageImg.Name + '.tga';
+    PageImg.Image := Page;
+    PageImg.Width := Page.Width;
+    PageImg.Height := Page.Height;
+    PageImg.HasAlpha := AnyAlpha;
+    PageImg.LastLevel := FLevel;
+    FAtlases.Add(PageImg.Name, PageImg);
+    FAtlasPages.Add(PageImg);
+    { The rectangles were set against PageHeight; the page is Trimmed high. }
+    for K := 0 to Sorted.Count - 1 do
+      if Sorted[K].AtlasPage = FAtlasPages.Count - 1 then
+      begin
+        Sorted[K].AtlasRect.Y := Sorted[K].AtlasRect.Y * PageHeight / Page.Height;
+        Sorted[K].AtlasRect.W := Sorted[K].AtlasRect.W * PageHeight / Page.Height;
+      end;
+    Page := nil;
+  end;
+
+  procedure NewPage;
+  begin
+    Page := TRGBAlphaImage.Create(PageWidth, PageHeight);
+    Page.Clear(Vector4Byte(0, 0, 0, 0));
+    ShelfY := 0;
+    ShelfH := 0;
+    X := 0;
+    Placed := 0;
+    AnyAlpha := false;
+  end;
+
+  { The image with its wrapped 1-texel border at (X, ShelfY). }
+  procedure Place(const Img: TDoomImage);
+  var
+    S: TRGBAlphaImage;
+    PX, PY: Integer;
+  begin
+    S := Img.Image;
+    W := Img.Width;
+    H := Img.Height;
+    PX := X + 1;
+    PY := ShelfY + 1;
+    Page.DrawFrom(S, PX, PY, dmOverwrite);
+    Page.DrawFrom(S, PX - 1, PY, W - 1, 0, 1, H, dmOverwrite);  { left border: the last column }
+    Page.DrawFrom(S, PX + W, PY, 0, 0, 1, H, dmOverwrite);      { right border: the first column }
+    Page.DrawFrom(S, PX, PY - 1, 0, H - 1, W, 1, dmOverwrite);  { bottom border: the top row }
+    Page.DrawFrom(S, PX, PY + H, 0, 0, W, 1, dmOverwrite);      { top border: the bottom row }
+    Page.DrawFrom(S, PX - 1, PY - 1, W - 1, H - 1, 1, 1, dmOverwrite);
+    Page.DrawFrom(S, PX + W, PY - 1, 0, H - 1, 1, 1, dmOverwrite);
+    Page.DrawFrom(S, PX - 1, PY + H, W - 1, 0, 1, 1, dmOverwrite);
+    Page.DrawFrom(S, PX + W, PY + H, 0, 0, 1, 1, dmOverwrite);
+    Img.AtlasPage := FAtlasPages.Count;
+    Img.AtlasRect := Vector4(PX / PageWidth, PY / PageHeight, W / PageWidth, H / PageHeight);
+    AnyAlpha := AnyAlpha or Img.HasAlpha;
+    Inc(Placed);
+  end;
+
+begin
+  { Forget the previous level's pages and placements. }
+  for I := 0 to FAtlasPages.Count - 1 do
+    FAtlases.Remove(FAtlasPages[I].Name);
+  FAtlasPages.Clear;
+  ResetAtlasPlacement;
+  Result := 0;
+  if Images.Count = 0 then Exit;
+
+  { Shelves of decreasing height: a simple packing that wastes little
+    with Doom's few texture heights (128, 72, 64...). }
+  Sorted := TDoomImageList.Create;
+  try
+    for I := 0 to Images.Count - 1 do
+      if (Images[I] <> nil) and (Images[I].Image <> nil) and (Sorted.IndexOf(Images[I]) < 0) and
+         (Images[I].Width + 2 <= PageWidth) and (Images[I].Height + 2 <= MaxHeight) then
+        Sorted.Add(Images[I]);
+    { Insertion sort by height, then width (a few hundred images). }
+    for I := 1 to Sorted.Count - 1 do
+    begin
+      Img := Sorted[I];
+      J := I - 1;
+      while (J >= 0) and Higher(Img, Sorted[J]) do
+      begin
+        Sorted[J + 1] := Sorted[J];
+        Dec(J);
+      end;
+      Sorted[J + 1] := Img;
+    end;
+
+    PageHeight := MaxHeight;
+    Page := nil;
+    NewPage;
+    for I := 0 to Sorted.Count - 1 do
+    begin
+      Img := Sorted[I];
+      W := Img.Width + 2;
+      H := Img.Height + 2;
+      if X + W > PageWidth then
+      begin
+        { Next shelf. }
+        ShelfY := ShelfY + ShelfH;
+        ShelfH := 0;
+        X := 0;
+      end;
+      if ShelfH = 0 then ShelfH := H;
+      if ShelfY + ShelfH > PageHeight then
+      begin
+        FinishPage;
+        NewPage;
+        ShelfH := H;
+      end;
+      Place(Img);
+      X := X + W;
+    end;
+    FinishPage;
+  finally
+    FreeAndNil(Sorted);
+  end;
+  Result := FAtlasPages.Count;
+end;
+
+function TDoomGraphics.AtlasPage(const Index: Integer): TDoomImage;
+begin
+  if (Index >= 0) and (Index < FAtlasPages.Count) then
+    Result := FAtlasPages[Index]
+  else
+    Result := nil;
+end;
+
+function TDoomGraphics.AtlasPageCount: Integer;
+begin
+  Result := FAtlasPages.Count;
 end;
 
 function TDoomGraphics.MissingTexture: TDoomImage;

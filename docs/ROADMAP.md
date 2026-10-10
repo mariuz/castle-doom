@@ -6,6 +6,22 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Map texture atlas: each level's wall textures and flats are packed into
+  atlas pages (2048 wide, trimmed to a power-of-two height, more pages
+  when full; E1M1: 150 images in one 2048x1024 page) with a 1-texel
+  border of their wrapped edges, and a chunk draws all of them in one
+  shape per page (`TDoomGraphics.BuildAtlas`, `doomgfx:/atlas/`,
+  `TGeomBatch.AtlasPage`): the `doom_tile` vertex attribute carries each
+  vertex's tile rectangle and a texture effect (`PLUG_texture_color`)
+  samples at `tile.xy + fract(uv) * tile.zw`, so walls and flats repeat
+  as before. Switches, scrolling walls and animated textures keep their
+  own shapes; the pages have no mipmaps (a mipmap would blend tiles, and
+  the wrap seam breaks its derivatives), nearest up close and linear far
+  away, which is also closer to Doom's own look. E1M1 door spot: map 151
+  -> 21 draw calls (12 with everything in view), the frame 186 -> 56,
+  geometry built in 63 ms instead of 96-244 (fewer shapes), and the
+  textures keep their real sizes (no power-of-two resize). `--no-atlas`
+  returns to one shape per texture (with mipmaps).
 - Unit tests for the node formats, the MIDI / MUS parsers and the
   synthesizers' envelope: `tests/castle_doom_tests.lpr` (15 cases, about
   20 s) loads E1M1 from every generated node-format PWAD (XNOD, ZNOD,
@@ -435,7 +451,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **DeHackEd frames and code pointers**: `-deh` patches already change thing stats, Misc, Ammo and par times; frames, code pointers, sprite / sound names and weapon frames would need vanilla's state table (`info.c` states) behind `TDoomActor`'s frame sequences. | Mods that change behaviour, not just numbers. | `DoomThings`, `DoomActors`, `DoomDehacked` | L |
-| **Browser frame rate**, measured (headless Chromium + SwiftShader on the live page, Chrome CPU profile, `PerfView:` statistics): a frame on E1M1 at the door spot draws 255 shapes = 255 draw calls (map 151 of its 206 per-texture shapes, sprites 104, one scene each); per frame the CPU time is ~94 ms in wasm (game logic 13 ms, the rest CGE's per-shape rendering and the music synth slice) + ~66 ms in the JOB JS bridge (`HaveSharedArrayBuffer`, `decode`, `Invoke_*`, then the WebGL calls: `bindBuffer`, `enable/disableVertexAttribArray`, `activeTexture`, `uniform*`), i.e. about 0.6 ms per shape, so the frame rate is the number of draw calls. Tried and reverted: splitting the static map geometry into 1024-unit cells for frustum culling (151 -> 249 map draw calls: textures repeat per cell and a 90-degree view covers most cells of a flat level). Done: (1) sprites in one scene per (light group, kind), each texture's quads merged by us in one persistent shape (`TSpriteBatch` / `TSpriteShape`; E1M1 door spot: sprites 104 -> 35 draw calls, 104 -> 9 scenes, the whole frame 255 -> 186 draw calls; CGE's own dynamic batching was tried in between: 8 merge slots a pass and shader relinks every frame from its pool shapes). Next, in order of certainty: (2) in CGE for the web: vertex array objects and cached uniform locations to cut WebGL calls per shape (every call crosses wasm -> JS); (3) a wall / flat texture atlas with shader-side wrapping for the map (one draw call per chunk: 151 of the 186 draw calls are the map now; the map textures repeat with GL wrap and use mipmaps with anisotropy for far floors, so an atlas needs `fract` wrapping in the fragment shader with explicit gradients, `texture2DGradEXT` on WebGL 1, to keep mipmapping without bleeding at tile edges, or padded tiles without mipmaps). | Playable speed on the Pages site. | `DoomActors`, CGE web renderer, `DoomGeometry` | M each |
+| **Browser frame rate**, measured (headless Chromium + SwiftShader on the live page, Chrome CPU profile, `PerfView:` statistics): a frame on E1M1 at the door spot draws 255 shapes = 255 draw calls (map 151 of its 206 per-texture shapes, sprites 104, one scene each); per frame the CPU time is ~94 ms in wasm (game logic 13 ms, the rest CGE's per-shape rendering and the music synth slice) + ~66 ms in the JOB JS bridge (`HaveSharedArrayBuffer`, `decode`, `Invoke_*`, then the WebGL calls: `bindBuffer`, `enable/disableVertexAttribArray`, `activeTexture`, `uniform*`), i.e. about 0.6 ms per shape, so the frame rate is the number of draw calls. Tried and reverted: splitting the static map geometry into 1024-unit cells for frustum culling (151 -> 249 map draw calls: textures repeat per cell and a 90-degree view covers most cells of a flat level). Done: (1) sprites in one scene per (light group, kind), each texture's quads merged by us in one persistent shape (`TSpriteBatch` / `TSpriteShape`; E1M1 door spot: sprites 104 -> 35 draw calls, 104 -> 9 scenes, the whole frame 255 -> 186 draw calls; CGE's own dynamic batching was tried in between: 8 merge slots a pass and shader relinks every frame from its pool shapes); (2) the map in a texture atlas with `fract` wrapping in the shader, padded tiles and no mipmaps (one shape per chunk and page: the frame 186 -> 56 draw calls, 12 for the map alone). Left: in CGE for the web, vertex array objects and cached uniform locations to cut WebGL calls per shape (every call crosses wasm -> JS); and mipmaps for the atlas with explicit gradients (`texture2DGradEXT` on WebGL 1) if far floors shimmer too much. | Playable speed on the Pages site. | `DoomActors`, CGE web renderer, `DoomGeometry` | M each |
 
 ## 3. Audio
 
@@ -466,10 +482,10 @@ L = several days). Items inside a section are in suggested order.
 
 ## Suggested next three
 
-1. Browser frame rate (M): sprites are merged, see Presentation; next
-   is the map (151 of 186 draw calls: a texture atlas with shader-side
-   wrapping, one draw call per chunk) or fewer WebGL calls per shape in
-   CGE's web renderer.
+1. Browser frame rate (M): sprites merged and the map in an atlas (a
+   frame at E1M1's door is 56 draw calls, from 255), see Presentation;
+   what is left is in CGE's web renderer (vertex array objects, cached
+   uniform locations), best contributed upstream.
 2. Web gamepads (M): a browser backend for CGE's game controllers
    (`navigator.getGamepads()`), so the desktop bindings work on the web
    (see Engine and tooling).

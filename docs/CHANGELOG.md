@@ -11,8 +11,12 @@
   Doom's own sound driver did; the built-in FM model remains the fallback
   (`--fm-synth` forces it) and the browser's synthesizer.
 - Things are drawn in a few batched scenes (one per light level and kind,
-  one draw call per sprite texture in each) instead of one scene each: a
-  third of the draw calls for the sprites, mainly for the browser.
+  one draw call per sprite texture in each) instead of one scene each,
+  and each level's wall textures and flats go into one texture atlas, so
+  a map chunk is one draw call: a frame at E1M1's first door went from 255
+  to 56 draw calls, mainly for the browser's frame rate. Map textures keep
+  their real sizes and are no longer mipmapped (`--no-atlas` restores the
+  old per-texture shapes).
 - Gamepad support in the desktop versions (Windows, Linux): sticks to
   move and look, right trigger to fire, A to use, bumpers for weapons,
   and the D-pad, A and B in the menus.

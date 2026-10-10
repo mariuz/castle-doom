@@ -79,6 +79,14 @@ type
     function SpriteEffect(out LightField: TSFVec2f): TEffectNode;
     { A new doom_light vertex attribute node. }
     function LightAttribute: TFloatVertexAttributeNode;
+    { A new doom_tile vertex attribute node (x, y, width, height of the
+      vertex's texture in the atlas page, as texture coordinates; (0, 0, 1,
+      1) for a shape with its own texture). }
+    function TileAttribute: TFloatVertexAttributeNode;
+    { A new effect for an atlas page's ImageTexture node: the texture
+      coordinates wrap inside the vertex's tile (doom_tile), so walls and
+      flats repeat as they did with their own textures. }
+    function AtlasTextureEffect: TEffectNode;
     { Doom's colormap index (0 = full bright, 31 = darkest) for a light
       level seen at the nearest scale, as the player's weapon is lit. }
     function WeaponColormap(const Light: Integer): Integer;
@@ -200,10 +208,25 @@ const
 
   GeometryVertex =
     'attribute vec2 doom_light;' + NL +
+    'attribute vec4 doom_tile;' + NL +
     'varying vec3 doom_light_info;' + NL +
+    'varying vec4 doom_tile_v;' + NL +
     'void PLUG_vertex_eye_space(const in vec4 vertex_eye, const in vec3 normal_eye)' + NL +
     '{' + NL +
     '  doom_light_info = vec3(doom_light, -vertex_eye.z);' + NL +
+    '  doom_tile_v = doom_tile;' + NL +
+    '}';
+
+  { On an atlas page's texture: sample inside the vertex's tile, the
+    coordinates wrapped by fract (the page clamps, the tile has a 1-texel
+    border of its wrapped edges for the filtering). }
+  AtlasTextureFragment =
+    'varying vec4 doom_tile_v;' + NL +
+    { The sampler parameter must not be called "texture": CGE renames
+      texture2D to texture on newer GLSL, which it would shadow. }
+    'void PLUG_texture_color(inout vec4 texture_color, const in sampler2D atlas, const in vec4 tex_coord)' + NL +
+    '{' + NL +
+    '  texture_color = texture2D(atlas, doom_tile_v.xy + fract(tex_coord.xy) * doom_tile_v.zw);' + NL +
     '}';
   GeometryFragmentInput =
     'varying vec3 doom_light_info;' + NL;
@@ -353,6 +376,25 @@ begin
   Result := TFloatVertexAttributeNode.Create;
   Result.NameField := 'doom_light';
   Result.NumComponents := 2;
+end;
+
+function TDoomLighting.TileAttribute: TFloatVertexAttributeNode;
+begin
+  Result := TFloatVertexAttributeNode.Create;
+  Result.NameField := 'doom_tile';
+  Result.NumComponents := 4;
+end;
+
+function TDoomLighting.AtlasTextureEffect: TEffectNode;
+var
+  FragmentPart: TEffectPartNode;
+begin
+  Result := TEffectNode.Create;
+  Result.Language := slGLSL;
+  FragmentPart := TEffectPartNode.Create;
+  FragmentPart.ShaderType := stFragment;
+  FragmentPart.Contents := AtlasTextureFragment;
+  Result.SetParts([FragmentPart]);
 end;
 
 function TDoomLighting.WeaponColormap(const Light: Integer): Integer;

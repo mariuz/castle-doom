@@ -261,15 +261,36 @@ them, `FlushDirty` regenerates them once per frame.
 
 ### Batches and nodes
 
-Inside a chunk, triangles are grouped per texture into `TGeomBatch`es. Each
-batch becomes one `TShapeNode` with:
+Inside a chunk, triangles are grouped into `TGeomBatch`es: one per atlas
+page (`UseTextureAtlas`, the default) plus one per texture that stays out of
+the atlas (switches, whose texture is swapped in place; scrolling walls,
+with their texture transform; animated textures, whose URL changes), or
+one per texture with `--no-atlas`. Each batch becomes one `TShapeNode` with:
 
 - `TIndexedTriangleSetNode` geometry, `Solid = true` (back-face culling),
-- `TCoordinateNode`, `TTextureCoordinateNode`, `TColorNode` (per-vertex),
-- `TAppearanceNode` with `TUnlitMaterialNode` (Doom has no lighting model; the
-  per-vertex `Color` multiplies the texture) and `AlphaMode = amMask` when the
-  texture has transparent pixels (alpha test, no sorting problems),
+- `TCoordinateNode`, `TTextureCoordinateNode` (in texture repeats, as if
+  each wall had its own texture), the `doom_light` and `doom_tile` vertex
+  attributes (`TFloatVertexAttributeNode`: the light, and the texture's
+  rectangle in the atlas page, (0, 0, 1, 1) with an own texture),
+- `TAppearanceNode` with `TUnlitMaterialNode` (Doom has no lighting model)
+  and `AlphaMode = amMask` when the texture has transparent pixels (alpha
+  test, no sorting problems),
 - a `TTextureTransformNode` for scrolling walls (linedef special 48).
+
+The atlas (`TDoomGraphics.BuildAtlas`, called by `TDoomGeometry.Create`
+with every texture and flat the map's sidedefs and sectors name): pages
+2048 wide, shelves of decreasing image height, each image with a 1-texel
+border copied from its opposite edges (so linear filtering at a tile's edge
+sees the wrapped neighbour), trimmed to a power-of-two height, a new page
+when one is full (Freedoom's largest map needs 2.9 M texels, one page);
+served as `doomgfx:/atlas/<map>_<n>.tga`. The page's `TImageTextureNode`
+clamps, has no mipmaps (a mipmap would blend tiles, and the wrap seam
+breaks the derivatives it needs; nearest magnification, linear
+minification: close to Doom's own unfiltered look) and carries
+`TDoomLighting.AtlasTextureEffect`, a `PLUG_texture_color` that samples at
+`tile.xy + fract(uv) * tile.zw` (a texture-level effect: group effects are
+plugged before CGE adds the texture code). E1M1 at the door: 21 map draw
+calls instead of 151, geometry built in 63 ms instead of 96-244.
 
 `Generate` fills the batch lists and either builds nodes and calls
 `Scene.Load(Root, true)` (first time, or when vertex counts changed) or just
@@ -1031,10 +1052,9 @@ and deploys `pages/index.html` plus the game to GitHub Pages.
 - Level load is dominated by texture decoding the first time a texture is
   seen; E1M1 loads in about 100 ms natively (map 2 ms, geometry 70 ms, things
   20 ms).
-- Static geometry is one scene with one shape per texture; dynamic sectors
-  are small scenes. `TCastleViewport.DynamicBatching = true` lets the engine
-  merge small shapes into fewer draw calls. Release builds run at 100+ FPS at
-  1600x900.
+- Static geometry is one scene with one shape per atlas page (plus the
+  switch, scrolling and animated textures); dynamic sectors are small
+  scenes. Release builds run at 100+ FPS at 1600x900.
 - Monster line-of-sight and movement loop over all linedefs with a bounding
   box rejection; cheap for vanilla-sized maps, but a blockmap would be the
   next step for huge maps.

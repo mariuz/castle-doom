@@ -19,6 +19,14 @@ uses SysUtils, Classes, Generics.Collections,
 function DoomToCge(const X, Y, Z: Single): TVector3; inline;
 function CgeToDoom(const V: TVector3): TVector3; inline;
 
+var
+  { Draw each chunk's walls and flats from one texture atlas page (one
+    draw call per chunk and page) instead of one shape per texture: the
+    browser's frame rate is the number of draw calls. Switches, scrolling
+    and animated textures keep their own shapes. --no-atlas / --atlas on
+    the command line. }
+  UseTextureAtlas: Boolean = true;
+
 type
   TDoomGeometry = class;
 
@@ -36,10 +44,16 @@ type
     { Per vertex: sector light level and kind (DoomLightWall + contrast,
       DoomLightPlane, DoomLightFullBright), the doom_light attribute. }
     Lights: TSingleList;
+    { Per vertex: the texture's rectangle in the atlas page (4 values,
+      the doom_tile attribute); (0, 0, 1, 1) with an own texture. }
+    Tiles: TSingleList;
+    { The atlas page this batch draws from, -1 = its own texture (Img). }
+    AtlasPage: Integer;
     Indices: TInt32List;
     CoordNode: TCoordinateNode;
     TexCoordNode: TTextureCoordinateNode;
     LightNode: TFloatVertexAttributeNode;
+    TileNode: TFloatVertexAttributeNode;
     Geometry: TIndexedTriangleSetNode;
     Shape: TShapeNode;
     TexTransform: TTextureTransformNode;
@@ -54,12 +68,13 @@ type
     procedure Reset;
     { Forget the nodes (they are owned by a scene root that is being replaced). }
     procedure DropNodes;
-    { Quad A B C D counter-clockwise as seen from the front. }
+    { Quad A B C D counter-clockwise as seen from the front; Tile is the
+      texture's atlas rectangle (TileOf). }
     procedure AddQuad(const A, B, C, D: TVector3; const TA, TB, TC, TD: TVector2;
-      const Light: TVector2);
+      const Light: TVector2; const Tile: TVector4);
     { Convex polygon (fan), counter-clockwise as seen from the front. }
     procedure AddPolygon(const Pts: array of TVector3; const Tex: array of TVector2;
-      const Light: TVector2);
+      const Light: TVector2; const Tile: TVector4);
     procedure CreateNodes;
     { Update node fields from the lists (nodes must exist). }
     procedure UpdateNodes;
@@ -83,7 +98,7 @@ type
     procedure EmitFlats(const Sub: Integer);
     procedure EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
       const ZBottom, ZTop: Single; const U0, U1: Single;
-      const TexTopZ: Single; const TexW, TexH: Integer; const Light: TVector2);
+      const TexTopZ: Single; const Img: TDoomImage; const Light: TVector2);
   public
     Name: String;
     SceneSolid, ScenePassable: TCastleScene;
@@ -122,6 +137,8 @@ type
     procedure BuildCollisionScene;
     procedure BuildSky(const SkyTexture: String);
     procedure Dependency(const Sec: Integer; const Chunk: TMapChunk);
+    { The level's wall textures and flats into TDoomGraphics' atlas pages. }
+    procedure BuildAtlas(const SkyTexture: String);
   public
     constructor Create(const AMap: TDoomMap; const AGraphics: TDoomGraphics;
       const DynamicSectors: array of Boolean; const SkyTexture: String);
@@ -171,6 +188,8 @@ begin
   Coords := TVector3List.Create;
   TexCoords := TVector2List.Create;
   Lights := TSingleList.Create;
+  Tiles := TSingleList.Create;
+  AtlasPage := -1;
   Indices := TInt32List.Create;
 end;
 
@@ -180,6 +199,7 @@ begin
   FreeAndNil(Coords);
   FreeAndNil(TexCoords);
   FreeAndNil(Lights);
+  FreeAndNil(Tiles);
   FreeAndNil(Indices);
   inherited;
 end;
@@ -192,6 +212,7 @@ begin
   CoordNode := nil;
   TexCoordNode := nil;
   LightNode := nil;
+  TileNode := nil;
   Geometry := nil;
   Shape := nil;
   TexTransform := nil;
@@ -203,11 +224,12 @@ begin
   Coords.Count := 0;
   TexCoords.Count := 0;
   Lights.Count := 0;
+  Tiles.Count := 0;
   Indices.Count := 0;
 end;
 
 procedure TGeomBatch.AddQuad(const A, B, C, D: TVector3; const TA, TB, TC, TD: TVector2;
-  const Light: TVector2);
+  const Light: TVector2; const Tile: TVector4);
 var
   Base, I: Integer;
 begin
@@ -218,13 +240,14 @@ begin
   begin
     Lights.Add(Light.X);
     Lights.Add(Light.Y);
+    Tiles.Add(Tile.X); Tiles.Add(Tile.Y); Tiles.Add(Tile.Z); Tiles.Add(Tile.W);
   end;
   Indices.Add(Base); Indices.Add(Base + 1); Indices.Add(Base + 2);
   Indices.Add(Base); Indices.Add(Base + 2); Indices.Add(Base + 3);
 end;
 
 procedure TGeomBatch.AddPolygon(const Pts: array of TVector3; const Tex: array of TVector2;
-  const Light: TVector2);
+  const Light: TVector2; const Tile: TVector4);
 var
   Base, I: Integer;
 begin
@@ -235,6 +258,7 @@ begin
     TexCoords.Add(Tex[I]);
     Lights.Add(Light.X);
     Lights.Add(Light.Y);
+    Tiles.Add(Tile.X); Tiles.Add(Tile.Y); Tiles.Add(Tile.Z); Tiles.Add(Tile.W);
   end;
   for I := 1 to High(Pts) - 1 do
   begin
@@ -252,16 +276,30 @@ begin
   CoordNode := TCoordinateNode.Create;
   TexCoordNode := TTextureCoordinateNode.Create;
   LightNode := DoomLightingInstance.LightAttribute;
+  TileNode := DoomLightingInstance.TileAttribute;
   Geometry := TIndexedTriangleSetNode.Create;
   Geometry.Coord := CoordNode;
   Geometry.TexCoord := TexCoordNode;
-  Geometry.SetAttrib([LightNode]);
+  Geometry.SetAttrib([LightNode, TileNode]);
   Geometry.Solid := true;
   Geometry.NormalPerVertex := false;
 
   Material := TUnlitMaterialNode.Create;
   Appearance := TAppearanceNode.Create;
   Appearance.Material := Material;
+  if AtlasPage >= 0 then
+  begin
+    { The page is clamped, nearest up close and linear far away without
+      mipmaps (a mipmap would blend the tiles into each other, and the
+      wrap seam breaks the derivatives it needs); the effect wraps the
+      coordinates inside each vertex's tile. }
+    TexNode := Img.MakeTextureNode(true);
+    (TexNode.TextureProperties as TTexturePropertiesNode).MinificationFilter := minLinear;
+    (TexNode.TextureProperties as TTexturePropertiesNode).GenerateMipMaps := false;
+    (TexNode.TextureProperties as TTexturePropertiesNode).AnisotropicDegree := 1;
+    TexNode.SetEffects([DoomLightingInstance.AtlasTextureEffect]);
+    Appearance.Texture := TexNode;
+  end else
   if Img <> nil then
   begin
     TexNode := Img.MakeTextureNode(Clamp);
@@ -288,6 +326,7 @@ begin
   CoordNode.SetPoint(Coords);
   TexCoordNode.SetPoint(TexCoords);
   LightNode.SetValue(Lights);
+  TileNode.SetValue(Tiles);
   if CommittedVertices <> Coords.Count then
     Geometry.SetIndex(Indices);
   CommittedVertices := Coords.Count;
@@ -320,8 +359,18 @@ function TMapChunk.Batch(const Img: TDoomImage; const Passable, Scrolling: Boole
   const SwitchLine: Integer): TGeomBatch;
 var
   Key: String;
+  Page: Integer;
 begin
-  Key := Img.Url;
+  { In the atlas: one batch per page (and passability); switches (their
+    texture is swapped in place), scrolling walls (their texture
+    transform) and animated textures (their URL changes) keep their own. }
+  Page := -1;
+  if UseTextureAtlas and (SwitchLine < 0) and (not Scrolling) and (Img.AnimGroup = nil) then
+    Page := Img.AtlasPage;
+  if Page >= 0 then
+    Key := 'atlas' + IntToStr(Page)
+  else
+    Key := Img.Url;
   if SwitchLine >= 0 then Key := 'switch' + IntToStr(SwitchLine);
   if Passable then Key := Key + 'P';
   if Scrolling then Key := Key + 'S';
@@ -329,30 +378,44 @@ begin
   begin
     Result := TGeomBatch.Create;
     Result.Key := Key;
-    Result.Img := Img;
+    Result.AtlasPage := Page;
+    if Page >= 0 then
+      Result.Img := FOwner.Graphics.AtlasPage(Page)
+    else
+      Result.Img := Img;
     Result.Passable := Passable;
     Result.Scrolling := Scrolling;
     FBatches.Add(Key, Result);
   end;
 end;
 
+{ The texture's rectangle in its atlas page for the doom_tile attribute,
+  or the whole texture. }
+function TileOf(const B: TGeomBatch; const Img: TDoomImage): TVector4;
+begin
+  if B.AtlasPage >= 0 then
+    Result := Img.AtlasRect
+  else
+    Result := Vector4(0, 0, 1, 1);
+end;
+
 procedure TMapChunk.EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
   const ZBottom, ZTop: Single; const U0, U1: Single;
-  const TexTopZ: Single; const TexW, TexH: Integer; const Light: TVector2);
+  const TexTopZ: Single; const Img: TDoomImage; const Light: TVector2);
 var
   Top: Single;
   VBottom, VTop: Single;
 begin
   Top := Max(ZTop, ZBottom);
   { Doom texture rows count from the top; X3D v grows upward. }
-  VBottom := 1 - (TexTopZ - ZBottom) / TexH;
-  VTop := 1 - (TexTopZ - Top) / TexH;
+  VBottom := 1 - (TexTopZ - ZBottom) / Img.Height;
+  VTop := 1 - (TexTopZ - Top) / Img.Height;
   B.AddQuad(
     DoomToCge(AX, AY, ZBottom), DoomToCge(BX, BY, ZBottom),
     DoomToCge(BX, BY, Top), DoomToCge(AX, AY, Top),
-    Vector2(U0 / TexW, VBottom), Vector2(U1 / TexW, VBottom),
-    Vector2(U1 / TexW, VTop), Vector2(U0 / TexW, VTop),
-    Light);
+    Vector2(U0 / Img.Width, VBottom), Vector2(U1 / Img.Width, VBottom),
+    Vector2(U1 / Img.Width, VTop), Vector2(U0 / Img.Width, VTop),
+    Light, TileOf(B, Img));
 end;
 
 procedure TMapChunk.EmitLineSide(const Line, Side: Integer);
@@ -415,7 +478,7 @@ begin
     else
       TexTopZ := CeilZ + Sd.YOffset;
     EmitWall(Batch(Img, false, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
-      FloorZ, CeilZ, U0, U1, TexTopZ, Img.Width, Img.Height, Light);
+      FloorZ, CeilZ, U0, U1, TexTopZ, Img, Light);
     Exit;
   end;
 
@@ -433,7 +496,7 @@ begin
     ZB := FloorZ;
     ZT := Min(OFloorZ, CeilZ);
     EmitWall(Batch(Img, false, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
-      ZB, ZT, U0, U1, TexTopZ, Img.Width, Img.Height, Light);
+      ZB, ZT, U0, U1, TexTopZ, Img, Light);
   end;
 
   { Upper wall: from the neighbour's (lower) ceiling up to our ceiling.
@@ -450,7 +513,7 @@ begin
       ZB := Max(OCeilZ, FloorZ);
       ZT := CeilZ;
       EmitWall(Batch(Img, false, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
-        ZB, ZT, U0, U1, TexTopZ, Img.Width, Img.Height, Light);
+        ZB, ZT, U0, U1, TexTopZ, Img, Light);
     end;
   end;
 
@@ -469,13 +532,14 @@ begin
     ZT := Min(OpenTop, TexTopZ);
     Passable := (L.Flags and ML_BLOCKING) = 0;
     EmitWall(Batch(Img, Passable, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
-      ZB, ZT, U0, U1, TexTopZ, Img.Width, Img.Height, Light);
+      ZB, ZT, U0, U1, TexTopZ, Img, Light);
   end;
 end;
 
 procedure TMapChunk.EmitFlats(const Sub: Integer);
 var
   Map: TDoomMap;
+  B: TGeomBatch;
   S: TDoomSubsector;
   Sec: Integer;
   Light: TVector2;
@@ -509,7 +573,8 @@ begin
       Pts[I] := DoomToCge(S.Poly[I].X, S.Poly[I].Y, Z);
       Tex[I] := Vector2(S.Poly[I].X / 64, S.Poly[I].Y / 64);
     end;
-    Batch(Img, false, false).AddPolygon(Pts, Tex, Light);
+    B := Batch(Img, false, false);
+    B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
   end;
 
   { Ceiling: reversed order = facing down. Sky ceilings are not drawn. }
@@ -524,7 +589,8 @@ begin
         Pts[I] := DoomToCge(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y, Z);
         Tex[I] := Vector2(S.Poly[N - 1 - I].X / 64, S.Poly[N - 1 - I].Y / 64);
       end;
-      Batch(Img, false, false).AddPolygon(Pts, Tex, Light);
+      B := Batch(Img, false, false);
+      B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
     end;
   end;
 end;
@@ -612,6 +678,8 @@ begin
   SetLength(FSectorDependents, Length(FMap.Sectors));
   for I := 0 to High(FSectorDependents) do
     FSectorDependents[I] := TChunkSet.Create;
+  if UseTextureAtlas then
+    BuildAtlas(SkyTexture);
   AssignChunks;
   for C in FChunks do
     C.Generate;
@@ -631,6 +699,45 @@ begin
   for I := 0 to High(FSectorDependents) do
     FreeAndNil(FSectorDependents[I]);
   inherited;
+end;
+
+procedure TDoomGeometry.BuildAtlas(const SkyTexture: String);
+var
+  Images: TDoomImageList;
+  I, Pages: Integer;
+
+  procedure Collect(const Img: TDoomImage);
+  begin
+    { Animated textures change their URL and switches are swapped in
+      place: they keep their own shapes. }
+    if (Img <> nil) and (Img.AnimGroup = nil) and (Copy(Img.Name, 1, 2) <> 'SW') and
+       (Img.Name <> SkyTexture) and (Images.IndexOf(Img) < 0) then
+      Images.Add(Img);
+  end;
+
+begin
+  Images := TDoomImageList.Create;
+  try
+    for I := 0 to High(FMap.Sidedefs) do
+    begin
+      Collect(FGraphics.Texture(FMap.Sidedefs[I].UpperTex));
+      Collect(FGraphics.Texture(FMap.Sidedefs[I].MiddleTex));
+      Collect(FGraphics.Texture(FMap.Sidedefs[I].LowerTex));
+    end;
+    for I := 0 to High(FMap.Sectors) do
+    begin
+      if not FMap.HasSkyFloor(I) then
+        Collect(FGraphics.Flat(FMap.Sectors[I].FloorTex));
+      if not FMap.HasSkyCeiling(I) then
+        Collect(FGraphics.Flat(FMap.Sectors[I].CeilingTex));
+    end;
+    Pages := FGraphics.BuildAtlas(Images, FMap.Name);
+    WritelnLog('Atlas', '%s: %d textures and flats in %d page(s)', [FMap.Name, Images.Count, Pages]);
+    for I := 0 to Pages - 1 do
+      WritelnLog('Atlas', '  page %d: %dx%d', [I, FGraphics.AtlasPage(I).Width, FGraphics.AtlasPage(I).Height]);
+  finally
+    FreeAndNil(Images);
+  end;
 end;
 
 procedure TDoomGeometry.Dependency(const Sec: Integer; const Chunk: TMapChunk);
@@ -853,7 +960,7 @@ begin
             Vector2(I / Segments, V1),
             Vector2(I / Segments, V0),
             Vector2((I + 1) / Segments, V0),
-            Vector2(255, DoomLightFullBright));
+            Vector2(255, DoomLightFullBright), Vector4(0, 0, 1, 1));
         end;
     end;
     Batch.CreateNodes;

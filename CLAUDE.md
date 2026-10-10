@@ -193,9 +193,11 @@ per-frame costs, CGE's FPS (`only render` = without display waits) and the
 last frame's render statistics (shapes, scenes, draw calls). `NOSPRITES`
 and `NOMAP` toggle the things' batch scenes / the map geometry to see what
 each costs, `PALMAP` the palette lookup. E1M1 at `G:480:712,A:0` draws
-about 186 shapes: 151 map, 35 sprites (the 104 visible quads merged per
-texture and light group by `TSpriteBatch`; before it they were 104 in 104
-scenes). `SPRITESTATS` logs how many sprites are shown and how many
+about 56 shapes: 21 map (one per chunk and atlas page; `--no-atlas` gives
+the old 151, one per texture per chunk) and 35 sprites (the 104 visible
+quads merged per texture and light group by `TSpriteBatch`; before it
+they were 104 in 104 scenes). The log's `Atlas:` lines give the page
+count and sizes (E1M1: 150 images, one 2048x1024 page). `SPRITESTATS` logs how many sprites are shown and how many
 distinct texture|light group|kind combinations they have (the sprite
 draw calls if all were in view: 208 and 87 on E1M1).
 `CASTLE_DOOM_LOG_SHADERS=1` logs every shader compile and link; during
@@ -321,6 +323,13 @@ autotest only checks the library loads.
   puts the feet back on the sector floor and cancels the fall (log
   `Player: Below the floor`); a timeout of an autotest with a huge Z in
   its screenshot line is that.
+- **GLSL in effects**: do not name a sampler parameter `texture`: CGE
+  renames `texture2D` to `texture` on newer GLSL and the parameter shadows
+  it ("no matching function for call to texture(sampler2D, vec2)"). A
+  texture-level effect (`TImageTextureNode.SetEffects`) is what reaches
+  `PLUG_texture_color`; group effects are plugged before the texture code
+  exists. FPC refuses a `for` counter in a routine that has nested
+  routines ("Illegal counter variable"): loop in a separate method.
 - **`TCastleContainer.SetView` cannot be called inside `TCastleView.Start`**;
   use `WaitForRenderAndCall`.
 - **`TCastleWalkNavigation.MoveForward` does not move by itself** (it needs the
