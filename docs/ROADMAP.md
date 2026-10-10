@@ -6,6 +6,18 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Key rebinding: `GameSettings` holds two keys for each action (move
+  forward / backward, strafe, turn, run, fire, use, automap), saved in
+  `settings.json`'s `keys`. The title screen's Options -> Controls...
+  page (`ControlsPanel` in the menu design, rows built in code) binds
+  the next key pressed (Backspace clears, Esc cancels, function keys and
+  Esc cannot be bound; a key moves from the action that had it). The
+  play view assigns the navigation's inputs from them, fires and uses
+  with the bound keys, and a bound key no longer triggers the fixed
+  hotkey it shadows (F, M, digits...); the help panel's first lines show
+  the bindings. `BIND:action:key` and `RESETKEYS` in a demo; autotests
+  `controls-page` (the `MENUCONTROLS` screenshot) and `key-bindings`.
+
 - Log filtering: `CASTLE_DOOM_LOG=Load,Shot` (`GameLogFilter`, desktop)
   writes `castle-doom-filtered.log` next to the saves with only those
   categories, every warning and the continuation lines of kept messages
@@ -640,7 +652,7 @@ play.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Video options in the game**: the options are on the title screen's Options panel (see above); Doom's in-game Options page has no video entries yet (it is `M_*` patches, so it needs a text-drawn page), and v-sync is not offered. | Change the field of view without leaving the level. | `DoomMenu`, `GameViewPlay` | S |
-| **Key and button rebinding**: a controls page writing the bindings to `settings.json`; the help panel and `pages/index.html` read them. | Players expect it. | `GameSettings`, `GameViewPlay`, `GameGamepad` | M |
+| **Gamepad button rebinding and more bindable actions**: keys are rebindable (see above); the gamepad layout is fixed, and weapon selection, the hotkeys (F, M, J...) and the mouse buttons are not bindable yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameGamepad` | S-M |
 | **UMAPINFO / MAPINFO**: level names, music, par, next and secret map, sky and episode definitions from PWADs. | Modern PWADs ship them; without it the port falls back to vanilla's progression. | new `DoomMapInfo`, `DoomWorld.NextMapName` | M |
 | **Golden screenshots in CI**: compare the autotests' PNGs with stored references (a tolerance for software GL), failing on a changed frame. | Rendering regressions are caught by eye today. | `tools/run_autotests.py`, `build.yml` | M |
 | **Offline web build**: a service worker caching the page, the wasm and the data zip, so the Pages site works offline after one visit. | A big first download, then instant starts. | `web.yml`, `pages/` | S-M |
@@ -648,12 +660,12 @@ play.
 
 ## Suggested next three
 
-1. Key and button rebinding (M, see Other suggested improvements): a
-   controls page writing the bindings to `settings.json`.
-2. UMAPINFO / MAPINFO (M, see Other suggested improvements): level
+1. UMAPINFO / MAPINFO (M, see Other suggested improvements): level
    names, music, par times and progression from PWADs.
-3. Video options in the game (S, see Other suggested improvements):
+2. Video options in the game (S, see Other suggested improvements):
    field of view and UI scale from Doom's in-game Options page.
+3. Golden screenshots in CI (M, see Other suggested improvements):
+   compare the autotests' PNGs with stored references.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

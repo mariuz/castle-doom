@@ -10,7 +10,7 @@ interface
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
   CastleDownload, CastleZip,
-  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked;
+  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked, GameSettings;
 
 type
   TViewMenu = class(TCastleView)
@@ -23,6 +23,12 @@ type
     FSfxLabel, FMusicLabel: TCastleLabel;
     FFovLabel, FUiScaleLabel, FRenderScaleLabel: TCastleLabel;
     FFullscreenButton: TCastleButton;
+    { The Controls page: a button per action and slot; the one waiting
+      for a key (FWaitSlot -1: none). }
+    FControls: TCastleRectangleControl;
+    FKeyButtons: array [TGameAction, 0..1] of TCastleButton;
+    FWaitAction: TGameAction;
+    FWaitSlot: Integer;
     FStatus: TCastleLabel;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
@@ -102,6 +108,15 @@ type
     procedure ClickRenderScaleDown(Sender: TObject);
     procedure ClickRenderScaleUp(Sender: TObject);
     procedure ClickFullscreen(Sender: TObject);
+    procedure ClickControls(Sender: TObject);
+    procedure ClickControlsBack(Sender: TObject);
+    procedure ClickKeysDefaults(Sender: TObject);
+    procedure ClickKeyButton(Sender: TObject);
+    procedure BuildControlsRows;
+    procedure UpdateKeyButtons;
+    { The key press the Controls page waits for (Escape cancels,
+      BackSpace clears the slot). }
+    function ControlsKey(const Event: TInputPressRelease): Boolean;
     procedure UpdateMapLabel;
     procedure UpdateSkillLabel;
     procedure StartGame;
@@ -124,7 +139,7 @@ type
 var
   ViewMenu: TViewMenu;
   { Set from the command line (--autotest MAP PREFIX): start this map at once.
-    MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENUQUIT, MENULOAD, MENUOPTIONS,
+    MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENUQUIT, MENULOAD, MENUOPTIONS, MENUCONTROLS,
     MENUDOOM2, MENUTITLE (title pages, menu closed) or MENUREADTHIS takes a
     screenshot of that menu page instead. }
   AutoTestMap: String;
@@ -152,7 +167,7 @@ implementation
 uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils,
   CastleStringUtils,
   CastleFilesUtils,
-  GameViewPlay, GameSettings, GameSaveBundle, GameSaveStorage, GameGamepad, GameViewDesign;
+  GameViewPlay, GameSaveBundle, GameSaveStorage, GameGamepad, GameViewDesign;
 
 const
   Freedoom1 = 'castle-data:/wads/freedoom1.wad';
@@ -228,6 +243,13 @@ begin
   FRenderScaleLabel.Exists := false;
   {$endif}
   UpdateVideoLabels;
+  { Controls: key bindings (GameSettings.Keys). }
+  Click('ButtonControls', {$ifdef FPC}@{$endif} ClickControls);
+  Click('ButtonControlsBack', {$ifdef FPC}@{$endif} ClickControlsBack);
+  Click('ButtonKeysDefaults', {$ifdef FPC}@{$endif} ClickKeysDefaults);
+  FControls := DesignedComponent('ControlsPanel') as TCastleRectangleControl;
+  FWaitSlot := -1;
+  BuildControlsRows;
   Click('ButtonStart', {$ifdef FPC}@{$endif} ClickStart);
   Click('ButtonBack', {$ifdef FPC}@{$endif} ClickBack);
   { Your own WADs (desktop only: needs a native file dialog). }
@@ -856,6 +878,112 @@ begin
   ChangeVideo(-1, 0);
 end;
 
+procedure TViewMenu.BuildControlsRows;
+var
+  List: TCastleVerticalGroup;
+  Row: TCastleHorizontalGroup;
+  Lab: TCastleLabel;
+  B: TCastleButton;
+  A: TGameAction;
+  I: Integer;
+begin
+  List := DesignedComponent('ControlsList') as TCastleVerticalGroup;
+  for A := Low(TGameAction) to High(TGameAction) do
+  begin
+    Row := TCastleHorizontalGroup.Create(FreeAtStop);
+    Row.Spacing := 10;
+    Lab := TCastleLabel.Create(FreeAtStop);
+    Lab.Caption := ActionNames[A];
+    Lab.FontSize := 22;
+    Lab.Color := White;
+    Row.InsertFront(Lab);
+    for I := 0 to 1 do
+    begin
+      B := TCastleButton.Create(FreeAtStop);
+      B.FontSize := 22;
+      B.AutoSizeWidth := false;
+      B.Width := 200;
+      B.Tag := Ord(A) * 2 + I;
+      B.OnClick := {$ifdef FPC}@{$endif} ClickKeyButton;
+      FKeyButtons[A, I] := B;
+      Row.InsertFront(B);
+    end;
+    List.InsertFront(Row);
+  end;
+  UpdateKeyButtons;
+end;
+
+procedure TViewMenu.UpdateKeyButtons;
+var
+  A: TGameAction;
+  I: Integer;
+begin
+  for A := Low(TGameAction) to High(TGameAction) do
+    for I := 0 to 1 do
+      if (FWaitSlot = I) and (FWaitAction = A) then
+        FKeyButtons[A, I].Caption := 'press a key...'
+      else
+        FKeyButtons[A, I].Caption := KeyName(Settings.Keys[A, I]);
+end;
+
+procedure TViewMenu.ClickControls(Sender: TObject);
+begin
+  FOptions.Exists := false;
+  FControls.Exists := true;
+  FWaitSlot := -1;
+  UpdateKeyButtons;
+end;
+
+procedure TViewMenu.ClickControlsBack(Sender: TObject);
+begin
+  FWaitSlot := -1;
+  FControls.Exists := false;
+  ShowOptions(true);
+end;
+
+procedure TViewMenu.ClickKeysDefaults(Sender: TObject);
+begin
+  FWaitSlot := -1;
+  ResetKeys;
+  SaveSettings;
+  UpdateKeyButtons;
+  WritelnLog('Settings', KeysSummary);
+end;
+
+procedure TViewMenu.ClickKeyButton(Sender: TObject);
+begin
+  FWaitAction := TGameAction((Sender as TCastleButton).Tag div 2);
+  FWaitSlot := (Sender as TCastleButton).Tag mod 2;
+  UpdateKeyButtons;
+end;
+
+function TViewMenu.ControlsKey(const Event: TInputPressRelease): Boolean;
+begin
+  Result := false;
+  if Event.EventType <> itKey then Exit;
+  if FWaitSlot < 0 then
+  begin
+    if Event.IsKey(keyEscape) then
+    begin
+      ClickControlsBack(nil);
+      Result := true;
+    end;
+    Exit;
+  end;
+  Result := true;
+  if not Event.IsKey(keyEscape) then
+  begin
+    if Event.IsKey(keyBackSpace) then
+      BindKey(FWaitAction, FWaitSlot, keyNone)
+    else if not BindKey(FWaitAction, FWaitSlot, Event.Key) then
+      Exit; { a function key: keep waiting }
+    SaveSettings;
+    WritelnLog('Settings', KeysSummary);
+  end;
+  FWaitSlot := -1;
+  UpdateKeyButtons;
+end;
+
 procedure TViewMenu.ChangeVolume(const Which, Delta: Integer);
 begin
   if Which = 0 then
@@ -958,6 +1086,15 @@ begin
     FDoomMenu.OpenPage(mpLoad)
   else if AutoTestMap = 'MENUOPTIONS' then
     ShowOptions(true)
+  else if AutoTestMap = 'MENUCONTROLS' then
+  begin
+    { The Controls page, after binding Q to "Use" like a click on its
+      first key and a key press would. }
+    ShowOptions(true);
+    ClickControls(nil);
+    ClickKeyButton(FKeyButtons[gaUse, 0]);
+    ControlsKey(InputKey(TVector2.Zero, keyQ, 'q', []));
+  end
   else if AutoTestMap = 'MENUKEYS' then
   begin
     FMenuKeys.DelimitedText := AutoTestMenuKeys;
@@ -1057,6 +1194,8 @@ begin
   Result := inherited;
   if Result then Exit;
   { Gamepad: the D-pad and A / B drive the menu like the arrows, Enter, Esc. }
+  if FControls.Exists then
+    Exit(ControlsKey(Event));
   if GamepadKey(Event, true, K) then
     Exit(Press(InputKey(Container.MousePosition, K, '', [])));
   if FOptions.Exists then

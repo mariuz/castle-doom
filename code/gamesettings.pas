@@ -8,7 +8,14 @@ unit GameSettings;
 
 interface
 
+uses CastleKeysMouse;
+
 type
+  { The bindable actions of the game (two keys each; the mouse's left
+    button always fires, the gamepad has its own fixed layout). }
+  TGameAction = (gaForward, gaBackward, gaStrafeLeft, gaStrafeRight,
+    gaTurnLeft, gaTurnRight, gaRun, gaFire, gaUse, gaAutomap);
+
   TGameSettings = record
     SfxVolume, MusicVolume: Integer;
     MusicOn: Boolean;
@@ -24,6 +31,8 @@ type
     Fullscreen: Boolean;
     UiScale: Integer;
     RenderScale: Integer;
+    { Key bindings: two keys per action (keyNone = unused). }
+    Keys: array [TGameAction, 0..1] of TKey;
   end;
 
 const
@@ -34,6 +43,19 @@ const
   MaxUiScale = 200;
   MinRenderScale = 25;
   MaxRenderScale = 100;
+
+const
+  ActionNames: array [TGameAction] of String = (
+    'Move forward', 'Move backward', 'Strafe left', 'Strafe right',
+    'Turn left', 'Turn right', 'Run', 'Fire', 'Use / open', 'Automap');
+  { The JSON keys of settings.json's "keys" object. }
+  ActionIds: array [TGameAction] of String = (
+    'forward', 'backward', 'strafeLeft', 'strafeRight',
+    'turnLeft', 'turnRight', 'run', 'fire', 'use', 'automap');
+  DefaultKeys: array [TGameAction, 0..1] of TKey = (
+    (keyW, keyArrowUp), (keyS, keyArrowDown), (keyA, keyNone), (keyD, keyNone),
+    (keyArrowLeft, keyNone), (keyArrowRight, keyNone), (keyShift, keyNone),
+    (keyCtrl, keyNone), (keyE, keySpace), (keyTab, keyNone));
 
 var
   Settings: TGameSettings;
@@ -60,6 +82,22 @@ procedure ApplyWindowSettings(const Startup: Boolean = false);
 { The video options for the log. }
 function VideoSummary: String;
 
+{ Key bindings. }
+procedure ResetKeys;
+{ Key is bound to Action (either slot). }
+function KeyIs(const Key: TKey; const Action: TGameAction): Boolean;
+{ The action Key is bound to; False when none. }
+function ActionOfKey(const Key: TKey; out Action: TGameAction): Boolean;
+{ Bind Key to slot Slot of Action, removing it from wherever else it was;
+  keyNone clears the slot. False for keys that cannot be bound (Escape,
+  the function keys, which the game and the engine's inspector use). }
+function BindKey(const Action: TGameAction; const Slot: Integer; const Key: TKey): Boolean;
+{ "W / Up", "Tab", "-" for the help panel and the Controls page. }
+function KeyName(const Key: TKey): String;
+function ActionKeysText(const Action: TGameAction): String;
+{ The bindings for the log. }
+function KeysSummary: String;
+
 implementation
 
 uses SysUtils, Math, FpJson, JsonParser, CastleLog, CastleUtils, CastleWindow,
@@ -74,6 +112,78 @@ const
 const
   SettingsUrl = 'castle-config:/settings.json';
 
+procedure ResetKeys;
+var
+  A: TGameAction;
+begin
+  for A := Low(TGameAction) to High(TGameAction) do
+  begin
+    Settings.Keys[A, 0] := DefaultKeys[A, 0];
+    Settings.Keys[A, 1] := DefaultKeys[A, 1];
+  end;
+end;
+
+function KeyIs(const Key: TKey; const Action: TGameAction): Boolean;
+begin
+  Result := (Key <> keyNone) and ((Settings.Keys[Action, 0] = Key) or (Settings.Keys[Action, 1] = Key));
+end;
+
+function ActionOfKey(const Key: TKey; out Action: TGameAction): Boolean;
+var
+  A: TGameAction;
+begin
+  for A := Low(TGameAction) to High(TGameAction) do
+    if KeyIs(Key, A) then
+    begin
+      Action := A;
+      Exit(true);
+    end;
+  Action := gaForward;
+  Result := false;
+end;
+
+function BindKey(const Action: TGameAction; const Slot: Integer; const Key: TKey): Boolean;
+var
+  A: TGameAction;
+  I: Integer;
+begin
+  if Key in [keyEscape, keyF1..keyF12] then Exit(false);
+  if Key <> keyNone then
+    for A := Low(TGameAction) to High(TGameAction) do
+      for I := 0 to 1 do
+        if Settings.Keys[A, I] = Key then
+          Settings.Keys[A, I] := keyNone;
+  Settings.Keys[Action, Slot] := Key;
+  Result := true;
+end;
+
+function KeyName(const Key: TKey): String;
+begin
+  if Key = keyNone then
+    Result := '-'
+  else
+    Result := KeyToStr(Key);
+end;
+
+function ActionKeysText(const Action: TGameAction): String;
+begin
+  if Settings.Keys[Action, 0] = keyNone then
+    Result := KeyName(Settings.Keys[Action, 1])
+  else if Settings.Keys[Action, 1] = keyNone then
+    Result := KeyName(Settings.Keys[Action, 0])
+  else
+    Result := KeyName(Settings.Keys[Action, 0]) + ' / ' + KeyName(Settings.Keys[Action, 1]);
+end;
+
+function KeysSummary: String;
+var
+  A: TGameAction;
+begin
+  Result := 'Keys:';
+  for A := Low(TGameAction) to High(TGameAction) do
+    Result := Result + ' ' + ActionIds[A] + ' ' + ActionKeysText(A) + ';';
+end;
+
 procedure Defaults;
 begin
   Settings.SfxVolume := MaxVolume;
@@ -87,13 +197,46 @@ begin
   Settings.Fullscreen := false;
   Settings.UiScale := 100;
   Settings.RenderScale := 100;
+  ResetKeys;
+end;
+
+{ settings.json's "keys": {"forward": ["W", "Up"], ...} (KeyToStr names;
+  a missing action keeps its defaults). }
+procedure ReadKeys(const J: TJSONObject);
+var
+  A: TGameAction;
+  Arr: TJSONArray;
+  I: Integer;
+begin
+  for A := Low(TGameAction) to High(TGameAction) do
+    if J.Find(ActionIds[A], Arr) then
+      for I := 0 to 1 do
+        if I < Arr.Count then
+          Settings.Keys[A, I] := StrToKey(Arr.Strings[I], keyNone)
+        else
+          Settings.Keys[A, I] := keyNone;
+end;
+
+function WriteKeys: TJSONObject;
+var
+  A: TGameAction;
+  Arr: TJSONArray;
+begin
+  Result := TJSONObject.Create;
+  for A := Low(TGameAction) to High(TGameAction) do
+  begin
+    Arr := TJSONArray.Create;
+    Arr.Add(KeyToStr(Settings.Keys[A, 0]));
+    Arr.Add(KeyToStr(Settings.Keys[A, 1]));
+    Result.Add(ActionIds[A], Arr);
+  end;
 end;
 
 procedure LoadSettings;
 var
   Text: String;
   D: TJSONData;
-  J: TJSONObject;
+  J, KeysJ: TJSONObject;
 begin
   Defaults;
   if not SaveStorageRead(SettingsUrl, Text) then Exit;
@@ -122,6 +265,8 @@ begin
     Settings.Fullscreen := J.Get('fullscreen', Settings.Fullscreen);
     Settings.UiScale := Clamped(J.Get('uiScale', Settings.UiScale), MinUiScale, MaxUiScale);
     Settings.RenderScale := Clamped(J.Get('renderScale', Settings.RenderScale), MinRenderScale, MaxRenderScale);
+    if J.Find('keys', KeysJ) then
+      ReadKeys(KeysJ);
   finally
     FreeAndNil(J);
   end;
@@ -129,6 +274,7 @@ begin
     Settings.SfxVolume, Settings.MusicVolume, BoolToStr(Settings.MusicOn, 'on', 'off'),
     BoolToStr(Settings.Diminish, 'on', 'off'), BoolToStr(Settings.MouseLook, 'on', 'off')]);
   WritelnLog('Settings', VideoSummary);
+  WritelnLog('Settings', KeysSummary);
 end;
 
 procedure SaveSettings;
@@ -148,6 +294,7 @@ begin
     J.Add('fullscreen', Settings.Fullscreen);
     J.Add('uiScale', Settings.UiScale);
     J.Add('renderScale', Settings.RenderScale);
+    J.Add('keys', WriteKeys);
     SaveStorageWrite(SettingsUrl, J.FormatJSON(AsCompressedJSON));
   finally
     FreeAndNil(J);

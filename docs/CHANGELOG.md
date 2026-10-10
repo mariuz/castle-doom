@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Rebindable keys: Options -> Controls... on the title screen sets two
+  keys for moving, strafing, turning, running, firing, using and the
+  automap; they are saved with the other settings and the help panel
+  shows them.
 - `CASTLE_DOOM_LOG=Load,Music` writes a second, filtered log
   (`castle-doom-filtered.log`) with only those categories and warnings.
 - Boom's `ANIMATED` and `SWITCHES` lumps: PWADs can define their own

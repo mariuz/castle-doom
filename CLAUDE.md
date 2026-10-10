@@ -84,7 +84,7 @@ The autotest harness is the main verification tool; use it after every change:
 ```
 
 Menu screenshots: `MENU`, `MENUEPISODE`, `MENUSKILL`, `MENUNIGHTMARE`,
-`MENULOAD`, `MENUOPTIONS`, `MENUDOOM2` save `<prefix>_<name>.png`.
+`MENULOAD`, `MENUOPTIONS`, `MENUCONTROLS`, `MENUDOOM2` save `<prefix>_<name>.png`.
 `MENUKEYS` drives the Doom menu with `--menukeys` (U up, D down, E enter,
 X escape, Y / N, S screenshot); the game it starts then runs `--demo`. Mouse
 hover is disabled in menu autotests (the real cursor over the window would
@@ -154,6 +154,12 @@ change and save them like the title screen's Options panel (log
 browser, through the page patch `tools/patch_web_page.py` (test it on a
 downloaded `web-site` artifact: `castleDoomSetScale(50)` in the console
 logs `Drawing buffer width/height changed`).
+Key bindings (`GameSettings.Keys`, `settings.json`'s `keys`):
+`BIND:action:key` (action as in the JSON: `forward`, `fire`, `use`...;
+key as `KeyToStr` names it: `F`, `Space`, `Up`) and `RESETKEYS` in a
+demo, logged as `Settings: Keys: forward W / Up; ...`; `KEY:name` now
+presses any key by that name. `MENUCONTROLS` screenshots the Controls
+page after binding Q to Use (autotests `controls-page`, `key-bindings`).
 Settings (`GameSettings`, `settings.json` next to the saves; the log
 prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
 like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a

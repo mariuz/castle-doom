@@ -159,9 +159,22 @@ TESTS = [
     ('log-filter', 'E1M1', 'Y,SHOTS,W:0.3,X,W:0.3,Q',
      [r'Log: Categories Load,Shot \(CASTLE_DOOM_LOG\) also go to', r'Shot: '],
      ['ENV:CASTLE_DOOM_LOG=Load,Shot'], lambda config: check_log_filtered(config)),
+    # Key rebinding: the Controls page binds Q to "Use" (saved), and in a
+    # game BIND moves fire to F and forward to I.
+    ('controls-page', 'MENUCONTROLS', None, [r'Settings: Keys: .*use Q / Space;'], [],
+     lambda config: check_keys(config, 'use', ['Q', 'Space'])),
+    ('key-bindings', 'E1M1', 'Y,SHOTS,BIND:fire:F,BIND:forward:I,W:0.3,F:1,KEY:F,W:0.3,S,Q',
+     [r'Settings: Keys: forward I / Up;.* fire F;', r'Shot: ', r'Saved screenshot 1 at E1M1 \(player -[1-3]\d\d\.'],
+     [], lambda config: check_keys(config, 'fire', ['F', 'None'])),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
+
+
+def check_keys(config, action, keys):
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        settings = json.load(f)
+    assert settings['keys'][action] == keys, 'keys.%s is %s' % (action, settings['keys'][action])
 
 
 def check_log_filtered(config):

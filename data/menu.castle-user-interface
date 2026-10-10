@@ -307,6 +307,12 @@
                   "Name": "ButtonRenderScaleUp",
                   "Caption": ">",
                   "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonControls",
+                  "Caption": "Controls...",
+                  "FontSize": 22.0
                 }
               ]
             },
@@ -421,6 +427,88 @@
             "X": 0.0,
             "Y": 16.0
           }
+        }
+      ]
+    },
+    {
+      "$$ClassName": "TCastleRectangleControl",
+      "Name": "ControlsPanel",
+      "FullSize": true,
+      "Exists": false,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 0.05,
+        "Green": 0.02,
+        "Blue": 0.02,
+        "Alpha": 0.92
+      },
+      "$Children": [
+        {
+          "$$ClassName": "TCastleVerticalGroup",
+          "Name": "ControlsGroup",
+          "Spacing": 10.0,
+          "Alignment": "hpMiddle",
+          "HorizontalAnchorParent": "hpMiddle",
+          "HorizontalAnchorSelf": "hpMiddle",
+          "VerticalAnchorParent": "vpMiddle",
+          "VerticalAnchorSelf": "vpMiddle",
+          "$Children": [
+            {
+              "$$ClassName": "TCastleLabel",
+              "Name": "ControlsHeader",
+              "Text": [
+                "Controls"
+              ],
+              "FontSize": 30.0,
+              "ColorPersistent": {
+                "$$ClassName": "TCastleColorPersistent",
+                "Red": 1.0,
+                "Green": 1.0,
+                "Blue": 1.0,
+                "Alpha": 1.0
+              }
+            },
+            {
+              "$$ClassName": "TCastleLabel",
+              "Name": "ControlsHint",
+              "Text": [
+                "Click a key, then press the new one (Backspace clears it, Esc cancels)"
+              ],
+              "FontSize": 18.0,
+              "ColorPersistent": {
+                "$$ClassName": "TCastleColorPersistent",
+                "Red": 1.0,
+                "Green": 1.0,
+                "Blue": 1.0,
+                "Alpha": 1.0
+              }
+            },
+            {
+              "$$ClassName": "TCastleVerticalGroup",
+              "Name": "ControlsList",
+              "Spacing": 6.0,
+              "Alignment": "hpRight"
+            },
+            {
+              "$$ClassName": "TCastleHorizontalGroup",
+              "Name": "RowControlsButtons",
+              "Spacing": 10.0,
+              "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonKeysDefaults",
+                  "Caption": "Defaults",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonControlsBack",
+                  "Caption": "Back  (Esc)",
+                  "FontSize": 22.0
+                }
+              ]
+            }
+          ]
         }
       ]
     },

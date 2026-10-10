@@ -9,7 +9,7 @@ uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages, CastleGLImages,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
-  DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu, DoomWorldStatus;
+  DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu, DoomWorldStatus, GameSettings;
 
 type
   TViewPlay = class(TCastleView)
@@ -101,6 +101,12 @@ type
     procedure PerfLog;
     { The camera's horizontal field of view from the settings. }
     procedure ApplyFieldOfView;
+    { The navigation's keys from Settings.Keys, and the help panel's
+      lines for them. }
+    procedure ApplyKeyBindings;
+    procedure DemoBind(const Spec: String);
+    { The first key bound to Action (the second if the first is unset). }
+    function BoundKey(const Action: TGameAction): TKey;
     { Select a thing in the engine's inspector (opening it): by name, or
       the one under the crosshair when Name is ''. }
     procedure SelectInInspector(const ThingName: String);
@@ -157,7 +163,7 @@ uses Math, JsonParser,
   CastleDownload, DoomActors, CastleInternalInspector,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleTimeUtils, CastleRenderContext,
   DoomGeometry, DoomMap, DoomLighting,
-  GameViewMenu, GameSaveStorage, GameSettings, GameGamepad;
+  GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs;
 
 type
   { Opens TCastleNavigation.Move (protected) to push the player. }
@@ -328,13 +334,7 @@ begin
   FNavigation.Input_MoveSpeedInc.MakeClear;
   FNavigation.Input_MoveSpeedDec.MakeClear;
   { WASD in addition to arrows. }
-  FNavigation.Input_Forward.Assign(keyW, keyArrowUp);
-  FNavigation.Input_Backward.Assign(keyS, keyArrowDown);
-  FNavigation.Input_LeftStrafe.Assign(keyA, keyNone);
-  FNavigation.Input_RightStrafe.Assign(keyD, keyNone);
-  FNavigation.Input_LeftRotate.Assign(keyArrowLeft, keyNone);
-  FNavigation.Input_RightRotate.Assign(keyArrowRight, keyNone);
-  FNavigation.Input_Run.Assign(keyShift, keyNone);
+  ApplyKeyBindings;
 end;
 
 procedure TViewPlay.Start;
@@ -391,7 +391,7 @@ var
   Step, Cmd, Rest, KeyStr: String;
   Arg, Arg2, LookAngle, LookPitch: Single;
   P, Sec: Integer;
-  K: TKey;
+  K, K2: TKey;
   SpawnedActor: TDoomActor;
   FDemoKeys: TStringList;
 begin
@@ -434,10 +434,10 @@ begin
   begin
     { Simulate holding the movement key, so the real navigation
       (collisions, gravity) is exercised. }
-    if Cmd = 'F' then K := keyW
-    else if Cmd = 'B' then K := keyS
-    else if Cmd = 'L' then K := keyA
-    else if Cmd = 'R' then K := keyD
+    if Cmd = 'F' then K := BoundKey(gaForward)
+    else if Cmd = 'B' then K := BoundKey(gaBackward)
+    else if Cmd = 'L' then K := BoundKey(gaStrafeLeft)
+    else if Cmd = 'R' then K := BoundKey(gaStrafeRight)
     else K := keyNone;
     if (K <> keyNone) and (FDemoTime = 0) then
       Container.Pressed.KeyDown(K, '');
@@ -500,6 +500,17 @@ begin
     ApplyWindowSettings;
     ApplyFieldOfView;
     WritelnLog('Settings', VideoSummary);
+  end
+  else if Cmd = 'BIND' then
+    { BIND:action:key binds a key like the Controls page (action as in
+      settings.json: forward, use...; key as KeyToStr names it: F, Space,
+      Up; None clears the first slot); RESETKEYS restores the defaults. }
+    DemoBind(Rest)
+  else if Cmd = 'RESETKEYS' then
+  begin
+    ResetKeys;
+    SaveSettings;
+    ApplyKeyBindings;
   end
   else if Cmd = 'SOUNDMENU' then
     OpenSoundMenu
@@ -600,7 +611,17 @@ begin
     else if Rest = 'F2' then K := keyF2
     else if Rest = 'F3' then K := keyF3
     else if Rest = 'F4' then K := keyF4
-    else K := keyNone;
+    else
+    begin
+      { Any other key by its KeyToStr name (F, SPACE, CTRL...). }
+      K := keyNone;
+      for K2 := Low(TKey) to High(TKey) do
+        if SameText(KeyToStr(K2), Rest) then
+        begin
+          K := K2;
+          Break;
+        end;
+    end;
     if K <> keyNone then
       Press(InputKey(TVector2.Zero, K, '', []));
   end
@@ -680,6 +701,96 @@ end;
 { "PerfView:" line: our own per-frame costs, CGE's frame rate (FPS, and
   "only render" = without waiting for the display) and the last frame's
   render statistics (shapes, scenes, draw calls). }
+procedure TViewPlay.ApplyKeyBindings;
+
+  procedure AssignInput(const Input: TInputShortcut; const Action: TGameAction);
+  begin
+    Input.Assign(Settings.Keys[Action, 0], Settings.Keys[Action, 1]);
+  end;
+
+  { The fixed hotkey's help text, '' when an action took the key over. }
+  function Hot(const Key: TKey; const Text: String): String;
+  var
+    A: TGameAction;
+  begin
+    if ActionOfKey(Key, A) then
+      Result := ''
+    else
+      Result := Text;
+  end;
+
+  function SameAsDefaults: Boolean;
+  var
+    A: TGameAction;
+  begin
+    for A := Low(TGameAction) to High(TGameAction) do
+      if (Settings.Keys[A, 0] <> DefaultKeys[A, 0]) or (Settings.Keys[A, 1] <> DefaultKeys[A, 1]) then
+        Exit(false);
+    Result := true;
+  end;
+
+begin
+  AssignInput(FNavigation.Input_Forward, gaForward);
+  AssignInput(FNavigation.Input_Backward, gaBackward);
+  AssignInput(FNavigation.Input_LeftStrafe, gaStrafeLeft);
+  AssignInput(FNavigation.Input_RightStrafe, gaStrafeRight);
+  AssignInput(FNavigation.Input_LeftRotate, gaTurnLeft);
+  AssignInput(FNavigation.Input_RightRotate, gaTurnRight);
+  AssignInput(FNavigation.Input_Run, gaRun);
+  { The design's help text describes the default keys; rebound ones
+    replace its first lines. }
+  if (FHelpLabel <> nil) and not SameAsDefaults and (FHelpLabel.Text.Count >= 5) then
+  begin
+    FHelpLabel.Text[0] := Format('Move: %s, %s   Strafe: %s, %s   Run: %s', [
+      ActionKeysText(gaForward), ActionKeysText(gaBackward), ActionKeysText(gaStrafeLeft),
+      ActionKeysText(gaStrafeRight), ActionKeysText(gaRun)]);
+    FHelpLabel.Text[1] := Format('Mouse: look   Turn: %s, %s   LMB / %s: fire', [
+      ActionKeysText(gaTurnLeft), ActionKeysText(gaTurnRight), ActionKeysText(gaFire)]);
+    FHelpLabel.Text[2] := ActionKeysText(gaUse) + ': use (doors, switches)';
+    FHelpLabel.Text[4] := ActionKeysText(gaAutomap) + ': automap   + / -: zoom' +
+      Hot(keyG, '   G: grid') + Hot(keyI, '   I: reveal map');
+    FHelpLabel.Text[5] := Trim(Hot(keyF, 'F: light diminishing on/off   ') + Hot(keyM, 'M: mouse look'));
+    FHelpLabel.Text[6] := Trim(Hot(keyN, 'N / P: next / previous map   ') + Hot(keyJ, 'J: music on/off   ') + 'F4: volume');
+    if FHelpLabel.Text.Count >= 11 then
+      FHelpLabel.Text[10] := Hot(keyH, 'H: hide this help   ') + 'Esc: menu (pauses; Esc again resumes)';
+  end;
+  WritelnLog('Settings', KeysSummary);
+end;
+
+procedure TViewPlay.DemoBind(const Spec: String);
+var
+  P: Integer;
+  ActionId, KeyText: String;
+  A: TGameAction;
+  K: TKey;
+begin
+  P := Pos(':', Spec);
+  if P = 0 then Exit;
+  ActionId := Copy(Spec, 1, P - 1);
+  KeyText := Copy(Spec, P + 1, MaxInt);
+  K := StrToKey(KeyText, keyNone);
+  for A := Low(TGameAction) to High(TGameAction) do
+    if SameText(ActionIds[A], ActionId) then
+    begin
+      if (K = keyNone) and not SameText(KeyText, 'None') then
+        WritelnWarning('Settings', 'Unknown key name "%s"', [KeyText])
+      else if BindKey(A, 0, K) then
+      begin
+        SaveSettings;
+        ApplyKeyBindings;
+      end;
+      Exit;
+    end;
+  WritelnWarning('Settings', 'Unknown action "%s"', [ActionId]);
+end;
+
+function TViewPlay.BoundKey(const Action: TGameAction): TKey;
+begin
+  Result := Settings.Keys[Action, 0];
+  if Result = keyNone then
+    Result := Settings.Keys[Action, 1];
+end;
+
 procedure TViewPlay.ApplyFieldOfView;
 begin
   FViewport.Camera.Perspective.FieldOfView := DegToRad(Settings.FieldOfView);
@@ -1634,7 +1745,9 @@ begin
     resumed the game or took the mouse back). }
   if FSuppressFire and not (buttonLeft in Container.MousePressed) then
     FSuppressFire := false;
-  if ((buttonLeft in Container.MousePressed) and not FSuppressFire) or Container.Pressed.Items[keyCtrl] or
+  if ((buttonLeft in Container.MousePressed) and not FSuppressFire) or
+     ((Settings.Keys[gaFire, 0] <> keyNone) and Container.Pressed.Items[Settings.Keys[gaFire, 0]]) or
+     ((Settings.Keys[gaFire, 1] <> keyNone) and Container.Pressed.Items[Settings.Keys[gaFire, 1]]) or
      GamepadFireHeld then
     FWorld.FireWeapon
   else
@@ -1698,6 +1811,7 @@ function TViewPlay.Press(const Event: TInputPressRelease): Boolean;
 var
   Idx: Integer;
   K: TKey;
+  BoundAction: TGameAction;
 begin
   Result := inherited;
   if Result then Exit;
@@ -1712,7 +1826,21 @@ begin
       Exit(true);
     end;
     if GamepadKey(Event, FIntermission or (FSlotMenu <> SlotMenuNone), K) then
+    begin
+      { In the game A / X use and View toggles the automap whatever keys
+        those actions are bound to. }
+      if (not FIntermission) and (FSlotMenu = SlotMenuNone) and (K = keyE) then
+      begin
+        FWorld.UseInFront;
+        Exit(true);
+      end;
+      if (not FIntermission) and (FSlotMenu = SlotMenuNone) and (K = keyTab) then
+      begin
+        FAutomap.Exists := not FAutomap.Exists;
+        Exit(true);
+      end;
       Exit(Press(InputKey(Container.MousePosition, K, '', [])));
+    end;
     Exit;
   end;
 
@@ -1720,7 +1848,8 @@ begin
   begin
     if FPendingMap <> '' then Exit;
     if (FIntermissionTime > 0.3) and (Event.IsKey(keyE) or Event.IsKey(keySpace) or
-       Event.IsKey(keyEnter) or Event.IsMouseButton(buttonLeft) or Event.IsKey(keyCtrl)) then
+       Event.IsKey(keyEnter) or Event.IsMouseButton(buttonLeft) or Event.IsKey(keyCtrl) or
+       ((Event.EventType = itKey) and (KeyIs(Event.Key, gaUse) or KeyIs(Event.Key, gaFire)))) then
     begin
       AccelerateScreen;
       Exit(true);
@@ -1733,7 +1862,7 @@ begin
     Exit;
   end;
 
-  if Event.IsKey(keyE) or Event.IsKey(keySpace) then
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaUse) then
   begin
     FWorld.UseInFront;
     Exit(true);
@@ -1748,7 +1877,7 @@ begin
     FSuppressFire := true;
     Exit(true);
   end;
-  if Event.IsMouseButton(buttonLeft) or Event.IsKey(keyCtrl) then
+  if Event.IsMouseButton(buttonLeft) or ((Event.EventType = itKey) and KeyIs(Event.Key, gaFire)) then
   begin
     FWorld.FireWeapon;
     Exit(true);
@@ -1761,7 +1890,7 @@ begin
   for Idx := 1 to 7 do
   begin
     K := TKey(Ord(key0) + Idx);
-    if Event.IsKey(K) then
+    if Event.IsKey(K) and not ActionOfKey(K, BoundAction) then
     begin
       case Idx of
         1: if (wpChainsaw in FWorld.Player.Weapons) and (FWorld.Player.Weapon <> wpChainsaw) then
@@ -1828,11 +1957,16 @@ begin
     LoadGame(0);
     Exit(true);
   end;
-  if Event.IsKey(keyTab) then
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaAutomap) then
   begin
     FAutomap.Exists := not FAutomap.Exists;
     Exit(true);
   end;
+  { A key bound to an action (moving, turning, running are the
+    navigation's) does nothing else, e.g. F bound to strafing must not
+    toggle light diminishing. }
+  if (Event.EventType = itKey) and ActionOfKey(Event.Key, BoundAction) then
+    Exit;
   if FAutomap.Exists then
   begin
     if Event.IsKey(keyPlus) or Event.IsKey(keyNumpadPlus) or (Event.IsKey(keyEqual)) then

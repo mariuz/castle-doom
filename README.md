@@ -134,7 +134,10 @@ Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `F5` screenshot, `F8` the engine's inspector (the map, every thing and the game state by name; its `F9` selects the monster under the crosshair), `H` help, `Esc` Doom's menu over the paused game
 (Options: end game, messages, mouse sensitivity, sound volume; `Esc` again or a click beside
 the items resumes; in the browser, Esc releasing the mouse opens it the same way, and a
-"click to look around" prompt shows until a click captures the mouse again).
+"click to look around" prompt shows until a click captures the mouse again). These are the
+default keys: the title screen's Options -> Controls... rebinds moving, turning, running,
+firing, using and the automap (two keys each, saved in `settings.json`; the help panel
+shows the new keys).
 
 Gamepad (Windows, Linux and the browser, where the pad shows up after a button press):
 left stick move / strafe, right stick turn / look, right trigger fire, A / X use,

@@ -903,6 +903,19 @@ black and white entries (Freedoom: red 1/9..8/9, gold 1/8..4/8, green 1/8),
 and an alpha-blended rectangle reproduces the palette shift exactly. The
 help panel is a `TCastleLabel`.
 
+Key bindings: `GameSettings.Keys` holds two keys per `TGameAction`
+(forward, backward, strafes, turns, run, fire, use, automap; JSON
+`keys` with `KeyToStr` names). `TViewPlay.ApplyKeyBindings` assigns the
+walk navigation's `Input_Forward`... from them and rewrites the help
+panel's first lines when they differ from the defaults; `Press` fires,
+uses and toggles the automap through `KeyIs`, and stops at any other
+bound key, so a key taken by an action no longer runs the fixed hotkey
+(F, M, the weapon digits) it shadows. The gamepad keeps its own layout
+(A use, View automap). The title screen's Controls page
+(`ControlsPanel`, a row per action built in `BuildControlsRows`) binds
+the next key pressed through `BindKey`, which takes the key away from
+any other action and refuses Escape and the function keys.
+
 ---
 
 ### The automap
