@@ -9,7 +9,7 @@
   caption="Castle DOOM"
   author="castle-doom"
   screen_orientation="landscape"
-  editor_units="DoomHud;DoomFont;DoomMenu;DoomAutomap;DoomIntermission;DoomFinale;DoomWipe;DoomWorldStatus"
+  editor_units="DoomHud;DoomFont;DoomMenu;DoomAutomap;DoomIntermission;DoomFinale;DoomWipe;DoomWorldStatus;DoomMapTransform"
 >
   <version value="0.5.0" code="9" />
   <compiler_options>

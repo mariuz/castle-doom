@@ -1,0 +1,65 @@
+{
+  "$$ClassName": "TCastleUserInterface",
+  "Name": "MapComponentUi",
+  "FullSize": true,
+  "$Children": [
+    {
+      "$$ClassName": "TCastleViewport",
+      "Name": "Viewport",
+      "FullSize": true,
+      "Items": {
+        "$$ClassName": "TCastleRootTransform",
+        "Name": "Items",
+        "$Children": [
+          {
+            "$$ClassName": "TCastleCamera",
+            "Name": "Camera",
+            "TranslationPersistent": {
+              "$$ClassName": "TCastleVector3Persistent",
+              "X": -416.0,
+              "Y": 41.0,
+              "Z": -256.0
+            },
+            "Perspective": {
+              "$$ClassName": "TCastlePerspective",
+              "FieldOfView": 1.5707963705062866,
+              "FieldOfViewAxis": "faHorizontal"
+            },
+            "ProjectionNear": 4.0
+          },
+          {
+            "$$ClassName": "TDoomMapTransform",
+            "Name": "DoomMap",
+            "Wad": "castle-data:/wads/freedoom1.wad",
+            "MapName": "E1M1"
+          }
+        ]
+      },
+      "Camera": "Camera"
+    },
+    {
+      "$$ClassName": "TCastleLabel",
+      "Name": "Caption",
+      "Text": [
+        "A Doom level in a design: TDoomMapTransform (Wad, MapName) builds it; the CGE editor shows it too."
+      ],
+      "FontSize": 16.0,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 1.0,
+        "Green": 1.0,
+        "Blue": 0.6,
+        "Alpha": 0.9
+      },
+      "HorizontalAnchorParent": "hpLeft",
+      "HorizontalAnchorSelf": "hpLeft",
+      "VerticalAnchorParent": "vpTop",
+      "VerticalAnchorSelf": "vpTop",
+      "TranslationPersistent": {
+        "$$ClassName": "TCastleVector2Persistent",
+        "X": 12.0,
+        "Y": -10.0
+      }
+    }
+  ]
+}

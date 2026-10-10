@@ -6,6 +6,20 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- A Doom level as a CGE component: `TDoomMapTransform`
+  (`doommaptransform.pas`, registered as "Doom Map" for the editor) is a
+  `TCastleTransform` with published `Wad` and `MapName` (and `Things`)
+  that builds the level in its first `Update`: the WAD, its graphics,
+  the map, `TDoomGeometry` with every sector static (one chunk, the
+  atlas, the lighting effects) and the things as `TDoomActor` billboards
+  that face the viewport's camera and play their idle frames at 35 tics
+  a second. Bad URLs or map names log a warning instead of raising (the
+  editor shows an empty component; the web build survives).
+  `data/mapcomponent.castle-user-interface` is a design with a viewport,
+  a camera and the component on E1M1; `--autotest MAPCOMPONENT prefix`
+  (`GameViewDesign`) shows it with the camera at the player start and
+  screenshots it (autotest `map-component`), which is what the editor's
+  3D view shows for the same design.
 - The menu view is a design too: `data/menu.castle-user-interface` holds
   the black background, Doom's menu (`TDoomMenuScreen`), the Options
   panel (the WAD / map / skill / volume rows of buttons and labels, the
@@ -551,7 +565,7 @@ play.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Try the designs in the CGE editor** on Windows (the editor is not built in CI): "Restart Editor (With Custom Components)", open `data/play.castle-user-interface` and `data/menu.castle-user-interface`, fix what the editor cannot show (the Doom controls render nothing without a WAD; a `Graphics`-less preview, e.g. a placeholder image, would help). | The editor workflow end to end. | the `Doom*` controls | S |
-| **A Doom map component for the editor**: a `TCastleTransform` descendant with published `Wad` and `Map` properties that builds the level geometry (and static billboards for the things) when placed in a design, so the editor's 3D view shows a Freedoom level with its lighting and the atlas. | Levels become inspectable without running the game; a showcase for CGE. | `DoomGeometry`, `DoomGraphics` behind a design-time component | M-L |
+| **The map component in the editor**: `TDoomMapTransform` is done (see above); try it in the editor on Windows (it builds in the design's first `Update`), give it published skill and sector-light switches, a bounding box for the editor's camera framing, and gizmo-friendly names for the chunk scenes. | A Freedoom level in the editor's 3D view with nothing to run. | `DoomMapTransform` | S |
 | **Live thing inspection**: `Things` has 200+ entries, so sort them by state or distance, publish the target, the current sequence's name and tics left, and add a `SELECT:n` demo command (CGE's inspector can select a component) and the inspector's F9 auto-select for the thing under the crosshair. | Find the monster you are looking at. | `DoomActors`, `GameViewPlay` | S |
 | **Profiler sections**: wrap the map load stages (parse, geometry, atlas, things, music intro) and the per-tic phases in `Profiler.Start` / `Stop` so the inspector's Profiler tab and `Profiler.Summary` show them next to CGE's own; the `Perf:` lines stay. | One place for timings. | `GameViewPlay`, `DoomWorld` | S |
 | **Debug drawing**: toggles that draw the subsector polygons, blocking lines, sector heights, actor radii and the player's line of fire as wireframe scenes under a `Debug` group, each one switched by the inspector's Exists checkbox. | See the simulation, not only the pixels. | new `DoomDebugDraw` | M |
@@ -573,16 +587,17 @@ play.
 
 ## Suggested next three
 
-1. A Doom map component for the editor (M-L, see Inspectability): a
-   transform that builds a level from a WAD inside a design, so the
-   editor's 3D view shows Freedoom maps; try the designs in the editor on
-   Windows first.
-2. Atlas mipmaps (S, see Presentation): sample the atlas with explicit
+1. Atlas mipmaps (S, see Presentation): sample the atlas with explicit
    gradients (`texture2DGradEXT` on WebGL 1, `textureGrad` elsewhere) so
    far floors and walls stop shimmering without the per-texture shapes.
-3. DeHackEd weapons and projectiles (M, see Gameplay): drive the
+2. DeHackEd weapons and projectiles (M, see Gameplay): drive the
    player's weapon animations and the projectiles from the state table
    too, so "Weapon N" and the projectile rows of a patch take effect.
+3. Live thing inspection and profiler sections (S each, see
+   Inspectability): select the thing under the crosshair in the
+   inspector, and the load stages in CGE's profiler. The editor items
+   are done except trying the designs in the editor on Windows (the
+   editor is not built in CI).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

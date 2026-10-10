@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- A Doom level as a Castle Game Engine component: `TDoomMapTransform`
+  ("Doom Map" in the editor) builds a map from a WAD inside any design
+  (its geometry, lighting and things), so the CGE editor's 3D view can
+  show a Freedoom level; `data/mapcomponent.castle-user-interface` is
+  such a design and `--autotest MAPCOMPONENT` screenshots it.
 - The play view's 2D layer (status bar, weapon, messages, help, the
   intermission and finale screens, Doom's menu, the melt) and the title
   screen with its Options panel are Castle Game Engine designs

@@ -99,6 +99,9 @@ TESTS = [
      [r'Line: line 269 special 74'], [], check_crusher),
     # The Nuked OPL3 library (data/lib, built by tools/build_nuked_opl3.sh)
     # loads and renders the intro of the level's song.
+    ('map-component', 'MAPCOMPONENT', None,
+     [r'DoomMap: E1M1 from castle-data:/wads/freedoom1.wad: 182 sectors, \d+ things shown',
+      r'AutoTest: Design shows E1M1: camera at the player start \(-416, 256\)', r'AutoTest: Design screenshot saved'], [], None),
     ('inspector', 'E1M1', 'W:1,INSPECTOR,W:1.5,S,INSPECTOR,W:0.3,Q',
      [r'AutoTest: Inspector toggled', r'AutoTest: Saved screenshot 1'], [], None),
     ('music-opl3', 'E1M1', 'W:6,Q',

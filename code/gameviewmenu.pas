@@ -72,6 +72,7 @@ type
     procedure ClickBack(Sender: TObject);
     procedure ContinueFromSlot(const Slot: Integer);
     procedure AutoContinue(Sender: TObject);
+    procedure AutoDesign(Sender: TObject);
     procedure UpdateWadsLabel;
     procedure RememberWads;
     procedure ClickPhase1(Sender: TObject);
@@ -138,7 +139,7 @@ implementation
 uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils,
   CastleStringUtils,
   CastleFilesUtils,
-  GameViewPlay, GameSettings, GameSaveBundle, GameSaveStorage, GameGamepad;
+  GameViewPlay, GameSettings, GameSaveBundle, GameSaveStorage, GameGamepad, GameViewDesign;
 
 const
   Freedoom1 = 'castle-data:/wads/freedoom1.wad';
@@ -224,6 +225,13 @@ begin
   begin
     { Cannot change the view inside Start; do it after the first render. }
     WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoContinue);
+    Exit;
+  end;
+  if AutoTestMap = 'MAPCOMPONENT' then
+  begin
+    { The design with the Doom map component (GameViewDesign); the view
+      cannot change inside Start. }
+    WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoDesign);
     Exit;
   end;
   if Copy(AutoTestMap, 1, 4) = 'MENU' then
@@ -816,6 +824,11 @@ end;
 procedure TViewMenu.AutoStart(Sender: TObject);
 begin
   StartGame;
+end;
+
+procedure TViewMenu.AutoDesign(Sender: TObject);
+begin
+  Container.View := ViewDesign;
 end;
 
 { --autotest MENU... : open the requested page, then screenshot a few tics

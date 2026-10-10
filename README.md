@@ -185,6 +185,8 @@ code/gameviewplay.pas   viewport, navigation, input; the 2D layer comes from dat
 code/doomworldstatus.pas  the game's state as published properties (the inspector)
 data/play.castle-user-interface  the play view's HUD, texts and screens: a CGE editor design
 data/menu.castle-user-interface  the title screen, Doom's menu and the Options panel: a CGE editor design
+code/doommaptransform.pas  TDoomMapTransform: a Doom level built from a WAD inside a design ("Doom Map" in the editor)
+code/gameviewdesign.pas  --autotest MAPCOMPONENT: shows data/mapcomponent.castle-user-interface, a design with that component
 ```
 
 Freedoom is Copyright (c) 2001-2024 Contributors to the Freedoom project, BSD licence

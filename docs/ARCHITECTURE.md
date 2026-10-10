@@ -80,6 +80,8 @@ Sizes, for orientation (lines of Pascal):
 | `doomgraphics.pas` | 765 | WAD graphics decoding, texture URLs |
 | `gameviewplay.pas` | 2000 | viewport, navigation, the 2D layer from `data/play.castle-user-interface`, input, test harness |
 | `doomworldstatus.pas` | 130 | `TDoomWorldStatus`: the game's state as published properties for the inspector |
+| `doommaptransform.pas` | 300 | `TDoomMapTransform`: a level from a WAD as a transform in any design ("Doom Map" in the editor) |
+| `gameviewdesign.pas` | 80 | `--autotest MAPCOMPONENT`: shows `data/mapcomponent.castle-user-interface` and screenshots it |
 | `doommap.pas` | 677 | map lumps, BSP queries, subsector polygons |
 | `doomthings.pas` | 363 | thing type table (info.c reduced) |
 | `gameviewmenu.pas` | 780 | title screen: Doom menu and options |
@@ -1053,6 +1055,23 @@ map/geometry/thing load times, music render times, and every screenshot with
 the player position.
 
 ---
+
+### A level as a component
+
+`TDoomMapTransform` (`doommaptransform.pas`) is a `TCastleTransform` with
+published `Wad`, `MapName` and `Things`. Setting them marks it dirty and
+its next `Update` builds the level: `TDoomWad`, `TDoomGraphics`,
+`TDoomMap`, a `TDoomGeometry` with every sector static (one chunk; the
+atlas and the lighting effects as in the game) under a `Map` child, the
+things as `TDoomActor`s in a `TSpriteBatch` under `Things` / `Sprites`.
+Each `Update` turns the sprites to the viewport's `MainCamera` and
+advances their idle frames at 35 tics a second. Errors are checked, not
+raised (an absent WAD or map logs a warning and leaves the component
+empty), so it works in the editor and on the web. `StartEye` /
+`StartDirection` give a camera the player start. The design
+`data/mapcomponent.castle-user-interface` (a viewport, a camera and the
+component on E1M1) is what `--autotest MAPCOMPONENT` (`GameViewDesign`)
+shows and screenshots, and what the editor shows for the same file.
 
 ### The engine's inspector
 

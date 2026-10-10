@@ -242,6 +242,16 @@ layout change with a before / after screenshot comparison (PIL
 face and the scene behind the help panel, and the `MENU`, `MENUOPTIONS`
 and `MENUTITLE` screenshots entirely.
 
+`--autotest MAPCOMPONENT prefix` loads `data/mapcomponent.castle-user-interface`
+(a viewport with a camera and a `TDoomMapTransform` on E1M1, the "Doom
+Map" editor component), moves the camera to the player start and saves
+`prefix_design.png` (autotest `map-component`; the log says `DoomMap:
+E1M1 from ...: 182 sectors, 209 things shown`). The component builds in
+its first `Update`, so a view must wait for `Built` before using
+`StartEye`; a design's viewport needs a camera (`"Camera": "Camera"`
+referencing a `TCastleCamera` child of `Items`), else `Viewport.Camera`
+is nil.
+
 The engine's inspector: `INSPECTOR` in a demo sends F8 (`W:1,INSPECTOR,
 W:1.5,S` screenshots it; autotest `inspector`). F8 works in release builds
 only because `GameInitialize` sets `TCastleContainer.InputInspector.Key`

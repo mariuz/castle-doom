@@ -10,7 +10,7 @@ uses SysUtils,
   CastleKeysMouse,
   CastleUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
-  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameSettings, GameSaveBundle;
+  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameSettings, GameSaveBundle;
 
 var
   Window: TCastleWindow;
@@ -173,6 +173,8 @@ begin
   ViewMenu.Name := 'ViewMenu';
   ViewPlay := TViewPlay.Create(Application);
   ViewPlay.Name := 'ViewPlay';
+  ViewDesign := TViewDesign.Create(Application);
+  ViewDesign.Name := 'ViewDesign';
   Window.Container.View := ViewMenu;
 end;
 
