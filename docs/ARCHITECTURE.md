@@ -1248,9 +1248,15 @@ deploys.
 - Static geometry is one scene with one shape per atlas page (plus the
   switch, scrolling and animated textures); dynamic sectors are small
   scenes. Release builds run at 100+ FPS at 1600x900.
-- Monster line-of-sight and movement loop over all linedefs with a bounding
-  box rejection; cheap for vanilla-sized maps, but a blockmap would be the
-  next step for huge maps.
+- The 2D queries (sight, monster and missile moves, hitscans, the player's
+  crossings and use) ask `TDoomMap`'s line grid for their candidates
+  (`LinesInBox`, `LinesNearSegment`): 128-unit cells like Doom's BLOCKMAP,
+  built from the vertices at load (a PWAD's own BLOCKMAP lump may be
+  missing or broken, so it is not read). A segment visits only the cells
+  along it, row by row; the result is a superset in ascending line order,
+  so the exact tests and their first-hit rules are unchanged. Each caller
+  has its own result buffer (`FLinesSight`, `FLinesMove`...), and the ones
+  that run line specials inside their loop take a local list.
 - Music rendering is the slowest single step (about 1 s per track natively,
   4x more on the web). Options if needed: lower `SampleRate`, render only the
   first minute, or cache rendered WAVs.
@@ -1297,8 +1303,6 @@ deploys.
   full-bright where the table (or Freedoom's `DEHACKED` lump) marks them.
 - No demo playback. The in-game menus (save / load slots) are still drawn by `GameViewPlay`, not by
   `DoomMenu`.
-- Vanilla node format only. A blockmap-free design means all 2D queries scan
-  all lines.
 - The built-in FM synth (web, or without the library) approximates the OPL2
   (envelope shapes and the modulation index are estimates, not a
   register-accurate emulation); the OPL3 driver's volume curve is a

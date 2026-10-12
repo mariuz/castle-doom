@@ -135,6 +135,9 @@ type
     { Set by a failed TryMove2D when only the mover's height was wrong
       (P_TryMove's floatok), with the floor height of the opening. }
     FFloatOk: Boolean;
+    { Line grid query results (TDoomMap.LinesInBox / LinesNearSegment),
+      one buffer per caller so that none overwrites another's. }
+    FLinesSight, FLinesMove, FLinesShot, FLinesMissile: TLineList;
     FFloatZ: Single;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
@@ -1876,14 +1879,17 @@ var
   V1, V2: TDoomVertex;
   T, TopSlope, BottomSlope, OpenTop, OpenBottom, Slope: Single;
   MinX, MaxX, MinY, MaxY: Single;
+  K, N: Integer;
 begin
   if FMap.RejectBlocks(S1, S2) then Exit(false);
   TopSlope := (Z2 + H2) - EyeZ;
   BottomSlope := Z2 - EyeZ;
   MinX := Min(X1, X2); MaxX := Max(X1, X2);
   MinY := Min(Y1, Y2); MaxY := Max(Y1, Y2);
-  for I := 0 to High(FMap.Linedefs) do
+  N := FMap.LinesNearSegment(X1, Y1, X2, Y2, 1, FLinesSight);
+  for K := 0 to N - 1 do
   begin
+    I := FLinesSight[K];
     L := FMap.Linedefs[I];
     V1 := FMap.Vertices[L.V1];
     V2 := FMap.Vertices[L.V2];
@@ -1948,11 +1954,14 @@ var
   V1, V2: TDoomVertex;
   T: Single;
   MinX, MaxX, MinY, MaxY: Single;
+  K, N: Integer;
 begin
   MinX := Min(X1, X2); MaxX := Max(X1, X2);
   MinY := Min(Y1, Y2); MaxY := Max(Y1, Y2);
-  for I := 0 to High(FMap.Linedefs) do
+  N := FMap.LinesNearSegment(X1, Y1, X2, Y2, 1, FLinesSight);
+  for K := 0 to N - 1 do
   begin
+    I := FLinesSight[K];
     L := FMap.Linedefs[I];
     V1 := FMap.Vertices[L.V1];
     V2 := FMap.Vertices[L.V2];
@@ -1981,6 +1990,7 @@ var
   OpenTop, OpenBottom, LowFloor, FloorZ: Single;
   Corners: array [0..3] of Single;
   O: TDoomActor;
+  K, N: Integer;
 
   function BoxIntersectsLine: Boolean;
   var
@@ -2010,8 +2020,10 @@ begin
   if Sec < 0 then Exit;
   FloorZ := FMap.Sectors[Sec].FloorHeight;
 
-  for I := 0 to High(FMap.Linedefs) do
+  N := FMap.LinesInBox(NX - R - 1, NY - R - 1, NX + R + 1, NY + R + 1, FLinesMove);
+  for K := 0 to N - 1 do
   begin
+    I := FLinesMove[K];
     L := FMap.Linedefs[I];
     V1 := FMap.Vertices[L.V1];
     V2 := FMap.Vertices[L.V2];
@@ -3159,6 +3171,7 @@ var
   V1, V2: TDoomVertex;
   O: TDoomActor;
   MinX, MaxX, MinY, MaxY: Single;
+  K, N: Integer;
 begin
   HitActor := nil;
   HitPlayer := false;
@@ -3173,8 +3186,10 @@ begin
     opening (PTR_ShootTraverse). }
   MinX := Min(X, EX); MaxX := Max(X, EX);
   MinY := Min(Y, EY); MaxY := Max(Y, EY);
-  for I := 0 to High(FMap.Linedefs) do
+  N := FMap.LinesNearSegment(X, Y, EX, EY, 1, FLinesShot);
+  for K := 0 to N - 1 do
   begin
+    I := FLinesShot[K];
     L := FMap.Linedefs[I];
     V1 := FMap.Vertices[L.V1];
     V2 := FMap.Vertices[L.V2];
@@ -3303,6 +3318,7 @@ var
   V1, V2: TDoomVertex;
   Hit: Boolean;
   O: TDoomActor;
+  K, N: Integer;
 begin
   if A.State <> asMissile then Exit;
   NX := A.DoomX + A.VelX;
@@ -3355,8 +3371,12 @@ begin
 
   { Walls / closed openings / floor / ceiling. }
   if not Hit then
-    for I := 0 to High(FMap.Linedefs) do
+  begin
+    N := FMap.LinesInBox(Min(A.DoomX, NX) - 2, Min(A.DoomY, NY) - 2,
+      Max(A.DoomX, NX) + 2, Max(A.DoomY, NY) + 2, FLinesMissile);
+    for K := 0 to N - 1 do
     begin
+      I := FLinesMissile[K];
       L := FMap.Linedefs[I];
       V1 := FMap.Vertices[L.V1];
       V2 := FMap.Vertices[L.V2];
@@ -3373,6 +3393,7 @@ begin
           Break;
         end;
     end;
+  end;
   if not Hit then
   begin
     Sec := FMap.SectorAt(NX, NY);
@@ -3961,6 +3982,7 @@ var
   V1, V2: TDoomVertex;
   O: TDoomActor;
   Tmp: TIntercept;
+  K, N: Integer;
 begin
   Result := 0;
   Target := nil;
@@ -3971,8 +3993,10 @@ begin
   MinX := Min(X, EX); MaxX := Max(X, EX);
   MinY := Min(Y, EY); MaxY := Max(Y, EY);
   Count := 0;
-  for I := 0 to High(FMap.Linedefs) do
+  N := FMap.LinesNearSegment(X, Y, EX, EY, 1, FLinesShot);
+  for K := 0 to N - 1 do
   begin
+    I := FLinesShot[K];
     L := FMap.Linedefs[I];
     V1 := FMap.Vertices[L.V1];
     V2 := FMap.Vertices[L.V2];
@@ -4099,6 +4123,8 @@ var
   L: TDoomLinedef;
   V1, V2: TDoomVertex;
   Shot: String;
+  Found: TLineList;
+  K, N: Integer;
 begin
   ShootZ := Player.Z + PlayerHeight / 2 + 8;
   TraceLineAttack(nil, Player.X, Player.Y, ShootZ, Angle, Slope, Range, Result, HitPlayer, HitWall, HX, HY, HZ);
@@ -4109,8 +4135,12 @@ begin
   if HitWall then Dist := Dist + 5;
   EX := Player.X + Cos(DegToRad(Angle)) * Dist;
   EY := Player.Y + Sin(DegToRad(Angle)) * Dist;
-  for I := 0 to High(FMap.Linedefs) do
+  { Its own list: ShootSpecialLine may move sectors and query again. }
+  Found := nil;
+  N := FMap.LinesNearSegment(Player.X, Player.Y, EX, EY, 1, Found);
+  for K := 0 to N - 1 do
   begin
+    I := Found[K];
     L := FMap.Linedefs[I];
     if not (L.Special in [24, 46, 47]) then Continue;
     V1 := FMap.Vertices[L.V1];
@@ -4497,10 +4527,16 @@ var
   V1, V2: TDoomVertex;
   T: Single;
   OldSide: Integer;
+  Found: TLineList;
+  K, N: Integer;
 begin
   if (FOldPlayerX = Player.X) and (FOldPlayerY = Player.Y) then Exit;
-  for I := 0 to High(FMap.Linedefs) do
+  { Its own list: a crossed line may teleport the player. }
+  Found := nil;
+  N := FMap.LinesNearSegment(FOldPlayerX, FOldPlayerY, Player.X, Player.Y, 1, Found);
+  for K := 0 to N - 1 do
   begin
+    I := Found[K];
     L := FMap.Linedefs[I];
     if L.Special = 0 then Continue;
     V1 := FMap.Vertices[L.V1];
@@ -4520,6 +4556,8 @@ var
   V1, V2: TDoomVertex;
   EX, EY, T, BestT: Single;
   Used: Boolean;
+  Found: TLineList;
+  K, N: Integer;
 begin
   if FMap = nil then Exit;
   if Player.Dead then
@@ -4537,11 +4575,14 @@ begin
   EX := Player.X + Cos(DegToRad(Player.Angle)) * 64;
   EY := Player.Y + Sin(DegToRad(Player.Angle)) * 64;
   Used := false;
+  Found := nil;
+  N := FMap.LinesNearSegment(Player.X, Player.Y, EX, EY, 1, Found);
   repeat
     Best := -1;
     BestT := 2;
-    for I := 0 to High(FMap.Linedefs) do
+    for K := 0 to N - 1 do
     begin
+      I := Found[K];
       L := FMap.Linedefs[I];
       if L.Used then Continue;
       V1 := FMap.Vertices[L.V1];
@@ -4575,8 +4616,8 @@ begin
     { Passable line without special: look further, marking it visited. }
     FMap.Linedefs[Best].Used := true;
   until false;
-  for I := 0 to High(FMap.Linedefs) do
-    FMap.Linedefs[I].Used := false;
+  for K := 0 to N - 1 do
+    FMap.Linedefs[Found[K]].Used := false;
   if not Used then
     FSounds.Play('DSNOWAY');
 end;

@@ -53,6 +53,7 @@ type
     procedure TestMap01;
     procedure TestZDoomNodes;
     procedure TestGlBspNodes;
+    procedure TestLineGrid;
   end;
 
   TTestMusic = class(TTestCase)
@@ -311,6 +312,106 @@ begin
     try
       AssertTrue('things', Length(M.Things) > 0);
       AssertTrue('polygons cover the map', PolygonArea(M) > 1e6);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ The line grid (TDoomMap.LinesInBox / LinesNearSegment) against a scan
+  of every line: random boxes and segments over E1M1 and MAP01 must
+  find every line a scan finds (bounding box overlap for a box, an
+  intersection for a segment), in ascending order. }
+procedure CheckLineGrid(const M: TDoomMap);
+var
+  Found: TLineList;
+  Q, I, K, N: Integer;
+  X1, Y1, X2, Y2, D, T, U, S0, S1, S2, S3: Single;
+  V1, V2: TDoomVertex;
+  InList: array of Boolean;
+begin
+  RandSeed := 7;
+  SetLength(InList, Length(M.Linedefs));
+  for Q := 1 to 4000 do
+  begin
+    X1 := M.MinX - 200 + Random * (M.MaxX - M.MinX + 400);
+    Y1 := M.MinY - 200 + Random * (M.MaxY - M.MinY + 400);
+    if Odd(Q) then
+    begin
+      X2 := X1 + Random * 100;
+      Y2 := Y1 + Random * 100;
+      N := M.LinesInBox(X1, Y1, X2, Y2, Found);
+    end else
+    begin
+      X2 := X1 + (Random - 0.5) * 6000;
+      Y2 := Y1 + (Random - 0.5) * 6000;
+      if Q mod 10 = 0 then Y2 := Y1; { horizontal }
+      N := M.LinesNearSegment(X1, Y1, X2, Y2, 1, Found);
+    end;
+    FillChar(InList[0], Length(InList), 0);
+    for K := 0 to N - 1 do
+    begin
+      if K > 0 then
+        TTestCase.AssertTrue('ascending', Found[K] > Found[K - 1]);
+      InList[Found[K]] := true;
+    end;
+    for I := 0 to High(M.Linedefs) do
+    begin
+      V1 := M.Vertices[M.Linedefs[I].V1];
+      V2 := M.Vertices[M.Linedefs[I].V2];
+      if Odd(Q) then
+      begin
+        if (Max(V1.X, V2.X) < X1) or (Min(V1.X, V2.X) > X2) or
+           (Max(V1.Y, V2.Y) < Y1) or (Min(V1.Y, V2.Y) > Y2) then Continue;
+        { All four corners on one side: the line passes beside the box. }
+        S0 := (X1 - V1.X) * (V2.Y - V1.Y) - (Y1 - V1.Y) * (V2.X - V1.X);
+        S1 := (X2 - V1.X) * (V2.Y - V1.Y) - (Y1 - V1.Y) * (V2.X - V1.X);
+        S2 := (X2 - V1.X) * (V2.Y - V1.Y) - (Y2 - V1.Y) * (V2.X - V1.X);
+        S3 := (X1 - V1.X) * (V2.Y - V1.Y) - (Y2 - V1.Y) * (V2.X - V1.X);
+        if ((S0 > 0) and (S1 > 0) and (S2 > 0) and (S3 > 0)) or
+           ((S0 < 0) and (S1 < 0) and (S2 < 0) and (S3 < 0)) then Continue;
+      end else
+      begin
+        D := (X2 - X1) * (V2.Y - V1.Y) - (Y2 - Y1) * (V2.X - V1.X);
+        if Abs(D) < 1e-6 then Continue;
+        T := ((V1.X - X1) * (V2.Y - V1.Y) - (V1.Y - Y1) * (V2.X - V1.X)) / D;
+        U := ((V1.X - X1) * (Y2 - Y1) - (V1.Y - Y1) * (X2 - X1)) / D;
+        if not ((T >= 0) and (T <= 1) and (U >= 0) and (U <= 1)) then Continue;
+      end;
+      TTestCase.AssertTrue(Format('%s query %d finds line %d', [M.Name, Q, I]), InList[I]);
+    end;
+  end;
+end;
+
+procedure TTestMap.TestLineGrid;
+var
+  W: TDoomWad;
+  M: TDoomMap;
+  Found: TLineList;
+begin
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertTrue('grid built', (M.GridWidth > 1) and (M.GridHeight > 1));
+      CheckLineGrid(M);
+      { The door at (544..560, 680..744): a small box finds a few lines,
+        far fewer than the map has. }
+      AssertTrue('few lines near the door', M.LinesInBox(530, 690, 570, 730, Found) < 40);
+      AssertEquals('nothing far outside', 0, M.LinesInBox(M.MaxX + 5000, 0, M.MaxX + 5100, 100, Found));
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom2.wad'));
+  try
+    M := TDoomMap.Create(W, 'MAP01');
+    try
+      CheckLineGrid(M);
     finally
       FreeAndNil(M);
     end;

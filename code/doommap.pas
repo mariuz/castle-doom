@@ -102,11 +102,26 @@ type
     Children: array [0..1] of Integer;
   end;
 
+  { Linedef indices returned by the grid queries (reused between calls). }
+  TLineList = array of Integer;
+
   TDoomMap = class
   strict private
     FWad: TDoomWad;
     FName: String;
     FNodesFormat: String;
+    { The line grid: cells of LineGridCell units from (FGridX, FGridY),
+      FGridW x FGridH of them; cell C's lines are FCellLines[FCellStart[C]
+      .. FCellStart[C + 1] - 1], ascending. FLineMark / FMarkStamp drop
+      the duplicates of a query (a line in several cells). }
+    FGridX, FGridY: Single;
+    FGridW, FGridH: Integer;
+    FCellStart, FCellLines: array of Integer;
+    FLineMark: array of Cardinal;
+    FMarkStamp: Cardinal;
+    procedure BuildLineGrid;
+    procedure NextMark;
+    procedure AddCellRow(const Row, Col0, Col1: Integer; var Found: TLineList; var Count: Integer);
     procedure LoadLumps(const MarkerIndex: Integer);
     procedure LoadVanillaNodes(const NodesLump, SegsLump, SubsLump: Integer);
     procedure LoadExtendedNodes(const Data: PByte; const Size: Integer; const Format: String);
@@ -154,6 +169,18 @@ type
     function SideSector(const LineIndex, SideIndex: Integer): Integer;
     function HasSkyCeiling(const Sec: Integer): Boolean;
     function HasSkyFloor(const Sec: Integer): Boolean;
+
+    { The linedefs that may touch the box, or the segment widened by Pad
+      units, in ascending index order like a scan of every line (so the
+      callers' first-hit rules do not change): Found[0 .. Result - 1].
+      A superset: the callers keep their exact tests. Built from the
+      vertices (like Doom's BLOCKMAP, 128-unit cells; a PWAD's own
+      BLOCKMAP lump may be missing or broken, so it is not read). }
+    function LinesInBox(const X1, Y1, X2, Y2: Single; var Found: TLineList): Integer;
+    function LinesNearSegment(const X1, Y1, X2, Y2, Pad: Single; var Found: TLineList): Integer;
+    { The grid's size in cells (for the log and the unit test). }
+    property GridWidth: Integer read FGridW;
+    property GridHeight: Integer read FGridH;
 
     property Name: String read FName;
     property Wad: TDoomWad read FWad;
@@ -247,9 +274,10 @@ begin
   LoadLumps(Marker);
   BuildSectorLists;
   BuildSubsectorPolygons;
-  WritelnLog('Map', '%s: %d vertices, %d linedefs, %d sectors, %d things, %d subsectors, %d nodes', [
+  BuildLineGrid;
+  WritelnLog('Map', '%s: %d vertices, %d linedefs, %d sectors, %d things, %d subsectors, %d nodes, line grid %d x %d', [
     FName, Length(Vertices), Length(Linedefs), Length(Sectors), Length(Things),
-    Length(Subsectors), Length(Nodes)]);
+    Length(Subsectors), Length(Nodes), FGridW, FGridH]);
 end;
 
 procedure TDoomMap.LoadLumps(const MarkerIndex: Integer);
@@ -901,6 +929,207 @@ begin
   S := Linedefs[LineIndex].Side[SideIndex];
   if S < 0 then Exit(-1);
   Result := Sidedefs[S].Sector;
+end;
+
+const
+  LineGridCell = 128;
+
+{ Sorts A[0 .. Count - 1] ascending: insertion sort for the usual few
+  dozen lines, a quicksort pass above that. }
+procedure SortLines(var A: TLineList; const L, R: Integer);
+var
+  I, J, P, T: Integer;
+begin
+  if R - L < 24 then
+  begin
+    for I := L + 1 to R do
+    begin
+      T := A[I];
+      J := I - 1;
+      while (J >= L) and (A[J] > T) do
+      begin
+        A[J + 1] := A[J];
+        Dec(J);
+      end;
+      A[J + 1] := T;
+    end;
+    Exit;
+  end;
+  P := A[(L + R) div 2];
+  I := L;
+  J := R;
+  repeat
+    while A[I] < P do Inc(I);
+    while A[J] > P do Dec(J);
+    if I <= J then
+    begin
+      T := A[I]; A[I] := A[J]; A[J] := T;
+      Inc(I);
+      Dec(J);
+    end;
+  until I > J;
+  if L < J then SortLines(A, L, J);
+  if I < R then SortLines(A, I, R);
+end;
+
+procedure TDoomMap.BuildLineGrid;
+var
+  GX0, GY0, GX1, GY1: Single;
+  Counts: array of Integer;
+  Pass, I, Row, Col, C: Integer;
+  V1, V2: TDoomVertex;
+  CX0, CY0, CX1, CY1, S0, S1, S2, S3: Single;
+begin
+  FGridW := 0;
+  FGridH := 0;
+  SetLength(FLineMark, Length(Linedefs));
+  FMarkStamp := 0;
+  if (Length(Linedefs) = 0) or (Length(Vertices) = 0) then Exit;
+  GX0 := Vertices[0].X; GX1 := GX0;
+  GY0 := Vertices[0].Y; GY1 := GY0;
+  for I := 1 to High(Vertices) do
+  begin
+    GX0 := Min(GX0, Vertices[I].X); GX1 := Max(GX1, Vertices[I].X);
+    GY0 := Min(GY0, Vertices[I].Y); GY1 := Max(GY1, Vertices[I].Y);
+  end;
+  FGridX := GX0 - 1;
+  FGridY := GY0 - 1;
+  FGridW := Trunc((GX1 + 1 - FGridX) / LineGridCell) + 1;
+  FGridH := Trunc((GY1 + 1 - FGridY) / LineGridCell) + 1;
+  SetLength(Counts, FGridW * FGridH);
+  SetLength(FCellStart, FGridW * FGridH + 1);
+  { Pass 0 counts the lines per cell, pass 1 stores them (in line order,
+    so every cell's list is ascending). A line goes into the cells of its
+    bounding box that it crosses (a cell widened by a unit on each side:
+    all four corners on one side of the line = it misses). }
+  for Pass := 0 to 1 do
+  begin
+    if Pass = 1 then
+    begin
+      FCellStart[0] := 0;
+      for C := 0 to High(Counts) do
+        FCellStart[C + 1] := FCellStart[C] + Counts[C];
+      SetLength(FCellLines, FCellStart[High(FCellStart)]);
+      for C := 0 to High(Counts) do
+        Counts[C] := FCellStart[C];
+    end;
+    for I := 0 to High(Linedefs) do
+    begin
+      V1 := Vertices[Linedefs[I].V1];
+      V2 := Vertices[Linedefs[I].V2];
+      for Row := Trunc((Min(V1.Y, V2.Y) - FGridY) / LineGridCell) to
+                 Trunc((Max(V1.Y, V2.Y) - FGridY) / LineGridCell) do
+        for Col := Trunc((Min(V1.X, V2.X) - FGridX) / LineGridCell) to
+                   Trunc((Max(V1.X, V2.X) - FGridX) / LineGridCell) do
+        begin
+          CX0 := FGridX + Col * LineGridCell - 1;
+          CY0 := FGridY + Row * LineGridCell - 1;
+          CX1 := CX0 + LineGridCell + 2;
+          CY1 := CY0 + LineGridCell + 2;
+          S0 := (CX0 - V1.X) * (V2.Y - V1.Y) - (CY0 - V1.Y) * (V2.X - V1.X);
+          S1 := (CX1 - V1.X) * (V2.Y - V1.Y) - (CY0 - V1.Y) * (V2.X - V1.X);
+          S2 := (CX1 - V1.X) * (V2.Y - V1.Y) - (CY1 - V1.Y) * (V2.X - V1.X);
+          S3 := (CX0 - V1.X) * (V2.Y - V1.Y) - (CY1 - V1.Y) * (V2.X - V1.X);
+          if ((S0 > 0) and (S1 > 0) and (S2 > 0) and (S3 > 0)) or
+             ((S0 < 0) and (S1 < 0) and (S2 < 0) and (S3 < 0)) then Continue;
+          C := Row * FGridW + Col;
+          if Pass = 1 then FCellLines[Counts[C]] := I;
+          Inc(Counts[C]);
+        end;
+    end;
+  end;
+end;
+
+procedure TDoomMap.NextMark;
+begin
+  Inc(FMarkStamp);
+  if FMarkStamp = 0 then
+  begin
+    { Wrapped around after 4 billion queries: clear the old marks. }
+    FillChar(FLineMark[0], Length(FLineMark) * SizeOf(Cardinal), 0);
+    FMarkStamp := 1;
+  end;
+end;
+
+procedure TDoomMap.AddCellRow(const Row, Col0, Col1: Integer; var Found: TLineList; var Count: Integer);
+var
+  Col, C, K, Line: Integer;
+begin
+  for Col := Max(Col0, 0) to Min(Col1, FGridW - 1) do
+  begin
+    C := Row * FGridW + Col;
+    for K := FCellStart[C] to FCellStart[C + 1] - 1 do
+    begin
+      Line := FCellLines[K];
+      if FLineMark[Line] = FMarkStamp then Continue;
+      FLineMark[Line] := FMarkStamp;
+      if Count = Length(Found) then
+        SetLength(Found, Count * 2 + 64);
+      Found[Count] := Line;
+      Inc(Count);
+    end;
+  end;
+end;
+
+function TDoomMap.LinesInBox(const X1, Y1, X2, Y2: Single; var Found: TLineList): Integer;
+var
+  Row: Integer;
+begin
+  Result := 0;
+  if FGridW = 0 then Exit;
+  NextMark;
+  { Clamped to the grid (Trunc of a far-away float could overflow). }
+  for Row := Max(0, Floor(Max(-1, (Min(Y1, Y2) - FGridY) / LineGridCell))) to
+             Min(FGridH - 1, Floor(Min(FGridH, (Max(Y1, Y2) - FGridY) / LineGridCell))) do
+    AddCellRow(Row, Floor(Max(-1, (Min(X1, X2) - FGridX) / LineGridCell)),
+      Floor(Min(FGridW, (Max(X1, X2) - FGridX) / LineGridCell)), Found, Result);
+  if Result > 1 then SortLines(Found, 0, Result - 1);
+end;
+
+function TDoomMap.LinesNearSegment(const X1, Y1, X2, Y2, Pad: Single; var Found: TLineList): Integer;
+var
+  Row: Integer;
+  DX, DY, YLo, YHi, TA, TB, XA, XB, Tmp: Single;
+begin
+  Result := 0;
+  if FGridW = 0 then Exit;
+  NextMark;
+  DX := X2 - X1;
+  DY := Y2 - Y1;
+  { Row by row: the part of the segment inside the row's band (widened
+    by Pad) gives the columns, so a long diagonal sight line visits only
+    the cells along it. }
+  for Row := Max(0, Floor(Max(-1, (Min(Y1, Y2) - Pad - FGridY) / LineGridCell))) to
+             Min(FGridH - 1, Floor(Min(FGridH, (Max(Y1, Y2) + Pad - FGridY) / LineGridCell))) do
+  begin
+    if Abs(DY) < 1e-6 then
+    begin
+      XA := Min(X1, X2);
+      XB := Max(X1, X2);
+    end else
+    begin
+      YLo := FGridY + Row * LineGridCell - Pad;
+      YHi := YLo + LineGridCell + 2 * Pad;
+      TA := (YLo - Y1) / DY;
+      TB := (YHi - Y1) / DY;
+      if TA > TB then
+      begin
+        Tmp := TA; TA := TB; TB := Tmp;
+      end;
+      TA := Max(TA, 0);
+      TB := Min(TB, 1);
+      if TA > TB then Continue;
+      XA := X1 + DX * TA;
+      XB := X1 + DX * TB;
+      if XA > XB then
+      begin
+        Tmp := XA; XA := XB; XB := Tmp;
+      end;
+    end;
+    AddCellRow(Row, Floor(Max(-1, (XA - Pad - FGridX) / LineGridCell)),
+      Floor(Min(FGridW, (XB + Pad - FGridX) / LineGridCell)), Found, Result);
+  end;
+  if Result > 1 then SortLines(Found, 0, Result - 1);
 end;
 
 procedure TDoomMap.BuildSectorLists;
