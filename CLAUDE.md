@@ -73,8 +73,8 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 25 cases) cover the parsers,
-every node format, the line grid, Boom's generalized types, scrollers, friction and both music synthesizers:
+Unit tests (FPCUnit, no window, about 20 s, 26 cases) cover the parsers,
+every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
 code 1 on a failure; CI runs them before the autotests). The node-format
@@ -426,6 +426,12 @@ pushers` (autotests `friction` and `pushers` read the player's position
 in their saves; unit test `TestFriction`). Walk tests need `--fixed-step`
 and a clear spot: at (-224, 140) the slow mud walk sticks on the
 corridor's corner.
+Boom translucency: `tools/testdata/translucent.wad`
+(`tools/make_translucent_wad.py`, needs numpy) makes the start room's
+west window grate (line 1052) 66% opaque and, through line 832's custom
+map `TRANSL25`, the east corridor's grate (837) a quarter opaque (log
+`Map: E1M1: 3 translucent lines`; autotest `translucency` with a golden
+screenshot from `G:-450:256,A:180,LOOK:30`, unit test `TestTranslucency`).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

@@ -106,7 +106,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   a `.gwa` file), so maps built with ZDBSP or glBSP load too. Boom's generalized linedef
   types (floors, ceilings, doors, locked doors, lifts, stairs and crushers), its numbered
   extra line types (silent teleports among them), sector types (damage and secret bits),
-  ice and mud, wind, currents and point pushers, `ANIMATED` and
+  ice and mud, wind, currents and point pushers, translucent middle textures, `ANIMATED` and
   `SWITCHES` lumps give PWADs their own animated textures and switches, and a `UMAPINFO`
   lump their level names, music, skies, par times, map order, story texts and endings.
 - Music: MUS and MIDI lumps played on an emulated OPL3 (Nuked OPL3, loaded as a shared

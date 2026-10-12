@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Boom translucency (260): middle textures drawn at the default map's
+  opacity (the WAD's `TRANMAP`, else Boom's 66%) or a custom map's,
+  estimated from its colour table; the 260 line alone or every line with
+  its tag. Test PWAD `tools/testdata/translucent.wad`
+  (`tools/make_translucent_wad.py`, needs numpy), autotest
+  `translucency` (a golden screenshot), unit test `TestTranslucency`.
+
 - Boom friction and pushers: 223 friction lines (ice and mud, with the
   sector type's friction bit), 224 wind, 225 currents and 226 point
   pushers / pullers (with the push bit) act on the knockback momentum of
@@ -760,7 +767,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **UDMF** (`TEXTMAP`) maps, and glBSP's `GL_LEVEL` markers for map names over 5 letters. | Remaining community map formats. | `DoomMap` | L (UDMF), S (`GL_LEVEL`) |
-| **Boom/MBF specials**: generalized linedefs are done (see above; floors still do not crush); the constant scrollers are done too (see above); left are the accelerative and displacement scrollers (214-218, 245-249: speed from a control sector's height changes), translucency (260), the other Boom line types (elevators 227-238, plat toggles 211 / 212, line-to-line teleports 243 / 244 and MBF's 262-269, deep water 242, light transfers 213 / 261, sky transfers 271 / 272) and MBF's friction for monsters' own walking (Boom moves only momentum). | Big community map support. | `DoomWorld.ApplySpecial`, `DoomGeometry` | M each |
+| **Boom/MBF specials**: generalized linedefs are done (see above; floors still do not crush); the constant scrollers are done too (see above); left are the accelerative and displacement scrollers (214-218, 245-249: speed from a control sector's height changes),  the other Boom line types (elevators 227-238, plat toggles 211 / 212, line-to-line teleports 243 / 244 and MBF's 262-269, deep water 242, light transfers 213 / 261, sky transfers 271 / 272) and MBF's friction for monsters' own walking (Boom moves only momentum). | Big community map support. | `DoomWorld.ApplySpecial`, `DoomGeometry` | M each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -799,11 +806,10 @@ play.
 
 ## Suggested next three
 
-1. Boom translucency (260, M, see Content and formats: the line's
-   middle texture drawn at 2/3 with the TRANMAP blend, or the lump the
-   line names).
-2. Boom elevators (227-238, S-M: the floor and ceiling moving
-   together) and the plat toggles (211, 212).
+1. Boom elevators (227-238, S-M, see Content and formats: the floor and
+   ceiling moving together) and the plat toggles (211, 212).
+2. MBF's translucent things (the TRANSLUCENT flag of DeHackEd's bits,
+   S-M: sprites in a blended group of `TSpriteBatch`).
 3. Touch controls in the browser (M, see Engine and tooling): the web
    build is unplayable on phones; `TCastleTouchNavigation` plus fire and
    use buttons, the first step to an Android package too.

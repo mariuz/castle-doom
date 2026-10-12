@@ -75,6 +75,9 @@ type
       per texture and speed. }
     Scrolling: Boolean;
     ScrollPerTic: TVector2;
+    { Boom's translucent middle textures (260): opacity below 1 makes a
+      blended shape outside the atlas. }
+    Alpha: Single;
     { Vertex count the nodes were created with; topology changes force a rebuild. }
     CommittedVertices: Integer;
     constructor Create;
@@ -107,7 +110,7 @@ type
     FBuilt: Boolean;
     FRootSolid, FRootPassable: TX3DRootNode;
     function Batch(const Img: TDoomImage; const Passable: Boolean; const ScrollPerTic: TVector2;
-      const SwitchLine: Integer = -1): TGeomBatch;
+      const SwitchLine: Integer = -1; const Alpha: Single = 1): TGeomBatch;
     procedure EmitLineSide(const Line, Side: Integer);
     procedure EmitFlats(const Sub: Integer);
     procedure EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
@@ -213,6 +216,7 @@ begin
   Lights := TSingleList.Create;
   Tiles := TSingleList.Create;
   AtlasPage := -1;
+  Alpha := 1;
   Indices := TInt32List.Create;
 end;
 
@@ -335,6 +339,13 @@ begin
     TexNode := Img.MakeTextureNode(Clamp);
     Appearance.Texture := TexNode;
   end;
+  if Alpha < 1 then
+  begin
+    { The holes of a masked texture stay holes (alpha 0 blends to
+      nothing), the rest shows the scene behind at 1 - Alpha. }
+    Material.Transparency := 1 - Alpha;
+    Appearance.AlphaMode := amBlend;
+  end else
   if (Img <> nil) and Img.HasAlpha then
     Appearance.AlphaMode := amMask
   else
@@ -388,7 +399,7 @@ begin
 end;
 
 function TMapChunk.Batch(const Img: TDoomImage; const Passable: Boolean; const ScrollPerTic: TVector2;
-  const SwitchLine: Integer): TGeomBatch;
+  const SwitchLine: Integer; const Alpha: Single): TGeomBatch;
 var
   Key: String;
   Page: Integer;
@@ -399,7 +410,7 @@ begin
     texture is swapped in place), scrolling walls (their texture
     transform) and animated textures (their URL changes) keep their own. }
   Page := -1;
-  if UseTextureAtlas and (SwitchLine < 0) and (not Scrolling) and (Img.AnimGroup = nil) then
+  if UseTextureAtlas and (SwitchLine < 0) and (not Scrolling) and (Img.AnimGroup = nil) and (Alpha >= 1) then
     Page := Img.AtlasPage;
   if Page >= 0 then
     Key := 'atlas' + IntToStr(Page)
@@ -409,6 +420,8 @@ begin
   if Passable then Key := Key + 'P';
   if Scrolling then
     Key := Key + Format('S%g,%g', [ScrollPerTic.X, ScrollPerTic.Y]);
+  if Alpha < 1 then
+    Key := Key + Format('T%g', [Alpha]);
   if not FBatches.TryGetValue(Key, Result) then
   begin
     Result := TGeomBatch.Create;
@@ -421,6 +434,7 @@ begin
     Result.Passable := Passable;
     Result.Scrolling := Scrolling;
     Result.ScrollPerTic := ScrollPerTic;
+    Result.Alpha := Alpha;
     FBatches.Add(Key, Result);
   end;
 end;
@@ -589,7 +603,7 @@ begin
     ZB := Max(OpenBottom, TexTopZ - Img.Height);
     ZT := Min(OpenTop, TexTopZ);
     Passable := (L.Flags and ML_BLOCKING) = 0;
-    EmitWall(Batch(Img, Passable, WallScroll(Rate, Img), SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
+    EmitWall(Batch(Img, Passable, WallScroll(Rate, Img), SwitchLine, Map.LineAlpha[Line]), VA.X, VA.Y, VB.X, VB.Y,
       ZB, ZT, U0, U1, TexTopZ, Img, Light);
   end;
 end;

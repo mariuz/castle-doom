@@ -143,6 +143,8 @@ type
     procedure BuildSubsectorPolygons;
     procedure BuildScrollers;
     procedure BuildFrictionAndPushers;
+    procedure BuildTranslucency;
+    function TranslucencyMapAlpha(const Lump: Integer): Single;
   public
     Vertices: array of TDoomVertex;
     Linedefs: array of TDoomLinedef;
@@ -172,6 +174,12 @@ type
       walking thrust (1 = Doom's). }
     Friction, MoveFactor: array of Single;
     Pushers: array of TDoomPusher;
+    { Boom's translucency (260): the opacity of each linedef's middle
+      texture, 1 = solid. The default map (the WAD's TRANMAP, else Boom's
+      66%) or a 64 KB lump the 260 line's middle texture names, its
+      opacity estimated from how it mixes the palette. }
+    LineAlpha: array of Single;
+    TranslucentLines: Integer;
 
     constructor Create(const AWad: TDoomWad; const MapName: String);
 
@@ -314,6 +322,7 @@ begin
   BuildLineGrid;
   BuildScrollers;
   BuildFrictionAndPushers;
+  BuildTranslucency;
   if ScrollingSides + ScrollingFloors + ScrollingCeilings + CarryingFloors > 0 then
     WritelnLog('Map', '%s: scrollers: %d walls, %d floors, %d ceilings, %d carrying floors', [
       FName, ScrollingSides, ScrollingFloors, ScrollingCeilings, CarryingFloors]);
@@ -1172,6 +1181,116 @@ begin
       Floor(Min(FGridW, (XB + Pad - FGridX) / LineGridCell)), Found, Result);
   end;
   if Result > 1 then SortLines(Found, 0, Result - 1);
+end;
+
+function TDoomMap.TranslucencyMapAlpha(const Lump: Integer): Single;
+var
+  Map: TBytes;
+  Weights: array of Single;
+  Fg, Bg, N, I, K: Integer;
+  F, B, O: TVector4Byte;
+  DotFB, LenFB: Single;
+begin
+  { tranmap[fg * 256 + bg] is the mix of a foreground and a background
+    colour: the weight w of the foreground in out = w * fg + (1 - w) * bg,
+    projected on fg - bg for pairs far enough apart, and the median of
+    them (nearest-colour rounding makes each one rough). }
+  Result := 0.66;
+  Map := FWad.LumpBytes(Lump);
+  if Length(Map) <> 65536 then Exit;
+  SetLength(Weights, 0);
+  N := 0;
+  Fg := 0;
+  while Fg < 256 do
+  begin
+    Bg := 3;
+    while Bg < 256 do
+    begin
+      F := FWad.PaletteColor(Fg);
+      B := FWad.PaletteColor(Bg);
+      O := FWad.PaletteColor(Map[Fg * 256 + Bg]);
+      LenFB := Sqr(F.X - B.X) + Sqr(F.Y - B.Y) + Sqr(F.Z - B.Z);
+      if LenFB > 100 * 100 then
+      begin
+        DotFB := (O.X - B.X) * (F.X - B.X) + (O.Y - B.Y) * (F.Y - B.Y) + (O.Z - B.Z) * (F.Z - B.Z);
+        if N = Length(Weights) then SetLength(Weights, N * 2 + 64);
+        Weights[N] := DotFB / LenFB;
+        Inc(N);
+      end;
+      Inc(Bg, 7);
+    end;
+    Inc(Fg, 5);
+  end;
+  if N = 0 then Exit;
+  { Insertion sort of a few thousand values, then the middle one. }
+  for I := 1 to N - 1 do
+  begin
+    DotFB := Weights[I];
+    K := I - 1;
+    while (K >= 0) and (Weights[K] > DotFB) do
+    begin
+      Weights[K + 1] := Weights[K];
+      Dec(K);
+    end;
+    Weights[K + 1] := DotFB;
+  end;
+  Result := Min(1, Max(0, Weights[N div 2]));
+end;
+
+procedure TDoomMap.BuildTranslucency;
+var
+  I, J, Lump, Side: Integer;
+  DefaultAlpha, Alpha: Single;
+  TexName: String;
+begin
+  SetLength(LineAlpha, Length(Linedefs));
+  for I := 0 to High(LineAlpha) do
+    LineAlpha[I] := 1;
+  TranslucentLines := 0;
+  DefaultAlpha := -1;
+  for I := 0 to High(Linedefs) do
+  begin
+    if Linedefs[I].Special <> 260 then Continue;
+    Alpha := -1;
+    { P_LoadSideDefs2: a middle texture naming a 64 KB lump is that
+      line's map (and not drawn). }
+    Side := Linedefs[I].Side[0];
+    if Side >= 0 then
+    begin
+      TexName := UpperCase(Sidedefs[Side].MiddleTex);
+      Lump := -1;
+      if (TexName <> '') and (TexName <> '-') then Lump := FWad.FindLump(TexName);
+      if (Lump >= 0) and (FWad.LumpSize(Lump) = 65536) then
+      begin
+        Alpha := TranslucencyMapAlpha(Lump);
+        for J := 0 to 1 do
+          if Linedefs[I].Side[J] >= 0 then
+            Sidedefs[Linedefs[I].Side[J]].MiddleTex := '-';
+      end;
+    end;
+    if Alpha < 0 then
+    begin
+      if DefaultAlpha < 0 then
+      begin
+        Lump := FWad.FindLump('TRANMAP');
+        if (Lump >= 0) and (FWad.LumpSize(Lump) = 65536) then
+          DefaultAlpha := TranslucencyMapAlpha(Lump)
+        else
+          DefaultAlpha := 0.66; { Boom's tran_filter_pct }
+      end;
+      Alpha := DefaultAlpha;
+    end;
+    if Linedefs[I].Tag = 0 then
+      LineAlpha[I] := Alpha
+    else
+      for J := 0 to High(Linedefs) do
+        if Linedefs[J].Tag = Linedefs[I].Tag then
+          LineAlpha[J] := Alpha;
+  end;
+  for I := 0 to High(LineAlpha) do
+    if LineAlpha[I] < 1 then Inc(TranslucentLines);
+  if TranslucentLines > 0 then
+    WritelnLog('Map', '%s: %d translucent lines', [FName, TranslucentLines]);
 end;
 
 procedure TDoomMap.BuildFrictionAndPushers;

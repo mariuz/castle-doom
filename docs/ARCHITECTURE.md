@@ -282,6 +282,16 @@ one per texture with `--no-atlas`. Each batch becomes one `TShapeNode` with:
 - `TAppearanceNode` with `TUnlitMaterialNode` (Doom has no lighting model)
   and `AlphaMode = amMask` when the texture has transparent pixels (alpha
   test, no sorting problems),
+- Boom's translucent middle textures (260): `TDoomMap.BuildTranslucency`
+  gives each line its opacity (`LineAlpha`): the 260 line alone, or every
+  line with its tag; the default map is the WAD's `TRANMAP` or Boom's 66%,
+  and a 260 line whose middle texture names a 64 KB lump uses that map
+  (and draws no middle texture). A map's opacity is estimated from how it
+  mixes the palette (`TranslucencyMapAlpha`: the median foreground weight
+  of sampled pairs). Such middle textures get their own batch outside the
+  atlas, an `UnlitMaterial` with `Transparency` 1 - opacity and
+  `AlphaMode` blend (the masked holes stay holes); one-sided walls stay
+  opaque.
 - a `TTextureTransformNode` for scrolling walls and flats: `TDoomMap.BuildScrollers`
   (Boom's `P_SpawnScrollers`) gives each sidedef, floor and ceiling its speed a
   tic from vanilla 48, Boom 85 and 250-255 (254 projects the control line's

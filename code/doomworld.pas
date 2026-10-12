@@ -1072,7 +1072,7 @@ begin
     end;
     { Exits, teleporters and scrollers (the geometry scrolls those
       textures itself) move no sector. }
-    if Special in [11, 51, 52, 124, 48, 85, 39, 97, 125, 126, 250..255, 174, 195, 197, 198, 207..210] then Continue;
+    if Special in [11, 51, 52, 124, 48, 85, 39, 97, 125, 126, 250..255, 260, 174, 195, 197, 198, 207..210] then Continue;
     MarkTag(Tag);
     { Stairs climb through neighbours sharing the floor texture. }
     if Special in [7, 8, 100, 127] then

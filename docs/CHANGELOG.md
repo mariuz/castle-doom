@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Boom translucency: windows, grates and force fields drawn see-through
+  (special 260), with the WAD's own translucency maps.
+
 ## v0.17.0 (2026-10-12)
 
 - Boom friction: icy floors that are slow to start and slide, muddy

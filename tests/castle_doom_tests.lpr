@@ -58,6 +58,7 @@ type
     procedure TestGeneralized;
     procedure TestScrollers;
     procedure TestFriction;
+    procedure TestTranslucency;
   end;
 
   TTestMusic = class(TTestCase)
@@ -524,6 +525,37 @@ begin
           AssertEquals('push radius', 256, M.Pushers[I].Radius, 1e-3);
         end;
       AssertEquals('one point pusher', 1, Points);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ Boom's translucency (260) on tools/testdata/translucent.wad
+  (tools/make_translucent_wad.py): the default 66% and a custom map made
+  a quarter opaque, its opacity estimated from the map. }
+procedure TTestMap.TestTranslucency;
+var
+  W: TDoomWad;
+  M: TDoomMap;
+  Path: String;
+begin
+  Path := 'tools/testdata/translucent.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/translucent.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('translucent lines', 3, M.TranslucentLines);
+      AssertEquals('default map', 0.66, M.LineAlpha[1052], 1e-6);
+      AssertEquals('custom map, estimated', 0.25, M.LineAlpha[837], 0.05);
+      AssertEquals('tagged with the 260 line', M.LineAlpha[837], M.LineAlpha[832], 1e-6);
+      AssertEquals('the map''s name is not drawn', '-', M.Sidedefs[M.Linedefs[832].Side[0]].MiddleTex);
+      AssertEquals('others solid', 1, M.LineAlpha[0], 1e-6);
     finally
       FreeAndNil(M);
     end;
