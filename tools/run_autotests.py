@@ -224,6 +224,15 @@ TESTS = [
      lambda config: check_boom_extended(config)),
     ('boom-teleport', 'MAP07', 'Y,A:30,W:0.3,LINE:941:209,W:0.5,Q',
      [r'Teleport: player silently to \(1528, 536\), angle 75'], [], None),
+    ('friction', 'E1M1',
+     'Y,G:-480:256,A:0,W:0.2,F:1.5,SAVE:1,W:1.5,SAVE:2,G:-224:200,A:90,W:0.2,SAVE:3,F:1,SAVE:4,Q',
+     [r'Map: E1M1: 2 friction lines, 2 pushers'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'friction.wad'), '--fixed-step'],
+     lambda config: check_friction(config)),
+    ('pushers', 'E1M1', 'Y,G:900:-500,A:0,W:0.2,SAVE:1,W:1,SAVE:2,G:1064:-900,A:0,W:0.2,SAVE:3,W:1,SAVE:4,Q',
+     [r'Map: E1M1: 2 friction lines, 2 pushers'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'friction.wad'), '--fixed-step'],
+     lambda config: check_pushers(config)),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
@@ -263,6 +272,25 @@ def check_boom_extended(config):
     assert all(b['sectorSpecial'][i] & 31 == 3 for i in (76, 126, 129)), '156: no strobe'
     assert b['sectorFloorTex'][77] != a['sectorFloorTex'][77], '153: floor texture unchanged'
     assert b['sectorCeiling'][145] <= a['sectorCeiling'][145], '199 raised a ceiling'
+
+
+def check_friction(config):
+    """tools/testdata/friction.wad: on the ice of sector 140 the player starts
+    slowly (a normal floor reaches x = -49) and slides on after the walk;
+    in the mud of sector 141 a second's walk covers far less than 160."""
+    p = [None] + [save_json(config, n)['player'] for n in range(1, 5)]
+    assert p[1]['x'] < -200, 'ice: no slow start, x %s' % p[1]['x']
+    assert p[2]['x'] - p[1]['x'] > 30, 'ice: no slide, %s -> %s' % (p[1]['x'], p[2]['x'])
+    walked = p[4]['y'] - p[3]['y']
+    assert 20 < walked < 120, 'mud: walked %s' % walked
+
+
+def check_pushers(config):
+    """tools/testdata/friction.wad: the current of sector 144 carries the
+    player west, the point pusher in sector 106 pushes them east."""
+    p = [None] + [save_json(config, n)['player'] for n in range(1, 5)]
+    assert p[2]['x'] < p[1]['x'] - 30, 'current: %s -> %s' % (p[1]['x'], p[2]['x'])
+    assert p[4]['x'] > p[3]['x'] + 30, 'point pusher: %s -> %s' % (p[3]['x'], p[4]['x'])
 
 
 def check_floor(config, sector, height):

@@ -57,6 +57,7 @@ type
     procedure TestLineGrid;
     procedure TestGeneralized;
     procedure TestScrollers;
+    procedure TestFriction;
   end;
 
   TTestMusic = class(TTestCase)
@@ -478,6 +479,51 @@ begin
       CheckVector('ceiling', M.CeilingScroll[141], 0, 2);
       CheckVector('carry', M.Carry[141], 0, 2 * 0.1875);
       CheckVector('start room floor', M.FloorScroll[140], 0, 0);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ Boom's friction and pushers on tools/testdata/friction.wad
+  (tools/make_friction_wad.py). }
+procedure TTestMap.TestFriction;
+var
+  W: TDoomWad;
+  M: TDoomMap;
+  Path: String;
+  I, Points: Integer;
+begin
+  Path := 'tools/testdata/friction.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/friction.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      { 192 units of 223 line: ice, 0x1EB8 * 192 / 0x80 + 0xD000. }
+      AssertEquals('ice friction', ($1EB8 * 192 / $80 + $D000) / $10000, M.Friction[140], 1e-5);
+      AssertTrue('ice: less thrust', M.MoveFactor[140] < 0.2);
+      { 64 units: mud. }
+      AssertTrue('mud friction', M.Friction[141] < $E800 / $10000);
+      AssertEquals('elsewhere Doom''s', $E800 / $10000, M.Friction[0], 1e-6);
+      AssertEquals('pushers', 2, Length(M.Pushers));
+      Points := 0;
+      for I := 0 to High(M.Pushers) do
+        if M.Pushers[I].Kind = pkCurrent then
+        begin
+          AssertEquals('current sector', 144, M.Pushers[I].Sector);
+          AssertEquals('current west', -1, M.Pushers[I].X, 1e-6);
+        end else
+        begin
+          Inc(Points);
+          AssertTrue('push thing', M.Pushers[I].Kind = pkPush);
+          AssertEquals('push radius', 256, M.Pushers[I].Radius, 1e-3);
+        end;
+      AssertEquals('one point pusher', 1, Points);
     finally
       FreeAndNil(M);
     end;

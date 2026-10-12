@@ -11,7 +11,7 @@
   screen_orientation="landscape"
   editor_units="DoomHud;DoomFont;DoomMenu;DoomAutomap;DoomIntermission;DoomFinale;DoomWipe;DoomWorldStatus;DoomMapTransform"
 >
-  <version value="0.16.0" code="20" />
+  <version value="0.17.0" code="21" />
   <compiler_options>
     <search_paths>
       <path value="code/" />

@@ -102,6 +102,19 @@ type
     Children: array [0..1] of Integer;
   end;
 
+  { Boom's pushers (P_SpawnPushers): wind (224) and current (225) push
+    what is in Sector by (X, Y) map units a tic (wind half as much on the
+    floor, current only there); a point pusher (226, a 5001 push or 5002
+    pull thing at (SourceX, SourceY)) pushes what it sees within Radius,
+    less the farther it is (Strength at its centre). }
+  TPusherKind = (pkWind, pkCurrent, pkPush, pkPull);
+  TDoomPusher = record
+    Kind: TPusherKind;
+    Sector: Integer;
+    X, Y: Single;
+    SourceX, SourceY, Radius, Strength: Single;
+  end;
+
   { Linedef indices returned by the grid queries (reused between calls). }
   TLineList = array of Integer;
 
@@ -129,6 +142,7 @@ type
     procedure BuildSectorLists;
     procedure BuildSubsectorPolygons;
     procedure BuildScrollers;
+    procedure BuildFrictionAndPushers;
   public
     Vertices: array of TDoomVertex;
     Linedefs: array of TDoomLinedef;
@@ -152,6 +166,12 @@ type
     FloorScroll, CeilingScroll, Carry: array of TVector2;
     { How many sides, floors, ceilings and carrying floors scroll. }
     ScrollingSides, ScrollingFloors, ScrollingCeilings, CarryingFloors: Integer;
+    { Boom's friction (223, P_SpawnFriction) per sector, used where the
+      sector type has the friction bit (256): Friction multiplies the
+      momentum each tic (Doom's 0.90625 elsewhere), MoveFactor the
+      walking thrust (1 = Doom's). }
+    Friction, MoveFactor: array of Single;
+    Pushers: array of TDoomPusher;
 
     constructor Create(const AWad: TDoomWad; const MapName: String);
 
@@ -293,6 +313,7 @@ begin
   BuildSubsectorPolygons;
   BuildLineGrid;
   BuildScrollers;
+  BuildFrictionAndPushers;
   if ScrollingSides + ScrollingFloors + ScrollingCeilings + CarryingFloors > 0 then
     WritelnLog('Map', '%s: scrollers: %d walls, %d floors, %d ceilings, %d carrying floors', [
       FName, ScrollingSides, ScrollingFloors, ScrollingCeilings, CarryingFloors]);
@@ -1151,6 +1172,95 @@ begin
       Floor(Min(FGridW, (XB + Pad - FGridX) / LineGridCell)), Found, Result);
   end;
   if Result > 1 then SortLines(Found, 0, Result - 1);
+end;
+
+procedure TDoomMap.BuildFrictionAndPushers;
+const
+  DoomFriction = $E800 / $10000;
+var
+  I, S, T, FrictionLines, N: Integer;
+  Len, F, MF, DX, DY: Single;
+  Kind: TPusherKind;
+begin
+  SetLength(Friction, Length(Sectors));
+  SetLength(MoveFactor, Length(Sectors));
+  for I := 0 to High(Sectors) do
+  begin
+    Friction[I] := DoomFriction;
+    MoveFactor[I] := 1;
+  end;
+  SetLength(Pushers, 0);
+  FrictionLines := 0;
+  for I := 0 to High(Linedefs) do
+  begin
+    DX := Vertices[Linedefs[I].V2].X - Vertices[Linedefs[I].V1].X;
+    DY := Vertices[Linedefs[I].V2].Y - Vertices[Linedefs[I].V1].Y;
+    case Linedefs[I].Special of
+      223:
+        begin
+          { The longer the line, the slipperier: 0xD000 (mud) up to 1. }
+          Len := Sqrt(Sqr(DX) + Sqr(DY));
+          F := ($1EB8 * Len / $80 + $D000) / $10000;
+          F := Min(1, Max(0, F));
+          { Boom's movefactor (in 1/2048ths of Doom's thrust). }
+          if F > DoomFriction then
+            MF := ($10092 - F * $10000) * $70 / $158
+          else
+            MF := (F * $10000 - $DB34) * $A / $80;
+          MF := Max(32, MF) / 2048;
+          Inc(FrictionLines);
+          S := -1;
+          repeat
+            S := FindSectorFromTag(Linedefs[I].Tag, S);
+            if S < 0 then Break;
+            Friction[S] := F;
+            MoveFactor[S] := MF;
+          until false;
+        end;
+      224, 225:
+        begin
+          if Linedefs[I].Special = 224 then Kind := pkWind else Kind := pkCurrent;
+          S := -1;
+          repeat
+            S := FindSectorFromTag(Linedefs[I].Tag, S);
+            if S < 0 then Break;
+            N := Length(Pushers);
+            SetLength(Pushers, N + 1);
+            Pushers[N] := Default(TDoomPusher);
+            Pushers[N].Kind := Kind;
+            Pushers[N].Sector := S;
+            { PUSH_FACTOR: 128 units of line = 1 unit a tic. }
+            Pushers[N].X := DX / 128;
+            Pushers[N].Y := DY / 128;
+          until false;
+        end;
+      226:
+        { The first push (5001) or pull (5002) thing in each tagged sector. }
+        begin
+          S := -1;
+          repeat
+            S := FindSectorFromTag(Linedefs[I].Tag, S);
+            if S < 0 then Break;
+            for T := 0 to High(Things) do
+              if ((Things[T].TypeNum = 5001) or (Things[T].TypeNum = 5002)) and (SectorAt(Things[T].X, Things[T].Y) = S) then
+              begin
+                N := Length(Pushers);
+                SetLength(Pushers, N + 1);
+                Pushers[N] := Default(TDoomPusher);
+                if Things[T].TypeNum = 5001 then Pushers[N].Kind := pkPush else Pushers[N].Kind := pkPull;
+                Pushers[N].Sector := S;
+                Pushers[N].SourceX := Things[T].X;
+                Pushers[N].SourceY := Things[T].Y;
+                Pushers[N].Strength := Sqrt(Sqr(DX) + Sqr(DY));
+                Pushers[N].Radius := 2 * Pushers[N].Strength;
+                Break;
+              end;
+          until false;
+        end;
+    end;
+  end;
+  if FrictionLines + Length(Pushers) > 0 then
+    WritelnLog('Map', '%s: %d friction lines, %d pushers', [FName, FrictionLines, Length(Pushers)]);
 end;
 
 procedure TDoomMap.BuildScrollers;

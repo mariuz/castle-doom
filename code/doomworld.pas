@@ -217,6 +217,11 @@ type
     { Boom's carrying floors (252, 253): things standing on them gain
       momentum each tic (T_Scroll's sc_carry). }
     procedure TicCarry;
+    { Boom's wind, currents and point pushers (T_Pusher). }
+    procedure TicPushers;
+    { The momentum kept each tic on the floor of Sec: Boom's friction
+      where the sector type has the friction bit, Doom's elsewhere. }
+    function FrictionAt(const Sec: Integer): Single;
     procedure TicMissile(const A: TDoomActor);
     procedure TicMovers;
     procedure TicLights;
@@ -372,12 +377,19 @@ type
       the player since the view last applied it (PlayerPushDX/DY, which the
       view moves the camera by with collisions, then clears). }
     PlayerPushVX, PlayerPushVY, PlayerPushDX, PlayerPushDY: Single;
+    { The player's walking speed (Doom units a tic) the view measured;
+      on Boom ice part of it turns into momentum, so the player slides. }
+    PlayerWalkVX, PlayerWalkVY: Single;
+
     { Skill level, Doom's gameskill: 0 "I'm too young to die" .. 4 "Nightmare!".
       Set before LoadMap (things are spawned by it); saved with the game. }
     Skill: Integer;
     { The WAD's BEX strings (pickup and door messages); may be nil. Not owned. }
     Strings: TDoomStrings;
 
+    { The walking speed's factor on the player's floor: Boom's mud is
+      slower, ice slower to start (1 elsewhere). }
+    function PlayerMoveFactor: Single;
     constructor Create(const AWad: TDoomWad; const AGraphics: TDoomGraphics;
       const ASounds: TDoomSounds; const AItems: TCastleRootTransform);
     destructor Destroy; override;
@@ -467,8 +479,11 @@ implementation
 uses Math, CastleLog, CastleStringUtils, CastleBehaviors, CastleTimeUtils, DoomMapInfo;
 
 const
-  { Boom's sector types: bit 7 is the secret, bits 5-6 the damage. }
+  { Boom's sector types: bit 7 is the secret, bits 5-6 the damage, bit 8
+    friction (223 lines), bit 9 pushers (224-226). }
   SectorSecretBit = 128;
+  SectorFrictionBit = 256;
+  SectorPushBit = 512;
   DoorSpeed = 2;
   DoorWait = 150;
   PlatSpeed = 4;
@@ -1135,6 +1150,8 @@ begin
     T := FMap.Things[I];
     if (T.Flags and MTF_NOTSINGLE) <> 0 then Continue;
     if (T.Flags and SkillFlag) = 0 then Continue;
+    { Boom's point pusher and puller things are markers (DoomMap.Pushers). }
+    if (T.TypeNum = 5001) or (T.TypeNum = 5002) then Continue;
     Info := FindThingInfo(T.TypeNum);
     if Info = nil then
     begin
@@ -1516,6 +1533,7 @@ begin
   TicButtons;
   Lap(2);
   TicCarry;
+  TicPushers;
   TicActors;
   TicPlayerPush;
   if FBrainDeathTics > 0 then
@@ -2586,8 +2604,8 @@ begin
     A.VelY := 0;
   end else
   begin
-    A.VelX := A.VelX * Friction;
-    A.VelY := A.VelY * Friction;
+    A.VelX := A.VelX * FrictionAt(A.Sector);
+    A.VelY := A.VelY * FrictionAt(A.Sector);
   end;
 end;
 
@@ -2618,10 +2636,137 @@ begin
   end;
 end;
 
+function TDoomWorld.FrictionAt(const Sec: Integer): Single;
+begin
+  if (Sec >= 0) and ((FMap.Sectors[Sec].Special and SectorFrictionBit) <> 0) then
+    Result := FMap.Friction[Sec]
+  else
+    Result := Friction;
+end;
+
+function TDoomWorld.PlayerMoveFactor: Single;
+var
+  Sec: Integer;
+  F: Single;
+begin
+  Result := 1;
+  if FMap = nil then Exit;
+  Sec := FMap.SectorAt(Player.X, Player.Y);
+  if (Sec < 0) or ((FMap.Sectors[Sec].Special and SectorFrictionBit) = 0) or
+     (Player.Z > FMap.Sectors[Sec].FloorHeight + 1) then Exit;
+  F := FMap.Friction[Sec];
+  if F > Friction then
+    { Ice: the thrust is smaller, the slide (TicPlayerPush) makes up the
+      rest of Boom's top speed. }
+    Result := FMap.MoveFactor[Sec]
+  else
+    { Mud: Boom's top speed (thrust over friction), with MBF's faster
+      thrust once moving (up to 8x), never below a crawl. }
+    Result := Max(0.15, Min(1, 8 * FMap.MoveFactor[Sec] * (1 - Friction) / Max(0.01, 1 - F)));
+end;
+
+procedure TDoomWorld.TicPushers;
+var
+  P: TDoomPusher;
+  A: TDoomActor;
+  OnFloor: Boolean;
+  Sec: Integer;
+  DX, DY, Dist, Speed: Single;
+
+  { Wind and current: what they give a thing in their sector. }
+  procedure SectorPush(const OnTheFloor: Boolean; var VX, VY: Single);
+  begin
+    if P.Kind = pkWind then
+    begin
+      if OnTheFloor then
+      begin
+        VX := VX + P.X / 2;
+        VY := VY + P.Y / 2;
+      end else
+      begin
+        VX := VX + P.X;
+        VY := VY + P.Y;
+      end;
+    end else
+    if OnTheFloor then
+    begin
+      VX := VX + P.X;
+      VY := VY + P.Y;
+    end;
+  end;
+
+  { A point pusher: (Strength - distance / 2) / 256 a tic, away from the
+    source (pull: towards it), when the thing is within Radius and seen. }
+  function PointSpeed(const X, Y: Single; out UX, UY: Single): Boolean;
+  begin
+    Result := false;
+    DX := X - P.SourceX;
+    DY := Y - P.SourceY;
+    Dist := Sqrt(Sqr(DX) + Sqr(DY));
+    if (Dist > P.Radius) or (Dist < 1) then Exit;
+    Speed := (P.Strength - Dist / 2) / 256;
+    if Speed <= 0 then Exit;
+    if not SightClear(P.SourceX, P.SourceY, X, Y) then Exit;
+    if P.Kind = pkPull then Speed := -Speed;
+    UX := DX / Dist * Speed;
+    UY := DY / Dist * Speed;
+    Result := true;
+  end;
+
+var
+  UX, UY: Single;
+begin
+  for P in FMap.Pushers do
+  begin
+    { Only while the sector type has Boom's push bit. }
+    if (FMap.Sectors[P.Sector].Special and SectorPushBit) = 0 then Continue;
+    if P.Kind in [pkWind, pkCurrent] then
+    begin
+      Sec := FMap.SectorAt(Player.X, Player.Y);
+      if (Sec = P.Sector) and not Player.Dead then
+        SectorPush(Player.Z <= FMap.Sectors[Sec].FloorHeight + 1, PlayerPushVX, PlayerPushVY);
+      for A in FActors do
+      begin
+        if A.Removed or (A.Sector <> P.Sector) or (A.State in [asMissile, asEffect]) or A.Charging then Continue;
+        if not ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) then Continue;
+        OnFloor := A.DoomZ <= FMap.Sectors[A.Sector].FloorHeight + 1;
+        SectorPush(OnFloor, A.VelX, A.VelY);
+      end;
+    end else
+    begin
+      if (not Player.Dead) and PointSpeed(Player.X, Player.Y, UX, UY) then
+      begin
+        PlayerPushVX := PlayerPushVX + UX;
+        PlayerPushVY := PlayerPushVY + UY;
+      end;
+      for A in FActors do
+      begin
+        if A.Removed or (A.State in [asMissile, asEffect]) or A.Charging then Continue;
+        if not ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) then Continue;
+        if PointSpeed(A.DoomX, A.DoomY, UX, UY) then
+        begin
+          A.VelX := A.VelX + UX;
+          A.VelY := A.VelY + UY;
+        end;
+      end;
+    end;
+  end;
+end;
+
 procedure TDoomWorld.TicPlayerPush;
 var
   Sec: Integer;
+  F: Single;
 begin
+  { Boom ice: the walk feeds the momentum (the part of Boom's top speed
+    the smaller thrust does not give), which then slides on. }
+  Sec := FMap.SectorAt(Player.X, Player.Y);
+  F := FrictionAt(Sec);
+  if (F > Friction) and (Sec >= 0) and (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) and not Player.Dead then
+  begin
+    PlayerPushVX := PlayerPushVX + PlayerWalkVX * (1 - Friction - (1 - F));
+    PlayerPushVY := PlayerPushVY + PlayerWalkVY * (1 - Friction - (1 - F));
+  end;
   if (PlayerPushVX = 0) and (PlayerPushVY = 0) then Exit;
   PlayerPushVX := Clamped(PlayerPushVX, -MaxMove, MaxMove);
   PlayerPushVY := Clamped(PlayerPushVY, -MaxMove, MaxMove);
@@ -2635,8 +2780,8 @@ begin
     PlayerPushVY := 0;
   end else
   begin
-    PlayerPushVX := PlayerPushVX * Friction;
-    PlayerPushVY := PlayerPushVY * Friction;
+    PlayerPushVX := PlayerPushVX * F;
+    PlayerPushVY := PlayerPushVY * F;
   end;
 end;
 

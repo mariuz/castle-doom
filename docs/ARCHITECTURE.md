@@ -557,6 +557,25 @@ type is read) and add damage in bits 5-6 (5, 10 or 20 every 32 tics, the
 last through a radiation suit too, 5 times in 256) and a secret in bit 7
 (`SectorSecretBit`), which `TicPlayer` clears on entry, keeping the rest.
 
+Boom's friction and pushers come from `TDoomMap.BuildFrictionAndPushers`
+(P_SpawnFriction, P_SpawnPushers): a 223 line gives its tagged sectors a
+friction (0xD000 + 0x1EB8 * length / 0x80, up to 1) and a move factor
+(Boom's movefactor / 2048), used where the sector type has the friction
+bit (256, `FrictionAt`); 224 (wind), 225 (current) and 226 (a 5001 push
+or 5002 pull thing in the tagged sector) are `Pushers`, active while the
+sector has the push bit (512). The momentum they act on is the knockback
+one: `TicPushers` adds wind (half on the floor), current (only on the
+floor) and point pushes ((strength - distance / 2) / 256 a tic, within
+twice the strength and in sight) to the player's `PlayerPushV` and the
+`VelX` / `VelY` of monsters and barrels, and both decay by `FrictionAt`.
+The player's own walk is CGE's: the view sets the navigation's
+`MoveSpeed` to 290 times `PlayerMoveFactor` (ice: the move factor; mud:
+Boom's top speed with MBF's up to 8x faster thrust once moving, at least
+0.15) and reports the measured walk (`PlayerWalkVX` / `VY`, Doom units a
+tic, without the push it applied); on ice `TicPlayerPush` turns
+friction - 0.90625 of it into momentum each tic, so the top speed is
+Boom's and the player slides on after the walk.
+
 **Using** (E/Space) traces 64 units ahead and picks the closest crossing line,
 continuing through passable lines without specials, with the "oof" sound on a
 blocked wall, following `P_UseLines`. **Walk-over** triggers compare the

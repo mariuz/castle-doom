@@ -46,6 +46,11 @@ type
     { Frame time spent in the world update, the status bar and the weapon
       sprite, logged as "PerfView:" every 10 s (see also TDoomWorld "Perf:"). }
     FPerfWorld, FPerfStatusBar, FPerfWeapon, FPerfClock: Double;
+    { The feet last frame and the push applied since, to measure the
+      walking speed (Boom ice); FWalkKnown is false after a jump. }
+    FPrevFeet: TVector3;
+    FPushedX, FPushedY: Single;
+    FWalkKnown: Boolean;
     { --fixed-step: when the last frame began. }
     FFixedStepLast: TTimerResult;
     FFixedStepStarted: Boolean;
@@ -1273,6 +1278,7 @@ begin
   Dir := DoomToCge(Cos(DegToRad(AngleDeg)), Sin(DegToRad(AngleDeg)), 0);
   FViewport.Camera.SetView(Pos, Dir, Vector3(0, 1, 0));
   FLastCameraPos := Pos;
+  FWalkKnown := false;
 end;
 
 function TViewPlay.DoomAngleFromCamera: Single;
@@ -1758,6 +1764,23 @@ begin
     FNavigation.CancelFalling;
     WritelnLog('Player', 'Below the floor of sector %d, put back on it', [Sec]);
   end;
+  { The walk since last frame, in Doom units a tic (Boom ice turns part of
+    it into momentum), and the floor's walking speed (Boom mud and ice). }
+  if FWalkKnown and (SecondsPassed > 0) then
+  begin
+    FWorld.PlayerWalkVX := Clamped((Feet.X - FPrevFeet.X - FPushedX) / (SecondsPassed * 35), -30, 30);
+    FWorld.PlayerWalkVY := Clamped((Feet.Y - FPrevFeet.Y - FPushedY) / (SecondsPassed * 35), -30, 30);
+  end else
+  begin
+    FWorld.PlayerWalkVX := 0;
+    FWorld.PlayerWalkVY := 0;
+  end;
+  FPrevFeet := Feet;
+  FPushedX := 0;
+  FPushedY := 0;
+  FWalkKnown := true;
+  FNavigation.MoveSpeed := 290 * FWorld.PlayerMoveFactor;
+
   PerfT := Timer;
   FWorld.Update(SecondsPassed, Feet.X, Feet.Y, Feet.Z, DoomAngleFromCamera, CamPos, CamDir);
   FPerfWorld := FPerfWorld + TimerSeconds(Timer, PerfT);
@@ -1772,8 +1795,12 @@ begin
     collisions (walls slide it); stop the push when nothing moved. }
   if (FWorld.PlayerPushDX <> 0) or (FWorld.PlayerPushDY <> 0) then
   begin
-    if not TWalkNavigationAccess(FNavigation).Move(
+    if TWalkNavigationAccess(FNavigation).Move(
       DoomToCge(FWorld.PlayerPushDX, FWorld.PlayerPushDY, 0), false, true) then
+    begin
+      FPushedX := FPushedX + FWorld.PlayerPushDX;
+      FPushedY := FPushedY + FWorld.PlayerPushDY;
+    end else
     begin
       FWorld.PlayerPushVX := 0;
       FWorld.PlayerPushVY := 0;

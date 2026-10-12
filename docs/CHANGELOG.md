@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.0 (2026-10-12)
+
+- Boom friction: icy floors that are slow to start and slide, muddy
+  floors that slow you down.
+- Boom pushers: wind, water currents and point pushers / pullers move
+  the player, monsters and barrels.
+
 ## v0.16.0 (2026-10-12)
 
 - Boom's numbered line types (142-210, 219-222, 239-241): more floors,

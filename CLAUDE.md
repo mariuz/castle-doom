@@ -73,8 +73,8 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 24 cases) cover the parsers,
-every node format, the line grid, Boom's generalized types and scrollers and both music synthesizers:
+Unit tests (FPCUnit, no window, about 20 s, 25 cases) cover the parsers,
+every node format, the line grid, Boom's generalized types, scrollers, friction and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
 code 1 on a failure; CI runs them before the autotests). The node-format
@@ -418,6 +418,14 @@ numbered types on E1M1's tags (autotest `boom-extended`). Silent
 teleports: `--autotest MAP07 p --demo "Y,A:30,W:0.3,LINE:941:209,W:0.5,Q"`
 logs `Teleport: player silently to (1528, 536), angle 75` (autotest
 `boom-teleport`).
+Boom friction and pushers: `tools/testdata/friction.wad`
+(`tools/make_friction_wad.py`) makes E1M1's start room ice, the corridor
+east of it (141) mud, sector 144 a westward current and puts a point
+pusher at (1000, -900); the log says `Map: E1M1: 2 friction lines, 2
+pushers` (autotests `friction` and `pushers` read the player's position
+in their saves; unit test `TestFriction`). Walk tests need `--fixed-step`
+and a clear spot: at (-224, 140) the slow mud walk sticks on the
+corridor's corner.
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies
