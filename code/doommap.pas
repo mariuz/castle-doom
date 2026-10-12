@@ -159,6 +159,12 @@ type
     function LowestFloorSurrounding(const Sec: Integer): Single;
     function HighestFloorSurrounding(const Sec: Integer): Single;
     function NextHighestFloor(const Sec: Integer; const CurrentHeight: Single): Single;
+    { Boom's P_FindNextLowestFloor, P_FindNextLowestCeiling and
+      P_FindNextHighestCeiling: the nearest neighbour height below / above
+      CurrentHeight, CurrentHeight itself when there is none. }
+    function NextLowestFloor(const Sec: Integer; const CurrentHeight: Single): Single;
+    function NextLowestCeiling(const Sec: Integer; const CurrentHeight: Single): Single;
+    function NextHighestCeiling(const Sec: Integer; const CurrentHeight: Single): Single;
     function LowestCeilingSurrounding(const Sec: Integer): Single;
     function HighestCeilingSurrounding(const Sec: Integer): Single;
     function MinSurroundingLight(const Sec: Integer; const MaxLight: Integer): Integer;
@@ -1368,6 +1374,63 @@ begin
       if (not Found) or (Sectors[O].FloorHeight < Result) then
       begin
         Result := Sectors[O].FloorHeight;
+        Found := true;
+      end;
+  end;
+end;
+
+function TDoomMap.NextLowestFloor(const Sec: Integer; const CurrentHeight: Single): Single;
+var
+  L, O: Integer;
+  Found: Boolean;
+begin
+  Result := CurrentHeight;
+  Found := false;
+  for L in Sectors[Sec].Lines do
+  begin
+    O := OtherSector(L, Sec);
+    if (O >= 0) and (Sectors[O].FloorHeight < CurrentHeight) then
+      if (not Found) or (Sectors[O].FloorHeight > Result) then
+      begin
+        Result := Sectors[O].FloorHeight;
+        Found := true;
+      end;
+  end;
+end;
+
+function TDoomMap.NextLowestCeiling(const Sec: Integer; const CurrentHeight: Single): Single;
+var
+  L, O: Integer;
+  Found: Boolean;
+begin
+  Result := CurrentHeight;
+  Found := false;
+  for L in Sectors[Sec].Lines do
+  begin
+    O := OtherSector(L, Sec);
+    if (O >= 0) and (Sectors[O].CeilingHeight < CurrentHeight) then
+      if (not Found) or (Sectors[O].CeilingHeight > Result) then
+      begin
+        Result := Sectors[O].CeilingHeight;
+        Found := true;
+      end;
+  end;
+end;
+
+function TDoomMap.NextHighestCeiling(const Sec: Integer; const CurrentHeight: Single): Single;
+var
+  L, O: Integer;
+  Found: Boolean;
+begin
+  Result := CurrentHeight;
+  Found := false;
+  for L in Sectors[Sec].Lines do
+  begin
+    O := OtherSector(L, Sec);
+    if (O >= 0) and (Sectors[O].CeilingHeight > CurrentHeight) then
+      if (not Found) or (Sectors[O].CeilingHeight < Result) then
+      begin
+        Result := Sectors[O].CeilingHeight;
         Found := true;
       end;
   end;

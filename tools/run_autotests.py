@@ -199,9 +199,37 @@ TESTS = [
      [r'BossDeath: E1M1: all TROO dead, UMAPINFO special 23 on tag 1'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad')],
      lambda config: check_floor(config, 98, -124)),
+    ('generalized', 'E1M1',
+     'Y,G:480:712,A:0,U,W:0.5,SAVE:1,G:0:256,A:0,F:0.4,W:1,SAVE:2,G:2064:-260,A:90,U,W:2,SAVE:3,'
+     'G:832:1440,A:90,U,W:0.5,K,U,W:1,SAVE:4,G:300:1400,A:90,F:1,W:1,SAVE:5,'
+     'LINE:618:12168,LINE:997:14088,W:1,SAVE:6,Q',
+     [r'Generalized: line 537: door open, wait, close, delay 35 tics, turbo, DR, monsters too',
+      r'Generalized: line 593: lift to lowest neighbour floor, delay 105 tics, normal, WR',
+      r'Generalized: line 753: floor down to lowest neighbour floor, change texture \(trigger model\), fast, S1',
+      r'Message: Blue key needed for this door',
+      r'Generalized: line 421: locked door',
+      r'Generalized: line 1002: door open, delay 35 tics, normal, W1',
+      r'Generalized: line 618: crusher', r'Generalized: line 997: lift to perpetual'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'generalized.wad')],
+     lambda config: check_generalized(config)),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
+
+
+def check_generalized(config):
+    """tools/testdata/generalized.wad: Boom's generalized doors, lifts, floor,
+    locked door, crusher and perpetual lift moved E1M1's sectors."""
+    s = [None] + [save_json(config, n) for n in range(1, 7)]
+    assert s[1]['sectorCeiling'][48] > -60, 'turbo door 48 not open: %s' % s[1]['sectorCeiling'][48]
+    assert s[2]['sectorFloor'][98] < 0, 'lift 98 not down: %s' % s[2]['sectorFloor'][98]
+    assert [s[3]['sectorFloor'][i] for i in (76, 126, 129)] == [136, 144, 136], \
+        'switch floors %s' % [s[3]['sectorFloor'][i] for i in (76, 126, 129)]
+    assert s[3]['sectorFloorTex'][129] == 'CEIL5_1', 'texture change %s' % s[3]['sectorFloorTex'][129]
+    assert s[4]['sectorCeiling'][71] > -100, 'blue door 71 not open: %s' % s[4]['sectorCeiling'][71]
+    assert s[5]['sectorCeiling'][77] > -128, 'W1 door 77 not opening'
+    kinds = sorted((m['sector'], m['kind'], m['perpetual']) for m in s[6]['movers'] if m['sector'] in (103, 145))
+    assert kinds == [(103, 4, True), (145, 1, True)], 'crusher / perpetual lift %s' % kinds
 
 
 def check_floor(config, sector, height):

@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Boom generalized linedefs (specials 0x2F80-0x7FFF): `DoomGeneralized`
+  decodes the bit fields and `ApplyGeneralized`
+  (`doomworld_generalized.inc`) runs floors, ceilings (crushing too),
+  doors, locked doors (cards, skulls, any or all keys), lifts (perpetual
+  too), stairs (down, any texture) and crushers with the vanilla movers,
+  texture and special changes by trigger or numeric model, manual D
+  types, monster flags and Boom's tag rule. Test PWAD
+  `tools/testdata/generalized.wad` (`tools/make_generalized_wad.py`),
+  autotest `generalized`, unit test `TestGeneralized`.
+
 - Line grid for the 2D queries: `TDoomMap` builds 128-unit cells of the
   linedefs at load (from the vertices, like Doom's BLOCKMAP; a PWAD's
   own lump is not trusted) and `LinesInBox` / `LinesNearSegment` give
@@ -724,7 +734,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **UDMF** (`TEXTMAP`) maps, and glBSP's `GL_LEVEL` markers for map names over 5 letters. | Remaining community map formats. | `DoomMap` | L (UDMF), S (`GL_LEVEL`) |
-| **Boom/MBF specials** (generalized linedefs, scrolling floors, friction, translucency) and **DeHackEd** patches. | Big community map support; large job. | `DoomWorld.ApplySpecial`, `DoomThings` | L |
+| **Boom/MBF specials**: generalized linedefs are done (see above; floors still do not crush); left are scrolling walls and floors (250-255), friction and pushers (223-225), translucency (260), the other Boom line types (light transfers 213 / 261, sky transfers 271 / 272, the 142-200 numbered extras) and Boom's generalized sector specials (damage, secret, friction and push bits above 31). | Big community map support. | `DoomWorld.ApplySpecial`, `DoomGeometry` | M each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -763,11 +773,11 @@ play.
 
 ## Suggested next three
 
-1. Boom generalized linedefs (M-L, see Content and formats), part (a):
-   generalized floors, ceilings, doors, lifts and crushers (specials
-   0x2F80-0x7FFF) decoded into the existing movers.
-2. Boom scrolling walls and floors (part (b): specials 48, 250-255,
-   then (c) friction and pushers, (d) translucency).
+1. Boom scrolling walls and floors (M, see Content and formats: 250-255
+   scroll walls, floors and ceilings by the line's vector, and 252 / 253
+   carry things; vanilla's 48 already scrolls).
+2. Boom's numbered extra line types 142-200 and sector special bits (M),
+   then friction, pushers and translucency.
 3. Touch controls in the browser (M, see Engine and tooling): the web
    build is unplayable on phones; `TCastleTouchNavigation` plus fire and
    use buttons, the first step to an Android package too.

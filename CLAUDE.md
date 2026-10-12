@@ -73,8 +73,8 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 22 cases) cover the parsers,
-every node format, the line grid and both music synthesizers:
+Unit tests (FPCUnit, no window, about 20 s, 23 cases) cover the parsers,
+every node format, the line grid, Boom's generalized types and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
 code 1 on a failure; CI runs them before the autotests). The node-format
@@ -394,6 +394,14 @@ starting E1M3 (`--autotest MENUKEYS p -file ... --menukeys
 the last imp's death on E1M1 lower sector 98 to -124 (`BossDeath: ...
 UMAPINFO special 23 on tag 1`); autotests `umapinfo-episode`,
 `umapinfo-boss`.
+Boom generalized lines: `tools/testdata/generalized.wad`
+(`tools/make_generalized_wad.py`) turns E1M1's door, lift, switch, blue
+door and tag-5 W1 doors into generalized types; with `-file` each use
+logs `Generalized: line N: <decoded type>` (autotest `generalized`
+checks the heights in its saves). Any line can try a generalized value
+by number: `LINE:593:21008` lowers the lift's ceiling to its floor
+(0x5210, crushing); decode values with `DecodeGeneralized` (unit test
+`TestGeneralized`).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

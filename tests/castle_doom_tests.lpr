@@ -19,7 +19,8 @@ program castle_doom_tests;
 
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
-  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale;
+  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
+  DoomGeneralized;
 
 function DataPath(const Name: String): String;
 begin
@@ -54,6 +55,7 @@ type
     procedure TestZDoomNodes;
     procedure TestGlBspNodes;
     procedure TestLineGrid;
+    procedure TestGeneralized;
   end;
 
   TTestMusic = class(TTestCase)
@@ -383,6 +385,60 @@ begin
       TTestCase.AssertTrue(Format('%s query %d finds line %d', [M.Name, Q, I]), InList[I]);
     end;
   end;
+end;
+
+{ Boom's generalized line types decoded from their bit fields
+  (boomref.txt's examples and the lines of tools/make_generalized_wad.py). }
+procedure TTestMap.TestGeneralized;
+var
+  G: TGenLine;
+begin
+  AssertFalse('vanilla special', IsGeneralized(88));
+  AssertTrue('vanilla decodes to nothing', DecodeGeneralized(1).Kind = gkNone);
+  { 0x6892: S1 floor down to the lowest neighbour floor, fast, texture
+    from the trigger line's front sector. }
+  G := DecodeGeneralized($6892);
+  AssertTrue('floor', G.Kind = gkFloor);
+  AssertTrue('S1', G.Trigger = gtS1);
+  AssertTrue('fast', G.Speed = gsFast);
+  AssertFalse('down', G.Up);
+  AssertTrue('lowest neighbour', G.Target = gtLowestNeighbour);
+  AssertTrue('texture change', G.Change = gcTexture);
+  AssertFalse('trigger model', G.NumericModel);
+  AssertFalse('one shot', GenRepeatable(G));
+  { The highest floor type: WR? no, DR turbo up by 32, texture and special,
+    numeric model, crush. }
+  G := DecodeGeneralized($7FFF);
+  AssertTrue('top floor', (G.Kind = gkFloor) and (G.Trigger = gtDR) and (G.Speed = gsTurbo) and G.Up and
+    (G.Target = gtBy32) and (G.Change = gcTextureAndSpecial) and G.NumericModel and G.Crush);
+  AssertTrue('DR is manual and repeatable', GenManual(G) and GenRepeatable(G));
+  { Ceiling down to the floor, crushing, fast, W1. }
+  G := DecodeGeneralized($5210);
+  AssertTrue('ceiling', (G.Kind = gkCeiling) and (G.Target = gtOwnOther) and G.Crush and not G.Up);
+  { Doors: DR turbo open-wait-close for monsters too; W1 open-stay. }
+  G := DecodeGeneralized($3C9F);
+  AssertTrue('door', (G.Kind = gkDoor) and (G.DoorKind = gdOpenWaitClose) and G.Monster and
+    (G.DelayTics = 35) and (G.Speed = gsTurbo));
+  AssertTrue('monster bumps it', GenMonsterTrigger($3C9F, false));
+  AssertFalse('not by walking', GenMonsterTrigger($3C9F, true));
+  G := DecodeGeneralized($3C28 or $300);
+  AssertTrue('open-stay door, 30 s delay field', (G.DoorKind = gdOpen) and (G.DelayTics = 30 * 35));
+  { Locked: blue card or skull, DR. }
+  G := DecodeGeneralized($3A8F);
+  AssertTrue('locked door', (G.Kind = gkLockedDoor) and (G.Key = gkyBlueCard) and G.SkullIsCard);
+  AssertFalse('never monsters', GenMonsterTrigger($3A8F or $20, false));
+  { Lift: WR, 3 s, lowest floor; perpetual. }
+  G := DecodeGeneralized($3449);
+  AssertTrue('lift', (G.Kind = gkLift) and (G.Trigger = gtWR) and (G.DelayTics = 105) and
+    (G.LiftTarget = glLowestFloor));
+  AssertTrue('perpetual lift', DecodeGeneralized($3708).LiftTarget = glPerpetual);
+  { Stairs: up by 16, any texture; crusher: silent. }
+  G := DecodeGeneralized($3388);
+  AssertTrue('stairs', (G.Kind = gkStairs) and G.Up and (G.StepSize = 16) and G.IgnoreTexture);
+  G := DecodeGeneralized($2FC0);
+  AssertTrue('crusher', (G.Kind = gkCrusher) and G.Silent and (G.Trigger = gtW1));
+  AssertEquals('description', 'floor down to lowest neighbour floor, change texture (trigger model), fast, S1',
+    GenDescription(DecodeGeneralized($6892)));
 end;
 
 procedure TTestMap.TestLineGrid;

@@ -510,6 +510,24 @@ walk-over, shoot) with the vanilla special numbers: manual and locked doors
 124) and gun triggers (24, 46, 47). One-time specials are cleared after use;
 switch textures flip, repeatable ones flip back after a second.
 
+Boom's **generalized types** (specials 0x2F80-0x7FFF) are decoded by
+`DoomGeneralized` (`DecodeGeneralized`: trigger W1/WR/S1/SR/G1/GR/D1/DR,
+speed, monster flag, then per kind the target, direction, texture and
+special change with its trigger or numeric model, crush, door kind and
+delay, key, lift target and delay, stair step and texture rule, silent
+crusher) and run by `ApplyGeneralized` (`doomworld_generalized.inc`, called
+first by `ApplySpecial`) with the vanilla movers: `DoDoor` takes a speed
+(the blazing sounds from 4x up), `DoLiftTo` any low and high heights and
+wait, `DoFloor` returns its mover so the change can set `ChangeSpecial` /
+`NewSpecial`, ceilings may set `NewCeilingTex`, `DoStairs` builds down and
+ignores the texture when asked, and `TDoomMap` has the next-lower floor
+and next ceiling searches. Non-manual types need a tag, D types act on the
+sector behind the line and never flip a switch, locked doors check cards
+and skulls (`GenKeyOk`, Boom's `PD_*` messages), and monsters trigger only
+lines with the monster bit (W lines join `FMonsterCrossLines`, S and D
+lines are bumped). Floors do not crush (no floor here checks what stands
+on it). Each activation logs `Generalized: line N: <description>`.
+
 Sector specials give damaging floors (5, 7, 16, 4, 11), secrets (9) and light
 effects (blink, strobe, glow, flicker) animated in `TicLights`.
 

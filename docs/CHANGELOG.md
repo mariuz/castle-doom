@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.14.0 (2026-10-12)
 
+- Boom generalized linedefs: PWADs made for Boom can use their custom
+  doors, locked doors, lifts, floors, ceilings, stairs and crushers.
 - Big maps run faster: walls are found through a grid instead of
   checking every line (Freedoom Phase 2's MAP12: the monsters cost a
   seventh of the time they did).

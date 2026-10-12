@@ -12,7 +12,8 @@ interface
 
 uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
-  DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting, DoomStates;
+  DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting, DoomStates,
+  DoomGeneralized;
 
 const
   TicRate = 35;
@@ -112,8 +113,12 @@ type
     Silent: Boolean;
     StartSound, StopSound, MoveSound: String;
     Emitter: TCastleTransform;
-    { Floor texture to apply when done (numeric/trigger change types). }
-    NewFloorTex: String;
+    { Floor / ceiling texture to apply when done (numeric/trigger change
+      types; the ceiling one for Boom's generalized ceilings). }
+    NewFloorTex, NewCeilingTex: String;
+    { Boom's generalized change types: the sector special when done. }
+    ChangeSpecial: Boolean;
+    NewSpecial: Integer;
     constructor Create(const AWorld: TDoomWorld; const ASector: Integer; const AKind: TMoverKind);
     destructor Destroy; override;
     procedure Start;
@@ -262,6 +267,10 @@ type
     function TargetAlive(const A: TDoomActor): Boolean;
     procedure TargetPosition(const A: TDoomActor; out TX, TY, TZ, TRadius: Single);
     function FloorRaiseToTexture(const Sec: Integer): Single;
+    { P_FindShortestTextureAround / P_FindShortestUpperAround: the height
+      of the shortest lower (upper) texture on the sector's two-sided
+      lines, 0 when there is none. }
+    function ShortestTexture(const Sec: Integer; const Upper: Boolean): Integer;
     procedure ExplodeBarrel(const A: TDoomActor);
     procedure RadiusDamage(const X, Y, Z: Single; const Radius, Damage: Integer; const Source: TDoomActor);
     { A body bullets and autoaim can hit (MF_SHOOTABLE and alive). }
@@ -295,9 +304,18 @@ type
     function CrossSpecialLine(const Line, Side: Integer): Boolean;
     function ShootSpecialLine(const Line: Integer): Boolean;
     function ApplySpecial(const Line: Integer; const Activation: TActivation; const ByMonster: Boolean): Boolean;
-    procedure DoDoor(const Sec: Integer; const Open, Close, Blaze: Boolean; const WaitTics: Integer);
+    { Speed 0: the vanilla speed (Blaze: 4x); a faster one plays the
+      blazing door sounds. }
+    procedure DoDoor(const Sec: Integer; const Open, Close, Blaze: Boolean; const WaitTics: Integer;
+      const Speed: Single = 0);
     procedure DoLift(const Sec: Integer; const Blaze: Boolean; const Perpetual: Boolean);
-    procedure DoFloor(const Sec: Integer; const Target: Single; const Speed: Single; const ChangeTexFrom: Integer = -1);
+    { A lift from its floor down to Low, back up after WaitTics; perpetual
+      ones go between Low and High for ever. }
+    procedure DoLiftTo(const Sec: Integer; const Low, High, Speed: Single; const WaitTics: Integer;
+      const Perpetual: Boolean);
+    { The new mover, nil when none was needed (already there) or possible. }
+    function DoFloor(const Sec: Integer; const Target: Single; const Speed: Single;
+      const ChangeTexFrom: Integer = -1): TSectorMover;
     procedure DoCeiling(const Sec: Integer; const Target: Single; const Speed: Single; const Crusher: Boolean;
       const Silent: Boolean = false);
     { EV_DoDonut: the tagged pillar lowers to the floor of the sector around
@@ -306,7 +324,13 @@ type
     { P_ActivateInStasis / P_ActivateInStasisCeiling: resume stopped
       perpetual lifts or crushers with this tag. }
     procedure ResumeMovers(const Tag: Integer; const Kind: TMoverKind);
-    procedure DoStairs(const Line: Integer; const StepSize: Integer; const Speed: Single);
+    { StepSize < 0 builds down; IgnoreTexture (Boom) climbs into any
+      neighbour, not only those with the first step's floor texture. }
+    procedure DoStairs(const Line: Integer; const StepSize: Integer; const Speed: Single;
+      const IgnoreTexture: Boolean = false; const ManualSector: Integer = -1);
+    { Boom's generalized types (doomworld_generalized.inc). }
+    function ApplyGeneralized(const Line: Integer; const Activation: TActivation; const ByMonster: Boolean): Boolean;
+    function GenKeyOk(const G: TGenLine): Boolean;
     procedure DoLight(const Sec: Integer; const Level: Integer);
     procedure DoTeleport(const Line: Integer);
     { EV_Teleport for a monster; false when there is no free destination. }
@@ -787,6 +811,13 @@ begin
               World.Map.Sectors[Sector].FloorTex := NewFloorTex;
               World.Geometry.SectorChanged(Sector);
             end;
+            if NewCeilingTex <> '' then
+            begin
+              World.Map.Sectors[Sector].CeilingTex := NewCeilingTex;
+              World.Geometry.SectorChanged(Sector);
+            end;
+            if ChangeSpecial then
+              World.Map.Sectors[Sector].Special := NewSpecial;
           end;
         end;
       end;
@@ -924,6 +955,58 @@ var
         FDynamic[J] := true;
   end;
 
+  { Boom's generalized types: the sector behind a D1 / DR line or the
+    tagged ones, and every sector a stair could climb into (all their
+    neighbours when the stair ignores the texture). }
+  procedure MarkGeneralized(const Line: Integer);
+  var
+    G: TGenLine;
+    Start, Cur, Nxt, LL, Bk, Steps: Integer;
+  begin
+    G := DecodeGeneralized(FMap.Linedefs[Line].Special);
+    if GenManual(G) then
+    begin
+      Start := FMap.Linedefs[Line].BackSector;
+      if Start >= 0 then FDynamic[Start] := true;
+    end else
+    begin
+      Start := -1;
+      MarkTag(FMap.Linedefs[Line].Tag);
+    end;
+    if G.Kind <> gkStairs then Exit;
+    Cur := -1;
+    repeat
+      if Start >= 0 then
+      begin
+        if Cur >= 0 then Break;
+        Cur := Start;
+      end else
+      begin
+        Cur := FMap.FindSectorFromTag(FMap.Linedefs[Line].Tag, Cur);
+        if Cur < 0 then Break;
+      end;
+      Bk := Cur;
+      Steps := 0;
+      repeat
+        Nxt := -1;
+        for LL in FMap.Sectors[Bk].Lines do
+          if ((FMap.Linedefs[LL].Flags and ML_TWOSIDED) <> 0) and (FMap.Linedefs[LL].FrontSector = Bk) and
+             (FMap.Linedefs[LL].BackSector >= 0) and not FDynamic[FMap.Linedefs[LL].BackSector] and
+             (G.IgnoreTexture or (FMap.Sectors[FMap.Linedefs[LL].BackSector].FloorTex = FMap.Sectors[Cur].FloorTex)) then
+          begin
+            Nxt := FMap.Linedefs[LL].BackSector;
+            Break;
+          end;
+        if Nxt >= 0 then
+        begin
+          FDynamic[Nxt] := true;
+          Bk := Nxt;
+        end;
+        Inc(Steps);
+      until (Nxt < 0) or (Steps > 200);
+    until false;
+  end;
+
   procedure MarkNeighbours(const Sec: Integer);
   var
     LL, O: Integer;
@@ -944,6 +1027,11 @@ begin
     Special := FMap.Linedefs[I].Special;
     Tag := FMap.Linedefs[I].Tag;
     if Special = 0 then Continue;
+    if IsGeneralized(Special) then
+    begin
+      MarkGeneralized(I);
+      Continue;
+    end;
     IsManualDoor := false;
     for M := 0 to High(ManualDoorSpecials) do
       if ManualDoorSpecials[M] = Special then IsManualDoor := true;
@@ -1176,7 +1264,8 @@ begin
   SetLength(FSectorSound, Length(FMap.Sectors));
   SetLength(FMonsterCrossLines, 0);
   for I := 0 to High(FMap.Linedefs) do
-    if FMap.Linedefs[I].Special in MonsterCrossSpecials then
+    if (FMap.Linedefs[I].Special in MonsterCrossSpecials) or
+       GenMonsterTrigger(FMap.Linedefs[I].Special, true) then
     begin
       SetLength(FMonsterCrossLines, Length(FMonsterCrossLines) + 1);
       FMonsterCrossLines[High(FMonsterCrossLines)] := I;
@@ -2337,7 +2426,8 @@ begin
     if (not Moved) and (Blocked >= 0) and (Tries = 0) then
     begin
       { Monsters open doors in their way. }
-      if FMap.Linedefs[Blocked].Special in [1, 117, 2, 4, 108, 90, 105, 86, 106] then
+      if (FMap.Linedefs[Blocked].Special in [1, 117, 2, 4, 108, 90, 105, 86, 106]) or
+         GenMonsterTrigger(FMap.Linedefs[Blocked].Special, false) then
         UseSpecialLine(Blocked, FMap.PointOnLineSide(A.DoomX, A.DoomY, Blocked), true);
     end;
     Inc(Tries);
@@ -3729,28 +3819,34 @@ begin
 end;
 
 function TDoomWorld.FloorRaiseToTexture(const Sec: Integer): Single;
+begin
+  { EV_DoFloor raiseToTexture: raise by the shortest lower texture around. }
+  Result := FMap.Sectors[Sec].FloorHeight + ShortestTexture(Sec, false);
+end;
+
+function TDoomWorld.ShortestTexture(const Sec: Integer; const Upper: Boolean): Integer;
 var
   L, Side: Integer;
   Img: TDoomImage;
-  MinH: Integer;
   Tex: String;
 begin
-  { EV_DoFloor raiseToTexture: raise by the shortest lower texture around. }
-  MinH := 32000;
+  Result := 32000;
   for L in FMap.Sectors[Sec].Lines do
     if (FMap.Linedefs[L].Flags and ML_TWOSIDED) <> 0 then
       for Side := 0 to 1 do
         if FMap.Linedefs[L].Side[Side] >= 0 then
         begin
-          Tex := FMap.Sidedefs[FMap.Linedefs[L].Side[Side]].LowerTex;
+          if Upper then
+            Tex := FMap.Sidedefs[FMap.Linedefs[L].Side[Side]].UpperTex
+          else
+            Tex := FMap.Sidedefs[FMap.Linedefs[L].Side[Side]].LowerTex;
           if (Tex <> '') and (Tex <> '-') then
           begin
             Img := FGraphics.Texture(Tex);
-            if (Img <> nil) and (Img.Height < MinH) then MinH := Img.Height;
+            if (Img <> nil) and (Img.Height < Result) then Result := Img.Height;
           end;
         end;
-  if MinH = 32000 then MinH := 0;
-  Result := FMap.Sectors[Sec].FloorHeight + MinH;
+  if Result = 32000 then Result := 0;
 end;
 
 { A_BossDeath: the last boss of a kind on special maps opens the way or ends the level. }
@@ -4673,10 +4769,12 @@ begin
   Result := ApplySpecial(Line, acShoot, false);
 end;
 
-procedure TDoomWorld.DoDoor(const Sec: Integer; const Open, Close, Blaze: Boolean; const WaitTics: Integer);
+procedure TDoomWorld.DoDoor(const Sec: Integer; const Open, Close, Blaze: Boolean; const WaitTics: Integer;
+  const Speed: Single);
 var
   M: TSectorMover;
   Existing: TSectorMover;
+  Fast: Boolean;
 begin
   Existing := FMap.Sectors[Sec].Mover as TSectorMover;
   if Existing <> nil then
@@ -4700,11 +4798,15 @@ begin
   end;
   M := TSectorMover.Create(Self, Sec, mkDoor);
   M.MovesCeiling := true;
-  if Blaze then M.Speed := DoorSpeed * 4 else M.Speed := DoorSpeed;
+  if Speed > 0 then M.Speed := Speed
+  else if Blaze then M.Speed := DoorSpeed * 4
+  else M.Speed := DoorSpeed;
+  { Boom's generalized doors blaze from the fast speed up. }
+  Fast := M.Speed >= DoorSpeed * 4;
   if Open then
   begin
     M.Target := FMap.LowestCeilingSurrounding(Sec) - 4;
-    if Blaze then M.StartSound := 'DSBDOPN' else M.StartSound := 'DSDOROPN';
+    if Fast then M.StartSound := 'DSBDOPN' else M.StartSound := 'DSDOROPN';
     if Close then
     begin
       M.HasReturn := true;
@@ -4714,7 +4816,7 @@ begin
   end else
   begin
     M.Target := FMap.Sectors[Sec].FloorHeight;
-    if Blaze then M.StartSound := 'DSBDCLS' else M.StartSound := 'DSDORCLS';
+    if Fast then M.StartSound := 'DSBDCLS' else M.StartSound := 'DSDORCLS';
     if Close and (WaitTics > 0) then
     begin
       { Close, wait, reopen (type 16 / 76). }
@@ -4734,26 +4836,36 @@ end;
 
 procedure TDoomWorld.DoLift(const Sec: Integer; const Blaze: Boolean; const Perpetual: Boolean);
 var
-  M: TSectorMover;
-  Low: Single;
+  Low, High: Single;
 begin
-  if FMap.Sectors[Sec].Mover <> nil then Exit;
   Low := FMap.LowestFloorSurrounding(Sec);
   if Low > FMap.Sectors[Sec].FloorHeight then Low := FMap.Sectors[Sec].FloorHeight;
-  M := TSectorMover.Create(Self, Sec, mkLift);
-  M.MovesCeiling := false;
-  if Blaze then M.Speed := PlatSpeed * 2 else M.Speed := PlatSpeed;
-  M.Target := Low;
-  M.HasReturn := true;
-  M.ReturnTarget := FMap.Sectors[Sec].FloorHeight;
-  M.WaitTics := PlatWait;
-  M.Perpetual := Perpetual;
+  High := FMap.Sectors[Sec].FloorHeight;
   if Perpetual then
   begin
-    M.Target := Low;
-    M.ReturnTarget := FMap.HighestFloorSurrounding(Sec);
-    if M.ReturnTarget > FMap.Sectors[Sec].CeilingHeight then M.ReturnTarget := FMap.Sectors[Sec].CeilingHeight;
+    High := FMap.HighestFloorSurrounding(Sec);
+    if High > FMap.Sectors[Sec].CeilingHeight then High := FMap.Sectors[Sec].CeilingHeight;
   end;
+  if Blaze then
+    DoLiftTo(Sec, Low, High, PlatSpeed * 2, PlatWait, Perpetual)
+  else
+    DoLiftTo(Sec, Low, High, PlatSpeed, PlatWait, Perpetual);
+end;
+
+procedure TDoomWorld.DoLiftTo(const Sec: Integer; const Low, High, Speed: Single; const WaitTics: Integer;
+  const Perpetual: Boolean);
+var
+  M: TSectorMover;
+begin
+  if FMap.Sectors[Sec].Mover <> nil then Exit;
+  M := TSectorMover.Create(Self, Sec, mkLift);
+  M.MovesCeiling := false;
+  M.Speed := Speed;
+  M.Target := Low;
+  M.HasReturn := true;
+  M.ReturnTarget := High;
+  M.WaitTics := WaitTics;
+  M.Perpetual := Perpetual;
   M.StartSound := 'DSPSTART';
   M.StopSound := 'DSPSTOP';
   if (M.Target = FMap.Sectors[Sec].FloorHeight) and not Perpetual then
@@ -4765,11 +4877,12 @@ begin
   M.Start;
 end;
 
-procedure TDoomWorld.DoFloor(const Sec: Integer; const Target: Single; const Speed: Single;
-  const ChangeTexFrom: Integer);
+function TDoomWorld.DoFloor(const Sec: Integer; const Target: Single; const Speed: Single;
+  const ChangeTexFrom: Integer): TSectorMover;
 var
   M: TSectorMover;
 begin
+  Result := nil;
   if FMap.Sectors[Sec].Mover <> nil then Exit;
   if Target = FMap.Sectors[Sec].FloorHeight then
   begin
@@ -4790,6 +4903,7 @@ begin
     M.NewFloorTex := FMap.Sectors[ChangeTexFrom].FloorTex;
   FMovers.Add(M);
   M.Start;
+  Result := M;
 end;
 
 procedure TDoomWorld.DoCeiling(const Sec: Integer; const Target: Single; const Speed: Single; const Crusher: Boolean;
@@ -4824,16 +4938,26 @@ begin
   M.Start;
 end;
 
-procedure TDoomWorld.DoStairs(const Line: Integer; const StepSize: Integer; const Speed: Single);
+procedure TDoomWorld.DoStairs(const Line: Integer; const StepSize: Integer; const Speed: Single;
+  const IgnoreTexture: Boolean; const ManualSector: Integer);
 var
   Tag, S, Sec, Next, L, Back, Guard: Integer;
   Height: Single;
   Tex: String;
+  First: Boolean;
 begin
   Tag := FMap.Linedefs[Line].Tag;
   S := -1;
+  First := true;
   repeat
-    S := FMap.FindSectorFromTag(Tag, S);
+    { A manual (D1 / DR) Boom stair starts at the sector behind the line. }
+    if ManualSector >= 0 then
+    begin
+      if not First then Break;
+      S := ManualSector;
+    end else
+      S := FMap.FindSectorFromTag(Tag, S);
+    First := false;
     if S < 0 then Break;
     if FMap.Sectors[S].Mover <> nil then Continue;
     Tex := FMap.Sectors[S].FloorTex;
@@ -4847,7 +4971,8 @@ begin
         if ((FMap.Linedefs[L].Flags and ML_TWOSIDED) <> 0) and (FMap.Linedefs[L].FrontSector = Sec) then
         begin
           Back := FMap.Linedefs[L].BackSector;
-          if (Back >= 0) and (FMap.Sectors[Back].FloorTex = Tex) and (FMap.Sectors[Back].Mover = nil) then
+          if (Back >= 0) and (IgnoreTexture or (FMap.Sectors[Back].FloorTex = Tex)) and
+             (FMap.Sectors[Back].Mover = nil) then
           begin
             Next := Back;
             Break;
@@ -4950,7 +5075,8 @@ begin
   begin
     L := FMonsterCrossLines[I];
     Special := FMap.Linedefs[L].Special;
-    if not (Special in MonsterCrossSpecials) then Continue; { a W1 already used }
+    { A W1 already used. }
+    if not ((Special in MonsterCrossSpecials) or GenMonsterTrigger(Special, true)) then Continue;
     V1 := FMap.Vertices[FMap.Linedefs[L].V1];
     V2 := FMap.Vertices[FMap.Linedefs[L].V2];
     if not SegmentsIntersect(OldX, OldY, A.DoomX, A.DoomY, V1.X, V1.Y, V2.X, V2.Y, T) then Continue;
@@ -5125,6 +5251,8 @@ begin
   Back := FMap.Linedefs[Line].BackSector;
   Front := FMap.Linedefs[Line].FrontSector;
   if Special = 0 then Exit;
+  if IsGeneralized(Special) then
+    Exit(ApplyGeneralized(Line, Activation, ByMonster));
   Done := false;
   Repeatable := false;
 
@@ -5318,6 +5446,7 @@ begin
 end;
 
 {$I doomworld_save.inc}
+{$I doomworld_generalized.inc}
 
 initialization
   InitEffectInfos;

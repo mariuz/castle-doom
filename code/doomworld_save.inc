@@ -281,6 +281,9 @@ begin
     MJ.Add('stopSound', M.StopSound);
     MJ.Add('moveSound', M.MoveSound);
     MJ.Add('newFloorTex', M.NewFloorTex);
+    MJ.Add('newCeilingTex', M.NewCeilingTex);
+    MJ.Add('changeSpecial', M.ChangeSpecial);
+    MJ.Add('newSpecial', M.NewSpecial);
     Arr.Add(MJ);
   end;
   Result.Add('movers', Arr);
@@ -530,6 +533,9 @@ begin
       M.StopSound := MJ.Get('stopSound', '');
       M.MoveSound := MJ.Get('moveSound', '');
       M.NewFloorTex := MJ.Get('newFloorTex', '');
+      M.NewCeilingTex := MJ.Get('newCeilingTex', '');
+      M.ChangeSpecial := MJ.Get('changeSpecial', false);
+      M.NewSpecial := MJ.Get('newSpecial', 0);
       FMap.Sectors[Sec].Mover := M;
       FMovers.Add(M);
     end;
