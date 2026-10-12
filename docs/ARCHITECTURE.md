@@ -556,9 +556,19 @@ crushers (145, 150-152, 164-168, 183-188, 199-206; the "lower" ones never
 raise), close-wait-open doors (175, 196), lights (156, 157, 169-173,
 192-194; strobing sets special 3 in the low bits, `StartStrobe`), teleports
 (174, 195) and Boom's silent teleports (207-210: no fog, the view keeps
-its angle to the line) and gun exits (197, 198). Not yet: elevators
-(227-238), plat toggles (211, 212), line-to-line teleports (243, 244) and
-the transfers (213, 242, 261, 271, 272).
+its angle to the line), gun exits (197, 198), elevators (227-238:
+`DoElevator`, a `mkElevator` mover that moves the floor and keeps the
+ceiling `Gap` above it, at 4 units a tic) and the instant plat toggles
+(211, 212: `DoToggle`, a `mkToggle` mover left in stasis with the
+original floor in `ReturnTarget`; each use puts the floor at the ceiling,
+crushing once with 10 damage, or back). Not yet: line-to-line teleports
+(243, 244) and the transfers (213, 242, 261, 271, 272).
+
+MBF's translucent things: `BitsValue` knows MBF's bit names up to 31
+(`TRANSLUCENT`) and numbers with bit 31 set; `TThingInfo.Translucent`
+puts a thing's quads in sprite groups of their own (`GroupFor`'s
+translucency, scene names ending `_Translucent`) whose shapes blend at
+66% like Boom's TRANMAP (fuzz wins over translucency).
 
 Sector specials give damaging floors (5, 7, 16, 4, 11), secrets (9) and light
 effects (blink, strobe, glow, flicker) animated in `TicLights`. Boom's sector

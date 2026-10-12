@@ -199,7 +199,7 @@ type
     Members: TDoomActorList;
     { Pending change events (TSpriteBatch.Flush sends them once a frame). }
     CoordsDirty, IndexDirty: Boolean;
-    constructor Create(const Url: String; const Kind: Integer);
+    constructor Create(const Url: String; const Kind: Integer; const Translucent: Boolean);
     destructor Destroy; override;
     procedure Add(const A: TDoomActor);
     procedure Remove(const A: TDoomActor);
@@ -212,6 +212,8 @@ type
     Root: TX3DRootNode;
     Scene: TCastleScene;
     Kind: Integer;
+    { Blended at Boom's 66% (MF_TRANSLUCENT things). }
+    Translucent: Boolean;
     { The light effect on every shape's Appearance. }
     Effect: TEffectNode;
     Shapes: TSpriteShapeDict;
@@ -239,8 +241,9 @@ type
     property ViewAngle: Single read FViewAngle write SetViewAngle;
     { The quads' horizontal axis in CGE coordinates for ViewAngle. }
     property Right: TVector3 read FRight;
-    { The group for a light level (0..255) and kind (DoomLight*). }
-    function GroupFor(const Light, Kind: Integer): TSpriteGroup;
+    { The group for a light level (0..255), kind (DoomLight*) and
+      translucency. }
+    function GroupFor(const Light, Kind: Integer; const Translucent: Boolean = false): TSpriteGroup;
     { Send the frame's vertex and index changes to the scenes (the world
       calls it once per Update, after the tics). }
     procedure Flush;
@@ -262,7 +265,7 @@ var
 
 { TSpriteShape --------------------------------------------------------------- }
 
-constructor TSpriteShape.Create(const Url: String; const Kind: Integer);
+constructor TSpriteShape.Create(const Url: String; const Kind: Integer; const Translucent: Boolean);
 var
   Props: TTexturePropertiesNode;
   Texture: TImageTextureNode;
@@ -287,6 +290,12 @@ begin
       of Doom's fuzzoffset pattern, which the background shows through. }
     Appearance.AlphaMode := amBlend;
     Material.EmissiveColor := Vector3(0, 0, 0);
+  end else
+  if Translucent then
+  begin
+    { Boom's TRANMAP mixes about 66% of the thing into the background. }
+    Appearance.AlphaMode := amBlend;
+    Material.Transparency := 1 - 0.66;
   end;
   Texture := TImageTextureNode.Create;
   Texture.SetUrl([Url]);
@@ -397,7 +406,7 @@ function TSpriteGroup.ShapeFor(const Url: String): TSpriteShape;
 begin
   if not Shapes.TryGetValue(Url, Result) then
   begin
-    Result := TSpriteShape.Create(Url, Kind);
+    Result := TSpriteShape.Create(Url, Kind, Translucent);
     Result.Shape.Appearance.SetEffects([Effect]);
     Shapes.Add(Url, Result);
     { Adding children rebuilds the scene's shape tree (ChangedAll), but CGE
@@ -450,16 +459,18 @@ begin
   FRight := Vector3(Sin(A), 0, Cos(A));
 end;
 
-function TSpriteBatch.GroupFor(const Light, Kind: Integer): TSpriteGroup;
+function TSpriteBatch.GroupFor(const Light, Kind: Integer; const Translucent: Boolean): TSpriteGroup;
 var
   Key: Integer;
   LightField: TSFVec2f;
 begin
   Key := (Light div 16) * 100 + Kind;
+  if Translucent then Key := Key + 10000;
   if not FGroups.TryGetValue(Key, Result) then
   begin
     Result := TSpriteGroup.Create;
     Result.Kind := Kind;
+    Result.Translucent := Translucent;
     Result.Shapes := TSpriteShapeDict.Create;
     Result.Effect := DoomLightingInstance.SpriteEffect(LightField);
     Result.Effect.KeepExistingBegin;
@@ -471,6 +482,8 @@ begin
       2: Result.Scene.Name := Format('SpritesLight%d_Fuzz', [(Light div 16) * 16]);
       else Result.Scene.Name := Format('SpritesLight%d', [(Light div 16) * 16]);
     end;
+    if Translucent then
+      Result.Scene.Name := Result.Scene.Name + '_Translucent';
     Result.Scene.Collides := false;
     Result.Scene.Pickable := false;
     Result.Scene.CastShadows := false;
@@ -900,7 +913,7 @@ begin
     V := Vector2(Light, DoomLightWall);
   if TVector2.PerfectlyEquals(FLightValue, V) and (FGroup <> nil) then Exit;
   FLightValue := V;
-  NewGroup := FBatch.GroupFor(Light, Round(V.Y));
+  NewGroup := FBatch.GroupFor(Light, Round(V.Y), (not Fuzz) and Info^.Translucent);
   if NewGroup <> FGroup then
   begin
     FGroup := NewGroup;

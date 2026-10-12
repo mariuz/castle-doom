@@ -78,6 +78,7 @@ type
   published
     procedure TestFreedoomLump;
     procedure TestPatchFile;
+    procedure TestTranslucentBits;
   end;
 
   TTestGamepad = class(TTestCase)
@@ -934,6 +935,30 @@ begin
     finally
       FreeAndNil(S);
     end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ MBF's TRANSLUCENT bit (31) in "Bits", by name and as an unsigned
+  number (tools/testdata/translucent.deh). }
+procedure TTestDehacked.TestTranslucentBits;
+var
+  W: TDoomWad;
+  Patch: String;
+begin
+  Patch := 'tools/testdata/translucent.deh';
+  if not FileExists(Patch) then
+    Patch := '../tools/testdata/translucent.deh';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    AddDehackedFile(Patch);
+    ApplyDehacked(W);
+    AssertTrue('imp translucent (by name)', FindThingInfo(3001)^.Translucent);
+    AssertTrue('imp still solid', FindThingInfo(3001)^.Solid);
+    AssertTrue('zombieman translucent (by number)', FindThingInfo(3004)^.Translucent);
+    AssertTrue('zombieman still solid', FindThingInfo(3004)^.Solid);
+    AssertFalse('sergeant untouched', FindThingInfo(9)^.Translucent);
   finally
     FreeAndNil(W);
   end;

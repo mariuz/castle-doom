@@ -73,6 +73,9 @@ type
     Drop: Integer;
     { MF_SHADOW: drawn as fuzz (the spectre). }
     Shadow: Boolean;
+    { Boom's / MBF's MF_TRANSLUCENT (bit 31, from a DeHackEd patch):
+      drawn see-through like Boom's TRANMAP (66% opaque). }
+    Translucent: Boolean;
     { The row in vanilla's mobjinfo (DoomStates.Mobjs), -1 for none. }
     Mobj: Integer;
     { The sequences from the state table (empty Frames when the thing has
@@ -422,6 +425,7 @@ const
   MF_SPAWNCEILING = 256;
   MF_FLOAT = 16384;
   MF_SHADOW = 262144;
+  MF_TRANSLUCENT = Integer($80000000);
 var
   I, M: Integer;
   Info: PThingInfo;
@@ -500,6 +504,7 @@ begin
     Info^.Hanging := (Mo.Flags and MF_SPAWNCEILING) <> 0;
     Info^.Floats := (Mo.Flags and MF_FLOAT) <> 0;
     Info^.Shadow := (Mo.Flags and MF_SHADOW) <> 0;
+    Info^.Translucent := (Mo.Flags and MF_TRANSLUCENT) <> 0;
   end;
 end;
 

@@ -73,7 +73,7 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 26 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 27 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -432,6 +432,15 @@ west window grate (line 1052) 66% opaque and, through line 832's custom
 map `TRANSL25`, the east corridor's grate (837) a quarter opaque (log
 `Map: E1M1: 3 translucent lines`; autotest `translucency` with a golden
 screenshot from `G:-450:256,A:180,LOOK:30`, unit test `TestTranslucency`).
+Boom elevators and toggles: `Y,W:0.3,LINE:618:232,LINE:753:236,LINE:593:212,W:4,SAVE:1`
+on E1M1 lowers sector 103 with its ceiling (8 / 136), brings tag 3 to the
+switch sector's floor (160) and jumps the lift's floor (98) to its
+ceiling; another `LINE:593:212` puts it back at 12 (autotest
+`boom-elevators`). MBF translucent things: `-deh
+tools/testdata/translucent.deh` makes the imp (by name) and the
+zombieman (bit 31 as a number) see-through (`Y,A:0,P:3001:120,W:0.1,S`;
+autotest `translucent-things` with a golden screenshot, unit test
+`TestTranslucentBits`).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

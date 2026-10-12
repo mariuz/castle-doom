@@ -90,12 +90,14 @@ const
   VanillaMaxAmmo: array [0..3] of Integer = (200, 50, 300, 50);
   VanillaClipAmmo: array [0..3] of Integer = (10, 4, 20, 1);
   { DeHackEd's / BEX's mnemonic bits ("Bits = SOLID+SHOOTABLE"). }
-  BitNames: array [0..27] of String = (
+  BitNames: array [0..31] of String = (
     'SPECIAL', 'SOLID', 'SHOOTABLE', 'NOSECTOR', 'NOBLOCKMAP', 'AMBUSH', 'JUSTHIT',
     'JUSTATTACKED', 'SPAWNCEILING', 'NOGRAVITY', 'DROPOFF', 'PICKUP', 'NOCLIP',
     'SLIDE', 'FLOAT', 'TELEPORT', 'MISSILE', 'DROPPED', 'SHADOW', 'NOBLOOD',
     'CORPSE', 'INFLOAT', 'COUNTKILL', 'COUNTITEM', 'SKULLFLY', 'NOTDMATCH',
-    'TRANSLATION', 'TRANSLATION2');
+    'TRANSLATION', 'TRANSLATION2',
+    { MBF's: only TRANSLUCENT (Boom's MF_TRANSLUCENT) is used here. }
+    'TOUCHY', 'BOUNCES', 'FRIEND', 'TRANSLUCENT');
 
 { A "Bits" value: a number, or names joined by + | , or blanks. }
 function BitsValue(const S: String): Integer;
@@ -103,15 +105,18 @@ var
   Words: TStringArray;
   W: String;
   I: Integer;
+  N: Int64;
 begin
-  Result := StrToIntDef(Trim(S), -1);
-  if Result >= 0 then Exit;
+  { A number may use bit 31 (MBF's TRANSLUCENT), written signed or not. }
+  N := StrToInt64Def(Trim(S), Low(Int64));
+  if N <> Low(Int64) then
+    Exit(Integer(LongWord(N and $FFFFFFFF)));
   Result := 0;
   Words := S.Split(['+', '|', ',', ' ', #9], TStringSplitOptions.ExcludeEmpty);
   for W in Words do
     for I := 0 to High(BitNames) do
       if SameText(W, BitNames[I]) or SameText(W, 'MF_' + BitNames[I]) then
-        Result := Result or (1 shl I);
+        Result := Result or Integer(LongWord(1) shl I);
 end;
 
 procedure ResetDehacked;

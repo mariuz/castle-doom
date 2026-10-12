@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Boom elevators: floor and ceiling moving together (227-238), and
+  platforms that jump between floor and ceiling (211, 212).
+- MBF's translucent things: a DeHackEd patch's TRANSLUCENT bit draws a
+  thing see-through.
 - Boom translucency: windows, grates and force fields drawn see-through
   (special 260), with the WAD's own translucency maps.
 

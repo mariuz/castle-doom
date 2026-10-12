@@ -6,6 +6,18 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Boom elevators (227-238: floor and ceiling together at 4 units a tic,
+  to the next higher or lower floor or the line's front sector's floor,
+  a new mover kind `mkElevator`) and the instant plat toggles (211, 212:
+  `mkToggle`, a mover in stasis keeping the original floor; the floor
+  jumps to the ceiling, crushing once, and back). Autotest
+  `boom-elevators`.
+- MBF's translucent things: DeHackEd's `Bits` know MBF's names up to bit
+  31 (`TRANSLUCENT`, also as an unsigned number); such things are drawn
+  in their own blended sprite groups at Boom's 66%. Test patch
+  `tools/testdata/translucent.deh`, autotest `translucent-things` (a
+  golden screenshot), unit test `TestTranslucentBits`.
+
 - Boom translucency (260): middle textures drawn at the default map's
   opacity (the WAD's `TRANMAP`, else Boom's 66%) or a custom map's,
   estimated from its colour table; the 260 line alone or every line with
@@ -767,7 +779,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **UDMF** (`TEXTMAP`) maps, and glBSP's `GL_LEVEL` markers for map names over 5 letters. | Remaining community map formats. | `DoomMap` | L (UDMF), S (`GL_LEVEL`) |
-| **Boom/MBF specials**: generalized linedefs are done (see above; floors still do not crush); the constant scrollers are done too (see above); left are the accelerative and displacement scrollers (214-218, 245-249: speed from a control sector's height changes),  the other Boom line types (elevators 227-238, plat toggles 211 / 212, line-to-line teleports 243 / 244 and MBF's 262-269, deep water 242, light transfers 213 / 261, sky transfers 271 / 272) and MBF's friction for monsters' own walking (Boom moves only momentum). | Big community map support. | `DoomWorld.ApplySpecial`, `DoomGeometry` | M each |
+| **Boom/MBF specials**: generalized linedefs are done (see above; floors still do not crush); the constant scrollers are done too (see above); left are the accelerative and displacement scrollers (214-218, 245-249: speed from a control sector's height changes),  the other Boom line types (line-to-line teleports 243 / 244 and MBF's 262-269, deep water 242, light transfers 213 / 261, sky transfers 271 / 272) and MBF's friction for monsters' own walking (Boom moves only momentum). | Big community map support. | `DoomWorld.ApplySpecial`, `DoomGeometry` | M each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -806,13 +818,13 @@ play.
 
 ## Suggested next three
 
-1. Boom elevators (227-238, S-M, see Content and formats: the floor and
-   ceiling moving together) and the plat toggles (211, 212).
-2. MBF's translucent things (the TRANSLUCENT flag of DeHackEd's bits,
-   S-M: sprites in a blended group of `TSpriteBatch`).
-3. Touch controls in the browser (M, see Engine and tooling): the web
+1. Touch controls in the browser (M, see Engine and tooling): the web
    build is unplayable on phones; `TCastleTouchNavigation` plus fire and
    use buttons, the first step to an Android package too.
+2. Boom's line-to-line teleports (243, 244 and MBF's 262-269, S) and the
+   light and sky transfers (213, 261, 271, 272, M), the last Boom line
+   types (see Content and formats).
+3. Gamepad button rebinding (S-M, see Other suggested improvements).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

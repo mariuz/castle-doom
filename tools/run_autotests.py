@@ -241,6 +241,10 @@ TESTS = [
      [r'Map: E1M1: 3 translucent lines'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'translucent.wad'), '--fixed-step'],
      None),
+    ('translucent-things', 'E1M1', 'Y,A:0,P:3001:120,W:0.1,S,Q',
+     [r'DeHackEd: translucent.deh: 2 values applied'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'translucent.deh'), '--fixed-step'],
+     None),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
@@ -360,6 +364,7 @@ GOLDEN = [
     'video-settings_1.png', 'settings-1_1.png', 'phase2-download_1.png', 'arch-vile_1.png',
     'save-round-trip_1.png', 'save-round-trip_2.png', 'knockback_1.png', 'melee-turn_1.png',
     'donut_1.png', 'select-thing_1.png', 'key-bindings_1.png', 'translucency_1.png',
+    'translucent-things_1.png',
 ]
 
 
