@@ -233,6 +233,10 @@ TESTS = [
      [r'Map: E1M1: 2 friction lines, 2 pushers'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'friction.wad'), '--fixed-step'],
      lambda config: check_pushers(config)),
+    ('boom-elevators', 'E1M1',
+     'Y,W:0.3,LINE:618:232,LINE:753:236,LINE:593:212,W:4,SAVE:1,LINE:593:212,W:0.2,SAVE:2,Q',
+     [r'Line: line 618 special 232 tag 2: activated', r'Line: line 593 special 212 tag 1: activated'],
+     [], lambda config: check_elevators(config)),
     ('translucency', 'E1M1', 'Y,G:-450:256,A:180,LOOK:30,W:0.3,S,Q',
      [r'Map: E1M1: 3 translucent lines'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'translucent.wad'), '--fixed-step'],
@@ -295,6 +299,18 @@ def check_pushers(config):
     p = [None] + [save_json(config, n)['player'] for n in range(1, 5)]
     assert p[2]['x'] < p[1]['x'] - 30, 'current: %s -> %s' % (p[1]['x'], p[2]['x'])
     assert p[4]['x'] > p[3]['x'] + 30, 'point pusher: %s -> %s' % (p[3]['x'], p[4]['x'])
+
+
+def check_elevators(config):
+    """Boom's elevators keep the gap between floor and ceiling (sector 103
+    down to the next lower floor, tag 3 to the switch sector's floor 160);
+    the 212 toggle puts the lift's floor (98) at its ceiling and back."""
+    a, b = save_json(config, 1), save_json(config, 2)
+    f, c = a['sectorFloor'], a['sectorCeiling']
+    assert (f[103], c[103]) == (8, 136), 'elevator down: %s %s' % (f[103], c[103])
+    assert (f[76], c[76]) == (160, 160), 'elevator to the front floor: %s %s' % (f[76], c[76])
+    assert f[98] == c[98] == 128, 'toggle up: %s' % f[98]
+    assert b['sectorFloor'][98] == 12, 'toggle down: %s' % b['sectorFloor'][98]
 
 
 def check_floor(config, sector, height):

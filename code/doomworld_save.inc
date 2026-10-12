@@ -284,6 +284,7 @@ begin
     MJ.Add('newCeilingTex', M.NewCeilingTex);
     MJ.Add('changeSpecial', M.ChangeSpecial);
     MJ.Add('newSpecial', M.NewSpecial);
+    MJ.Add('gap', Double(M.Gap));
     Arr.Add(MJ);
   end;
   Result.Add('movers', Arr);
@@ -536,6 +537,7 @@ begin
       M.NewCeilingTex := MJ.Get('newCeilingTex', '');
       M.ChangeSpecial := MJ.Get('changeSpecial', false);
       M.NewSpecial := MJ.Get('newSpecial', 0);
+      M.Gap := MJ.Get('gap', 0.0);
       FMap.Sectors[Sec].Mover := M;
       FMovers.Add(M);
     end;

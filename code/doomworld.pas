@@ -83,7 +83,10 @@ type
     { Icon of Sin: the spawn cube, its fire, the explosions when the brain dies. }
     ekSpawnShot, ekSpawnFire, ekBrainExplosion);
 
-  TMoverKind = (mkDoor, mkLift, mkFloor, mkCeiling, mkCrusher);
+  { mkElevator: Boom's elevators (227-238), floor and ceiling together;
+    mkToggle: Boom's instant plat toggles (211, 212), kept in stasis
+    with the original floor in ReturnTarget. }
+  TMoverKind = (mkDoor, mkLift, mkFloor, mkCeiling, mkCrusher, mkElevator, mkToggle);
   { mpStasis: a stopped perpetual lift or crusher (EV_StopPlat,
     EV_CeilingCrushStop) that a new start resumes (P_ActivateInStasis). }
   TMoverPhase = (mpMoving, mpWaiting, mpDone, mpStasis);
@@ -119,6 +122,8 @@ type
     { Boom's generalized change types: the sector special when done. }
     ChangeSpecial: Boolean;
     NewSpecial: Integer;
+    { Elevators: the ceiling's height above the floor, kept while moving. }
+    Gap: Single;
     constructor Create(const AWorld: TDoomWorld; const ASector: Integer; const AKind: TMoverKind);
     destructor Destroy; override;
     procedure Start;
@@ -208,6 +213,11 @@ type
     procedure TicPush(const A: TDoomActor);
     procedure TicPlayerPush;
     procedure AddLightSector(const Sec: Integer);
+    { Boom's elevators: floor and ceiling of Sec to floor height Target. }
+    procedure DoElevator(const Sec: Integer; const Target: Single);
+    { Boom's instant plat toggle (EV_DoPlat toggleUpDn): the floor jumps to
+      the ceiling, crushing what is there, and back on the next use. }
+    procedure DoToggle(const Sec: Integer);
     { Boom's light strobing lines (156, 172, 193). }
     procedure StartStrobe(const Sec: Integer);
     { EV_DoChange: the sector takes Model's floor texture and special. }
@@ -756,6 +766,26 @@ var
   A: TDoomActor;
   Blocked: Boolean;
 begin
+  if (Kind = mkElevator) and (Phase = mpMoving) then
+  begin
+    { T_MoveElevator: both planes by the same step, nothing blocks them. }
+    H := World.Map.Sectors[Sector].FloorHeight;
+    NewH := H + Direction * Speed;
+    if ((Direction > 0) and (NewH >= Target)) or ((Direction < 0) and (NewH <= Target)) or (Direction = 0) then
+      NewH := Target;
+    World.Map.Sectors[Sector].FloorHeight := NewH;
+    World.Map.Sectors[Sector].CeilingHeight := NewH + Gap;
+    World.Geometry.SectorChanged(Sector);
+    if (MoveSound <> '') and (World.Tic mod 8 = 0) then
+      World.Sounds.PlayAt(MoveSound, Emitter);
+    if NewH = Target then
+    begin
+      Phase := mpDone;
+      if StopSound <> '' then
+        World.Sounds.PlayAt(StopSound, Emitter);
+    end;
+    Exit;
+  end;
   case Phase of
     mpMoving:
       begin
@@ -5212,6 +5242,64 @@ begin
   until false;
 end;
 
+procedure TDoomWorld.DoElevator(const Sec: Integer; const Target: Single);
+var
+  M: TSectorMover;
+begin
+  if FMap.Sectors[Sec].Mover <> nil then Exit;
+  if Target = FMap.Sectors[Sec].FloorHeight then Exit;
+  M := TSectorMover.Create(Self, Sec, mkElevator);
+  M.MovesCeiling := false;
+  M.Speed := 4; { ELEVATORSPEED }
+  M.Target := Target;
+  M.Gap := FMap.Sectors[Sec].CeilingHeight - FMap.Sectors[Sec].FloorHeight;
+  M.MoveSound := 'DSSTNMOV';
+  M.StopSound := 'DSPSTOP';
+  FMovers.Add(M);
+  M.Start;
+end;
+
+procedure TDoomWorld.DoToggle(const Sec: Integer);
+var
+  M: TSectorMover;
+  A: TDoomActor;
+  Up: Boolean;
+begin
+  M := FMap.Sectors[Sec].Mover as TSectorMover;
+  if (M <> nil) and (M.Kind <> mkToggle) then Exit;
+  if M = nil then
+  begin
+    M := TSectorMover.Create(Self, Sec, mkToggle);
+    M.MovesCeiling := false;
+    M.ReturnTarget := FMap.Sectors[Sec].FloorHeight;
+    M.Phase := mpStasis;
+    M.StopSound := 'DSPSTOP';
+    FMovers.Add(M);
+    FMap.Sectors[Sec].Mover := M;
+  end;
+  { Up to the ceiling from the bottom, else back to the original floor. }
+  Up := FMap.Sectors[Sec].FloorHeight < FMap.Sectors[Sec].CeilingHeight;
+  if Up then
+    M.SetHeight(FMap.Sectors[Sec].CeilingHeight)
+  else
+    M.SetHeight(M.ReturnTarget);
+  FSounds.PlayAt(M.StopSound, M.Emitter);
+  if not Up then Exit;
+  { The plat crushes (P_ChangeSector once): 10 damage, corpses squashed. }
+  if (Player.Sector = Sec) and not Player.Dead then
+    DamagePlayer(10, nil);
+  for A in FActors do
+    if (A.Sector = Sec) and not A.Removed then
+    begin
+      if (A.Info^.Kind = tkMonster) and (A.State in [asDying, asDead]) then
+        CrushCorpse(A)
+      else
+      if ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) and
+         not (A.State in [asDying, asDead, asEffect, asMissile]) then
+        DamageActor(A, 10, A.DoomX, A.DoomY, A.DoomZ + 32, nil, false);
+    end;
+end;
+
 function TDoomWorld.FloorModel(const Sec: Integer; const Height: Single): Integer;
 var
   L, O: Integer;
@@ -5595,6 +5683,12 @@ var
       169, 192: while NextTagged(I) do DoLight(I, FMap.MaxSurroundingLight(I, 0));
       170: while NextTagged(I) do DoLight(I, 35);
       171: while NextTagged(I) do DoLight(I, 255);
+      { Elevators: to the next higher / lower floor, or the line's front
+        sector's floor }
+      227, 228, 229, 230: while NextTagged(I) do DoElevator(I, FMap.NextHighestFloor(I, FMap.Sectors[I].FloorHeight));
+      231, 232, 233, 234: while NextTagged(I) do DoElevator(I, FMap.NextLowestFloor(I, FMap.Sectors[I].FloorHeight));
+      235, 236, 237, 238: if Front >= 0 then while NextTagged(I) do DoElevator(I, FMap.Sectors[Front].FloorHeight);
+      211, 212: while NextTagged(I) do DoToggle(I);
       { Teleports }
       174, 195: DoTeleport(Line);
       207, 208, 209, 210: DoTeleport(Line, true);
@@ -5703,10 +5797,10 @@ begin
 
         { Boom S1 / SR }
         158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
-        189, 203, 204, 209, 221, 241:
+        189, 203, 204, 209, 221, 241, 229, 233, 237:
           Done := BoomExtended;
         176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 190, 191, 192, 193, 194, 195, 196,
-        205, 206, 210, 222:
+        205, 206, 210, 222, 230, 234, 238, 211:
           begin
             Done := BoomExtended;
             Repeatable := true;
@@ -5791,9 +5885,9 @@ begin
         124: begin FExitRequested := true; FSecretExit := true; Exit(true); end;
 
         { Boom W1 / WR }
-        142, 143, 144, 145, 146, 153, 199, 200, 207, 219, 239:
+        142, 143, 144, 145, 146, 153, 199, 200, 207, 219, 239, 227, 231, 235:
           Done := BoomExtended;
-        147, 148, 149, 150, 151, 152, 154, 155, 156, 157, 201, 202, 208, 220, 240:
+        147, 148, 149, 150, 151, 152, 154, 155, 156, 157, 201, 202, 208, 220, 240, 228, 232, 236, 212:
           begin
             Done := BoomExtended;
             Repeatable := true;
