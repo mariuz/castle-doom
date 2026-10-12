@@ -212,6 +212,10 @@ TESTS = [
       r'Generalized: line 618: crusher', r'Generalized: line 997: lift to perpetual'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'generalized.wad')],
      lambda config: check_generalized(config)),
+    ('scrollers', 'E1M1', 'Y,G:-240:256,A:0,W:0.1,SAVE:1,W:1,SAVE:2,G:-440:200,A:-90,W:0.3,S,Q',
+     [r'Map: E1M1: scrollers: 2 walls, 1 floors, 1 ceilings, 1 carrying floors'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'scroll.wad')],
+     lambda config: check_carry(config)),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
@@ -230,6 +234,13 @@ def check_generalized(config):
     assert s[5]['sectorCeiling'][77] > -128, 'W1 door 77 not opening'
     kinds = sorted((m['sector'], m['kind'], m['perpetual']) for m in s[6]['movers'] if m['sector'] in (103, 145))
     assert kinds == [(103, 4, True), (145, 1, True)], 'crusher / perpetual lift %s' % kinds
+
+
+def check_carry(config):
+    """tools/testdata/scroll.wad: sector 141's 253 floor carries the player north."""
+    a, b = save_json(config, 1)['player'], save_json(config, 2)['player']
+    assert b['y'] - a['y'] > 50 and abs(b['x'] - a['x']) < 1, \
+        'player not carried north: (%s, %s) -> (%s, %s)' % (a['x'], a['y'], b['x'], b['y'])
 
 
 def check_floor(config, sector, height):

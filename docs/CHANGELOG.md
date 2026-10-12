@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.0 (2026-10-12)
+
+- Boom scrollers: scrolling walls, floors and ceilings, and conveyor
+  floors that carry the player and monsters.
+- Fixed: walls with Doom's scrolling special (48) moved right instead of
+  left.
+
 ## v0.14.0 (2026-10-12)
 
 - Boom generalized linedefs: PWADs made for Boom can use their custom

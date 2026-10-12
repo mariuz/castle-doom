@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Boom scrollers: walls (85, 254, 255), floors and ceilings (250, 251,
+  253) and carrying floors (252, 253) from `TDoomMap.BuildScrollers`;
+  scrolling flats and walls get their own shapes with a texture
+  transform at their speed, `TDoomWorld.TicCarry` pushes the player,
+  monsters and barrels. Vanilla 48 scrolled the wrong way until now (the
+  transform's sign was inverted); every direction was measured from
+  screenshot pairs. Test PWAD `tools/testdata/scroll.wad`
+  (`tools/make_scroll_wad.py`), autotest `scrollers`, unit test
+  `TestScrollers`.
+
 - Boom generalized linedefs (specials 0x2F80-0x7FFF): `DoomGeneralized`
   decodes the bit fields and `ApplyGeneralized`
   (`doomworld_generalized.inc`) runs floors, ceilings (crushing too),
@@ -734,7 +744,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **UDMF** (`TEXTMAP`) maps, and glBSP's `GL_LEVEL` markers for map names over 5 letters. | Remaining community map formats. | `DoomMap` | L (UDMF), S (`GL_LEVEL`) |
-| **Boom/MBF specials**: generalized linedefs are done (see above; floors still do not crush); left are scrolling walls and floors (250-255), friction and pushers (223-225), translucency (260), the other Boom line types (light transfers 213 / 261, sky transfers 271 / 272, the 142-200 numbered extras) and Boom's generalized sector specials (damage, secret, friction and push bits above 31). | Big community map support. | `DoomWorld.ApplySpecial`, `DoomGeometry` | M each |
+| **Boom/MBF specials**: generalized linedefs are done (see above; floors still do not crush); the constant scrollers are done too (see above); left are the accelerative and displacement scrollers (214-218, 245-249: speed from a control sector's height changes), friction and pushers (223-225), translucency (260), the other Boom line types (light transfers 213 / 261, sky transfers 271 / 272, the 142-200 numbered extras) and Boom's generalized sector specials (damage, secret, friction and push bits above 31). | Big community map support. | `DoomWorld.ApplySpecial`, `DoomGeometry` | M each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -773,11 +783,10 @@ play.
 
 ## Suggested next three
 
-1. Boom scrolling walls and floors (M, see Content and formats: 250-255
-   scroll walls, floors and ceilings by the line's vector, and 252 / 253
-   carry things; vanilla's 48 already scrolls).
-2. Boom's numbered extra line types 142-200 and sector special bits (M),
-   then friction, pushers and translucency.
+1. Boom's numbered extra line types 142-200 (M, see Content and formats:
+   more floor, ceiling, door, lift and light specials in the vanilla
+   style) and the generalized sector special bits (damage, secret).
+2. Boom friction and pushers (223-225, M), then translucency (260).
 3. Touch controls in the browser (M, see Engine and tooling): the web
    build is unplayable on phones; `TCastleTouchNavigation` plus fire and
    use buttons, the first step to an Android package too.

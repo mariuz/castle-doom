@@ -70,8 +70,11 @@ type
     TexTransform: TTextureTransformNode;
     { Does not block movement (masked middle textures on passable lines). }
     Passable: Boolean;
-    { Scrolling wall (linedef special 48). }
+    { Scrolling walls and flats (vanilla 48, Boom 85 and 250-255): the
+      texture transform's translation a tic (ScrollPerTic), so one batch
+      per texture and speed. }
     Scrolling: Boolean;
+    ScrollPerTic: TVector2;
     { Vertex count the nodes were created with; topology changes force a rebuild. }
     CommittedVertices: Integer;
     constructor Create;
@@ -103,7 +106,7 @@ type
     FBatches: TGeomBatchDict;
     FBuilt: Boolean;
     FRootSolid, FRootPassable: TX3DRootNode;
-    function Batch(const Img: TDoomImage; const Passable, Scrolling: Boolean;
+    function Batch(const Img: TDoomImage; const Passable: Boolean; const ScrollPerTic: TVector2;
       const SwitchLine: Integer = -1): TGeomBatch;
     procedure EmitLineSide(const Line, Side: Integer);
     procedure EmitFlats(const Sub: Integer);
@@ -119,8 +122,9 @@ type
     destructor Destroy; override;
     { (Re)generate geometry from the current map state. }
     procedure Generate;
-    { Update texture transforms of scrolling walls. }
-    procedure UpdateScroll(const Offset: Single);
+    { Update texture transforms of scrolling walls and flats, Tics after
+      the level start. }
+    procedure UpdateScroll(const Tics: Single);
     function FindBatch(const Key: String): TGeomBatch;
     property Built: Boolean read FBuilt;
   end;
@@ -383,12 +387,14 @@ begin
   inherited;
 end;
 
-function TMapChunk.Batch(const Img: TDoomImage; const Passable, Scrolling: Boolean;
+function TMapChunk.Batch(const Img: TDoomImage; const Passable: Boolean; const ScrollPerTic: TVector2;
   const SwitchLine: Integer): TGeomBatch;
 var
   Key: String;
   Page: Integer;
+  Scrolling: Boolean;
 begin
+  Scrolling := not ScrollPerTic.IsPerfectlyZero;
   { In the atlas: one batch per page (and passability); switches (their
     texture is swapped in place), scrolling walls (their texture
     transform) and animated textures (their URL changes) keep their own. }
@@ -401,7 +407,8 @@ begin
     Key := Img.Url;
   if SwitchLine >= 0 then Key := 'switch' + IntToStr(SwitchLine);
   if Passable then Key := Key + 'P';
-  if Scrolling then Key := Key + 'S';
+  if Scrolling then
+    Key := Key + Format('S%g,%g', [ScrollPerTic.X, ScrollPerTic.Y]);
   if not FBatches.TryGetValue(Key, Result) then
   begin
     Result := TGeomBatch.Create;
@@ -413,6 +420,7 @@ begin
       Result.Img := Img;
     Result.Passable := Passable;
     Result.Scrolling := Scrolling;
+    Result.ScrollPerTic := ScrollPerTic;
     FBatches.Add(Key, Result);
   end;
 end;
@@ -425,6 +433,26 @@ begin
     Result := Img.AtlasRect
   else
     Result := Vector4(0, 0, 1, 1);
+end;
+
+{ A wall's texture transform a tic for a side scrolling Rate texels a
+  tic (X: texture offset, Y: row offset); zero = no scrolling. }
+function WallScroll(const Rate: TVector2; const Img: TDoomImage): TVector2;
+begin
+  if Rate.IsPerfectlyZero then
+    Result := TVector2.Zero
+  else
+    Result := Vector2(Rate.X / Img.Width, -Rate.Y / Img.Height);
+end;
+
+{ A flat's texture transform a tic for a floor or ceiling moving Rate
+  map units a tic (flats repeat every 64 units). }
+function FlatScroll(const Rate: TVector2; const Img: TDoomImage): TVector2;
+begin
+  if Rate.IsPerfectlyZero then
+    Result := TVector2.Zero
+  else
+    Result := Vector2(Rate.X / Img.Width, Rate.Y / Img.Height);
 end;
 
 procedure TMapChunk.EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
@@ -459,7 +487,8 @@ var
   SwitchLine: Integer;
   FloorZ, CeilZ, OFloorZ, OCeilZ: Single;
   TexTopZ, ZB, ZT, OpenBottom, OpenTop: Single;
-  Scrolling, Passable: Boolean;
+  Passable: Boolean;
+  Rate: TVector2;
 begin
   Map := FOwner.Map;
   L := Map.Linedefs[Line];
@@ -486,7 +515,7 @@ begin
 
   U0 := Sd.XOffset;
   U1 := Sd.XOffset + L.Length;
-  Scrolling := L.Special = 48;
+  Rate := Map.SideScroll[L.Side[Side]];
   { Switches get a private batch per line so SW1 -> SW2 flips only that wall. }
   SwitchLine := -1;
   if (Side = 0) and (L.Special <> 0) and
@@ -506,7 +535,7 @@ begin
       TexTopZ := FloorZ + Img.Height + Sd.YOffset
     else
       TexTopZ := CeilZ + Sd.YOffset;
-    EmitWall(Batch(Img, false, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
+    EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
       FloorZ, CeilZ, U0, U1, TexTopZ, Img, Light);
     Exit;
   end;
@@ -524,7 +553,7 @@ begin
       TexTopZ := OFloorZ + Sd.YOffset;
     ZB := FloorZ;
     ZT := Min(OFloorZ, CeilZ);
-    EmitWall(Batch(Img, false, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
+    EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
       ZB, ZT, U0, U1, TexTopZ, Img, Light);
   end;
 
@@ -541,7 +570,7 @@ begin
         TexTopZ := OCeilZ + Img.Height + Sd.YOffset;
       ZB := Max(OCeilZ, FloorZ);
       ZT := CeilZ;
-      EmitWall(Batch(Img, false, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
+      EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
         ZB, ZT, U0, U1, TexTopZ, Img, Light);
     end;
   end;
@@ -560,7 +589,7 @@ begin
     ZB := Max(OpenBottom, TexTopZ - Img.Height);
     ZT := Min(OpenTop, TexTopZ);
     Passable := (L.Flags and ML_BLOCKING) = 0;
-    EmitWall(Batch(Img, Passable, Scrolling, SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
+    EmitWall(Batch(Img, Passable, WallScroll(Rate, Img), SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
       ZB, ZT, U0, U1, TexTopZ, Img, Light);
   end;
 end;
@@ -602,7 +631,7 @@ begin
       Pts[I] := DoomToCge(S.Poly[I].X, S.Poly[I].Y, Z);
       Tex[I] := Vector2(S.Poly[I].X / 64, S.Poly[I].Y / 64);
     end;
-    B := Batch(Img, false, false);
+    B := Batch(Img, false, FlatScroll(Map.FloorScroll[Sec], Img));
     B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
   end;
 
@@ -618,7 +647,7 @@ begin
         Pts[I] := DoomToCge(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y, Z);
         Tex[I] := Vector2(S.Poly[N - 1 - I].X / 64, S.Poly[N - 1 - I].Y / 64);
       end;
-      B := Batch(Img, false, false);
+      B := Batch(Img, false, FlatScroll(Map.CeilingScroll[Sec], Img));
       B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
     end;
   end;
@@ -677,13 +706,15 @@ begin
     Result := nil;
 end;
 
-procedure TMapChunk.UpdateScroll(const Offset: Single);
+procedure TMapChunk.UpdateScroll(const Tics: Single);
 var
   B: TGeomBatch;
 begin
+  { Only the fraction matters (the textures repeat), and keeps the
+    numbers small. }
   for B in FBatches.Values do
-    if B.Scrolling and (B.TexTransform <> nil) and (B.Img <> nil) then
-      B.TexTransform.Translation := Vector2(-Offset / B.Img.Width, 0);
+    if B.Scrolling and (B.TexTransform <> nil) then
+      B.TexTransform.Translation := Vector2(Frac(B.ScrollPerTic.X * Tics), Frac(B.ScrollPerTic.Y * Tics));
 end;
 
 { TDoomGeometry -------------------------------------------------------------- }
@@ -1066,7 +1097,8 @@ procedure TDoomGeometry.Update(const SecondsPassed: Single; const CameraPosition
 var
   C: TMapChunk;
 begin
-  { Scrolling walls move 35 texels per second (1 per tic). }
+  { FScrollOffset counts tics (35 a second); each scrolling batch knows
+    its texture translation a tic. }
   FScrollOffset := FScrollOffset + SecondsPassed * 35;
   for C in FChunks do
     C.UpdateScroll(FScrollOffset);

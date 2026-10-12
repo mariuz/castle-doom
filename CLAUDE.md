@@ -73,8 +73,8 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 23 cases) cover the parsers,
-every node format, the line grid, Boom's generalized types and both music synthesizers:
+Unit tests (FPCUnit, no window, about 20 s, 24 cases) cover the parsers,
+every node format, the line grid, Boom's generalized types and scrollers and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
 code 1 on a failure; CI runs them before the autotests). The node-format
@@ -402,6 +402,14 @@ checks the heights in its saves). Any line can try a generalized value
 by number: `LINE:593:21008` lowers the lift's ceiling to its floor
 (0x5210, crushing); decode values with `DecodeGeneralized` (unit test
 `TestGeneralized`).
+Boom scrollers: `tools/testdata/scroll.wad` (`tools/make_scroll_wad.py`)
+scrolls two start-room walls (254, 255) and sector 141's floor and
+ceiling (253, 250), which carries the player north (`G:-240:256` then
+`W:1`: about 100 units; autotest `scrollers`, unit test `TestScrollers`;
+the log says `Map: E1M1: scrollers: 2 walls, 1 floors, 1 ceilings, 1
+carrying floors`). Scroll directions are checked by comparing two
+screenshots a few tics apart under `--fixed-step` (a wall seen from the
+front: texture offset growing = moving left).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

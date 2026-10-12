@@ -56,6 +56,7 @@ type
     procedure TestGlBspNodes;
     procedure TestLineGrid;
     procedure TestGeneralized;
+    procedure TestScrollers;
   end;
 
   TTestMusic = class(TTestCase)
@@ -439,6 +440,50 @@ begin
   AssertTrue('crusher', (G.Kind = gkCrusher) and G.Silent and (G.Trigger = gtW1));
   AssertEquals('description', 'floor down to lowest neighbour floor, change texture (trigger model), fast, S1',
     GenDescription(DecodeGeneralized($6892)));
+end;
+
+{ Boom's scrollers on tools/testdata/scroll.wad (tools/make_scroll_wad.py):
+  a 254 wall, a 255 wall, sector 141's floor, ceiling and carry. }
+procedure TTestMap.TestScrollers;
+var
+  W: TDoomWad;
+  M: TDoomMap;
+  Path: String;
+
+  procedure CheckVector(const What: String; const V: TVector2; const X, Y: Single);
+  begin
+    AssertTrue(Format('%s: (%g, %g), expected (%g, %g)', [What, V.X, V.Y, X, Y]),
+      (Abs(V.X - X) < 1e-4) and (Abs(V.Y - Y) < 1e-4));
+  end;
+
+begin
+  Path := 'tools/testdata/scroll.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/scroll.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('walls', 2, M.ScrollingSides);
+      AssertEquals('floors', 1, M.ScrollingFloors);
+      AssertEquals('ceilings', 1, M.ScrollingCeilings);
+      AssertEquals('carrying floors', 1, M.CarryingFloors);
+      { 254 from line 898 (48 east) onto line 911 (48 west). }
+      CheckVector('254 wall', M.SideScroll[M.Linedefs[911].Side[0]], 1.5, 0);
+      { 255 with the offsets (2, 0). }
+      CheckVector('255 wall', M.SideScroll[M.Linedefs[1046].Side[0]], -2, 0);
+      { 253 / 250 from lines 64 long pointing north. }
+      CheckVector('floor', M.FloorScroll[141], 0, 2);
+      CheckVector('ceiling', M.CeilingScroll[141], 0, 2);
+      CheckVector('carry', M.Carry[141], 0, 2 * 0.1875);
+      CheckVector('start room floor', M.FloorScroll[140], 0, 0);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
 end;
 
 procedure TTestMap.TestLineGrid;

@@ -282,7 +282,16 @@ one per texture with `--no-atlas`. Each batch becomes one `TShapeNode` with:
 - `TAppearanceNode` with `TUnlitMaterialNode` (Doom has no lighting model)
   and `AlphaMode = amMask` when the texture has transparent pixels (alpha
   test, no sorting problems),
-- a `TTextureTransformNode` for scrolling walls (linedef special 48).
+- a `TTextureTransformNode` for scrolling walls and flats: `TDoomMap.BuildScrollers`
+  (Boom's `P_SpawnScrollers`) gives each sidedef, floor and ceiling its speed a
+  tic from vanilla 48, Boom 85 and 250-255 (254 projects the control line's
+  vector on each tagged wall, 255 uses the side's own offsets), the batch key
+  carries the texture translation a tic (`ScrollPerTic`, so each speed is its
+  own shape) and `UpdateScroll` sets the translation's fraction from the tics
+  since the level start. Boom's carrying floors (252, 253) live in
+  `TDoomMap.Carry`: `TDoomWorld.TicCarry` adds it each tic to the momentum of
+  the player and of monsters and barrels standing on the floor (the knockback
+  momentum, so Doom's friction gives twice the floor's speed, like Boom).
 
 The atlas (`TDoomGraphics.BuildAtlas`, called by `TDoomGeometry.Create`
 with every texture and flat the map's sidedefs and sectors name): pages

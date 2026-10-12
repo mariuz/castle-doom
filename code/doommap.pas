@@ -128,6 +128,7 @@ type
     function LoadGlNodes: Boolean;
     procedure BuildSectorLists;
     procedure BuildSubsectorPolygons;
+    procedure BuildScrollers;
   public
     Vertices: array of TDoomVertex;
     Linedefs: array of TDoomLinedef;
@@ -141,6 +142,16 @@ type
     Subsectors: array of TDoomSubsector;
     Nodes: array of TDoomNode;
     MinX, MinY, MaxX, MaxY: Single;
+    { Scrollers (vanilla 48, Boom 85 and 250-255, P_SpawnScrollers), per
+      tic and constant: SideScroll per sidedef in texels (X adds to the
+      texture offset, Y to the row offset); FloorScroll / CeilingScroll
+      per sector in map units, the way the flat moves; Carry per sector,
+      the momentum a thing standing on the floor gains (Boom's
+      CARRYFACTOR). Zero where nothing scrolls. }
+    SideScroll: array of TVector2;
+    FloorScroll, CeilingScroll, Carry: array of TVector2;
+    { How many sides, floors, ceilings and carrying floors scroll. }
+    ScrollingSides, ScrollingFloors, ScrollingCeilings, CarryingFloors: Integer;
 
     constructor Create(const AWad: TDoomWad; const MapName: String);
 
@@ -281,6 +292,10 @@ begin
   BuildSectorLists;
   BuildSubsectorPolygons;
   BuildLineGrid;
+  BuildScrollers;
+  if ScrollingSides + ScrollingFloors + ScrollingCeilings + CarryingFloors > 0 then
+    WritelnLog('Map', '%s: scrollers: %d walls, %d floors, %d ceilings, %d carrying floors', [
+      FName, ScrollingSides, ScrollingFloors, ScrollingCeilings, CarryingFloors]);
   WritelnLog('Map', '%s: %d vertices, %d linedefs, %d sectors, %d things, %d subsectors, %d nodes, line grid %d x %d', [
     FName, Length(Vertices), Length(Linedefs), Length(Sectors), Length(Things),
     Length(Subsectors), Length(Nodes), FGridW, FGridH]);
@@ -1136,6 +1151,88 @@ begin
       Floor(Min(FGridW, (XB + Pad - FGridX) / LineGridCell)), Found, Result);
   end;
   if Result > 1 then SortLines(Found, 0, Result - 1);
+end;
+
+procedure TDoomMap.BuildScrollers;
+const
+  { Boom's CARRYFACTOR (0x3000 / 0x10000): with Doom's friction a thing
+    then drifts at twice the floor's scroll speed. }
+  CarryFactor = 0.1875;
+var
+  I, J, S: Integer;
+  DX, DY, LX, LY, Len: Single;
+  V: TVector2;
+
+  procedure AddSide(const Side: Integer; const Rate: TVector2);
+  begin
+    if (Side < 0) or (Side > High(SideScroll)) then Exit;
+    SideScroll[Side] := SideScroll[Side] + Rate;
+  end;
+
+begin
+  SetLength(SideScroll, Length(Sidedefs));
+  SetLength(FloorScroll, Length(Sectors));
+  SetLength(CeilingScroll, Length(Sectors));
+  SetLength(Carry, Length(Sectors));
+  for I := 0 to High(Linedefs) do
+  begin
+    { The line's vector, 32 units = 1 unit a tic (SCROLL_SHIFT). }
+    DX := (Vertices[Linedefs[I].V2].X - Vertices[Linedefs[I].V1].X) / 32;
+    DY := (Vertices[Linedefs[I].V2].Y - Vertices[Linedefs[I].V1].Y) / 32;
+    case Linedefs[I].Special of
+      48: AddSide(Linedefs[I].Side[0], Vector2(1, 0));
+      85: AddSide(Linedefs[I].Side[0], Vector2(-1, 0));
+      250, 251, 252, 253:
+        begin
+          S := -1;
+          repeat
+            S := FindSectorFromTag(Linedefs[I].Tag, S);
+            if S < 0 then Break;
+            case Linedefs[I].Special of
+              250: CeilingScroll[S] := CeilingScroll[S] + Vector2(DX, DY);
+              251: FloorScroll[S] := FloorScroll[S] + Vector2(DX, DY);
+              252: Carry[S] := Carry[S] + Vector2(DX, DY) * CarryFactor;
+              else
+                begin
+                  FloorScroll[S] := FloorScroll[S] + Vector2(DX, DY);
+                  Carry[S] := Carry[S] + Vector2(DX, DY) * CarryFactor;
+                end;
+            end;
+          until false;
+        end;
+      254:
+        { Add_WallScroller: the tagged walls move like the floor would,
+          projected on each wall's own direction. }
+        for J := 0 to High(Linedefs) do
+          if (J <> I) and (Linedefs[J].Tag = Linedefs[I].Tag) and (Linedefs[I].Tag <> 0) then
+          begin
+            LX := Vertices[Linedefs[J].V2].X - Vertices[Linedefs[J].V1].X;
+            LY := Vertices[Linedefs[J].V2].Y - Vertices[Linedefs[J].V1].Y;
+            Len := Sqrt(Sqr(LX) + Sqr(LY));
+            if Len = 0 then Continue;
+            V.X := -(DY * LY + DX * LX) / Len;
+            V.Y := -(DX * LY - DY * LX) / Len;
+            AddSide(Linedefs[J].Side[0], V);
+          end;
+      255:
+        { The front side's own offsets give the speed. }
+        if Linedefs[I].Side[0] >= 0 then
+          AddSide(Linedefs[I].Side[0], Vector2(-Sidedefs[Linedefs[I].Side[0]].XOffset,
+            Sidedefs[Linedefs[I].Side[0]].YOffset));
+    end;
+  end;
+  ScrollingSides := 0;
+  for I := 0 to High(SideScroll) do
+    if not SideScroll[I].IsPerfectlyZero then Inc(ScrollingSides);
+  ScrollingFloors := 0;
+  ScrollingCeilings := 0;
+  CarryingFloors := 0;
+  for I := 0 to High(Sectors) do
+  begin
+    if not FloorScroll[I].IsPerfectlyZero then Inc(ScrollingFloors);
+    if not CeilingScroll[I].IsPerfectlyZero then Inc(ScrollingCeilings);
+    if not Carry[I].IsPerfectlyZero then Inc(CarryingFloors);
+  end;
 end;
 
 procedure TDoomMap.BuildSectorLists;

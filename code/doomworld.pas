@@ -207,6 +207,9 @@ type
     { P_XYMovement for knocked-back monsters, corpses and barrels. }
     procedure TicPush(const A: TDoomActor);
     procedure TicPlayerPush;
+    { Boom's carrying floors (252, 253): things standing on them gain
+      momentum each tic (T_Scroll's sc_carry). }
+    procedure TicCarry;
     procedure TicMissile(const A: TDoomActor);
     procedure TicMovers;
     procedure TicLights;
@@ -1041,7 +1044,9 @@ begin
       if Back >= 0 then FDynamic[Back] := true;
       Continue;
     end;
-    if Special in [11, 51, 52, 124, 48, 39, 97, 125, 126] then Continue;
+    { Exits, teleporters and scrollers (the geometry scrolls those
+      textures itself) move no sector. }
+    if Special in [11, 51, 52, 124, 48, 85, 39, 97, 125, 126, 250..255] then Continue;
     MarkTag(Tag);
     { Stairs climb through neighbours sharing the floor texture. }
     if Special in [7, 8, 100, 127] then
@@ -1505,6 +1510,7 @@ begin
   TicLights;
   TicButtons;
   Lap(2);
+  TicCarry;
   TicActors;
   TicPlayerPush;
   if FBrainDeathTics > 0 then
@@ -2537,6 +2543,33 @@ begin
   begin
     A.VelX := A.VelX * Friction;
     A.VelY := A.VelY * Friction;
+  end;
+end;
+
+procedure TDoomWorld.TicCarry;
+var
+  A: TDoomActor;
+  Sec: Integer;
+  C: TVector2;
+begin
+  if FMap.CarryingFloors = 0 then Exit;
+  Sec := FMap.SectorAt(Player.X, Player.Y);
+  if (Sec >= 0) and not Player.Dead and (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) then
+  begin
+    C := FMap.Carry[Sec];
+    PlayerPushVX := PlayerPushVX + C.X;
+    PlayerPushVY := PlayerPushVY + C.Y;
+  end;
+  { Monsters (and their corpses) and barrels: the things that have
+    momentum here (TicPush). }
+  for A in FActors do
+  begin
+    if A.Removed or (A.Sector < 0) or (A.State in [asMissile, asEffect]) or A.Charging then Continue;
+    if not ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) then Continue;
+    C := FMap.Carry[A.Sector];
+    if C.IsPerfectlyZero or (A.DoomZ > FMap.Sectors[A.Sector].FloorHeight + 1) then Continue;
+    A.VelX := A.VelX + C.X;
+    A.VelY := A.VelY + C.Y;
   end;
 end;
 

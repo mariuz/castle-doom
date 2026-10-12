@@ -56,7 +56,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   floors and ceilings from BSP subsectors, sky, sector light levels with "fake contrast".
 - Doors (manual, switch, walk-over, locked, blazing), lifts (perpetual ones stop and
   resume), floors (raise to the shortest lower texture, donuts), ceilings, crushers
-  (slow ones slow down on what they crush, silent ones, stop and resume), stairs, teleporters, light changes, scrolling walls, switch textures, secret sectors,
+  (slow ones slow down on what they crush, silent ones, stop and resume), stairs, teleporters, light changes, scrolling walls (and Boom's scrolling floors and ceilings and carrying conveyor floors), switch textures, secret sectors,
   damaging floors, exits (normal and secret) with an intermission screen.
 - Pickups: health, armor, ammo, keys, weapons, powerups, with Doom's messages.
 - Monsters wake up like in Doom: on sight in front of them, or when your shots reach their
