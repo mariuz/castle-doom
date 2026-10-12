@@ -31,6 +31,7 @@ type
     procedure DrawTime(const Img: TRGBAlphaImage; const RightX, Y, Seconds: Integer);
     procedure DrawCentered(const Img: TRGBAlphaImage; const Patch: TDoomImage; const Y: Integer);
     function LevelNamePatch(const MapName: String): TDoomImage;
+    function DrawLevelName(const Img: TRGBAlphaImage; const MapName: String; const Y: Integer): Integer;
     procedure SetStage(const S: TIntermissionStage);
   public
     constructor Create(AOwner: TComponent); override;
@@ -53,7 +54,7 @@ implementation
 
 uses SysUtils, Math, DoomMapInfo,
   CastleVectors, CastleUIControls,
-  DoomHud, DoomDehacked, CastleComponentSerialize;
+  DoomHud, DoomFont, DoomDehacked, CastleComponentSerialize;
 
 const
   Doom1Pars: array [1..3, 1..9] of Integer = (
@@ -206,7 +207,8 @@ var
   Info: TMapInfoEntry;
 begin
   { UMAPINFO: its levelpic; a renamed level without one shows no picture
-    (the vanilla one would name another level). }
+    (the vanilla one would name another level; DrawLevelName writes the
+    name as text instead). }
   Info := MapInfoFor(MapName);
   if Info <> nil then
   begin
@@ -221,6 +223,30 @@ begin
     M := StrToIntDef(Copy(MapName, 4, 1), 1);
     Result := FGraphics.Patch(Format('WILV%d%d', [E - 1, M - 1]));
   end;
+end;
+
+function TDoomIntermission.DrawLevelName(const Img: TRGBAlphaImage; const MapName: String;
+  const Y: Integer): Integer;
+const
+  TextHeight = 8;
+var
+  Patch: TDoomImage;
+  Info: TMapInfoEntry;
+  S: String;
+begin
+  { The picture, or (UMAPINFO without a levelpic) the levelname in the
+    HU font, like Boom ports do. Result: the height drawn, 0 for nothing. }
+  Patch := LevelNamePatch(MapName);
+  if Patch <> nil then
+  begin
+    DrawCentered(Img, Patch, Y);
+    Exit(Patch.Height);
+  end;
+  Info := MapInfoFor(MapName);
+  if (Info = nil) or (Info.LevelName = '') then Exit(0);
+  S := UpperCase(Info.LevelName);
+  DrawDoomText(FGraphics, Img, (320 - DoomTextWidth(FGraphics, S)) div 2, Y, S);
+  Result := TextHeight;
 end;
 
 procedure TDoomIntermission.DrawCentered(const Img: TRGBAlphaImage; const Patch: TDoomImage; const Y: Integer);
@@ -292,8 +318,8 @@ const
   TimeY = 168;
 var
   Img: TRGBAlphaImage;
-  Back, LevelName, P: TDoomImage;
-  E, LineH: Integer;
+  Back, P: TDoomImage;
+  E, LineH, NameH: Integer;
 begin
   if FGraphics = nil then Exit;
   Img := TRGBAlphaImage.Create(320, 200);
@@ -317,16 +343,14 @@ begin
     { "ENTERING" + next level name. }
     P := FGraphics.Patch('WIENTER');
     DrawCentered(Img, P, 2);
-    LevelName := LevelNamePatch(FNextMap);
-    if (P <> nil) then DrawCentered(Img, LevelName, 2 + (5 * P.Height) div 4)
-    else DrawCentered(Img, LevelName, 20);
+    if P <> nil then DrawLevelName(Img, FNextMap, 2 + (5 * P.Height) div 4)
+    else DrawLevelName(Img, FNextMap, 20);
   end else
   begin
     { Level name + "FINISHED", then the stats. }
-    LevelName := LevelNamePatch(FMapName);
-    DrawCentered(Img, LevelName, 2);
+    NameH := DrawLevelName(Img, FMapName, 2);
     P := FGraphics.Patch('WIF');
-    if LevelName <> nil then DrawCentered(Img, P, 2 + (5 * LevelName.Height) div 4)
+    if NameH > 0 then DrawCentered(Img, P, 2 + (5 * NameH) div 4)
     else DrawCentered(Img, P, 20);
 
     BlitDoomImage(Img, FGraphics.Patch('WIOSTK'), StatsX, StatsY);

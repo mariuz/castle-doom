@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- UMAPINFO maps without a level name picture show their name as text on
+  the intermission screen.
+
 ## v0.13.0 (2026-10-10)
 
 - V-sync and a frame rate cap (35, 60, 120, 144 FPS or none) on the

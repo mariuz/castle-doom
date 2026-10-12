@@ -246,7 +246,8 @@ begin
   FViewport.Items.Add(Camera);
   FViewport.Camera := Camera;
   FViewport.BackgroundColor := Black;
-  { Many small sector scenes: let CGE merge them into fewer draw calls. }
+  { CGE still merges what the atlas and the sprite batches leave: E1M1's
+    door spot draws 56 shapes with it, 67 without (docs/ROADMAP.md). }
   FViewport.DynamicBatching := true;
   { Behind the design's 2D layer (loaded before Start). }
   InsertBack(FViewport);
