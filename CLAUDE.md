@@ -410,6 +410,14 @@ the log says `Map: E1M1: scrollers: 2 walls, 1 floors, 1 ceilings, 1
 carrying floors`). Scroll directions are checked by comparing two
 screenshots a few tics apart under `--fixed-step` (a wall seen from the
 front: texture offset growing = moving left).
+Boom's numbered line types and sector types: `tools/testdata/boomext.wad`
+(`tools/make_boomext_wad.py`) makes E1M1's start sector 192 (secret bit +
+damage 10): `W:2,SAVE:1` gives "A secret is revealed!", health 90 and
+special 64; `LINE:593:142`, `LINE:618:150`, `LINE:753:156`, ... try the
+numbered types on E1M1's tags (autotest `boom-extended`). Silent
+teleports: `--autotest MAP07 p --demo "Y,A:30,W:0.3,LINE:941:209,W:0.5,Q"`
+logs `Teleport: player silently to (1528, 536), angle 75` (autotest
+`boom-teleport`).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

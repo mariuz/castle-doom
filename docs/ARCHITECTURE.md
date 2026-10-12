@@ -537,8 +537,25 @@ lines with the monster bit (W lines join `FMonsterCrossLines`, S and D
 lines are bumped). Floors do not crush (no floor here checks what stands
 on it). Each activation logs `Generalized: line N: <description>`.
 
+Boom's numbered line types run from `BoomExtended` inside `ApplySpecial`
+with the same helpers: floors (142-144, 147-149, 158-161, 176-180, 219-222),
+texture and type changes (153, 154, 189, 190 from the line's front sector,
+239-241 from a neighbour at the same height, `ChangeFloorTo`), donuts (146,
+155, 191), perpetual lifts and stops (162, 163, 181, 182), ceilings and
+crushers (145, 150-152, 164-168, 183-188, 199-206; the "lower" ones never
+raise), close-wait-open doors (175, 196), lights (156, 157, 169-173,
+192-194; strobing sets special 3 in the low bits, `StartStrobe`), teleports
+(174, 195) and Boom's silent teleports (207-210: no fog, the view keeps
+its angle to the line) and gun exits (197, 198). Not yet: elevators
+(227-238), plat toggles (211, 212), line-to-line teleports (243, 244) and
+the transfers (213, 242, 261, 271, 272).
+
 Sector specials give damaging floors (5, 7, 16, 4, 11), secrets (9) and light
-effects (blink, strobe, glow, flicker) animated in `TicLights`.
+effects (blink, strobe, glow, flicker) animated in `TicLights`. Boom's sector
+types keep those in the low 5 bits (`and 31` everywhere a light or vanilla
+type is read) and add damage in bits 5-6 (5, 10 or 20 every 32 tics, the
+last through a radiation suit too, 5 times in 256) and a secret in bit 7
+(`SectorSecretBit`), which `TicPlayer` clears on entry, keeping the rest.
 
 **Using** (E/Space) traces 64 units ahead and picks the closest crossing line,
 continuing through passable lines without specials, with the "oof" sound on a

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.16.0 (2026-10-12)
+
+- Boom's numbered line types (142-210, 219-222, 239-241): more floors,
+  ceilings, crushers, lights (strobing too), texture changes, silent
+  teleports that keep the view's direction, and gun-triggered exits.
+- Boom's sector types: damaging floors and secrets combined with any
+  light effect.
+
 ## v0.15.0 (2026-10-12)
 
 - Boom scrollers: scrolling walls, floors and ceilings, and conveyor

@@ -207,6 +207,13 @@ type
     { P_XYMovement for knocked-back monsters, corpses and barrels. }
     procedure TicPush(const A: TDoomActor);
     procedure TicPlayerPush;
+    procedure AddLightSector(const Sec: Integer);
+    { Boom's light strobing lines (156, 172, 193). }
+    procedure StartStrobe(const Sec: Integer);
+    { EV_DoChange: the sector takes Model's floor texture and special. }
+    procedure ChangeFloorTo(const Sec, Model: Integer);
+    { P_FindModelFloorSector: a neighbour with its floor at Height, -1. }
+    function FloorModel(const Sec: Integer; const Height: Single): Integer;
     { Boom's carrying floors (252, 253): things standing on them gain
       momentum each tic (T_Scroll's sc_carry). }
     procedure TicCarry;
@@ -335,7 +342,9 @@ type
     function ApplyGeneralized(const Line: Integer; const Activation: TActivation; const ByMonster: Boolean): Boolean;
     function GenKeyOk(const G: TGenLine): Boolean;
     procedure DoLight(const Sec: Integer; const Level: Integer);
-    procedure DoTeleport(const Line: Integer);
+    { Silent (Boom 207-210): no fog or sound, and the view keeps its
+      angle to the line, turned the way the destination faces. }
+    procedure DoTeleport(const Line: Integer; const Silent: Boolean = false);
     { EV_Teleport for a monster; false when there is no free destination. }
     function TeleportActor(const A: TDoomActor; const Line: Integer): Boolean;
     { P_CrossSpecialLine for a monster that moved from (OldX, OldY). }
@@ -458,6 +467,8 @@ implementation
 uses Math, CastleLog, CastleStringUtils, CastleBehaviors, CastleTimeUtils, DoomMapInfo;
 
 const
+  { Boom's sector types: bit 7 is the secret, bits 5-6 the damage. }
+  SectorSecretBit = 128;
   DoorSpeed = 2;
   DoorWait = 150;
   PlatSpeed = 4;
@@ -1024,7 +1035,7 @@ var
 begin
   SetLength(FDynamic, Length(FMap.Sectors));
   for I := 0 to High(FDynamic) do
-    FDynamic[I] := FMap.Sectors[I].Special in [1, 2, 3, 4, 8, 12, 13, 17];
+    FDynamic[I] := (FMap.Sectors[I].Special and 31) in [1, 2, 3, 4, 8, 12, 13, 17];
   for I := 0 to High(FMap.Linedefs) do
   begin
     Special := FMap.Linedefs[I].Special;
@@ -1046,7 +1057,7 @@ begin
     end;
     { Exits, teleporters and scrollers (the geometry scrolls those
       textures itself) move no sector. }
-    if Special in [11, 51, 52, 124, 48, 85, 39, 97, 125, 126, 250..255] then Continue;
+    if Special in [11, 51, 52, 124, 48, 85, 39, 97, 125, 126, 250..255, 174, 195, 197, 198, 207..210] then Continue;
     MarkTag(Tag);
     { Stairs climb through neighbours sharing the floor texture. }
     if Special in [7, 8, 100, 127] then
@@ -1079,7 +1090,7 @@ begin
       until false;
     end;
     { Donut: the tagged sector, its neighbour and the neighbour's neighbours. }
-    if Special = 9 then
+    if Special in [9, 146, 155, 191] then
     begin
       S := -1;
       repeat
@@ -1117,7 +1128,8 @@ begin
   Player.TotalItems := 0;
   Player.TotalSecrets := 0;
   for I := 0 to High(FMap.Sectors) do
-    if FMap.Sectors[I].Special = 9 then Inc(Player.TotalSecrets);
+    if (FMap.Sectors[I].Special = 9) or ((FMap.Sectors[I].Special and SectorSecretBit) <> 0) then
+      Inc(Player.TotalSecrets);
   for I := 0 to High(FMap.Things) do
   begin
     T := FMap.Things[I];
@@ -1279,19 +1291,12 @@ begin
   FTicAccum := 0;
   { Light effect sectors. }
   SetLength(FLightSectors, 0);
+  SetLength(FLightTimers, 0);
+  SetLength(FLightPhase, 0);
+  { Boom's sector types keep the vanilla light effects in the low 5 bits. }
   for I := 0 to High(FMap.Sectors) do
-    if FMap.Sectors[I].Special in [1, 2, 3, 4, 8, 12, 13, 17] then
-    begin
-      SetLength(FLightSectors, Length(FLightSectors) + 1);
-      FLightSectors[High(FLightSectors)] := I;
-    end;
-  SetLength(FLightTimers, Length(FLightSectors));
-  SetLength(FLightPhase, Length(FLightSectors));
-  for I := 0 to High(FLightTimers) do
-  begin
-    FLightTimers[I] := Random1(8);
-    FLightPhase[I] := 0;
-  end;
+    if (FMap.Sectors[I].Special and 31) in [1, 2, 3, 4, 8, 12, 13, 17] then
+      AddLightSector(I);
   PlayerTeleported := false;
   PlayerTurn := 0;
   PlayerPushVX := 0; PlayerPushVY := 0; PlayerPushDX := 0; PlayerPushDY := 0;
@@ -1541,6 +1546,32 @@ begin
   end;
 end;
 
+procedure TDoomWorld.AddLightSector(const Sec: Integer);
+var
+  N: Integer;
+begin
+  N := Length(FLightSectors);
+  SetLength(FLightSectors, N + 1);
+  SetLength(FLightTimers, N + 1);
+  SetLength(FLightPhase, N + 1);
+  FLightSectors[N] := Sec;
+  FLightTimers[N] := Random1(8);
+  FLightPhase[N] := 0;
+end;
+
+procedure TDoomWorld.StartStrobe(const Sec: Integer);
+var
+  I: Integer;
+begin
+  { EV_StartLightStrobing: a slow strobe, unless the sector already has a
+    light effect. The effect is kept as special 3 in the low bits (the
+    damage and secret bits stay), so a saved game brings it back. }
+  for I := 0 to High(FLightSectors) do
+    if FLightSectors[I] = Sec then Exit;
+  FMap.Sectors[Sec].Special := (FMap.Sectors[Sec].Special and not 31) or 3;
+  AddLightSector(Sec);
+end;
+
 procedure TDoomWorld.TicLights;
 var
   I, Sec, MinL, MaxL, NewL: Integer;
@@ -1551,7 +1582,7 @@ begin
     MaxL := FMap.Sectors[Sec].OrigLight;
     MinL := FMap.MinSurroundingLight(Sec, MaxL);
     NewL := FMap.Sectors[Sec].LightLevel;
-    case FMap.Sectors[Sec].Special of
+    case FMap.Sectors[Sec].Special and 31 of
       1, 17: { random blink / fire flicker }
         begin
           Dec(FLightTimers[I]);
@@ -1565,7 +1596,7 @@ begin
             end else
             begin
               NewL := MaxL;
-              if FMap.Sectors[Sec].Special = 17 then
+              if (FMap.Sectors[Sec].Special and 31) = 17 then
                 FLightTimers[I] := Random1(4)
               else
                 FLightTimers[I] := Random1(64);
@@ -1585,7 +1616,7 @@ begin
             begin
               if MinL = MaxL then MinL := 0;
               NewL := MinL;
-              if FMap.Sectors[Sec].Special in [3, 12] then
+              if (FMap.Sectors[Sec].Special and 31) in [3, 12] then
                 FLightTimers[I] := 35
               else
                 FLightTimers[I] := 15;
@@ -1663,15 +1694,29 @@ begin
   if Sec < 0 then Exit;
   if FTic mod 8 = 0 then RevealAutomap;
   Special := FMap.Sectors[Sec].Special;
-  if Special = 9 then
+  { Vanilla 9, or Boom's secret bit (which leaves the rest of the type). }
+  if (Special = 9) or ((Special and SectorSecretBit) <> 0) then
   begin
-    FMap.Sectors[Sec].Special := 0;
+    if Special = 9 then
+      Special := 0
+    else
+      Special := Special and not SectorSecretBit;
+    FMap.Sectors[Sec].Special := Special;
     Inc(Player.Secrets);
     ShowMessage('A secret is revealed!');
     FSounds.Play('DSITEMUP');
   end;
-  { Damaging floors, only when standing on them. }
-  if (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) and (FTic mod 32 = 0) and (Player.RadSuitTics = 0) then
+  { Damaging floors, only when standing on them; Boom's types (32 and
+    up) say the damage in bits 5-6: 5, 10 or 20 a hit, the last one
+    through a radiation suit too (2 in 256 tics). }
+  if (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) and (FTic mod 32 = 0) and (Special >= 32) then
+    case (Special shr 5) and 3 of
+      1: if Player.RadSuitTics = 0 then DamagePlayer(5, nil);
+      2: if Player.RadSuitTics = 0 then DamagePlayer(10, nil);
+      3: if (Player.RadSuitTics = 0) or (Random1(256) < 5) then DamagePlayer(20, nil);
+    end;
+  if (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) and (FTic mod 32 = 0) and (Player.RadSuitTics = 0) and
+     (Special < 32) then
     case Special of
       7: DamagePlayer(5, nil);
       5: DamagePlayer(10, nil);
@@ -3512,7 +3557,7 @@ begin
           NX := A.DoomX + A.VelX * Max(0, T - 0.1);
           NY := A.DoomY + A.VelY * Max(0, T - 0.1);
           { Shooting a gun-activated line. }
-          if L.Special in [24, 46, 47] then ShootSpecialLine(I);
+          if L.Special in [24, 46, 47, 197, 198] then ShootSpecialLine(I);
           Break;
         end;
     end;
@@ -4271,7 +4316,7 @@ begin
   begin
     I := Found[K];
     L := FMap.Linedefs[I];
-    if not (L.Special in [24, 46, 47]) then Continue;
+    if not (L.Special in [24, 46, 47, 197, 198]) then Continue;
     V1 := FMap.Vertices[L.V1];
     V2 := FMap.Vertices[L.V2];
     if SegmentsIntersect(Player.X, Player.Y, EX, EY, V1.X, V1.Y, V2.X, V2.Y, T) then
@@ -4793,7 +4838,7 @@ end;
 function TDoomWorld.CrossSpecialLine(const Line, Side: Integer): Boolean;
 begin
   { Teleporters only work from the front side. }
-  if (FMap.Linedefs[Line].Special in [39, 97]) and (Side <> 0) then Exit(false);
+  if (FMap.Linedefs[Line].Special in [39, 97, 207, 208]) and (Side <> 0) then Exit(false);
   Result := ApplySpecial(Line, acCross, false);
 end;
 
@@ -5022,6 +5067,26 @@ begin
   until false;
 end;
 
+function TDoomWorld.FloorModel(const Sec: Integer; const Height: Single): Integer;
+var
+  L, O: Integer;
+begin
+  for L in FMap.Sectors[Sec].Lines do
+  begin
+    O := FMap.OtherSector(L, Sec);
+    if (O >= 0) and (FMap.Sectors[O].FloorHeight = Height) then Exit(O);
+  end;
+  Result := -1;
+end;
+
+procedure TDoomWorld.ChangeFloorTo(const Sec, Model: Integer);
+begin
+  if Model < 0 then Exit;
+  FMap.Sectors[Sec].FloorTex := FMap.Sectors[Model].FloorTex;
+  FMap.Sectors[Sec].Special := FMap.Sectors[Model].Special;
+  FGeometry.SectorChanged(Sec);
+end;
+
 procedure TDoomWorld.DoLight(const Sec: Integer; const Level: Integer);
 begin
   if FMap.Sectors[Sec].LightLevel <> Level then
@@ -5177,11 +5242,23 @@ begin
   until false;
 end;
 
-procedure TDoomWorld.DoTeleport(const Line: Integer);
+procedure TDoomWorld.DoTeleport(const Line: Integer; const Silent: Boolean);
 var
   Tag, S: Integer;
   A, Fog: TDoomActor;
+  LineAngle, HeightAbove: Single;
 begin
+  if Silent then
+  begin
+    { EV_SilentTeleport: crossing the line straight from its front (its
+      angle + 90) leaves facing the destination's angle. }
+    LineAngle := RadToDeg(ArcTan2(
+      FMap.Vertices[FMap.Linedefs[Line].V2].Y - FMap.Vertices[FMap.Linedefs[Line].V1].Y,
+      FMap.Vertices[FMap.Linedefs[Line].V2].X - FMap.Vertices[FMap.Linedefs[Line].V1].X));
+    HeightAbove := 0;
+    if Player.Sector >= 0 then
+      HeightAbove := Max(0, Player.Z - FMap.Sectors[Player.Sector].FloorHeight);
+  end;
   Tag := FMap.Linedefs[Line].Tag;
   S := -1;
   repeat
@@ -5190,6 +5267,23 @@ begin
     for A in FActors do
       if (A.Info^.Kind = tkTeleportDest) and (A.Sector = S) then
       begin
+        if Silent then
+        begin
+          PlayerTeleported := true;
+          PlayerTeleportX := A.DoomX;
+          PlayerTeleportY := A.DoomY;
+          PlayerTeleportZ := FMap.Sectors[S].FloorHeight + HeightAbove;
+          PlayerTeleportAngle := Player.Angle + A.Angle - LineAngle - 90;
+          Player.X := A.DoomX;
+          Player.Y := A.DoomY;
+          Player.Z := PlayerTeleportZ;
+          Player.Sector := S;
+          FOldPlayerX := Player.X;
+          FOldPlayerY := Player.Y;
+          WritelnLog('Teleport', 'player silently to (%.0f, %.0f), angle %.0f', [A.DoomX, A.DoomY,
+            PlayerTeleportAngle]);
+          Exit;
+        end;
         { Fog at the departure point. }
         Fog := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[ekTeleFog]);
         Fog.State := asEffect;
@@ -5275,6 +5369,92 @@ var
     if Back < 0 then Exit;
     DoDoor(Back, true, not StayOpen, Blaze, DoorWait);
     Result := true;
+  end;
+
+  { A floor move that takes Model's texture and special when it ends. }
+  procedure FloorAndChange(const Sec: Integer; const Target, Speed: Single; const Model: Integer);
+  var
+    Mover: TSectorMover;
+  begin
+    if FMap.Sectors[Sec].Mover <> nil then Exit;
+    Mover := DoFloor(Sec, Target, Speed, Model);
+    if Model < 0 then Exit;
+    if Mover <> nil then
+    begin
+      Mover.ChangeSpecial := true;
+      Mover.NewSpecial := FMap.Sectors[Model].Special;
+    end else
+      FMap.Sectors[Sec].Special := FMap.Sectors[Model].Special;
+  end;
+
+  { Boom's extended types 142-241 (in the vanilla style, by number). }
+  function BoomExtended: Boolean;
+  var
+    I: Integer;
+  begin
+    Result := true;
+    I := -1;
+    case Special of
+      { Floors }
+      142, 147, 178: while NextTagged(I) do DoFloor(I, FMap.Sectors[I].FloorHeight + 512, FloorSpeed);
+      143, 148: while NextTagged(I) do DoFloor(I, FMap.Sectors[I].FloorHeight + 24, FloorSpeed / 2, Front);
+      144, 149: while NextTagged(I) do DoFloor(I, FMap.Sectors[I].FloorHeight + 32, FloorSpeed / 2, Front);
+      158, 176: while NextTagged(I) do DoFloor(I, FloorRaiseToTexture(I), FloorSpeed);
+      159, 177:
+        while NextTagged(I) do
+          FloorAndChange(I, FMap.LowestFloorSurrounding(I), FloorSpeed,
+            FloorModel(I, FMap.LowestFloorSurrounding(I)));
+      160, 179: while NextTagged(I) do FloorAndChange(I, FMap.Sectors[I].FloorHeight + 24, FloorSpeed, Front);
+      161, 180: while NextTagged(I) do DoFloor(I, FMap.Sectors[I].FloorHeight + 24, FloorSpeed);
+      219, 220, 221, 222:
+        while NextTagged(I) do DoFloor(I, FMap.NextLowestFloor(I, FMap.Sectors[I].FloorHeight), FloorSpeed);
+      { Texture and type changes without moving: from the line's front
+        sector (153, 154, 189, 190) or a neighbour at the same height. }
+      153, 154, 189, 190: while NextTagged(I) do ChangeFloorTo(I, Front);
+      239, 240, 241: while NextTagged(I) do ChangeFloorTo(I, FloorModel(I, FMap.Sectors[I].FloorHeight));
+      146, 155, 191: DoDonut(Tag);
+      { Lifts }
+      162, 181: begin ResumeMovers(Tag, mkLift); TaggedLifts(false, true); end;
+      163, 182, 168, 188: StopPlats(Tag);
+      { Ceilings and crushers }
+      145, 152: while NextTagged(I) do DoCeiling(I, FMap.Sectors[I].FloorHeight, CeilSpeed, false);
+      151, 166, 186: while NextTagged(I) do DoCeiling(I, FMap.HighestCeilingSurrounding(I), CeilSpeed, false);
+      167, 187: while NextTagged(I) do DoCeiling(I, FMap.Sectors[I].FloorHeight + 8, CeilSpeed, false);
+      { These only lower: a higher target stops at the ceiling itself. }
+      199, 201, 203, 205:
+        while NextTagged(I) do
+          DoCeiling(I, Min(FMap.LowestCeilingSurrounding(I), FMap.Sectors[I].CeilingHeight), CeilSpeed, false);
+      200, 202, 204, 206:
+        while NextTagged(I) do
+          DoCeiling(I, Min(FMap.HighestFloorSurrounding(I), FMap.Sectors[I].CeilingHeight), CeilSpeed, false);
+      150, 165, 185:
+        begin
+          ResumeMovers(Tag, mkCrusher);
+          while NextTagged(I) do DoCeiling(I, FMap.Sectors[I].FloorHeight + 8, CeilSpeed, true, true);
+        end;
+      164, 183:
+        begin
+          ResumeMovers(Tag, mkCrusher);
+          while NextTagged(I) do DoCeiling(I, FMap.Sectors[I].FloorHeight + 8, CeilSpeed * 2, true);
+        end;
+      184:
+        begin
+          ResumeMovers(Tag, mkCrusher);
+          while NextTagged(I) do DoCeiling(I, FMap.Sectors[I].FloorHeight + 8, CeilSpeed, true);
+        end;
+      { Doors: close, 30 s, open }
+      175, 196: TaggedDoors(false, true, false, 30 * TicRate);
+      { Lights }
+      156, 172, 193: while NextTagged(I) do StartStrobe(I);
+      157, 173, 194: while NextTagged(I) do DoLight(I, FMap.MinSurroundingLight(I, FMap.Sectors[I].LightLevel));
+      169, 192: while NextTagged(I) do DoLight(I, FMap.MaxSurroundingLight(I, 0));
+      170: while NextTagged(I) do DoLight(I, 35);
+      171: while NextTagged(I) do DoLight(I, 255);
+      { Teleports }
+      174, 195: DoTeleport(Line);
+      207, 208, 209, 210: DoTeleport(Line, true);
+      else Result := false;
+    end;
   end;
 
 begin
@@ -5375,6 +5555,17 @@ begin
         51: begin FSounds.Play('DSSWTCHX'); FExitRequested := true; FSecretExit := true; Exit(true); end;
 
         9: begin DoDonut(Tag); Done := true; end;
+
+        { Boom S1 / SR }
+        158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
+        189, 203, 204, 209, 221, 241:
+          Done := BoomExtended;
+        176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 190, 191, 192, 193, 194, 195, 196,
+        205, 206, 210, 222:
+          begin
+            Done := BoomExtended;
+            Repeatable := true;
+          end;
       end;
 
     acCross:
@@ -5453,6 +5644,15 @@ begin
 
         52: begin FExitRequested := true; FSecretExit := false; Exit(true); end;
         124: begin FExitRequested := true; FSecretExit := true; Exit(true); end;
+
+        { Boom W1 / WR }
+        142, 143, 144, 145, 146, 153, 199, 200, 207, 219, 239:
+          Done := BoomExtended;
+        147, 148, 149, 150, 151, 152, 154, 155, 156, 157, 201, 202, 208, 220, 240:
+          begin
+            Done := BoomExtended;
+            Repeatable := true;
+          end;
       end;
 
     acShoot:
@@ -5460,6 +5660,9 @@ begin
         24: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.LowestCeilingSurrounding(S), FloorSpeed); Done := true; end;
         46: begin TaggedDoors(true, false, false, 0); Done := true; Repeatable := true; end;
         47: begin S := -1; while NextTagged(S) do DoFloor(S, FMap.NextHighestFloor(S, FMap.Sectors[S].FloorHeight), FloorSpeed / 2, Front); Done := true; end;
+        { Boom G1 exits }
+        197: begin ChangeLineButton(Line, false); FExitRequested := true; FSecretExit := false; Exit(true); end;
+        198: begin ChangeLineButton(Line, false); FExitRequested := true; FSecretExit := true; Exit(true); end;
       end;
   end;
 

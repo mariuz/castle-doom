@@ -216,6 +216,14 @@ TESTS = [
      [r'Map: E1M1: scrollers: 2 walls, 1 floors, 1 ceilings, 1 carrying floors'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'scroll.wad')],
      lambda config: check_carry(config)),
+    ('boom-extended', 'E1M1',
+     'W:2,SAVE:1,Y,LINE:593:142,LINE:618:150,LINE:753:156,LINE:528:153,LINE:997:199,W:2,SAVE:2,Q',
+     [r'Message: A secret is revealed!', r'Line: line 593 special 142 tag 1: activated',
+      r'Line: line 997 special 199 tag 6: activated'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'boomext.wad')],
+     lambda config: check_boom_extended(config)),
+    ('boom-teleport', 'MAP07', 'Y,A:30,W:0.3,LINE:941:209,W:0.5,Q',
+     [r'Teleport: player silently to \(1528, 536\), angle 75'], [], None),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
@@ -241,6 +249,20 @@ def check_carry(config):
     a, b = save_json(config, 1)['player'], save_json(config, 2)['player']
     assert b['y'] - a['y'] > 50 and abs(b['x'] - a['x']) < 1, \
         'player not carried north: (%s, %s) -> (%s, %s)' % (a['x'], a['y'], b['x'], b['y'])
+
+
+def check_boom_extended(config):
+    """tools/testdata/boomext.wad: Boom's sector bits (secret 128, damage 64)
+    and numbered line types 142, 150, 156, 153 and 199 on E1M1."""
+    a, b = save_json(config, 1), save_json(config, 2)
+    assert a['sectorSpecial'][140] == 64, 'secret bit not cleared: %s' % a['sectorSpecial'][140]
+    assert a['player']['health'] < 100, 'no damage from the Boom sector: %s' % a['player']['health']
+    assert b['sectorFloor'][98] > 12, '142 did not raise sector 98: %s' % b['sectorFloor'][98]
+    crushers = [m for m in b['movers'] if m['sector'] == 103]
+    assert crushers and crushers[0]['silent'], '150: no silent crusher on 103: %s' % crushers
+    assert all(b['sectorSpecial'][i] & 31 == 3 for i in (76, 126, 129)), '156: no strobe'
+    assert b['sectorFloorTex'][77] != a['sectorFloorTex'][77], '153: floor texture unchanged'
+    assert b['sectorCeiling'][145] <= a['sectorCeiling'][145], '199 raised a ceiling'
 
 
 def check_floor(config, sector, height):
