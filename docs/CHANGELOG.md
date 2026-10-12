@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.18.0 (2026-10-12)
 
 - Boom elevators: floor and ceiling moving together (227-238), and
   platforms that jump between floor and ceiling (211, 212).
