@@ -73,8 +73,8 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 21 cases) cover the parsers,
-every node format and both music synthesizers:
+Unit tests (FPCUnit, no window, about 20 s, 22 cases) cover the parsers,
+every node format, the line grid and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
 code 1 on a failure; CI runs them before the autotests). The node-format
@@ -82,7 +82,9 @@ cases read `tools/testdata/nodes/*.wad` (gitignored): generate them once
 with `python3 tools/make_znodes.py tools/testdata/nodes/` and `python3
 tools/make_glnodes.py tools/testdata/nodes` (needs `glbsp`), else they
 print "skipped". A stale `castle-engine-output/compilation/.../*.ppu` can
-make the test build miss a changed unit interface: delete it. Add a case
+make the test build miss a changed unit interface: delete it (the
+test build finds the game's units through those files, so compile the
+game first). Add a case
 there when changing `DoomWad`, `DoomMap`, `DoomMusic`, `DoomStates` or `DoomDehacked`.
 
 The autotest harness is the main verification tool; use it after every change:
@@ -245,6 +247,13 @@ workflow builds every branch; download its `web-site` artifact
 (`gh api repos/mariuz/castle-doom/actions/artifacts` works here, `gh run`
 does not), unzip it into an empty directory, serve it with `python3 -m
 http.server` and point Playwright at `play/?map=...`.
+
+2D queries (sight, moves, missiles, hitscans, crossings, use) take
+their candidate lines from `TDoomMap.LinesInBox` / `LinesNearSegment`
+(a 128-unit grid, ascending line order); a new linedef scan in the
+simulation should too. MAP12 of Phase 2 (7245 lines) with its monsters
+awake: `-skill 4 --demo "Y,X,W:1,X,W:12,PERF,Q"` logs `actors` about
+1 ms per tic (7.8 before the grid).
 
 Profiling: `PERF` logs a `PerfView:` line at once (also every 10 s): our
 per-frame costs, CGE's FPS (`only render` = without display waits) and the

@@ -6,6 +6,17 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Line grid for the 2D queries: `TDoomMap` builds 128-unit cells of the
+  linedefs at load (from the vertices, like Doom's BLOCKMAP; a PWAD's
+  own lump is not trusted) and `LinesInBox` / `LinesNearSegment` give
+  the candidates in ascending order, so `CheckSight`, `SightClear`,
+  `TryMove2D`, `TraceLineAttack`, `AimLineAttack`, `TicMissile`,
+  `CheckCrossings`, `PlayerLineAttack` and `UseInFront` keep their exact
+  tests and first-hit rules (the fixed-step golden screenshots are
+  unchanged). Phase 2's MAP12 (7245 lines) with its monsters awake:
+  actors 7.8 -> 1.1 ms per tic. Unit test `TestLineGrid` compares 8000
+  random queries with a full scan.
+
 - UMAPINFO level names as text on the intermission: a map with a
   `levelname` and no `levelpic` shows its name in the HU font above
   "FINISHED" and below "ENTERING" (`TDoomIntermission.DrawLevelName`),
@@ -691,7 +702,6 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **True fuzz from the background**: Doom's fuzz copies the pixel one row above or below, darkened by colormap 6; the shader cannot read the framebuffer, so the pattern is black specks instead. A screen-space pass (render the spectres into a mask, then shift and darken the scene there) would be exact. | Exact spectre look. | `DoomLighting`, `GameViewPlay` | M |
-| **Blockmap-free 2D queries** scan every linedef (`SightClear`, `TryMove2D`, `TicMissile`, `CheckCrossings`). Add a simple grid (or read `BLOCKMAP`) for very large maps. | Performance on big PWADs. | `DoomMap` | M |
 | **Item respawn / deathmatch starts**: not applicable to single player, but the flags are parsed. | Only if multiplayer ever happens. | - | - |
 
 ## 2. Presentation
@@ -725,7 +735,7 @@ L = several days). Items inside a section are in suggested order.
 | **More unit tests**: `DoomGeometry`'s sector chunks (needs the graphics cache without a window), the automap and HUD composition, the save file's round trip through `doomworld_save.inc` on a world without a viewport. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
 | **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
 | **Web gamepads in CGE itself**: the game's `GameGamepad` polls the Gamepad API through JOB (done, see above); a real `CastleInternalGameControllersWeb` backend inside CGE (`gamepadconnected` events, `mapping` other than `standard`) would serve every CGE web game. Best contributed upstream. | One less game-side workaround. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
-| **Performance**: build a static-sector blockmap; merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
+| **Performance**: a thing grid for the actor-vs-actor checks (they still loop over every actor); merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
 
 ## 6. Inspectability (Castle Game Engine's tools)
 
@@ -753,12 +763,11 @@ play.
 
 ## Suggested next three
 
-1. Blockmap for the 2D queries (M, see Gameplay fidelity): the
-   groundwork for big community maps, before Boom's specials.
-2. Boom generalized linedefs (M-L, see Content and formats), in parts:
-   (a) generalized floors, ceilings, doors and lifts through the existing
-   movers, (b) scrolling walls and floors, (c) friction and pushers,
-   (d) translucency.
+1. Boom generalized linedefs (M-L, see Content and formats), part (a):
+   generalized floors, ceilings, doors, lifts and crushers (specials
+   0x2F80-0x7FFF) decoded into the existing movers.
+2. Boom scrolling walls and floors (part (b): specials 48, 250-255,
+   then (c) friction and pushers, (d) translucency).
 3. Touch controls in the browser (M, see Engine and tooling): the web
    build is unplayable on phones; `TCastleTouchNavigation` plus fire and
    use buttons, the first step to an Android package too.
