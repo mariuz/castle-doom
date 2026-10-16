@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Boom line-to-line teleports (243, 244 and MBF's 262-269): walk through
+  one line and come out of another, keeping your direction relative to it.
+- Boom light transfers (213, 261): floors and ceilings lit like another
+  sector, and sky transfers (271, 272): a map's own sky texture.
+
 ## v0.18.0 (2026-10-12)
 
 - Boom elevators: floor and ceiling moving together (227-238), and

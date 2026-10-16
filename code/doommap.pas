@@ -144,6 +144,7 @@ type
     procedure BuildScrollers;
     procedure BuildFrictionAndPushers;
     procedure BuildTranslucency;
+    procedure BuildTransfers;
     function TranslucencyMapAlpha(const Lump: Integer): Single;
   public
     Vertices: array of TDoomVertex;
@@ -180,6 +181,16 @@ type
       opacity estimated from how it mixes the palette. }
     LineAlpha: array of Single;
     TranslucentLines: Integer;
+    { Boom's light transfers: the sector whose light a sector's floor (213)
+      or ceiling (261) shows, -1 for its own. }
+    FloorLightSector, CeilingLightSector: array of Integer;
+    LightTransfers: Integer;
+    { Boom's sky transfer (271, 272: the upper texture of the line's front
+      side as the sky of the tagged sky sectors, 272 mirrored). There is
+      one sky here, so the transfer covering most sky sectors is used,
+      when it covers more than half of them; empty when none is. }
+    SkyTransferTexture: String;
+    SkyTransferFlipped: Boolean;
 
     constructor Create(const AWad: TDoomWad; const MapName: String);
 
@@ -323,6 +334,7 @@ begin
   BuildScrollers;
   BuildFrictionAndPushers;
   BuildTranslucency;
+  BuildTransfers;
   if ScrollingSides + ScrollingFloors + ScrollingCeilings + CarryingFloors > 0 then
     WritelnLog('Map', '%s: scrollers: %d walls, %d floors, %d ceilings, %d carrying floors', [
       FName, ScrollingSides, ScrollingFloors, ScrollingCeilings, CarryingFloors]);
@@ -1235,6 +1247,76 @@ begin
     Weights[K + 1] := DotFB;
   end;
   Result := Min(1, Max(0, Weights[N div 2]));
+end;
+
+procedure TDoomMap.BuildTransfers;
+var
+  I, S, Front, SkySectors, Covered, Best, BestLine: Integer;
+begin
+  SetLength(FloorLightSector, Length(Sectors));
+  SetLength(CeilingLightSector, Length(Sectors));
+  for I := 0 to High(Sectors) do
+  begin
+    FloorLightSector[I] := -1;
+    CeilingLightSector[I] := -1;
+  end;
+  LightTransfers := 0;
+  SkyTransferTexture := '';
+  SkyTransferFlipped := false;
+  SkySectors := 0;
+  for I := 0 to High(Sectors) do
+    if HasSkyCeiling(I) then Inc(SkySectors);
+  Best := 0;
+  BestLine := -1;
+  for I := 0 to High(Linedefs) do
+  begin
+    Front := Linedefs[I].FrontSector;
+    case Linedefs[I].Special of
+      213, 261:
+        if Front >= 0 then
+        begin
+          Inc(LightTransfers);
+          S := -1;
+          repeat
+            S := FindSectorFromTag(Linedefs[I].Tag, S);
+            if S < 0 then Break;
+            if Linedefs[I].Special = 213 then
+              FloorLightSector[S] := Front
+            else
+              CeilingLightSector[S] := Front;
+          until false;
+        end;
+      271, 272:
+        begin
+          Covered := 0;
+          S := -1;
+          repeat
+            S := FindSectorFromTag(Linedefs[I].Tag, S);
+            if S < 0 then Break;
+            if HasSkyCeiling(S) then Inc(Covered);
+          until false;
+          if Covered > Best then
+          begin
+            Best := Covered;
+            BestLine := I;
+          end;
+        end;
+    end;
+  end;
+  if BestLine >= 0 then
+  begin
+    if (Best * 2 > SkySectors) and (Linedefs[BestLine].Side[0] >= 0) then
+    begin
+      SkyTransferTexture := UpperCase(Sidedefs[Linedefs[BestLine].Side[0]].UpperTex);
+      SkyTransferFlipped := Linedefs[BestLine].Special = 272;
+      WritelnLog('Map', '%s: sky transfer: line %d gives %s%s to %d of %d sky sectors', [FName, BestLine,
+        SkyTransferTexture, BoolToStr(SkyTransferFlipped, ' (mirrored)', ''), Best, SkySectors]);
+    end else
+      WritelnLog('Map', '%s: sky transfer of line %d covers only %d of %d sky sectors: the map''s sky stays',
+        [FName, BestLine, Best, SkySectors]);
+  end;
+  if LightTransfers > 0 then
+    WritelnLog('Map', '%s: %d light transfer lines', [FName, LightTransfers]);
 end;
 
 procedure TDoomMap.BuildTranslucency;

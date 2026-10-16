@@ -153,13 +153,14 @@ type
     procedure SetVisible(const Value: Boolean);
     procedure AssignChunks;
     procedure BuildCollisionScene;
-    procedure BuildSky(const SkyTexture: String);
+    procedure BuildSky(const SkyTexture: String; const Flipped: Boolean);
     procedure Dependency(const Sec: Integer; const Chunk: TMapChunk);
     { The level's wall textures and flats into TDoomGraphics' atlas pages. }
     procedure BuildAtlas(const SkyTexture: String);
   public
+    { SkyFlipped mirrors the sky (Boom's 272 sky transfer). }
     constructor Create(const AMap: TDoomMap; const AGraphics: TDoomGraphics;
-      const DynamicSectors: array of Boolean; const SkyTexture: String);
+      const DynamicSectors: array of Boolean; const SkyTexture: String; const SkyFlipped: Boolean = false);
     destructor Destroy; override;
     { Add all scenes to a viewport's Items. }
     procedure AddToWorld(const Parent: TCastleTransform);
@@ -637,6 +638,11 @@ begin
     Img := nil
   else
     Img := FOwner.Graphics.Flat(Map.Sectors[Sec].FloorTex);
+  { Boom's light transfers (213 floor, 261 ceiling): another sector's light. }
+  if Map.FloorLightSector[Sec] >= 0 then
+    Light := Vector2(Map.Sectors[Map.FloorLightSector[Sec]].LightLevel, DoomLightPlane)
+  else
+    Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightPlane);
   if Img <> nil then
   begin
     Z := Map.Sectors[Sec].FloorHeight;
@@ -653,6 +659,10 @@ begin
   if not Map.HasSkyCeiling(Sec) then
   begin
     Img := FOwner.Graphics.Flat(Map.Sectors[Sec].CeilingTex);
+    if Map.CeilingLightSector[Sec] >= 0 then
+      Light := Vector2(Map.Sectors[Map.CeilingLightSector[Sec]].LightLevel, DoomLightPlane)
+    else
+      Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightPlane);
     if Img <> nil then
     begin
       Z := Map.Sectors[Sec].CeilingHeight;
@@ -734,7 +744,7 @@ end;
 { TDoomGeometry -------------------------------------------------------------- }
 
 constructor TDoomGeometry.Create(const AMap: TDoomMap; const AGraphics: TDoomGraphics;
-  const DynamicSectors: array of Boolean; const SkyTexture: String);
+  const DynamicSectors: array of Boolean; const SkyTexture: String; const SkyFlipped: Boolean);
 var
   I: Integer;
   C: TMapChunk;
@@ -758,7 +768,7 @@ begin
   for C in FChunks do
     C.Generate;
   BuildCollisionScene;
-  BuildSky(SkyTexture);
+  BuildSky(SkyTexture, SkyFlipped);
   WritelnLog('Geometry', '%s: %d chunks (%d dynamic sectors)', [FMap.Name, FChunks.Count, FChunks.Count - 1]);
 end;
 
@@ -866,6 +876,9 @@ begin
     if FSectorChunk[Sec] <> nil then C := FSectorChunk[Sec] else C := FStaticChunk;
     AddSub(C, I);
     Dependency(Sec, C);
+    { A light transfer's source changes these flats too. }
+    if FMap.FloorLightSector[Sec] >= 0 then Dependency(FMap.FloorLightSector[Sec], C);
+    if FMap.CeilingLightSector[Sec] >= 0 then Dependency(FMap.CeilingLightSector[Sec], C);
   end;
 
   { Each line side goes to the chunk of the first dynamic sector it touches
@@ -968,7 +981,7 @@ begin
   end;
 end;
 
-procedure TDoomGeometry.BuildSky(const SkyTexture: String);
+procedure TDoomGeometry.BuildSky(const SkyTexture: String; const Flipped: Boolean);
 const
   Radius = 12000;
   Segments = 16; { per quarter }
@@ -989,6 +1002,12 @@ var
   function RowHeight(const Row: Single): Single;
   begin
     Result := Radius * (SkyTextureMid - Row) / SkyFocal;
+  end;
+
+  { The texture column (0..1 in a tile), mirrored for Boom's 272. }
+  function SkyU(const U: Single): Single;
+  begin
+    if Flipped then Result := 1 - U else Result := U;
   end;
 
 begin
@@ -1033,10 +1052,10 @@ begin
           P2 := DoomToCge(Cos(A0) * Radius, Sin(A0) * Radius, Y0);
           P3 := DoomToCge(Cos(A1) * Radius, Sin(A1) * Radius, Y0);
           Batch.AddQuad(P0, P1, P2, P3,
-            Vector2((I + 1) / Segments, V1),
-            Vector2(I / Segments, V1),
-            Vector2(I / Segments, V0),
-            Vector2((I + 1) / Segments, V0),
+            Vector2(SkyU((I + 1) / Segments), V1),
+            Vector2(SkyU(I / Segments), V1),
+            Vector2(SkyU(I / Segments), V0),
+            Vector2(SkyU((I + 1) / Segments), V0),
             Vector2(255, DoomLightFullBright), Vector4(0, 0, 1, 1));
         end;
     end;

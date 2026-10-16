@@ -245,6 +245,12 @@ TESTS = [
      [r'DeHackEd: translucent.deh: 2 values applied'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'translucent.deh'), '--fixed-step'],
      None),
+    ('transfers', 'E1M1', 'Y,G:-300:256,A:0,W:0.2,F:1,W:0.3,SAVE:1,G:900:-500,A:90,LOOK:45,W:0.3,S,Q',
+     [r'Map: E1M1: sky transfer: line 1016 gives STARTAN3 \(mirrored\) to 19 of 19 sky sectors',
+      r'Map: E1M1: 2 light transfer lines',
+      r'Teleport: player through line 834 to line 679 at \(728, -384\), angle 270'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'transfer.wad'), '--fixed-step'],
+     lambda config: check_floor_y(config, -380)),
     ('icon-of-sin', 'MAP30', 'Y,G:-2208:3000,A:90,W:12,S,D,W:4,Q',
      [r'BrainAwake:', r'BrainDeath: Level exit'], [], None),
 ]
@@ -317,6 +323,12 @@ def check_elevators(config):
     assert b['sectorFloor'][98] == 12, 'toggle down: %s' % b['sectorFloor'][98]
 
 
+def check_floor_y(config, below):
+    """The player ended south of y = below (a line teleport moved them there)."""
+    p = save_json(config, 1)['player']
+    assert p['y'] < below, 'player at (%s, %s), not teleported' % (p['x'], p['y'])
+
+
 def check_floor(config, sector, height):
     with open(os.path.join(config, 'castle-doom', 'save1.json')) as f:
         save = json.load(f)
@@ -364,7 +376,7 @@ GOLDEN = [
     'video-settings_1.png', 'settings-1_1.png', 'phase2-download_1.png', 'arch-vile_1.png',
     'save-round-trip_1.png', 'save-round-trip_2.png', 'knockback_1.png', 'melee-turn_1.png',
     'donut_1.png', 'select-thing_1.png', 'key-bindings_1.png', 'translucency_1.png',
-    'translucent-things_1.png',
+    'translucent-things_1.png', 'transfers_1.png',
 ]
 
 

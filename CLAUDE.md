@@ -73,7 +73,7 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 27 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 28 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -441,6 +441,14 @@ tools/testdata/translucent.deh` makes the imp (by name) and the
 zombieman (bit 31 as a number) see-through (`Y,A:0,P:3001:120,W:0.1,S`;
 autotest `translucent-things` with a golden screenshot, unit test
 `TestTranslucentBits`).
+Boom line teleports and transfers: `tools/testdata/transfer.wad`
+(`tools/make_transfer_wad.py`) makes E1M1's start-room edge (line 834) a
+243 to line 679 (`G:-300:256,A:0,F:1` logs `Teleport: player through
+line 834 to line 679 at (728, -384), angle 270`), lights the start room
+like sector 133 (213, 261) and makes STARTAN3 the mirrored sky (272;
+autotest `transfers` with a golden screenshot of the sky, unit test
+`TestTransfers`). `LINE:834:263` tries the reversed type from wherever
+the player stands (the position is projected on the source line).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

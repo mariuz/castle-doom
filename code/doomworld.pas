@@ -361,7 +361,13 @@ type
       angle to the line, turned the way the destination faces. }
     procedure DoTeleport(const Line: Integer; const Silent: Boolean = false);
     { EV_Teleport for a monster; false when there is no free destination. }
-    function TeleportActor(const A: TDoomActor; const Line: Integer): Boolean;
+    function TeleportActor(const A: TDoomActor; const Line: Integer; const Silent: Boolean = false): Boolean;
+    { Boom's / MBF's line-to-line teleports (EV_SilentLineTeleport): to the
+      matching point of the other line with the same tag, on its front
+      side (or, Reverse, its back side, mirrored), the height above the
+      floor kept and the view turned by the angle between the lines.
+      A = nil: the player. }
+    function LineTeleport(const Line: Integer; const Reverse: Boolean; const A: TDoomActor): Boolean;
     { P_CrossSpecialLine for a monster that moved from (OldX, OldY). }
     procedure MonsterCrossLines(const A: TDoomActor; const OldX, OldY: Single);
     procedure StopPlats(const Tag: Integer);
@@ -503,7 +509,9 @@ const
   ManualDoorSpecials: array [0..9] of Integer = (1, 26, 27, 28, 31, 32, 33, 34, 117, 118);
   { P_CrossSpecialLine: the walk-over specials a monster can set off (door
     raise, two lifts, teleporters and the monster-only teleporters). }
-  MonsterCrossSpecials = [4, 10, 39, 88, 97, 125, 126];
+  { Boom lets monsters through its silent and line teleports too, and
+    MBF has monster-only ones (264-269). }
+  MonsterCrossSpecials = [4, 10, 39, 88, 97, 125, 126, 207, 208, 243, 244];
 
 var
   EffectInfos: array [TEffectKind] of TThingInfo;
@@ -687,6 +695,13 @@ begin
   T := ((CX - AX) * (DY - CY) - (CY - AY) * (DX - CX)) / D;
   U := ((CX - AX) * (BY - AY) - (CY - AY) * (BX - AX)) / D;
   Result := (T >= 0) and (T <= 1) and (U >= 0) and (U <= 1);
+end;
+
+{ A walk-over special a monster may trigger: MonsterCrossSpecials, or
+  MBF's monster teleports (262-269, past a Pascal set's 255). }
+function MonsterCrossSpecial(const Special: Integer): Boolean;
+begin
+  Result := (Special in MonsterCrossSpecials) or ((Special >= 262) and (Special <= 269));
 end;
 
 { TSectorMover --------------------------------------------------------------- }
@@ -1102,7 +1117,9 @@ begin
     end;
     { Exits, teleporters and scrollers (the geometry scrolls those
       textures itself) move no sector. }
-    if Special in [11, 51, 52, 124, 48, 85, 39, 97, 125, 126, 250..255, 260, 174, 195, 197, 198, 207..210] then Continue;
+    if (Special in [11, 51, 52, 124, 48, 85, 39, 97, 125, 126, 250..255, 174, 195, 197, 198, 207..210,
+      213, 243, 244]) or (Special = 260) or (Special = 261) or (Special = 271) or (Special = 272) or
+       ((Special >= 262) and (Special <= 269)) then Continue;
     MarkTag(Tag);
     { Stairs climb through neighbours sharing the floor texture. }
     if Special in [7, 8, 100, 127] then
@@ -1150,6 +1167,12 @@ begin
       until false;
     end;
   end;
+  { Boom's light transfers: a sector showing a dynamic sector's light
+    changes with it, so it needs its own chunk too. }
+  for I := 0 to High(FDynamic) do
+    if ((FMap.FloorLightSector[I] >= 0) and FDynamic[FMap.FloorLightSector[I]]) or
+       ((FMap.CeilingLightSector[I] >= 0) and FDynamic[FMap.CeilingLightSector[I]]) then
+      FDynamic[I] := true;
 end;
 
 procedure TDoomWorld.SpawnThings;
@@ -1273,7 +1296,11 @@ begin
   Profiler.Stop(ProfStage);
   ProfStage := Profiler.Start('Build geometry');
   FGraphics.BeginLevel;
-  FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName));
+  { Boom's sky transfer (271, 272) when it covers most of the sky. }
+  if (FMap.SkyTransferTexture <> '') and (FGraphics.Texture(FMap.SkyTransferTexture) <> nil) then
+    FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FMap.SkyTransferTexture, FMap.SkyTransferFlipped)
+  else
+    FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName));
   FGeometry.AddToWorld(FMapGroup);
   { The previous level's geometry is gone: its textures can go too. }
   FGraphics.ReleaseUnused;
@@ -1328,7 +1355,7 @@ begin
   SetLength(FSectorSound, Length(FMap.Sectors));
   SetLength(FMonsterCrossLines, 0);
   for I := 0 to High(FMap.Linedefs) do
-    if (FMap.Linedefs[I].Special in MonsterCrossSpecials) or
+    if MonsterCrossSpecial(FMap.Linedefs[I].Special) or
        GenMonsterTrigger(FMap.Linedefs[I].Special, true) then
     begin
       SetLength(FMonsterCrossLines, Length(FMonsterCrossLines) + 1);
@@ -5013,7 +5040,8 @@ end;
 function TDoomWorld.CrossSpecialLine(const Line, Side: Integer): Boolean;
 begin
   { Teleporters only work from the front side. }
-  if (FMap.Linedefs[Line].Special in [39, 97, 207, 208]) and (Side <> 0) then Exit(false);
+  if ((FMap.Linedefs[Line].Special in [39, 97, 207, 208, 243, 244]) or (FMap.Linedefs[Line].Special = 262) or
+      (FMap.Linedefs[Line].Special = 263)) and (Side <> 0) then Exit(false);
   Result := ApplySpecial(Line, acCross, false);
 end;
 
@@ -5407,17 +5435,29 @@ begin
     L := FMonsterCrossLines[I];
     Special := FMap.Linedefs[L].Special;
     { A W1 already used. }
-    if not ((Special in MonsterCrossSpecials) or GenMonsterTrigger(Special, true)) then Continue;
+    if not (MonsterCrossSpecial(Special) or GenMonsterTrigger(Special, true)) then Continue;
     V1 := FMap.Vertices[FMap.Linedefs[L].V1];
     V2 := FMap.Vertices[FMap.Linedefs[L].V2];
     if not SegmentsIntersect(OldX, OldY, A.DoomX, A.DoomY, V1.X, V1.Y, V2.X, V2.Y, T) then Continue;
     case Special of
-      39, 97, 125, 126:
-        { EV_Teleport: only from the front side. }
-        if (FMap.PointOnLineSide(OldX, OldY, L) = 0) and TeleportActor(A, L) then
+      39, 97, 125, 126, 207, 208, 268, 269:
+        { EV_Teleport (silent for Boom's 207 / 208 and MBF's 268 / 269):
+          only from the front side. }
+        if (FMap.PointOnLineSide(OldX, OldY, L) = 0) and
+           TeleportActor(A, L, (Special = 207) or (Special = 208) or (Special = 268) or (Special = 269)) then
         begin
-          if Special in [39, 125] then FMap.Linedefs[L].Special := 0;
+          if (Special = 39) or (Special = 125) or (Special = 207) or (Special = 268) then
+            FMap.Linedefs[L].Special := 0;
           Exit; { it is somewhere else now }
+        end;
+      243, 244, 262, 263, 264, 265, 266, 267:
+        { EV_SilentLineTeleport: reversed for 262-265. }
+        if (FMap.PointOnLineSide(OldX, OldY, L) = 0) and
+           LineTeleport(L, (Special >= 262) and (Special <= 265), A) then
+        begin
+          if (Special = 243) or (Special = 262) or (Special = 264) or (Special = 266) then
+            FMap.Linedefs[L].Special := 0;
+          Exit;
         end;
       else
         ApplySpecial(L, acCross, true);
@@ -5425,7 +5465,102 @@ begin
   end;
 end;
 
-function TDoomWorld.TeleportActor(const A: TDoomActor; const Line: Integer): Boolean;
+function TDoomWorld.LineTeleport(const Line: Integer; const Reverse: Boolean; const A: TDoomActor): Boolean;
+var
+  J, Fudge, Side, Sec, OldSec: Integer;
+  SV1, SV2, DV1, DV2: TDoomVertex;
+  SDX, SDY, DDX, DDY, Len, NX, NY, Pos, X, Y, TX, TY, TZ, Above, Turn, VX, VY: Single;
+begin
+  Result := false;
+  if FMap.Linedefs[Line].Tag = 0 then Exit;
+  SV1 := FMap.Vertices[FMap.Linedefs[Line].V1];
+  SV2 := FMap.Vertices[FMap.Linedefs[Line].V2];
+  SDX := SV2.X - SV1.X;
+  SDY := SV2.Y - SV1.Y;
+  if A = nil then
+  begin
+    TX := Player.X; TY := Player.Y; TZ := Player.Z; OldSec := Player.Sector;
+  end else
+  begin
+    TX := A.DoomX; TY := A.DoomY; TZ := A.DoomZ; OldSec := A.Sector;
+  end;
+  Above := 0;
+  if OldSec >= 0 then Above := Max(0, TZ - FMap.Sectors[OldSec].FloorHeight);
+  for J := 0 to High(FMap.Linedefs) do
+  begin
+    if (J = Line) or (FMap.Linedefs[J].Tag <> FMap.Linedefs[Line].Tag) or
+       (FMap.Linedefs[J].BackSector < 0) then Continue;
+    DV1 := FMap.Vertices[FMap.Linedefs[J].V1];
+    DV2 := FMap.Vertices[FMap.Linedefs[J].V2];
+    DDX := DV2.X - DV1.X;
+    DDY := DV2.Y - DV1.Y;
+    Len := Sqrt(Sqr(DDX) + Sqr(DDY));
+    if Len = 0 then Continue;
+    { Where along the source line the thing crossed, 0 at its V1. }
+    if Abs(SDX) > Abs(SDY) then Pos := (TX - SV1.X) / SDX else Pos := (TY - SV1.Y) / SDY;
+    Turn := RadToDeg(ArcTan2(DDY, DDX) - ArcTan2(SDY, SDX));
+    if Reverse then Pos := 1 - Pos else Turn := Turn + 180;
+    { The same point counted from the exit line's V2. }
+    X := DV2.X - Pos * DDX;
+    Y := DV2.Y - Pos * DDY;
+    { Out on the exit side (front, or back when reversed): step along the
+      line's normal until there (Boom's fudge, 10 units). }
+    if Reverse then Side := 1 else Side := 0;
+    NX := DDY / Len;
+    NY := -DDX / Len;
+    if Side = 1 then
+    begin
+      NX := -NX;
+      NY := -NY;
+    end;
+    Fudge := 10;
+    while (FMap.PointOnLineSide(X, Y, J) <> Side) and (Fudge > 0) do
+    begin
+      X := X + NX;
+      Y := Y + NY;
+      Dec(Fudge);
+    end;
+    Sec := FMap.SectorAt(X, Y);
+    if Sec < 0 then Continue;
+    if A = nil then
+    begin
+      PlayerTeleported := true;
+      PlayerTeleportX := X;
+      PlayerTeleportY := Y;
+      PlayerTeleportZ := FMap.Sectors[Sec].FloorHeight + Above;
+      PlayerTeleportAngle := Player.Angle + Turn;
+      Player.X := X;
+      Player.Y := Y;
+      Player.Z := PlayerTeleportZ;
+      Player.Sector := Sec;
+      FOldPlayerX := X;
+      FOldPlayerY := Y;
+      { The momentum turns with the view. }
+      VX := PlayerPushVX * Cos(DegToRad(Turn)) - PlayerPushVY * Sin(DegToRad(Turn));
+      VY := PlayerPushVX * Sin(DegToRad(Turn)) + PlayerPushVY * Cos(DegToRad(Turn));
+      PlayerPushVX := VX;
+      PlayerPushVY := VY;
+      WritelnLog('Teleport', 'player through line %d to line %d at (%.0f, %.0f), angle %.0f',
+        [Line, J, X, Y, PlayerTeleportAngle]);
+    end else
+    begin
+      A.DoomX := X;
+      A.DoomY := Y;
+      A.DoomZ := FMap.Sectors[Sec].FloorHeight + Above;
+      A.Sector := Sec;
+      A.Angle := A.Angle + Turn;
+      VX := A.VelX * Cos(DegToRad(Turn)) - A.VelY * Sin(DegToRad(Turn));
+      VY := A.VelX * Sin(DegToRad(Turn)) + A.VelY * Cos(DegToRad(Turn));
+      A.VelX := VX;
+      A.VelY := VY;
+      A.UpdateTransform;
+      WritelnLog('Teleport', '%s through line %d to line %d at (%.0f, %.0f)', [A.Info^.Sprite, Line, J, X, Y]);
+    end;
+    Exit(true);
+  end;
+end;
+
+function TDoomWorld.TeleportActor(const A: TDoomActor; const Line: Integer; const Silent: Boolean): Boolean;
 var
   Tag, S: Integer;
   D, O: TDoomActor;
@@ -5460,7 +5595,8 @@ begin
           if not TeleFrag then Exit;
           DamagePlayer(10000, A);
         end;
-        SpawnFog(A.DoomX, A.DoomY, A.DoomZ, A.Sector);
+        if not Silent then
+          SpawnFog(A.DoomX, A.DoomY, A.DoomZ, A.Sector);
         A.DoomX := D.DoomX;
         A.DoomY := D.DoomY;
         A.DoomZ := Z;
@@ -5468,7 +5604,8 @@ begin
         A.Angle := D.Angle;
         A.VelX := 0; A.VelY := 0; A.VelZ := 0;
         A.UpdateTransform;
-        SpawnFog(D.DoomX + Cos(DegToRad(D.Angle)) * 20, D.DoomY + Sin(DegToRad(D.Angle)) * 20, Z, S);
+        if not Silent then
+          SpawnFog(D.DoomX + Cos(DegToRad(D.Angle)) * 20, D.DoomY + Sin(DegToRad(D.Angle)) * 20, Z, S);
         WritelnLog('Teleport', '%s teleported to (%.0f, %.0f) by line %d', [A.Info^.Sprite, D.DoomX, D.DoomY, Line]);
         Exit(true);
       end;
@@ -5879,7 +6016,11 @@ begin
 
         39: begin if not ByMonster then DoTeleport(Line); Done := true; end;
         97: begin if not ByMonster then DoTeleport(Line); Done := true; Repeatable := true; end;
-        125, 126: Exit(false);
+        125, 126, 264..269: Exit(false); { monsters only }
+        243: begin Done := LineTeleport(Line, false, nil); end;
+        244: begin Done := LineTeleport(Line, false, nil); Repeatable := true; end;
+        262: begin Done := LineTeleport(Line, true, nil); end;
+        263: begin Done := LineTeleport(Line, true, nil); Repeatable := true; end;
 
         52: begin FExitRequested := true; FSecretExit := false; Exit(true); end;
         124: begin FExitRequested := true; FSecretExit := true; Exit(true); end;

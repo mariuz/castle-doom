@@ -6,6 +6,17 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Boom's last line types: line-to-line teleports (243, 244, MBF's 262 /
+  263 reversed and the monster-only 264-269; `LineTeleport` maps the
+  crossing point onto the tagged exit line, keeps the height above the
+  floor and turns view and momentum with the lines), monsters through
+  Boom's silent teleports (207, 208), floor and ceiling light transfers
+  (213, 261: `FloorLightSector` / `CeilingLightSector`) and the sky
+  transfer (271, 272, mirrored; it replaces the one sky when it covers
+  most sky sectors). Test PWAD `tools/testdata/transfer.wad`
+  (`tools/make_transfer_wad.py`), autotest `transfers` (a golden
+  screenshot of the transferred sky), unit test `TestTransfers`.
+
 - Boom elevators (227-238: floor and ceiling together at 4 units a tic,
   to the next higher or lower floor or the line's front sector's floor,
   a new mover kind `mkElevator`) and the instant plat toggles (211, 212:
@@ -779,7 +790,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **UDMF** (`TEXTMAP`) maps, and glBSP's `GL_LEVEL` markers for map names over 5 letters. | Remaining community map formats. | `DoomMap` | L (UDMF), S (`GL_LEVEL`) |
-| **Boom/MBF specials**: generalized linedefs are done (see above; floors still do not crush); the constant scrollers are done too (see above); left are the accelerative and displacement scrollers (214-218, 245-249: speed from a control sector's height changes),  the other Boom line types (line-to-line teleports 243 / 244 and MBF's 262-269, deep water 242, light transfers 213 / 261, sky transfers 271 / 272) and MBF's friction for monsters' own walking (Boom moves only momentum). | Big community map support. | `DoomWorld.ApplySpecial`, `DoomGeometry` | M each |
+| **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types are done (see above); left are the accelerative and displacement scrollers (214-218, 245-249: speed from a control sector's height changes), deep water (242, Boom's fake floors and ceilings: a second set of planes drawn from another sector), per-sector skies (one sky is drawn: a 271 / 272 transfer replaces it only when it covers most sky sectors) and MBF's friction for monsters' own walking. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomWorld` | M each, deep water L |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -821,10 +832,9 @@ play.
 1. Touch controls in the browser (M, see Engine and tooling): the web
    build is unplayable on phones; `TCastleTouchNavigation` plus fire and
    use buttons, the first step to an Android package too.
-2. Boom's line-to-line teleports (243, 244 and MBF's 262-269, S) and the
-   light and sky transfers (213, 261, 271, 272, M), the last Boom line
-   types (see Content and formats).
-3. Gamepad button rebinding (S-M, see Other suggested improvements).
+2. Gamepad button rebinding (S-M, see Other suggested improvements).
+3. Boom's accelerative and displacement scrollers (214-218, 245-249, S-M,
+   see Content and formats), then deep water (242, L).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

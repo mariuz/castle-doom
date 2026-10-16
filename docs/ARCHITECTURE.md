@@ -561,8 +561,18 @@ its angle to the line), gun exits (197, 198), elevators (227-238:
 ceiling `Gap` above it, at 4 units a tic) and the instant plat toggles
 (211, 212: `DoToggle`, a `mkToggle` mover left in stasis with the
 original floor in `ReturnTarget`; each use puts the floor at the ceiling,
-crushing once with 10 damage, or back). Not yet: line-to-line teleports
-(243, 244) and the transfers (213, 242, 261, 271, 272).
+crushing once with 10 damage, or back), line-to-line teleports (243,
+244, MBF's reversed 262 / 263 and monster-only 264-269: `LineTeleport`,
+EV_SilentLineTeleport's mapping of the crossing point onto the other
+line with the tag, height above the floor kept, view and momentum turned
+by the lines' angle, plus 180 unless reversed) and monsters through the
+silent teleports (207, 208, 268, 269: `TeleportActor` without fog).
+Light transfers (213 floor, 261 ceiling) are `TDoomMap.FloorLightSector`
+/ `CeilingLightSector`: the flats take that sector's light, depend on it
+in the geometry's chunks and are dynamic when it is. The sky transfer
+(271, 272 mirrored: the line's front upper texture) replaces the level's
+one sky (`TDoomGeometry.Create`'s `SkyFlipped`) when it covers more than
+half of the sky sectors. Not yet: deep water (242).
 
 MBF's translucent things: `BitsValue` knows MBF's bit names up to 31
 (`TRANSLUCENT`) and numbers with bit 31 set; `TThingInfo.Translucent`

@@ -59,6 +59,7 @@ type
     procedure TestScrollers;
     procedure TestFriction;
     procedure TestTranslucency;
+    procedure TestTransfers;
   end;
 
   TTestMusic = class(TTestCase)
@@ -557,6 +558,36 @@ begin
       AssertEquals('tagged with the 260 line', M.LineAlpha[837], M.LineAlpha[832], 1e-6);
       AssertEquals('the map''s name is not drawn', '-', M.Sidedefs[M.Linedefs[832].Side[0]].MiddleTex);
       AssertEquals('others solid', 1, M.LineAlpha[0], 1e-6);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ Boom's light and sky transfers on tools/testdata/transfer.wad
+  (tools/make_transfer_wad.py). }
+procedure TTestMap.TestTransfers;
+var
+  W: TDoomWad;
+  M: TDoomMap;
+  Path: String;
+begin
+  Path := 'tools/testdata/transfer.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/transfer.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('light transfer lines', 2, M.LightTransfers);
+      AssertEquals('floor light from 133', 133, M.FloorLightSector[140]);
+      AssertEquals('ceiling light from 133', 133, M.CeilingLightSector[140]);
+      AssertEquals('others their own', -1, M.FloorLightSector[141]);
+      AssertEquals('sky texture', 'STARTAN3', M.SkyTransferTexture);
+      AssertTrue('272 mirrors', M.SkyTransferFlipped);
     finally
       FreeAndNil(M);
     end;
