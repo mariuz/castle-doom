@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.21.0 (2026-10-16)
 
 - Android: an APK for 64-bit ARM phones and tablets on the Releases page,
   with both Freedoom WADs and the touch controls.
