@@ -12,6 +12,15 @@
   editor_units="DoomHud;DoomFont;DoomMenu;DoomAutomap;DoomIntermission;DoomFinale;DoomWipe;DoomWorldStatus;DoomMapTransform;GameTouch"
 >
   <version value="0.20.0" code="24" />
+  <!-- The sounds come from the WAD, so the build tool cannot see from the
+       data that sound is used (Android's "sound" service, OpenAL). -->
+  <!-- The launcher icon (Android, the Linux desktop file, macOS). -->
+  <icons>
+    <icon path="pages/icon-512.png" />
+  </icons>
+  <dependencies>
+    <dependency name="Sound" />
+  </dependencies>
   <compiler_options>
     <search_paths>
       <path value="code/" />

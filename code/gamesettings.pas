@@ -148,7 +148,9 @@ function PadSummary: String;
 implementation
 
 uses SysUtils, Math, FpJson, JsonParser, CastleLog, CastleUtils, CastleWindow, CastleApplicationProperties,
-  {$ifndef WASI} CastleGL, {$endif}
+  { Desktop OpenGL for the swap interval (not on the web or Android, whose
+    GLES has none). }
+  {$if not (defined(WASI) or defined(ANDROID))} CastleGL, {$endif}
   {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
   GameSaveStorage;
 
@@ -517,7 +519,7 @@ end;
   OpenGL unit loads (CGE sets it itself only on macOS). Returns how, or
   why not, for the log. }
 function ApplySwapInterval(const Interval: Integer): String;
-{$ifdef LINUX}
+{$if defined(LINUX) and not defined(ANDROID)}
 type
   TglXSwapIntervalMESA = function (Interval: Cardinal): Integer; cdecl;
   TglXGetCurrentDisplay = function: Pointer; cdecl;
@@ -529,13 +531,16 @@ var
 {$endif}
 begin
   Result := 'not available';
+  {$ifdef ANDROID}
+  Exit;
+  {$endif}
   {$ifdef MSWINDOWS}
   if Assigned(wglSwapIntervalEXT) then
   begin
     if wglSwapIntervalEXT(Interval) then Result := 'wglSwapIntervalEXT' else Result := 'wglSwapIntervalEXT failed';
   end;
   {$endif}
-  {$ifdef LINUX}
+  {$if defined(LINUX) and not defined(ANDROID)}
   Pointer(SwapMesa) := dglGetProcAddress('glXSwapIntervalMESA');
   if Assigned(SwapMesa) then
   begin

@@ -1391,9 +1391,25 @@ Things that differ on the web and shaped the code:
 - CGE has no game controller backend for the browser; `GameGamepad` polls
   the Gamepad API through JOB and feeds CGE's explicit backend (section 13).
 
-`.github/workflows/build.yml` packages Windows and Linux inside the CGE Docker
-image (`kambi/castle-engine-cloud-builds-tools:cge-unstable`) and attaches
-them to a GitHub Release on `v*` tags. `.github/workflows/web.yml` builds FPC's
+Android (`castle-engine package --os=android --cpu=aarch64`, in CGE's
+Docker image): the same code with OpenGL ES. What differs:
+`GameSettings` has no swap interval there (desktop GL only),
+`AtlasMipmapsAvailable` asks for ES 3.0, `GameInitialize` turns the
+touch controls on for good when `ApplicationProperties.TouchDevice` (CGE
+reports real finger indexes, so `TDoomTouchControls` gets multi-touch
+through its `Press` / `Motion` / `Release`), Freedoom Phase 2 is in the
+APK (no download), file dialogs are not available, and Nuked OPL3 is not
+packaged (the FM synthesizer plays). The manifest declares the `Sound`
+dependency: CGE adds Android's sound service (OpenAL) only when it sees
+sound files in `data/`, and the game's sounds come from the WAD. Only
+64-bit ARM is built: FPC 3.2.2's 32-bit ARM code generator emits VFP
+immediates (e.g. 1/2048) its assembler rejects.
+
+`.github/workflows/build.yml` packages Windows, Linux and macOS on
+GitHub's runners (FPC and CGE from castle-build-ci), the MSI with WiX and
+the Android APK inside the CGE Docker image
+(`kambi/castle-engine-cloud-builds-tools:cge-unstable`), and attaches
+them to a GitHub Release on `v*` tags (or `release_tag`). `.github/workflows/web.yml` builds FPC's
 main branch with the `wasm32-wasip1` cross-compiler and Pas2js from source
 (cached by FPC commit), compiles the web target with `wasm-opt` optimization,
 and deploys `pages/index.html` plus the game to GitHub Pages. It runs on

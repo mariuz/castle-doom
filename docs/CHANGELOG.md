@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Android: an APK for 64-bit ARM phones and tablets on the Releases page,
+  with both Freedoom WADs and the touch controls.
+- The app icon on Linux, macOS and Android.
+
 ## v0.20.0 (2026-10-16)
 
 - Boom's displacement and accelerative scrollers (214-218, 245-249):

@@ -53,6 +53,24 @@ compile --mode=release` (delete the stray `link*.res` it leaves). Autotests
 run under `xvfb-run -a -s "-screen 0 1280x800x24" ./castle-doom --autotest ...`
 (software GL, about 12 FPS, no sound); the log goes to stdout.
 
+## Android package (Docker, also in the cloud container)
+
+CGE's image `kambi/castle-engine-cloud-builds-tools:cge-unstable` (about
+18 GB unpacked) has FPC's Android cross-compilers, the SDK and the NDK;
+CI's `build-android` job runs `castle-engine package --os=android
+--cpu=aarch64 --mode=release` in it. In the cloud container start
+`dockerd` first, and since containers neither reach the agent proxy nor
+trust its CA, run with `--network host -e HTTPS_PROXY -v
+/root/.ccr:/ccr:ro`, import `/ccr/agent-proxy-ca.crt` into a copy of the
+JDK's `cacerts` with `keytool` and point Gradle at it and the proxy
+through `JAVA_TOOL_OPTIONS` (`-Djavax.net.ssl.trustStore=...
+-Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=PORT`); keep `/root/.gradle`
+on a mounted directory, because Maven Central answers 429 to the first
+burst and a second run finishes. Without `AndroidSigningProperties.txt`
+the APK is debug-signed (`castle-doom-X-android-debug.apk`). Inspect it
+with the image's `aapt2 dump badging` and `apksigner verify`; there is no
+emulator here (no KVM), so it is only run on real devices.
+
 ## Testing without watching the window
 
 `tools/run_autotests.py EXE OUTDIR [test...]` runs the regression suite
@@ -649,6 +667,12 @@ autotest only checks the library loads.
 - **Web performance**: watch the `Perf:` / `PerfView:` lines in the browser
   console. Textures that are resized to powers of two or mipmapped are CPU
   work in WebAssembly; sprites use `GuiTexture`.
+- **FPC 3.2.2 for 32-bit ARM** (Android `arm`) emits `vmov.f64 dN,#imm`
+  for constants such as 1/2048 that VFP cannot encode, and the assembler
+  stops ("garbage following instruction"); only 64-bit ARM is packaged.
+  Desktop-GL names (`CastleGL`, `GLFeatures.Version_3_1`, GLX / WGL) do not
+  exist on Android's OpenGL ES: guard them with `ANDROID` (FPC also
+  defines `LINUX` there).
 - **FPC on wasm32**: loop counters must be 32-bit (`Int64` loop variables do
   not compile there).
 - **Pointer lock on the web**: the browser keeps Esc and only releases the

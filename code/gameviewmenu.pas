@@ -415,6 +415,10 @@ end;
 
 function TViewMenu.NeedsFetch(const Iwad: String): Boolean;
 begin
+  { Android packages carry both Freedoom WADs. }
+  {$ifdef ANDROID}
+  Exit(false);
+  {$endif}
   Result := (Iwad = Freedoom2) and (FFetchZip = nil) and
     ((WadBaseUrl <> '') or (UriExists(Freedoom2) <> ueFile));
 end;
@@ -653,7 +657,11 @@ begin
 end;
 
 const
+  {$ifdef ANDROID}
+  NoDialogInBrowser = 'File dialogs are not available on Android';
+  {$else}
   NoDialogInBrowser = 'In the browser, export and import saves on the Castle DOOM home page ("Your saves")';
+  {$endif}
 
 procedure TViewMenu.ClickExportSaves(Sender: TObject);
 var

@@ -5,7 +5,7 @@
 
 **Play in the browser: https://mariuz.github.io/castle-doom/** (WebAssembly build; it plays
 offline after one visit and can be installed as an app from the browser's menu)
-&middot; **Downloads: [Releases](https://github.com/mariuz/castle-doom/releases)** (Windows installer or zip, Linux, macOS) &middot; [Changelog](docs/CHANGELOG.md)
+&middot; **Downloads: [Releases](https://github.com/mariuz/castle-doom/releases)** (Windows installer or zip, Linux, macOS, Android APK) &middot; [Changelog](docs/CHANGELOG.md)
 
 Doom levels, rendered and played with [Castle Game Engine](https://castle-engine.io/)
 (Object Pascal). It reads the original WAD format directly: Freedoom Phase 1 and
@@ -153,7 +153,14 @@ LB / RB previous / next weapon, View automap, Menu Doom's menu; in menus the D-p
 and B (back). Options -> Controls... -> Gamepad rebinds fire, use, the automap and the
 weapon changes (two buttons each, the triggers too).
 
-Touch screens (phones and tablets in the browser; `--touch` on the desktop, where the
+Android: the Releases page has an APK for 64-bit ARM phones and tablets (Android 5.0 or
+newer; allow installing from your browser or file manager). It carries both Freedoom WADs,
+the touch controls are always on (a gamepad works too) and the back button opens Doom's
+menu; music plays on the built-in FM synthesizer. Until the project has release signing
+keys the APK is signed with a build's debug key: uninstall the old version before
+installing a newer one (your saves go with it).
+
+Touch screens (phones and tablets in the browser and on Android; `--touch` on the desktop, where the
 mouse is one finger): a stick appears where the left thumb lands (pushed to its edge it
 runs), dragging anywhere else on the right turns and looks, and round buttons fire (drag
 the fire button to aim while shooting), use, change weapons, toggle the automap and open
@@ -173,7 +180,11 @@ castle-doom --autotest E1M1 shots/e1m1 --demo "S,F:3,S,T:90,U,W:2,S,X,S,Q"
   push, each on GitHub's runner for that system with FPC and the CGE snapshot set up by
   [castle-build-ci](https://github.com/castle-engine/castle-build-ci), and a Windows installer (MSI, WiX on a Windows runner, from the Windows zip
   by `tools/make_msi_wxs.py`); pushing a tag `vX.Y.Z`, or running the workflow by hand with
-  `release_tag`, attaches them to a GitHub Release.
+  `release_tag`, attaches them to a GitHub Release. The same workflow builds an Android APK
+  (64-bit ARM) in CGE's Docker image, which has the Android SDK, NDK and FPC's Android
+  cross-compilers; it is release-signed when the repository has the secrets
+  `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD` and
+  `ANDROID_KEY_PASSWORD`, else debug-signed.
 - The `Autotests` job runs the FPCUnit unit tests (`tests/castle_doom_tests.lpr`: WADs, map
   BSP, music rendering, DeHackEd) and then `tools/run_autotests.py` under Xvfb.
 - `.github/workflows/web.yml`: builds the WebAssembly version (FPC main branch with the

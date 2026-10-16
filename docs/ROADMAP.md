@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Android builds: CI's `build-android` job packages a 64-bit ARM APK in
+  CGE's Docker image (Android SDK, NDK, FPC cross-compilers) and the
+  release attaches it; release signing comes from repository secrets
+  when they exist, else the APK is debug-signed. On Android the touch
+  controls are always on, Phase 2 is in the package and the desktop GL
+  calls are left out. Not yet tried on a device from here (no emulator in
+  the cloud container).
+
 - Boom's displacement (245-249) and accelerative (214-218) scrollers:
   runtime scrollers (`TDoomMap.DynScrollers`, `TDoomWorld.TicScrollers`)
   move walls, flats and carrying floors by the control sector's height
@@ -831,7 +839,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **More unit tests**: `DoomGeometry`'s sector chunks (needs the graphics cache without a window), the automap and HUD composition, the save file's round trip through `doomworld_save.inc` on a world without a viewport. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
-| **Android / iOS builds** via `castle-engine package --target=android`: the touch controls exist (`GameTouch`, see above; feed them CGE's real finger indexes there), a CI job with the Android SDK and NDK is needed, and the WADs and saves must find their place in the package. | CGE's mobile support is a selling point. | `CastleEngineManifest.xml`, `.github/workflows/build.yml` | M |
+| **Mobile, the rest**: Android builds are done (see above); left are testing on devices (pause / resume and the GL context, the soft keyboard for save names, performance), release signing keys in the repository's secrets, 32-bit ARM (needs an FPC with a fixed ARM code generator), an Android App Bundle for stores, and iOS (`castle-engine package --target=ios` on a macOS runner, needs Apple signing). | CGE's mobile support is a selling point. | `CastleEngineManifest.xml`, `.github/workflows/build.yml` | M |
 | **Web gamepads in CGE itself**: the game's `GameGamepad` polls the Gamepad API through JOB (done, see above); a real `CastleInternalGameControllersWeb` backend inside CGE (`gamepadconnected` events, `mapping` other than `standard`) would serve every CGE web game. Best contributed upstream. | One less game-side workaround. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
 | **Performance**: a thing grid for the actor-vs-actor checks (they still loop over every actor); merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
 
@@ -861,12 +869,12 @@ play.
 
 ## Suggested next three
 
-1. Android builds (M, see Engine and tooling): the touch controls are
-   there; a CI job and the package's data are what is missing.
-2. The rest of UMAPINFO and ZDoom's MAPINFO (M, see Other suggested
+1. The rest of UMAPINFO and ZDoom's MAPINFO (M, see Other suggested
    improvements).
-3. Per-sector skies and MBF's friction for monsters' own walking (M, see
+2. Per-sector skies and MBF's friction for monsters' own walking (M, see
    Content and formats), finishing the Boom / MBF specials.
+3. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
+   then signing keys and the soft keyboard for save names.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

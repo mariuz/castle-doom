@@ -19,3 +19,9 @@ tools/testdata/nodes/
 
 # Python bytecode (tools/*.py imported by the harness checks)
 __pycache__/
+
+# Android packages and signing keys (CI writes them from secrets)
+*.apk
+*.aab
+AndroidSigningProperties.txt
+*.keystore

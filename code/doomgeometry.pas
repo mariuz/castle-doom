@@ -225,8 +225,9 @@ function AtlasMipmapsAvailable: Boolean;
 begin
   Result := UseAtlasMipmaps and InternalUpgradeGlslVersion and (GLFeatures <> nil) and
     { CASTLE_WEBGL / OpenGLES are CGE's own defines, not set here: the
-      web build is WASI, the desktop builds use desktop OpenGL. }
-    GLFeatures.{$ifdef WASI} VersionWebGL_2 {$else} Version_3_1 {$endif};
+      web build is WASI (WebGL 2), Android uses OpenGL ES (3.0 has
+      textureGrad), the desktop builds desktop OpenGL. }
+    GLFeatures.{$if defined(WASI)} VersionWebGL_2 {$elseif defined(ANDROID)} VersionES_3_0 {$else} Version_3_1 {$endif};
 end;
 
 function DoomToCge(const X, Y, Z: Single): TVector3;

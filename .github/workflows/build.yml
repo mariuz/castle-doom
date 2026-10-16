@@ -1,7 +1,8 @@
 # Native builds: Windows x86_64, Linux x86_64 and macOS x86_64 / aarch64 on
 # GitHub's runners (FPC and the CGE snapshot set up by castle-build-ci, like
 # CGE's own template castle-game/.github/workflows/build.yml),
-# and a Windows Installer (MSI) made with WiX from the Windows zip.
+# a Windows Installer (MSI) made with WiX from the Windows zip, and an
+# Android APK built in CGE's Docker image.
 #
 # - On every push / pull request: build and keep the packages as workflow artifacts.
 # - On a tag like v1.2.3: also attach the packages to a GitHub Release.
@@ -134,6 +135,72 @@ jobs:
           path: "*-darwin-*.zip"
           if-no-files-found: error
 
+  # Android APK (64-bit ARM: every current device, and FPC 3.2.2's 32-bit
+  # ARM code generator emits VFP immediates its assembler rejects) built
+  # in CGE's Docker image, which has the
+  # Android SDK and NDK and FPC's Android cross-compilers (castle-build-ci
+  # sets up none of them). Docker Hub limits anonymous pulls per runner
+  # IP, so the pull is retried a few times before the job gives up; the
+  # release does not wait for this job's success (an APK is attached when
+  # it was built).
+  build-android:
+    name: Package Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      IMAGE: kambi/castle-engine-cloud-builds-tools:cge-unstable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull the CGE build image
+        timeout-minutes: 20
+        run: |
+          for attempt in 1 2 3 4; do
+            docker pull "$IMAGE" && exit 0
+            echo "Pull failed (attempt $attempt), waiting"
+            sleep $((attempt * 90))
+          done
+          exit 1
+
+      # Release signing when the repository has the secrets
+      # ANDROID_KEYSTORE_BASE64 (a keystore, base64), ANDROID_KEY_ALIAS,
+      # ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_PASSWORD; without them CGE
+      # signs with a fresh debug key (castle-doom-X-android-debug.apk), so
+      # an update then needs the old app uninstalled first.
+      - name: Signing keys (when configured)
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            echo "No signing secrets: a debug-signed APK"
+            exit 0
+          fi
+          echo "$KEYSTORE" | base64 -d > android-release.keystore
+          {
+            echo "key.store=/project/android-release.keystore"
+            echo "key.alias=$ALIAS"
+            echo "key.store.password=$STORE_PASSWORD"
+            echo "key.alias.password=$KEY_PASSWORD"
+          } > AndroidSigningProperties.txt
+
+      - name: Package Android (APK)
+        timeout-minutes: 35
+        run: |
+          docker run --rm -v "$PWD:/project" -w /project "$IMAGE" \
+            bash -c 'git config --global --add safe.directory /project && castle-engine package --os=android --cpu=aarch64 --mode=release --verbose'
+          sudo chown -R "$(id -u):$(id -g)" .
+          ls -l *.apk
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: castle-doom-android
+          path: "*.apk"
+          if-no-files-found: error
+
   # A Windows Installer package from the Windows zip: WiX 5 (pinned) on a
   # Windows runner, the .wxs written by tools/make_msi_wxs.py.
   build-msi:
@@ -224,8 +291,8 @@ jobs:
 
   release:
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.release_tag, 'v')
-    needs: [build-linux, build-windows, build-macos, build-msi]
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.release_tag, 'v')) && needs.build-linux.result == 'success' && needs.build-windows.result == 'success' && needs.build-macos.result == 'success' && needs.build-msi.result == 'success' }}
+    needs: [build-linux, build-windows, build-macos, build-msi, build-android]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -256,4 +323,5 @@ jobs:
             packages/*.zip
             packages/*.tar.gz
             packages/*.msi
+            packages/*.apk
           generate_release_notes: true

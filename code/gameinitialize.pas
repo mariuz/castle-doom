@@ -174,6 +174,13 @@ begin
     Window.Container.Fps.MaxSensibleSecondsPassed := 1 / 35;
     WritelnLog('AutoTest', 'Fixed step: 1/35 s a frame');
   end;
+  { Phones and tablets (Android): the touch controls, always. }
+  if ApplicationProperties.TouchDevice then
+  begin
+    TouchForced := true;
+    TouchMode := true;
+    WritelnLog('Touch', 'Touch device: touch controls on');
+  end;
   { Remembered WAD paths live in the user config (castle-config:/). }
   UserConfig.Load;
   if (ExportSaves <> '') or (ImportSaves <> '') then
