@@ -9,7 +9,8 @@ uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleTimeUtils,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages, CastleGLImages,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
-  DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu, DoomWorldStatus, GameSettings;
+  DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu, DoomWorldStatus, GameSettings,
+  GameTouch;
 
 type
   TViewPlay = class(TCastleView)
@@ -31,6 +32,10 @@ type
     FClickPrompt: TDoomFontText;
     { Demo command CLICKPROMPT: show the prompt in an autotest. }
     FForceClickPrompt: Boolean;
+    { Phones and tablets: stick, look area and buttons (GameTouch). }
+    FTouch: TDoomTouchControls;
+    { The triggers last frame (they are axes, without press events). }
+    FTriggerHeld: array [Boolean] of Boolean;
     { Demo command NOSPRITES: the things are hidden (profiling). }
     FNoSprites: Boolean;
     FIntermissionBack: TCastleRectangleControl;
@@ -113,6 +118,18 @@ type
       lines for them. }
     procedure ApplyKeyBindings;
     procedure DemoBind(const Spec: String);
+    { TDOWN:id:x:y, TMOVE:id:x:y, TUP:id (x, y fractions of the window). }
+    procedure DemoTouch(const Cmd, Spec: String);
+    procedure TouchButton(const Button: TTouchButton);
+    { A gamepad button went down in the game: run its bound actions (fire
+      is held, see Update). False when nothing is bound to it. }
+    function PadPressed(const B: TPadButton): Boolean;
+    { The triggers have no events: find their presses every frame. }
+    procedure CheckPadTriggers;
+    { PADDOWN:button / PADUP:button / PADBIND:action:button. }
+    procedure DemoPad(const Cmd, Spec: String);
+    { Move and turn by the touch controls' stick and look fingers. }
+    procedure ApplyTouch(const SecondsPassed: Single);
     { The first key bound to Action (the second if the first is unset). }
     function BoundKey(const Action: TGameAction): TKey;
     { Select a thing in the engine's inspector (opening it): by name, or
@@ -308,6 +325,9 @@ begin
   FSlotScreen.MouseEnabled := AutoTestPrefix = '';
   { The screen melt, above everything. }
   FWipe := DesignedComponent('Wipe') as TDoomWipe;
+  FTouch := DesignedComponent('TouchControls') as TDoomTouchControls;
+  FTouch.Graphics := Graphics;
+  FTouch.OnButton := {$ifdef FPC}@{$endif} TouchButton;
 end;
 
 procedure TViewPlay.SetupNavigation;
@@ -325,6 +345,8 @@ begin
   FNavigation.FallSpeedStart := 180;
   FNavigation.FallSpeedIncrease := 12;
   FNavigation.GrowSpeed := 350;
+  { CGE turns the view during long falls; Doom does not. }
+  FNavigation.FallingEffect := false;
   FNavigation.MouseLook := Settings.MouseLook;
   FNavigation.MouseLookHorizontalSensitivity := MouseLookSensitivity;
   FNavigation.MouseLookVerticalSensitivity := MouseLookSensitivity;
@@ -381,6 +403,8 @@ end;
 
 procedure TViewPlay.Stop;
 begin
+  { The page must stop keeping fingers from the engine (the menus). }
+  PollTouches(nil);
   Container.PointerLock.RemoveUserCancelledListener({$ifdef FPC}@{$endif} PointerLockUserCancelled);
   FreeAndNil(FPendingSave);
   FSlotMenu := SlotMenuNone;
@@ -565,6 +589,16 @@ begin
     DoomLightingInstance.Diminish := not DoomLightingInstance.Diminish
   else if Cmd = 'CLICKPROMPT' then
     FForceClickPrompt := true
+  else if Cmd = 'TOUCH' then
+  begin
+    { The touch controls, as if the game ran with --touch. }
+    TouchForced := true;
+    TouchMode := true;
+  end
+  else if (Cmd = 'TDOWN') or (Cmd = 'TMOVE') or (Cmd = 'TUP') then
+    DemoTouch(Cmd, Rest)
+  else if (Cmd = 'PADDOWN') or (Cmd = 'PADUP') or (Cmd = 'PADBIND') then
+    DemoPad(Cmd, Rest)
   else if Cmd = 'PALMAP' then
     DoomLightingInstance.PaletteMapped := not DoomLightingInstance.PaletteMapped
   else if Cmd = 'K' then
@@ -764,6 +798,16 @@ procedure TViewPlay.ApplyKeyBindings;
     Result := true;
   end;
 
+  function PadSameAsDefaults: Boolean;
+  var
+    A: TPadAction;
+  begin
+    for A := Low(TPadAction) to High(TPadAction) do
+      if (Settings.Pad[A, 0] <> DefaultPad[A, 0]) or (Settings.Pad[A, 1] <> DefaultPad[A, 1]) then
+        Exit(false);
+    Result := true;
+  end;
+
 begin
   AssignInput(FNavigation.Input_Forward, gaForward);
   AssignInput(FNavigation.Input_Backward, gaBackward);
@@ -789,7 +833,164 @@ begin
     if FHelpLabel.Text.Count >= 11 then
       FHelpLabel.Text[10] := Hot(keyH, 'H: hide this help   ') + 'Esc: menu (pauses; Esc again resumes)';
   end;
+  if (FHelpLabel <> nil) and not PadSameAsDefaults and (FHelpLabel.Text.Count >= 13) then
+  begin
+    FHelpLabel.Text[11] := Format('Gamepad: sticks move / look, %s fire, %s use, %s / %s weapons,', [
+      PadActionText(gpaFire), PadActionText(gpaUse), PadActionText(gpaPrevWeapon),
+      PadActionText(gpaNextWeapon)]);
+    FHelpLabel.Text[12] := Format('  %s automap, Menu menu (D-pad, A, B in menus)', [PadActionText(gpaAutomap)]);
+  end;
   WritelnLog('Settings', KeysSummary);
+end;
+
+procedure TViewPlay.DemoTouch(const Cmd, Spec: String);
+var
+  Parts: TStringList;
+  Id: Integer;
+  Pos: TVector2;
+begin
+  Parts := TStringList.Create;
+  try
+    Parts.Delimiter := ':';
+    Parts.StrictDelimiter := true;
+    Parts.DelimitedText := Spec;
+    if Parts.Count < 1 then Exit;
+    Id := Round(DemoNumber(Parts[0], 0));
+    if Cmd = 'TUP' then
+    begin
+      FTouch.TouchUp(Id);
+      WritelnLog('Touch', 'Finger %d up', [Id]);
+      Exit;
+    end;
+    if Parts.Count < 3 then Exit;
+    Pos := Vector2(DemoNumber(Parts[1], 0) * FTouch.RenderRect.Width,
+      DemoNumber(Parts[2], 0) * FTouch.RenderRect.Height);
+    if Cmd = 'TDOWN' then
+    begin
+      FTouch.TouchDown(Id, Pos);
+      WritelnLog('Touch', 'Finger %d down at %.0f, %.0f', [Id, Pos.X, Pos.Y]);
+    end else
+      FTouch.TouchMove(Id, Pos);
+  finally
+    FreeAndNil(Parts);
+  end;
+end;
+
+procedure TViewPlay.TouchButton(const Button: TTouchButton);
+begin
+  if FWorld = nil then Exit;
+  WritelnLog('Touch', 'Button %s', [TouchButtonNames[Button]]);
+  case Button of
+    tbUse: FWorld.UseInFront;
+    tbPrevWeapon: FWorld.NextWeapon(-1);
+    tbNextWeapon: FWorld.NextWeapon(1);
+    tbAutomap: FAutomap.Exists := not FAutomap.Exists;
+    tbMenu: OpenPauseMenu;
+    else ;
+  end;
+end;
+
+function TViewPlay.PadPressed(const B: TPadButton): Boolean;
+var
+  A: TPadAction;
+begin
+  Result := false;
+  if B = pbNone then Exit;
+  for A := Low(TPadAction) to High(TPadAction) do
+    if PadIs(B, A) then
+    begin
+      Result := true;
+      case A of
+        gpaFire: FWorld.FireWeapon;
+        gpaUse: FWorld.UseInFront;
+        gpaAutomap: FAutomap.Exists := not FAutomap.Exists;
+        gpaNextWeapon: FWorld.NextWeapon(1);
+        gpaPrevWeapon: FWorld.NextWeapon(-1);
+      end;
+      WritelnLog('Gamepad', '%s: %s', [PadButtonNames[B], PadActionIds[A]]);
+    end;
+end;
+
+procedure TViewPlay.CheckPadTriggers;
+var
+  Right, Held: Boolean;
+  B: TPadButton;
+begin
+  for Right := false to true do
+  begin
+    if Right then B := pbRightTrigger else B := pbLeftTrigger;
+    Held := PadButtonHeld(B);
+    if Held and not FTriggerHeld[Right] then
+      PadPressed(B);
+    FTriggerHeld[Right] := Held;
+  end;
+end;
+
+procedure TViewPlay.DemoPad(const Cmd, Spec: String);
+var
+  Parts: TStringList;
+  B: TPadButton;
+  A: TPadAction;
+  Event: TInputPressRelease;
+begin
+  Parts := TStringList.Create;
+  try
+    Parts.Delimiter := ':';
+    Parts.StrictDelimiter := true;
+    Parts.DelimitedText := Spec;
+    if Parts.Count < 1 then Exit;
+    if Cmd = 'PADBIND' then
+    begin
+      { PADBIND:action:button like the Controls page (- clears slot 1). }
+      if Parts.Count < 2 then Exit;
+      for A := Low(TPadAction) to High(TPadAction) do
+        if SameText(Parts[0], PadActionIds[A]) then
+        begin
+          BindPad(A, 0, StrToPadButton(Parts[1]));
+          SaveSettings;
+          ApplyKeyBindings;
+          WritelnLog('Settings', PadSummary);
+        end;
+      Exit;
+    end;
+    B := StrToPadButton(Parts[0]);
+    if B = pbNone then Exit;
+    if Cmd = 'PADDOWN' then
+    begin
+      Include(SimulatedPadHeld, B);
+      if PadButtonEvent(B, Event) then
+        Press(Event);
+    end else
+      Exclude(SimulatedPadHeld, B);
+  finally
+    FreeAndNil(Parts);
+  end;
+end;
+
+procedure TViewPlay.ApplyTouch(const SecondsPassed: Single);
+var
+  Look, Stick: TVector2;
+  Dir, Forward, Right: TVector3;
+  Speed: Single;
+begin
+  { No pointer lock with fingers: the look finger turns instead. }
+  FNavigation.MouseLook := false;
+  Look := FTouch.TakeLook;
+  if FWorld.Player.Dead then Exit;
+  if not Look.IsPerfectlyZero then
+    TWalkNavigationAccess(FNavigation).ProcessMouseLookDelta(
+      Vector2(DegToRad(Look.X), DegToRad(Look.Y)));
+  Stick := FTouch.MoveVector;
+  if Stick.IsPerfectlyZero then Exit;
+  Dir := FViewport.Camera.Direction;
+  Forward := Vector3(Dir.X, 0, Dir.Z);
+  if Forward.Length < 0.001 then Exit;
+  Forward := Forward.Normalize;
+  Right := Vector3(-Forward.Z, 0, Forward.X);
+  { Doom's running speed at the stick's edge, walking half way. }
+  Speed := 2 * 290 * FWorld.PlayerMoveFactor * Stick.Length;
+  TWalkNavigationAccess(FNavigation).Move(
+    (Forward * Stick.Y + Right * Stick.X).Normalize * (Speed * SecondsPassed), false, true);
 end;
 
 procedure TViewPlay.DemoBind(const Spec: String);
@@ -1251,7 +1452,7 @@ procedure TViewPlay.ResumeFromPause;
 begin
   CloseSlotMenu;
   FNavigation.Exists := not FWorld.Player.Dead;
-  if AutoTestPrefix = '' then
+  if (AutoTestPrefix = '') and not TouchMode then
     FNavigation.MouseLook := Settings.MouseLook;
   FSuppressFire := true;
 end;
@@ -1621,6 +1822,7 @@ var
   P: TPlayerState;
   PerfT: TTimerResult;
   Elapsed: Double;
+  TouchPlaying, TouchShown: Boolean;
 begin
   inherited;
   if AutoTestFixedStep then
@@ -1661,6 +1863,16 @@ begin
     RunDemo(SecondsPassed);
     FWorld.Player.Refire := false;
     if FWorld = nil then Exit;
+  end;
+  { Touch controls while the game is played (the browser's fingers are
+    read here; the menus and the intermission take taps as clicks). }
+  TouchPlaying := (not FIntermission) and (FSlotMenu = SlotMenuNone) and (FPendingMap = '');
+  if TouchPlaying then PollTouches(FTouch) else PollTouches(nil);
+  TouchShown := TouchMode and TouchPlaying;
+  if FTouch.Exists <> TouchShown then
+  begin
+    FTouch.Exists := TouchShown;
+    FTouch.ReleaseAll;
   end;
   if FIntermission then
   begin
@@ -1721,6 +1933,10 @@ begin
   FStatusBar.Exists := true;
   FNavigation.Exists := not FWorld.Player.Dead;
   FLevelTime := FLevelTime + SecondsPassed;
+  FHelpLabel.Exists := FHelpVisible and not TouchMode;
+  CheckPadTriggers;
+  if FTouch.Exists then
+    ApplyTouch(SecondsPassed);
 
   if AutoTestDemo <> '' then
   begin
@@ -1844,7 +2060,7 @@ begin
   if ((buttonLeft in Container.MousePressed) and not FSuppressFire) or
      ((Settings.Keys[gaFire, 0] <> keyNone) and Container.Pressed.Items[Settings.Keys[gaFire, 0]]) or
      ((Settings.Keys[gaFire, 1] <> keyNone) and Container.Pressed.Items[Settings.Keys[gaFire, 1]]) or
-     GamepadFireHeld then
+     GamepadFireHeld or (FTouch.Exists and FTouch.FireHeld) then
     FWorld.FireWeapon
   else
     FWorld.Player.Refire := false;
@@ -1863,7 +2079,7 @@ begin
     it on Esc or another window): say so instead of a dead mouse. }
   FClickPrompt.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
   FClickPrompt.Exists := (FSlotMenu = SlotMenuNone) and not FIntermission and
-    not FWorld.Player.Dead and
+    not FWorld.Player.Dead and not TouchMode and
     (FForceClickPrompt or ((AutoTestPrefix = '') and Settings.MouseLook and
      not (FNavigation.MouseLook and Container.PointerLock.Active)));
   FAutomapTitle.Exists := FAutomap.Exists;
@@ -1893,7 +2109,7 @@ begin
   FPerfClock := FPerfClock + SecondsPassed;
   if FPerfClock >= 10 then
     PerfLog;
-  FCrosshair.Exists := FNavigation.MouseLook and not P.Dead and not FAutomap.Exists;
+  FCrosshair.Exists := (FNavigation.MouseLook or FTouch.Exists) and not P.Dead and not FAutomap.Exists;
 
   if FWorld.ExitRequested then
   begin
@@ -1923,30 +2139,15 @@ begin
   if Result then Exit;
   if FWorld = nil then Exit;
 
-  { Gamepad buttons act as the keys of the same action. }
+  { Gamepad buttons: the bound actions in the game (GameSettings' Pad),
+    the keys of the same meaning in the menus and the intermission. }
   if Event.EventType = itGameController then
   begin
-    if (not FIntermission) and (FSlotMenu = SlotMenuNone) and (GamepadWeaponStep(Event) <> 0) then
-    begin
-      FWorld.NextWeapon(GamepadWeaponStep(Event));
+    if (not FIntermission) and (FSlotMenu = SlotMenuNone) and
+       PadPressed(PadButtonOfEvent(Event)) then
       Exit(true);
-    end;
     if GamepadKey(Event, FIntermission or (FSlotMenu <> SlotMenuNone), K) then
-    begin
-      { In the game A / X use and View toggles the automap whatever keys
-        those actions are bound to. }
-      if (not FIntermission) and (FSlotMenu = SlotMenuNone) and (K = keyE) then
-      begin
-        FWorld.UseInFront;
-        Exit(true);
-      end;
-      if (not FIntermission) and (FSlotMenu = SlotMenuNone) and (K = keyTab) then
-      begin
-        FAutomap.Exists := not FAutomap.Exists;
-        Exit(true);
-      end;
       Exit(Press(InputKey(Container.MousePosition, K, '', [])));
-    end;
     Exit;
   end;
 

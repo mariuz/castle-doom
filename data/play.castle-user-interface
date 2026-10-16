@@ -148,6 +148,12 @@
       }
     },
     {
+      "$$ClassName": "TDoomTouchControls",
+      "Name": "TouchControls",
+      "Exists": false,
+      "FullSize": true
+    },
+    {
       "$$ClassName": "TCastleRectangleControl",
       "Name": "IntermissionBack",
       "Exists": false,

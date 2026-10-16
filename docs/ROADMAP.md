@@ -6,6 +6,24 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Touch controls (`GameTouch`): in the browser on phones and tablets
+  (and with `--touch` on the desktop) a floating stick on the left
+  walks and runs, a drag elsewhere turns and looks, and round buttons
+  fire (dragging it aims), use, change weapons, toggle the automap and
+  open the menu. CGE's web backend has no multi-touch (every pointer is
+  finger 0), so the page script from `tools/patch_web_page.py` tracks the
+  fingers and keeps them from the engine while the game is played; the
+  controls show after a touch and hide after mouse use. Demo commands
+  `TOUCH`, `TDOWN` / `TMOVE` / `TUP`; autotest `touch-controls` (a golden
+  screenshot), unit test `TestTouchControls`. CGE's falling effect (a
+  turn of the view during long falls) is off now.
+- Gamepad button rebinding: `GameSettings.Pad` (two buttons for fire,
+  use, automap, next and previous weapon; the triggers count as buttons),
+  saved as `settings.json`'s `pad`, rebound on the Controls page's
+  Gamepad half. Demo commands `PADDOWN` / `PADUP` / `PADBIND`; autotests
+  `gamepad-bindings` and `controls-pad` (`MENUCONTROLSPAD`), unit test
+  `TestPadBindings`.
+
 - Boom's last line types: line-to-line teleports (243, 244, MBF's 262 /
   263 reversed and the monster-only 264-269; `LineTeleport` maps the
   crossing point onto the tagged exit line, keeps the height above the
@@ -799,7 +817,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **More unit tests**: `DoomGeometry`'s sector chunks (needs the graphics cache without a window), the automap and HUD composition, the save file's round trip through `doomworld_save.inc` on a world without a viewport. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
-| **Android / iOS builds** via `castle-engine package --target=android`: touch controls would be needed (`TCastleTouchNavigation`). | CGE's mobile support is a selling point. | `GameViewPlay` input | M |
+| **Android / iOS builds** via `castle-engine package --target=android`: the touch controls exist (`GameTouch`, see above; feed them CGE's real finger indexes there), a CI job with the Android SDK and NDK is needed, and the WADs and saves must find their place in the package. | CGE's mobile support is a selling point. | `CastleEngineManifest.xml`, `.github/workflows/build.yml` | M |
 | **Web gamepads in CGE itself**: the game's `GameGamepad` polls the Gamepad API through JOB (done, see above); a real `CastleInternalGameControllersWeb` backend inside CGE (`gamepadconnected` events, `mapping` other than `standard`) would serve every CGE web game. Best contributed upstream. | One less game-side workaround. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
 | **Performance**: a thing grid for the actor-vs-actor checks (they still loop over every actor); merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
 
@@ -822,19 +840,19 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Gamepad button rebinding and more bindable actions**: keys are rebindable (see above); the gamepad layout is fixed, and weapon selection, the hotkeys (F, M, J...) and the mouse buttons are not bindable yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameGamepad` | S-M |
+| **More bindable actions**: keys and gamepad buttons are rebindable (see above); weapon selection by number, the hotkeys (F, M, J...), the mouse buttons and the touch buttons' layout are not yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameTouch` | S |
 | **The rest of UMAPINFO, and ZDoom MAPINFO**: UMAPINFO's keys are done (see above) except patch backdrops and `exitpic` / `enterpic`; ZDoom's MAPINFO syntax is not read. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
 | **Fixed step everywhere**: `--fixed-step` makes 7 moving-scene autotests reproducible (see above); running the whole suite with it would make every screenshot comparable but triples its real time (software GL draws about 12 frames a second, each now a single tic). | Every screenshot a regression check. | `tools/run_autotests.py` | S |
 | **Longer crash reports**: the desktop dialog shows CGE's last 10 log lines (`CastleLog.LastLog`), the web overlay 40; a game-side ring buffer (fed by `ApplicationProperties.OnLog`) and a "copy to clipboard" button would make reports more complete. | Better bug reports. | `GameCrash`, `tools/patch_web_page.py` | S |
 
 ## Suggested next three
 
-1. Touch controls in the browser (M, see Engine and tooling): the web
-   build is unplayable on phones; `TCastleTouchNavigation` plus fire and
-   use buttons, the first step to an Android package too.
-2. Gamepad button rebinding (S-M, see Other suggested improvements).
-3. Boom's accelerative and displacement scrollers (214-218, 245-249, S-M,
+1. Boom's accelerative and displacement scrollers (214-218, 245-249, S-M,
    see Content and formats), then deep water (242, L).
+2. Android builds (M, see Engine and tooling): the touch controls are
+   there now; a CI job and the package's data are what is missing.
+3. The rest of UMAPINFO and ZDoom's MAPINFO (M, see Other suggested
+   improvements).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

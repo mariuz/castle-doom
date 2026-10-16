@@ -175,6 +175,24 @@ TESTS = [
     ('key-bindings', 'E1M1', 'Y,SHOTS,BIND:fire:F,BIND:forward:I,W:0.3,F:1,KEY:F,W:0.3,S,Q',
      [r'Settings: Keys: forward I / Up;.* fire F;', r'Shot: ', r'Saved screenshot 1 at E1M1 \(player -[1-3]\d\d\.'],
      ['--fixed-step'], lambda config: check_keys(config, 'fire', ['F', 'None'])),
+    # Gamepad bindings (GameSettings.Pad): the right trigger fires, RB
+    # changes weapon, then Y is bound to fire and LT to the automap.
+    ('gamepad-bindings', 'E1M1',
+     'Y,K,SHOTS,W:1,PADDOWN:RT,W:0.2,PADUP:RT,PADDOWN:RB,PADUP:RB,PADBIND:fire:Y,PADBIND:automap:LT,'
+     'PADDOWN:Y,W:0.2,PADUP:Y,PADDOWN:LT,W:0.1,PADUP:LT,W:0.3,S,Q',
+     [r'Gamepad: RT: fire', r'Gamepad: RB: nextWeapon', r'Settings: Gamepad: fire Y;.* automap LT;',
+      r'Gamepad: Y: fire', r'Gamepad: LT: automap', r'Shot: '], [],
+     lambda config: check_pad(config, 'fire', ['Y', 'None'])),
+    ('controls-pad', 'MENUCONTROLSPAD', None, [r'Settings: Gamepad: fire RT / Y;'], [],
+     lambda config: check_pad(config, 'fire', ['RT', 'Y'])),
+    # Touch controls (GameTouch) with the mouse as fingers: the stick walks
+    # forward, a drag turns right, FIRE shoots, MENU pauses.
+    ('touch-controls', 'E1M1',
+     'Y,W:0.3,S,SAVE:1,TDOWN:1:0.2:0.5,TMOVE:1:0.2:0.65,W:1,TUP:1,SAVE:2,'
+     'TDOWN:2:0.6:0.5,TMOVE:2:0.65:0.5,TMOVE:2:0.7:0.5,TUP:2,W:0.1,SAVE:3,SHOTS,'
+     'TDOWN:3:0.904:0.388,W:0.3,TUP:3,TDOWN:4:0.955:0.92,TUP:4,W:0.3,S,Q',
+     [r'Touch: Finger 1 down', r'Shot: ', r'Touch: Button MENU'], ['--touch', '--fixed-step'],
+     lambda config: check_touch(config)),
     # UMAPINFO from a PWAD (tools/make_umapinfo_wad.py): E1M1 renamed with a
     # story text after its intermission, then E1M3 without intermission
     # ending the game with the bunny.
@@ -349,6 +367,21 @@ def check_keys(config, action, keys):
     assert settings['keys'][action] == keys, 'keys.%s is %s' % (action, settings['keys'][action])
 
 
+def check_pad(config, action, buttons):
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        settings = json.load(f)
+    assert settings['pad'][action] == buttons, 'pad.%s is %s' % (action, settings['pad'][action])
+
+
+def check_touch(config):
+    """The touch stick moved the player east (the start faces east), the
+    look finger's drag of a tenth of the width turned 18 degrees right."""
+    p = [None] + [save_json(config, n)['player'] for n in range(1, 4)]
+    assert p[2]['x'] - p[1]['x'] > 300, 'stick: %s -> %s' % (p[1]['x'], p[2]['x'])
+    turned = p[2]['angle'] - p[3]['angle']
+    assert 15 < turned < 21, 'look: turned %s' % turned
+
+
 def check_log_filtered(config):
     with open(os.path.join(config, 'castle-doom', 'castle-doom-filtered.log')) as f:
         log = f.read()
@@ -376,7 +409,8 @@ GOLDEN = [
     'video-settings_1.png', 'settings-1_1.png', 'phase2-download_1.png', 'arch-vile_1.png',
     'save-round-trip_1.png', 'save-round-trip_2.png', 'knockback_1.png', 'melee-turn_1.png',
     'donut_1.png', 'select-thing_1.png', 'key-bindings_1.png', 'translucency_1.png',
-    'translucent-things_1.png', 'transfers_1.png',
+    'translucent-things_1.png', 'transfers_1.png', 'touch-controls_1.png',
+    'controls-pad_menucontrolspad.png',
 ]
 
 

@@ -1024,11 +1024,16 @@ walk navigation's `Input_Forward`... from them and rewrites the help
 panel's first lines when they differ from the defaults; `Press` fires,
 uses and toggles the automap through `KeyIs`, and stops at any other
 bound key, so a key taken by an action no longer runs the fixed hotkey
-(F, M, the weapon digits) it shadows. The gamepad keeps its own layout
-(A use, View automap). The title screen's Controls page
-(`ControlsPanel`, a row per action built in `BuildControlsRows`) binds
-the next key pressed through `BindKey`, which takes the key away from
-any other action and refuses Escape and the function keys.
+(F, M, the weapon digits) it shadows. Gamepad bindings:
+`GameSettings.Pad` holds two `TPadButton`s per `TPadAction` (fire, use,
+automap, next and previous weapon; JSON `pad` with the Xbox names A, RT,
+DPadUp...); the triggers count as buttons past half way. The title
+screen's Controls page (`ControlsPanel`, a row per action built in
+`BuildControlsRows`) binds the next key pressed through `BindKey`, which
+takes the key away from any other action and refuses Escape and the
+function keys; its Gamepad button swaps in the pad rows (`PadList`),
+which bind the next controller button (`BindPad`; the triggers are
+polled in `TViewMenu.Update`, Start cancels and cannot be bound).
 
 ---
 
@@ -1139,16 +1144,45 @@ The player is not a `TCastleTransform`; it is the viewport's camera moved by
 - `HeadBobbing = 0.03`, `MouseLook = true`, WASD bound through
   `Input_Forward.Assign(keyW, keyArrowUp)` etc., jump/crouch/fly inputs
   cleared,
-- `UseGameController` for the sticks. Gamepad buttons become the keys of
-  the same actions in `GameGamepad` (`GamepadKey`: A use, View automap,
-  Menu Esc; in menus the D-pad, A and B are the arrows, Enter and Esc),
-  the bumpers step the weapon and the right trigger fires while held.
+- `FallingEffect = false`: CGE turns the view during long falls (it once
+  made the player face elsewhere after walking off E1M1's start ledge).
+- `UseGameController` for the sticks. In the game a button press runs
+  the actions bound to it (`TViewPlay.PadPressed` through
+  `PadButtonOfEvent`), the triggers have no events and are edge-detected
+  every frame (`CheckPadTriggers`), and fire is held while any of its
+  buttons is (`GamepadFireHeld`); Start is Esc. In menus the D-pad, A and
+  B are the arrows, Enter and Esc (`GamepadKey`). The demo commands
+  `PADDOWN` / `PADUP` hold a button (`SimulatedPadHeld`, plus a press
+  event for buttons that have one).
   CGE reads controllers on Windows and Linux; in the browser
   `GameGamepad` polls `navigator.getGamepads()` through JOB every frame
   (`ApplicationProperties.OnUpdate`) and feeds CGE's explicit controller
   backend (`TExplicitControllerManagerBackend`: count, axes, triggers,
   buttons of the Gamepad API's standard mapping, Y flipped so forward is
   positive), so the views see the same `TGameController` events.
+
+Touch controls (`GameTouch`): `TDoomTouchControls`, a full-size control
+of the play design (`TouchControls`, over the HUD and under the menus),
+keeps a list of fingers in its own pixels. A finger landing on a round
+button presses it (fire is held, the others call `OnButton` at once:
+use, previous / next weapon, automap, menu), one landing on the left 40%
+becomes a floating stick (its centre follows a finger pushed beyond the
+radius, 0.13 of the smaller side; a full push is Doom's running speed),
+any other turns and looks: half a turn per width of drag, also while
+dragging the fire button. `TViewPlay.ApplyTouch` moves the camera with
+the navigation's own `Move` (collisions, steps) and turns it with
+`ProcessMouseLookDelta`; mouse look is off while the controls show, the
+help panel and the click prompt are hidden and the crosshair stays.
+Where the fingers come from: on the desktop the control's `Press` /
+`Motion` / `Release` take the mouse (or CGE's finger indexes) when
+`--touch` is given; in the browser CGE's backend reports every pointer
+as finger 0, so the page script added by `tools/patch_web_page.py`
+tracks touch pointers itself, keeps them from the engine (a capture
+listener on `window`) while the game asks every frame
+(`castleDoomTouches(1)`, from `PollTouches`; a menu, the intermission,
+or half a second without asking lets taps through as clicks), and
+answers whether the last pointer was a finger (`TouchMode`, which shows
+or hides the controls) and where each finger is.
 
 Collisions use the map chunks' `PreciseCollisions` triangles, the invisible
 blocking-line scene, and the actors' bounding boxes (`Collides`). The

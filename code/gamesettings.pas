@@ -12,9 +12,18 @@ uses CastleKeysMouse;
 
 type
   { The bindable actions of the game (two keys each; the mouse's left
-    button always fires, the gamepad has its own fixed layout). }
+    button always fires). }
   TGameAction = (gaForward, gaBackward, gaStrafeLeft, gaStrafeRight,
     gaTurnLeft, gaTurnRight, gaRun, gaFire, gaUse, gaAutomap);
+
+  { The gamepad's bindable actions (the sticks move and look, Start opens
+    the menu, and the menus use the D-pad, A and B whatever is bound). }
+  TPadAction = (gpaFire, gpaUse, gpaAutomap, gpaNextWeapon, gpaPrevWeapon);
+  { A gamepad button in the standard (Xbox) layout; the triggers count as
+    buttons when pressed past half way. Start and Guide are not bindable. }
+  TPadButton = (pbNone, pbA, pbB, pbX, pbY, pbLeftBumper, pbRightBumper,
+    pbLeftTrigger, pbRightTrigger, pbLeftStick, pbRightStick,
+    pbDPadUp, pbDPadDown, pbDPadLeft, pbDPadRight, pbView);
 
   TGameSettings = record
     SfxVolume, MusicVolume: Integer;
@@ -38,6 +47,8 @@ type
     FrameCap: Integer;
     { Key bindings: two keys per action (keyNone = unused). }
     Keys: array [TGameAction, 0..1] of TKey;
+    { Gamepad bindings: two buttons per action (pbNone = unused). }
+    Pad: array [TPadAction, 0..1] of TPadButton;
   end;
 
 const
@@ -63,6 +74,19 @@ const
     (keyW, keyArrowUp), (keyS, keyArrowDown), (keyA, keyNone), (keyD, keyNone),
     (keyArrowLeft, keyNone), (keyArrowRight, keyNone), (keyShift, keyNone),
     (keyCtrl, keyNone), (keyE, keySpace), (keyTab, keyNone));
+
+  PadActionNames: array [TPadAction] of String = (
+    'Fire', 'Use / open', 'Automap', 'Next weapon', 'Previous weapon');
+  { The JSON keys of settings.json's "pad" object. }
+  PadActionIds: array [TPadAction] of String = (
+    'fire', 'use', 'automap', 'nextWeapon', 'prevWeapon');
+  { settings.json's, the log's and the Controls page's button names. }
+  PadButtonNames: array [TPadButton] of String = ('-', 'A', 'B', 'X', 'Y',
+    'LB', 'RB', 'LT', 'RT', 'LS', 'RS', 'DPadUp', 'DPadDown', 'DPadLeft',
+    'DPadRight', 'View');
+  DefaultPad: array [TPadAction, 0..1] of TPadButton = (
+    (pbRightTrigger, pbNone), (pbA, pbX), (pbView, pbNone),
+    (pbRightBumper, pbNone), (pbLeftBumper, pbNone));
 
 var
   Settings: TGameSettings;
@@ -109,6 +133,17 @@ function KeyName(const Key: TKey): String;
 function ActionKeysText(const Action: TGameAction): String;
 { The bindings for the log. }
 function KeysSummary: String;
+
+{ Gamepad bindings, like the keys'. }
+procedure ResetPad;
+function PadIs(const Button: TPadButton; const Action: TPadAction): Boolean;
+{ Bind Button to slot Slot of Action, removing it from other actions;
+  pbNone clears the slot. }
+procedure BindPad(const Action: TPadAction; const Slot: Integer; const Button: TPadButton);
+{ A button by its name (PadButtonNames, any case); pbNone when unknown. }
+function StrToPadButton(const S: String): TPadButton;
+function PadActionText(const Action: TPadAction): String;
+function PadSummary: String;
 
 implementation
 
@@ -197,6 +232,64 @@ begin
     Result := Result + ' ' + ActionIds[A] + ' ' + ActionKeysText(A) + ';';
 end;
 
+procedure ResetPad;
+var
+  A: TPadAction;
+begin
+  for A := Low(TPadAction) to High(TPadAction) do
+  begin
+    Settings.Pad[A, 0] := DefaultPad[A, 0];
+    Settings.Pad[A, 1] := DefaultPad[A, 1];
+  end;
+end;
+
+function PadIs(const Button: TPadButton; const Action: TPadAction): Boolean;
+begin
+  Result := (Button <> pbNone) and ((Settings.Pad[Action, 0] = Button) or (Settings.Pad[Action, 1] = Button));
+end;
+
+procedure BindPad(const Action: TPadAction; const Slot: Integer; const Button: TPadButton);
+var
+  A: TPadAction;
+  I: Integer;
+begin
+  if Button <> pbNone then
+    for A := Low(TPadAction) to High(TPadAction) do
+      for I := 0 to 1 do
+        if Settings.Pad[A, I] = Button then
+          Settings.Pad[A, I] := pbNone;
+  Settings.Pad[Action, Slot] := Button;
+end;
+
+function StrToPadButton(const S: String): TPadButton;
+var
+  B: TPadButton;
+begin
+  for B := Succ(pbNone) to High(TPadButton) do
+    if SameText(S, PadButtonNames[B]) then
+      Exit(B);
+  Result := pbNone;
+end;
+
+function PadActionText(const Action: TPadAction): String;
+begin
+  if Settings.Pad[Action, 0] = pbNone then
+    Result := PadButtonNames[Settings.Pad[Action, 1]]
+  else if Settings.Pad[Action, 1] = pbNone then
+    Result := PadButtonNames[Settings.Pad[Action, 0]]
+  else
+    Result := PadButtonNames[Settings.Pad[Action, 0]] + ' / ' + PadButtonNames[Settings.Pad[Action, 1]];
+end;
+
+function PadSummary: String;
+var
+  A: TPadAction;
+begin
+  Result := 'Gamepad:';
+  for A := Low(TPadAction) to High(TPadAction) do
+    Result := Result + ' ' + PadActionIds[A] + ' ' + PadActionText(A) + ';';
+end;
+
 procedure Defaults;
 begin
   Settings.SfxVolume := MaxVolume;
@@ -213,6 +306,7 @@ begin
   Settings.VSync := false;
   Settings.FrameCap := 120;
   ResetKeys;
+  ResetPad;
 end;
 
 { settings.json's "keys": {"forward": ["W", "Up"], ...} (KeyToStr names;
@@ -247,11 +341,46 @@ begin
   end;
 end;
 
+{ settings.json's "pad": {"fire": ["RT", "None"], ...} (PadButtonNames). }
+procedure ReadPad(const J: TJSONObject);
+var
+  A: TPadAction;
+  Arr: TJSONArray;
+  I: Integer;
+begin
+  for A := Low(TPadAction) to High(TPadAction) do
+    if J.Find(PadActionIds[A], Arr) then
+      for I := 0 to 1 do
+        if I < Arr.Count then
+          Settings.Pad[A, I] := StrToPadButton(Arr.Strings[I])
+        else
+          Settings.Pad[A, I] := pbNone;
+end;
+
+function WritePad: TJSONObject;
+var
+  A: TPadAction;
+  Arr: TJSONArray;
+  I: Integer;
+begin
+  Result := TJSONObject.Create;
+  for A := Low(TPadAction) to High(TPadAction) do
+  begin
+    Arr := TJSONArray.Create;
+    for I := 0 to 1 do
+      if Settings.Pad[A, I] = pbNone then
+        Arr.Add('None')
+      else
+        Arr.Add(PadButtonNames[Settings.Pad[A, I]]);
+    Result.Add(PadActionIds[A], Arr);
+  end;
+end;
+
 procedure LoadSettings;
 var
   Text: String;
   D: TJSONData;
-  J, KeysJ: TJSONObject;
+  J, KeysJ, PadJ: TJSONObject;
 begin
   Defaults;
   if not SaveStorageRead(SettingsUrl, Text) then Exit;
@@ -284,6 +413,8 @@ begin
     Settings.FrameCap := Clamped(J.Get('frameCap', Settings.FrameCap), 0, 1000);
     if J.Find('keys', KeysJ) then
       ReadKeys(KeysJ);
+    if J.Find('pad', PadJ) then
+      ReadPad(PadJ);
   finally
     FreeAndNil(J);
   end;
@@ -292,6 +423,7 @@ begin
     BoolToStr(Settings.Diminish, 'on', 'off'), BoolToStr(Settings.MouseLook, 'on', 'off')]);
   WritelnLog('Settings', VideoSummary);
   WritelnLog('Settings', KeysSummary);
+  WritelnLog('Settings', PadSummary);
 end;
 
 procedure SaveSettings;
@@ -314,6 +446,7 @@ begin
     J.Add('vsync', Settings.VSync);
     J.Add('frameCap', Settings.FrameCap);
     J.Add('keys', WriteKeys);
+    J.Add('pad', WritePad);
     SaveStorageWrite(SettingsUrl, J.FormatJSON(AsCompressedJSON));
   finally
     FreeAndNil(J);

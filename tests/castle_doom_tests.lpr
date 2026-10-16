@@ -19,7 +19,7 @@ program castle_doom_tests;
 
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
-  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
+  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
   DoomGeneralized;
 
 function DataPath(const Name: String): String;
@@ -85,6 +85,8 @@ type
   TTestGamepad = class(TTestCase)
   published
     procedure TestWebPadMapping;
+    procedure TestPadBindings;
+    procedure TestTouchControls;
   end;
 
   TTestStates = class(TTestCase)
@@ -1135,6 +1137,91 @@ end;
 
 { TTestGamepad }
 
+procedure TTestGamepad.TestPadBindings;
+var
+  Event: TInputPressRelease;
+begin
+  ResetPad;
+  AssertTrue('RT fires', PadIs(pbRightTrigger, gpaFire));
+  AssertTrue('X uses', PadIs(pbX, gpaUse));
+  AssertEquals('use text', 'A / X', PadActionText(gpaUse));
+  { A button moves from the action that had it. }
+  BindPad(gpaFire, 1, pbX);
+  AssertTrue('X fires', PadIs(pbX, gpaFire));
+  AssertFalse('X no longer uses', PadIs(pbX, gpaUse));
+  AssertEquals('use text after', 'A', PadActionText(gpaUse));
+  BindPad(gpaAutomap, 0, pbNone);
+  AssertEquals('cleared', '-', PadActionText(gpaAutomap));
+  AssertTrue('names', StrToPadButton('dpadup') = pbDPadUp);
+  AssertTrue('unknown', StrToPadButton('Start') = pbNone);
+  { Events: B (east) is pbB; Start (menu) has no pad button; triggers
+    have no events. }
+  AssertTrue('B event', PadButtonEvent(pbB, Event));
+  AssertTrue('east', Event.Controller.Button = gbEast);
+  AssertTrue('B back', PadButtonOfEvent(Event) = pbB);
+  Event.Controller.Button := gbMenu;
+  AssertTrue('Start unbindable', PadButtonOfEvent(Event) = pbNone);
+  AssertFalse('trigger event', PadButtonEvent(pbLeftTrigger, Event));
+  { Held buttons (demo scripts) count for their actions. }
+  SimulatedPadHeld := [pbX];
+  AssertTrue('fire held through X', GamepadFireHeld);
+  SimulatedPadHeld := [];
+  ResetPad;
+end;
+
+procedure TTestGamepad.TestTouchControls;
+var
+  T: TDoomTouchControls;
+  Middle: TVector2;
+  Radius: Single;
+  V: TVector2;
+begin
+  TouchForced := false;
+  T := TDoomTouchControls.Create(nil);
+  try
+    T.SetTestSize(1600, 900);
+    { The stick: a finger on the left, pushed up half the stick's radius
+      (0.13 of the height) walks forward at half speed. }
+    T.TouchDown(1, Vector2(300, 400));
+    T.TouchMove(1, Vector2(300, 400 + 0.065 * 900));
+    V := T.MoveVector;
+    AssertEquals('stick forward', 0.5, V.Y, 0.01);
+    AssertEquals('stick sideways', 0, V.X, 0.01);
+    { Pushed far beyond the edge it is full speed, and the centre follows. }
+    T.TouchMove(1, Vector2(300 + 500, 400));
+    AssertEquals('stick right, full', 1, T.MoveVector.X, 0.01);
+    T.TouchMove(1, Vector2(300 + 500 - 0.13 * 900, 400));
+    AssertEquals('centre followed', 0, T.MoveVector.Length, 0.01);
+    { A drag on the right turns: a tenth of the width is 18 degrees. }
+    T.TouchDown(2, Vector2(1000, 500));
+    T.TouchMove(2, Vector2(1160, 520));
+    V := T.TakeLook;
+    AssertEquals('look right', 18, V.X, 0.01);
+    AssertEquals('look up', 2.25, V.Y, 0.01);
+    AssertEquals('look taken', 0, T.TakeLook.Length, 0.0001);
+    { Fire is held while a finger is on it, and dragging it turns too. }
+    T.ButtonCircle(tbFire, Middle, Radius);
+    AssertTrue('fire button found', T.ButtonAt(Middle) = tbFire);
+    T.TouchDown(3, Middle);
+    AssertTrue('fire held', T.FireHeld);
+    T.TouchMove(3, Middle + Vector2(-80, 0));
+    AssertEquals('fire turns', -9, T.TakeLook.X, 0.01);
+    T.TouchUp(3);
+    AssertFalse('fire released', T.FireHeld);
+    { The browser's answer: finger 2 stays, 1 lifted, 7 new on Use. }
+    T.ButtonCircle(tbUse, Middle, Radius);
+    ApplyTouchState(Format('1;2,1160,520;7,%d,%d', [Round(Middle.X), Round(Middle.Y)]), T);
+    AssertTrue('touch mode from the page', TouchMode);
+    AssertEquals('fingers', 2, T.TouchCount);
+    AssertEquals('stick gone', 0, T.MoveVector.Length, 0.0001);
+    ApplyTouchState('0', T);
+    AssertFalse('mouse again', TouchMode);
+    AssertEquals('all lifted', 0, T.TouchCount);
+  finally
+    FreeAndNil(T);
+  end;
+end;
+
 procedure TTestGamepad.TestWebPadMapping;
 var
   Pads: TWebPads;
@@ -1144,6 +1231,7 @@ begin
     the left stick a bit right and half forward (the browser's Y points
     down), the right stick left and fully down, A, D-pad down and Start
     pressed, the right trigger most of the way in. }
+  ResetPad;
   Pads := Default(TWebPads);
   Pads[0].Id := 'Test pad (STANDARD GAMEPAD Vendor: 045e Product: 02ea)';
   Pads[0].Axes[0] := 0.25;

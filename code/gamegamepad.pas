@@ -4,14 +4,15 @@
   mapping) every frame through JOB and feeds CGE's explicit backend, the
   one its console ports use; from there on the game sees the same
   TGameController objects and events as on the desktop.
-  The sticks drive TCastleWalkNavigation (UseGameController); buttons are
-  turned into the keys the views already handle, so menus, the
-  intermission and the game need no gamepad-specific code. }
+  The sticks drive TCastleWalkNavigation (UseGameController). In the menus
+  and the intermission the buttons are turned into the keys the views
+  already handle; in the game they do what GameSettings' Pad bindings
+  say (the Controls page rebinds them), Start opens the menu. }
 unit GameGamepad;
 
 interface
 
-uses CastleKeysMouse;
+uses CastleKeysMouse, GameSettings;
 
 type
   { One browser gamepad as the Gamepad API's standard mapping reports it
@@ -33,17 +34,27 @@ procedure InitializeGamepads;
 
 { The key a controller button stands for: in menus (title, Doom's in-game
   menu, intermission) the D-pad is the arrows, A (south) Enter, B (east) and
-  Menu Escape; in the game A is use (E), View the automap (Tab) and Menu
-  Escape. False for buttons with no key (the bumpers switch weapons, see
-  GamepadWeaponStep). }
+  Menu Escape; in the game only Menu is a key (Escape), the other buttons
+  are bound to actions (PadButtonOfEvent). }
 function GamepadKey(const Event: TInputPressRelease; const InMenu: Boolean;
   out Key: TKey): Boolean;
 
-{ +1 / -1 for the right / left bumper (next / previous weapon), else 0. }
-function GamepadWeaponStep(const Event: TInputPressRelease): Integer;
-
-{ The fire trigger (right trigger) held on any controller. }
+{ The game's name of a controller event's button; pbNone for other events
+  and for Start, Guide and Share. }
+function PadButtonOfEvent(const Event: TInputPressRelease): TPadButton;
+{ The button (a trigger past half way) is held on any controller. }
+function PadButtonHeld(const B: TPadButton): Boolean;
+{ A button bound to the action is held. }
+function PadActionHeld(const A: TPadAction): Boolean;
+{ The fire action's buttons are held. }
 function GamepadFireHeld: Boolean;
+{ A controller event for a button (demo scripts); false for the triggers,
+  which have no events (they are axes). }
+function PadButtonEvent(const B: TPadButton; out Event: TInputPressRelease): Boolean;
+
+var
+  { Buttons the demo scripts hold down (PADDOWN / PADUP). }
+  SimulatedPadHeld: set of TPadButton;
 
 { Make CGE's controllers the Count browser pads read this frame: the list
   follows the pads (a change is logged), the sticks become AxisLeft /
@@ -77,31 +88,62 @@ begin
       else ;
     end
   else
-    case Event.Controller.Button of
-      gbSouth, gbWest: Key := keyE;
-      gbView: Key := keyTab;
-      gbMenu: Key := keyEscape;
-      else ;
-    end;
+  if Event.Controller.Button = gbMenu then
+    Key := keyEscape;
   Result := Key <> keyNone;
 end;
 
-function GamepadWeaponStep(const Event: TInputPressRelease): Integer;
+const
+  { The CGE button of each pad button (gbMenu for the triggers: none). }
+  PadToCge: array [TPadButton] of TGameControllerButton = (gbMenu,
+    gbSouth, gbEast, gbWest, gbNorth, gbLeftBumper, gbRightBumper,
+    gbMenu, gbMenu, gbLeftStickClick, gbRightStickClick,
+    gbDPadUp, gbDPadDown, gbDPadLeft, gbDPadRight, gbView);
+
+function PadButtonOfEvent(const Event: TInputPressRelease): TPadButton;
+var
+  B: TPadButton;
 begin
-  Result := 0;
+  Result := pbNone;
   if Event.EventType <> itGameController then Exit;
-  if Event.Controller.Button = gbRightBumper then Result := 1
-  else if Event.Controller.Button = gbLeftBumper then Result := -1;
+  for B := Succ(pbNone) to High(TPadButton) do
+    if (B <> pbLeftTrigger) and (B <> pbRightTrigger) and (PadToCge[B] = Event.Controller.Button) then
+      Exit(B);
 end;
 
-function GamepadFireHeld: Boolean;
+function PadButtonHeld(const B: TPadButton): Boolean;
 var
   I: Integer;
 begin
+  if B = pbNone then Exit(false);
+  if B in SimulatedPadHeld then Exit(true);
   Result := false;
   for I := 0 to Controllers.Count - 1 do
-    if Controllers[I].AxisRightTrigger > 0.5 then
-      Exit(true);
+    case B of
+      pbLeftTrigger: if Controllers[I].AxisLeftTrigger > 0.5 then Exit(true);
+      pbRightTrigger: if Controllers[I].AxisRightTrigger > 0.5 then Exit(true);
+      else if Controllers[I].Pressed[PadToCge[B]] then Exit(true);
+    end;
+end;
+
+function PadActionHeld(const A: TPadAction): Boolean;
+begin
+  Result := PadButtonHeld(Settings.Pad[A, 0]) or PadButtonHeld(Settings.Pad[A, 1]);
+end;
+
+function GamepadFireHeld: Boolean;
+begin
+  Result := PadActionHeld(gpaFire);
+end;
+
+function PadButtonEvent(const B: TPadButton; out Event: TInputPressRelease): Boolean;
+begin
+  Event := Default(TInputPressRelease);
+  if B in [pbNone, pbLeftTrigger, pbRightTrigger] then Exit(false);
+  Event.EventType := itGameController;
+  Event.Controller.Button := PadToCge[B];
+  Event.Controller.Caption := PadButtonNames[B];
+  Result := true;
 end;
 
 { Browser pads -> CGE ------------------------------------------------------ }

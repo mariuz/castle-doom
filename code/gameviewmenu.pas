@@ -30,6 +30,10 @@ type
     FKeyButtons: array [TGameAction, 0..1] of TCastleButton;
     FWaitAction: TGameAction;
     FWaitSlot: Integer;
+    { The page's gamepad half: its rows, the action waiting for a button. }
+    FPadMode: Boolean;
+    FPadButtons: array [TPadAction, 0..1] of TCastleButton;
+    FWaitPadAction: TPadAction;
     FStatus: TCastleLabel;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
@@ -116,6 +120,12 @@ type
     procedure ClickControlsBack(Sender: TObject);
     procedure ClickKeysDefaults(Sender: TObject);
     procedure ClickKeyButton(Sender: TObject);
+    procedure ClickPadButton(Sender: TObject);
+    { Switch the Controls page between the keys and the gamepad. }
+    procedure ClickControlsPad(Sender: TObject);
+    procedure ShowControlsMode;
+    { Bind the gamepad button the page waits for (pbNone clears). }
+    procedure BindWaitingPad(const B: TPadButton);
     procedure BuildControlsRows;
     procedure UpdateKeyButtons;
     { The key press the Controls page waits for (Escape cancels,
@@ -144,6 +154,7 @@ var
   ViewMenu: TViewMenu;
   { Set from the command line (--autotest MAP PREFIX): start this map at once.
     MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENUQUIT, MENULOAD, MENUOPTIONS, MENUCONTROLS,
+    MENUCONTROLSPAD,
     MENUDOOM2, MENUTITLE (title pages, menu closed) or MENUREADTHIS takes a
     screenshot of that menu page instead. }
   AutoTestMap: String;
@@ -263,6 +274,7 @@ begin
   Click('ButtonControls', {$ifdef FPC}@{$endif} ClickControls);
   Click('ButtonControlsBack', {$ifdef FPC}@{$endif} ClickControlsBack);
   Click('ButtonKeysDefaults', {$ifdef FPC}@{$endif} ClickKeysDefaults);
+  Click('ButtonControlsPad', {$ifdef FPC}@{$endif} ClickControlsPad);
   FControls := DesignedComponent('ControlsPanel') as TCastleRectangleControl;
   FWaitSlot := -1;
   BuildControlsRows;
@@ -927,6 +939,7 @@ var
   Lab: TCastleLabel;
   B: TCastleButton;
   A: TGameAction;
+  P: TPadAction;
   I: Integer;
 begin
   List := DesignedComponent('ControlsList') as TCastleVerticalGroup;
@@ -952,20 +965,91 @@ begin
     end;
     List.InsertFront(Row);
   end;
+  List := DesignedComponent('PadList') as TCastleVerticalGroup;
+  for P := Low(TPadAction) to High(TPadAction) do
+  begin
+    Row := TCastleHorizontalGroup.Create(FreeAtStop);
+    Row.Spacing := 10;
+    Lab := TCastleLabel.Create(FreeAtStop);
+    Lab.Caption := PadActionNames[P];
+    Lab.FontSize := 22;
+    Lab.Color := White;
+    Row.InsertFront(Lab);
+    for I := 0 to 1 do
+    begin
+      B := TCastleButton.Create(FreeAtStop);
+      B.FontSize := 22;
+      B.AutoSizeWidth := false;
+      B.Width := 200;
+      B.Tag := Ord(P) * 2 + I;
+      B.OnClick := {$ifdef FPC}@{$endif} ClickPadButton;
+      FPadButtons[P, I] := B;
+      Row.InsertFront(B);
+    end;
+    List.InsertFront(Row);
+  end;
   UpdateKeyButtons;
 end;
 
 procedure TViewMenu.UpdateKeyButtons;
 var
   A: TGameAction;
+  P: TPadAction;
   I: Integer;
 begin
   for A := Low(TGameAction) to High(TGameAction) do
     for I := 0 to 1 do
-      if (FWaitSlot = I) and (FWaitAction = A) then
+      if (not FPadMode) and (FWaitSlot = I) and (FWaitAction = A) then
         FKeyButtons[A, I].Caption := 'press a key...'
       else
         FKeyButtons[A, I].Caption := KeyName(Settings.Keys[A, I]);
+  for P := Low(TPadAction) to High(TPadAction) do
+    for I := 0 to 1 do
+      if FPadMode and (FWaitSlot = I) and (FWaitPadAction = P) then
+        FPadButtons[P, I].Caption := 'press a button...'
+      else
+        FPadButtons[P, I].Caption := PadButtonNames[Settings.Pad[P, I]];
+end;
+
+procedure TViewMenu.ShowControlsMode;
+begin
+  (DesignedComponent('ControlsList') as TCastleUserInterface).Exists := not FPadMode;
+  (DesignedComponent('PadList') as TCastleUserInterface).Exists := FPadMode;
+  if FPadMode then
+  begin
+    (DesignedComponent('ControlsHint') as TCastleLabel).Caption :=
+      'Click an action, then press the gamepad button (Backspace clears it, Esc or Start cancels)';
+    (DesignedComponent('ButtonControlsPad') as TCastleButton).Caption := 'Keyboard';
+  end else
+  begin
+    (DesignedComponent('ControlsHint') as TCastleLabel).Caption :=
+      'Click a key, then press the new one (Backspace clears it, Esc cancels)';
+    (DesignedComponent('ButtonControlsPad') as TCastleButton).Caption := 'Gamepad';
+  end;
+  UpdateKeyButtons;
+end;
+
+procedure TViewMenu.ClickControlsPad(Sender: TObject);
+begin
+  FPadMode := not FPadMode;
+  FWaitSlot := -1;
+  ShowControlsMode;
+end;
+
+procedure TViewMenu.ClickPadButton(Sender: TObject);
+begin
+  FWaitPadAction := TPadAction((Sender as TCastleButton).Tag div 2);
+  FWaitSlot := (Sender as TCastleButton).Tag mod 2;
+  UpdateKeyButtons;
+end;
+
+procedure TViewMenu.BindWaitingPad(const B: TPadButton);
+begin
+  BindPad(FWaitPadAction, FWaitSlot, B);
+  SaveSettings;
+  WritelnLog('Settings', PadSummary);
+  FWaitSlot := -1;
+  UpdateKeyButtons;
 end;
 
 procedure TViewMenu.ClickControls(Sender: TObject);
@@ -973,7 +1057,7 @@ begin
   FOptions.Exists := false;
   FControls.Exists := true;
   FWaitSlot := -1;
-  UpdateKeyButtons;
+  ShowControlsMode;
 end;
 
 procedure TViewMenu.ClickControlsBack(Sender: TObject);
@@ -986,10 +1070,17 @@ end;
 procedure TViewMenu.ClickKeysDefaults(Sender: TObject);
 begin
   FWaitSlot := -1;
-  ResetKeys;
+  if FPadMode then
+  begin
+    ResetPad;
+    WritelnLog('Settings', PadSummary);
+  end else
+  begin
+    ResetKeys;
+    WritelnLog('Settings', KeysSummary);
+  end;
   SaveSettings;
   UpdateKeyButtons;
-  WritelnLog('Settings', KeysSummary);
 end;
 
 procedure TViewMenu.ClickKeyButton(Sender: TObject);
@@ -1002,6 +1093,34 @@ end;
 function TViewMenu.ControlsKey(const Event: TInputPressRelease): Boolean;
 begin
   Result := false;
+  if FPadMode and (FWaitSlot >= 0) then
+  begin
+    { Waiting for a gamepad button: Start or Esc cancels, Backspace
+      clears; the triggers are found in Update. }
+    if Event.IsController(gbMenu) or Event.IsKey(keyEscape) then
+    begin
+      FWaitSlot := -1;
+      UpdateKeyButtons;
+      Exit(true);
+    end;
+    if Event.IsKey(keyBackSpace) then
+    begin
+      BindWaitingPad(pbNone);
+      Exit(true);
+    end;
+    if PadButtonOfEvent(Event) <> pbNone then
+    begin
+      BindWaitingPad(PadButtonOfEvent(Event));
+      Exit(true);
+    end;
+    Exit;
+  end;
+  { Start or B on the page leaves it, like Esc. }
+  if Event.IsController(gbMenu) or Event.IsController(gbEast) then
+  begin
+    ClickControlsBack(nil);
+    Exit(true);
+  end;
   if Event.EventType <> itKey then Exit;
   if FWaitSlot < 0 then
   begin
@@ -1097,6 +1216,8 @@ end;
 { --autotest MENU... : open the requested page, then screenshot a few tics
   later (from Update, so the image is composed and rendered). }
 procedure TViewMenu.AutoTestMenu;
+var
+  Event: TInputPressRelease;
 begin
   FDoomMenu.MouseEnabled := false;
   { The title pages alone (MENUTITLE), otherwise the menu is open like
@@ -1136,6 +1257,17 @@ begin
     ClickControls(nil);
     ClickKeyButton(FKeyButtons[gaUse, 0]);
     ControlsKey(InputKey(TVector2.Zero, keyQ, 'q', []));
+  end
+  else if AutoTestMap = 'MENUCONTROLSPAD' then
+  begin
+    { The Controls page's gamepad half, after binding Y to the second
+      fire slot like a click and a button press would. }
+    ShowOptions(true);
+    ClickControls(nil);
+    ClickControlsPad(nil);
+    ClickPadButton(FPadButtons[gpaFire, 1]);
+    if PadButtonEvent(pbY, Event) then
+      ControlsKey(Event);
   end
   else if AutoTestMap = 'MENUKEYS' then
   begin
@@ -1193,6 +1325,15 @@ begin
   end;
   { The title music is rendered a slice per frame. }
   if FMusic <> nil then FMusic.Update;
+  { The Controls page waiting for a gamepad button: the triggers are
+    axes, without press events. }
+  if (FControls <> nil) and FControls.Exists and FPadMode and (FWaitSlot >= 0) then
+  begin
+    if PadButtonHeld(pbRightTrigger) then
+      BindWaitingPad(pbRightTrigger)
+    else if PadButtonHeld(pbLeftTrigger) then
+      BindWaitingPad(pbLeftTrigger);
+  end;
   if FDoomMenu = nil then Exit;
   { 320x200 shown 4:3, as tall as the window (or as wide, if narrower). }
   FDoomMenu.Height := Min(EffectiveHeight, EffectiveWidth * 3 / 4);

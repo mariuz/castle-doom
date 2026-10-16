@@ -10,7 +10,7 @@ uses SysUtils,
   CastleKeysMouse,
   CastleUtils, CastleTimeUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
-  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameSettings, GameSaveBundle, GameLogFilter, GameCrash;
+  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameSettings, GameSaveBundle, GameLogFilter, GameCrash, GameTouch;
 
 var
   Window: TCastleWindow;
@@ -70,6 +70,12 @@ begin
     if Parameters[I] = '--fixed-step' then
       AutoTestFixedStep := true
     else
+    if Parameters[I] = '--touch' then
+    begin
+      { The touch controls on the desktop (the mouse is one finger). }
+      TouchForced := true;
+      TouchMode := true;
+    end else
     if Parameters[I] = '--profile' then
       { CGE's profiler: each map load logs its stages (Profiler.Stop
         with LogSummary), PROFILE in a demo the whole summary. }

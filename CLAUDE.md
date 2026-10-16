@@ -73,7 +73,7 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 28 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 30 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -247,6 +247,22 @@ workflow builds every branch; download its `web-site` artifact
 (`gh api repos/mariuz/castle-doom/actions/artifacts` works here, `gh run`
 does not), unzip it into an empty directory, serve it with `python3 -m
 http.server` and point Playwright at `play/?map=...`.
+Gamepad bindings (`GameSettings.Pad`, `settings.json`'s `pad`):
+`PADBIND:action:button` (`fire`, `use`, `automap`, `nextWeapon`,
+`prevWeapon`; buttons A, B, X, Y, LB, RB, LT, RT, LS, RS, DPadUp...,
+View) and `PADDOWN:button` / `PADUP:button` (held, with a press event
+for non-triggers) in a demo; the log says `Gamepad: RT: fire` per
+press. `MENUCONTROLSPAD` screenshots the Controls page's gamepad half
+(autotests `gamepad-bindings`, `controls-pad`).
+Touch controls (`GameTouch`): `--touch` (or `TOUCH` in a demo) shows
+them on the desktop, where the mouse is one finger; `TDOWN:id:x:y`,
+`TMOVE:id:x:y` and `TUP:id` place fingers (x, y fractions of the
+window, y up): the stick takes the left 40%, FIRE is at about
+`0.904:0.388` and MENU at `0.955:0.92` in a 16:9 window (log `Touch:
+Button ...`; autotest `touch-controls`, unit test `TestTouchControls`).
+In the browser the page script (`tools/patch_web_page.py`) tracks the
+fingers; Playwright tests them with `hasTouch: true` and CDP
+`Input.dispatchTouchEvent` (several touch points at once).
 
 2D queries (sight, moves, missiles, hitscans, crossings, use) take
 their candidate lines from `TDoomMap.LinesInBox` / `LinesNearSegment`

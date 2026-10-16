@@ -7,7 +7,14 @@ workflow copies from pages/sw.js, and links the web app manifest,
 report: the last 40
 console lines (the game's log) shown over the page when the WebAssembly
 program stops (any exception does: FPC's wasm32 target cannot catch
-them), e.g. after the CRASH demo command (play/?map=E1M1&demo=W:2,CRASH).
+them), e.g. after the CRASH demo command (play/?map=E1M1&demo=W:2,CRASH),
+and for the touch controls (GameTouch): CGE's web backend reports every
+pointer as finger 0, so the page tracks the fingers itself. While the game
+is played (it calls window.castleDoomTouches(1) every frame) touch
+pointer events on the canvas do not reach the engine; the function returns
+whether the last pointer was a finger and where the fingers are. The
+menus call it with 0 (or not at all for half a second): taps are clicks
+there.
 
 CGE's page sizes the canvas to the display's pixels in a ResizeObserver
 callback. The patch multiplies that size by window.castleDoomScale (1 by
@@ -99,6 +106,65 @@ MANIFEST_NEW = """  <link rel="manifest" href="../manifest.webmanifest">
 """
 
 
+# Before the crash script (both go before the game's script tag).
+TOUCH_NEW = """
+  <style>canvas { touch-action: none; }</style>
+  <script>
+    /* Castle DOOM's touch controls (tools/patch_web_page.py): the fingers
+       on the canvas for GameTouch.PollTouches, kept from the engine while
+       the game is played. */
+    (function () {
+      const fingers = new Map();
+      let canvas = null;
+      let capture = false;
+      let askedAt = 0;
+      let touchMode = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+      function where(e) {
+        const r = canvas.getBoundingClientRect();
+        return [Math.round((e.clientX - r.left) * canvas.width / Math.max(1, r.width)),
+                Math.round(canvas.height - (e.clientY - r.top) * canvas.height / Math.max(1, r.height))];
+      }
+      function capturing() {
+        return capture && performance.now() - askedAt < 500;
+      }
+      window.addEventListener('pointerdown', function (e) {
+        if (e.pointerType !== 'touch') {
+          touchMode = false;
+          return;
+        }
+        touchMode = true;
+        if (!capturing() || !(e.target instanceof HTMLCanvasElement)) return;
+        canvas = e.target;
+        fingers.set(e.pointerId, where(e));
+        e.stopPropagation();
+        e.preventDefault();
+      }, true);
+      window.addEventListener('pointermove', function (e) {
+        if (e.pointerType === 'mouse' && (e.movementX || e.movementY)) touchMode = false;
+        if (!fingers.has(e.pointerId)) return;
+        fingers.set(e.pointerId, where(e));
+        e.stopPropagation();
+        e.preventDefault();
+      }, true);
+      function up(e) {
+        if (!fingers.has(e.pointerId)) return;
+        fingers.delete(e.pointerId);
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      window.addEventListener('pointerup', up, true);
+      window.addEventListener('pointercancel', up, true);
+      window.castleDoomTouches = function (playing) {
+        capture = !!playing;
+        askedAt = performance.now();
+        let s = touchMode ? '1' : '0';
+        for (const [id, p] of fingers) s += ';' + id + ',' + p[0] + ',' + p[1];
+        return s;
+      };
+    })();
+  </script>"""
+
+
 def main():
     if len(sys.argv) != 2:
         print(__doc__)
@@ -113,6 +179,12 @@ def main():
             sys.exit(1)
         text = CRASH_TAG.sub(lambda m: CRASH_NEW + m.group(1), text)
         done.append('crash report')
+    if 'castleDoomTouches' not in text:
+        if len(CRASH_TAG.findall(text)) != 1:
+            print('%s: the game script tag was not found, cannot add the touch controls' % path)
+            sys.exit(1)
+        text = CRASH_TAG.sub(lambda m: TOUCH_NEW + m.group(1), text)
+        done.append('touch controls')
     if 'manifest.webmanifest' not in text:
         if len(MANIFEST_TAG.findall(text)) != 1:
             print('%s: the title was not found, cannot link the manifest' % path)

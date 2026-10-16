@@ -530,10 +530,23 @@
               "Alignment": "hpRight"
             },
             {
+              "$$ClassName": "TCastleVerticalGroup",
+              "Name": "PadList",
+              "Exists": false,
+              "Spacing": 6.0,
+              "Alignment": "hpRight"
+            },
+            {
               "$$ClassName": "TCastleHorizontalGroup",
               "Name": "RowControlsButtons",
               "Spacing": 10.0,
               "$Children": [
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonControlsPad",
+                  "Caption": "Gamepad",
+                  "FontSize": 22.0
+                },
                 {
                   "$$ClassName": "TCastleButton",
                   "Name": "ButtonKeysDefaults",

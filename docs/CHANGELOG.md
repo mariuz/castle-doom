@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Touch controls for phones and tablets in the browser: a stick to move,
+  drag to look, and buttons to fire, use, change weapons, open the
+  automap and the menu (`--touch` tries them on the desktop).
+- Gamepad buttons can be rebound: Options -> Controls... -> Gamepad.
+- Walking off a high ledge no longer turns the view a little.
 - Boom line-to-line teleports (243, 244 and MBF's 262-269): walk through
   one line and come out of another, keeping your direction relative to it.
 - Boom light transfers (213, 261): floors and ceilings lit like another

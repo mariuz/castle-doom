@@ -149,7 +149,15 @@ shows the new keys).
 Gamepad (Windows, Linux and the browser, where the pad shows up after a button press):
 left stick move / strafe, right stick turn / look, right trigger fire, A / X use,
 LB / RB previous / next weapon, View automap, Menu Doom's menu; in menus the D-pad, A (Enter)
-and B (back).
+and B (back). Options -> Controls... -> Gamepad rebinds fire, use, the automap and the
+weapon changes (two buttons each, the triggers too).
+
+Touch screens (phones and tablets in the browser; `--touch` on the desktop, where the
+mouse is one finger): a stick appears where the left thumb lands (pushed to its edge it
+runs), dragging anywhere else on the right turns and looks, and round buttons fire (drag
+the fire button to aim while shooting), use, change weapons, toggle the automap and open
+the menu. The controls show when a finger touches the screen and hide again when the
+mouse is used; taps work as clicks in the menus and on the intermission.
 
 Automated smoke test (loads a map, runs a script, saves screenshots, quits):
 
