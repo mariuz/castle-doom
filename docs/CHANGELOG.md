@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.20.0 (2026-10-16)
 
 - Boom's displacement and accelerative scrollers (214-218, 245-249):
   walls, floors and conveyors driven by a moving sector, such as a lift.
