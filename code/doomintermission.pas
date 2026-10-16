@@ -320,14 +320,30 @@ var
   Img: TRGBAlphaImage;
   Back, P: TDoomImage;
   E, LineH, NameH: Integer;
+  Info: TMapInfoEntry;
 begin
   if FGraphics = nil then Exit;
   Img := TRGBAlphaImage.Create(320, 200);
   Img.Clear(Vector4Byte(0, 0, 0, 255));
 
-  { Background: the episode map (Doom 1) or INTERPIC. }
+  { Background: UMAPINFO's / MAPINFO's exit picture of the finished map
+    (enter picture of the next one while "Entering"), else the episode
+    map (Doom 1) or INTERPIC. }
   Back := nil;
-  if not FIsDoom2 then
+  if FStage in [isEntering, isDone] then
+    Info := MapInfoFor(FNextMap)
+  else
+    Info := MapInfoFor(FMapName);
+  if Info <> nil then
+  begin
+    if FStage in [isEntering, isDone] then
+    begin
+      if Info.EnterPic <> '' then Back := FGraphics.Patch(Info.EnterPic);
+    end else
+    if Info.ExitPic <> '' then
+      Back := FGraphics.Patch(Info.ExitPic);
+  end;
+  if (Back = nil) and not FIsDoom2 then
   begin
     E := StrToIntDef(Copy(FMapName, 2, 1), 1);
     Back := FGraphics.Patch(Format('WIMAP%d', [E - 1]));

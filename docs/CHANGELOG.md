@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- ZDoom's MAPINFO and ZMAPINFO lumps: PWADs made for ZDoom-family ports
+  get their level names, music, skies, par times, map order, cluster
+  story texts, episodes and endings.
+- UMAPINFO's `exitpic` / `enterpic` (intermission pictures) and story
+  backdrops that are pictures rather than flats.
+
 ## v0.21.0 (2026-10-16)
 
 - Android: an APK for 64-bit ARM phones and tablets on the Releases page,

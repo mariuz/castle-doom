@@ -91,7 +91,7 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 32 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 33 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -428,6 +428,17 @@ starting E1M3 (`--autotest MENUKEYS p -file ... --menukeys
 the last imp's death on E1M1 lower sector 98 to -124 (`BossDeath: ...
 UMAPINFO special 23 on tag 1`); autotests `umapinfo-episode`,
 `umapinfo-boss`.
+ZDoom MAPINFO: `tools/testdata/mapinfo.wad` (`tools/make_mapinfo_wad.py`,
+the new syntax; the unit test `TestZMapInfo` also parses an old-style
+text) gives E1M1 a title, SKY3 from `defaultmap`, par 77, TITLEPIC
+behind its statistics (`exitpic`) and cluster 1's exit text on
+FLOOR7_2; E1M3 keeps its vanilla name (`lookup`), shows CREDIT while
+"Entering" it and ends with the bunny (`EndGame3`); `clearepisodes`
+and one episode starting E1M3. The log says `MapInfo: MAPINFO: 2 maps`
+and a summary per entry (autotests `mapinfo` with golden screenshots of
+the two intermission pictures: `E,W:3,S,U,W:0.5,S` under
+`--fixed-step`, and `mapinfo-episode`). UMAPINFO wins when a WAD has
+both.
 Boom generalized lines: `tools/testdata/generalized.wad`
 (`tools/make_generalized_wad.py`) turns E1M1's door, lift, switch, blue
 door and tag-5 W1 doors into generalized types; with `-file` each use

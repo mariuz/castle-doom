@@ -204,8 +204,9 @@ begin
       the end of the game it names (a picture, the bunny, the cast call)
       or the next map. }
     MapInfoText(Info, Secret, FText);
+    { A flat, else a patch (UMAPINFO allows both). }
     FFlat := Info.InterBackdrop;
-    if (FFlat = '') or (FGraphics.Flat(FFlat) = nil) then
+    if (FFlat = '') or ((FGraphics.Flat(FFlat) = nil) and (FGraphics.Patch(FFlat) = nil)) then
     begin
       if AIsDoom2 then FFlat := 'SLIME16' else FFlat := 'FLOOR4_8';
     end;
@@ -487,9 +488,12 @@ begin
         { F_TextWrite: the flat tiled, the text typed from (10, 10). }
         F := FGraphics.Flat(FFlat);
         if F <> nil then
+        begin
           for Y := 0 to 200 div 64 do
             for X := 0 to 320 div 64 do
               BlitDoomImage(Img, F, X * 64, Y * 64);
+        end else
+          DrawPatch(FGraphics.Patch(FFlat), 0, 0);
         Count := Max(0, (FTic - 10) div TextSpeed);
         Lines := TStringList.Create;
         try

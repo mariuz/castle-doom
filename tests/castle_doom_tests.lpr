@@ -43,6 +43,7 @@ type
     procedure TestBoomLumps;
     procedure TestLogFilter;
     procedure TestUMapInfo;
+    procedure TestZMapInfo;
   end;
 
   TTestMap = class(TTestCase)
@@ -134,6 +135,91 @@ end;
 
 { UMAPINFO parsing (DoomMapInfo) and the lookups that use it, on
   tools/testdata/umapinfo.wad (tools/make_umapinfo_wad.py). }
+procedure TTestWad.TestZMapInfo;
+var
+  W: TDoomWad;
+  Path: String;
+  List: TMapInfoList;
+  Errors: TStringList;
+  E: TMapInfoEntry;
+  I: Integer;
+begin
+  List := TMapInfoList.Create(true);
+  Errors := TStringList.Create;
+  try
+    { The old, line-based syntax with ";" comments and clusterdef. }
+    AssertEquals('old maps', 2, ParseZMapInfo(
+      '; old style' + LineEnding +
+      'map E1M1 "Old Hangar"' + LineEnding +
+      'next E1M2' + LineEnding +
+      'secretnext E1M9' + LineEnding +
+      'par 45 ; seconds' + LineEnding +
+      'sky1 SKY2 0' + LineEnding +
+      'cluster 3' + LineEnding +
+      'nointermission' + LineEnding +
+      'music D_E1M7' + LineEnding +
+      'map E1M2 "Second"' + LineEnding +
+      'cluster 4' + LineEnding +
+      'clusterdef 3' + LineEnding +
+      'exittext "Old text"' + LineEnding +
+      'flat SLIME16' + LineEnding, List, Errors));
+    E := List[0];
+    AssertEquals('name', 'Old Hangar', E.LevelName);
+    AssertEquals('next', 'E1M2', E.Next);
+    AssertEquals('secret', 'E1M9', E.NextSecret);
+    AssertEquals('par', 45, E.ParTime);
+    AssertEquals('sky', 'SKY2', E.SkyTexture);
+    AssertEquals('music', 'D_E1M7', E.Music);
+    AssertTrue('flag without a value', E.NoIntermission);
+    AssertEquals('cluster 3 -> 4: its exit text', 'Old text', E.InterText);
+    AssertEquals('backdrop', 'SLIME16', E.InterBackdrop);
+    AssertEquals('secret exit to no cluster: the text too', 'Old text', E.InterTextSecret);
+    AssertEquals('second map', 'Second', List[1].LevelName);
+    AssertFalse('second keeps no flag', List[1].NoIntermission);
+    AssertEquals('no errors', 0, Errors.Count);
+
+    { The new syntax from tools/testdata/mapinfo.wad. }
+    List.Clear;
+    Path := 'tools/testdata/mapinfo.wad';
+    if not FileExists(Path) then
+      Path := '../tools/testdata/mapinfo.wad';
+    W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+    try
+      W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+      LoadMapInfo(W);
+      E := MapInfoFor('E1M1');
+      AssertTrue('E1M1', E <> nil);
+      AssertEquals('title', 'MapInfo Hangar', E.LevelName);
+      AssertEquals('defaultmap sky', 'SKY3', E.SkyTexture);
+      AssertEquals('next', 'E1M3', E.Next);
+      AssertEquals('par', 77, E.ParTime);
+      AssertEquals('exit picture', 'TITLEPIC', E.ExitPic);
+      AssertEquals('two-line exit text', 'You left the MAPINFO hangar.' + #10 + 'Cluster one is behind you.', E.InterText);
+      AssertEquals('cluster flat', 'FLOOR7_2', E.InterBackdrop);
+      AssertEquals('cluster music', 'D_VICTOR', E.InterMusic);
+      E := MapInfoFor('E1M3');
+      AssertEquals('lookup leaves the vanilla name', '', E.LevelName);
+      AssertTrue('EndGame3 is the bunny', (E.EndGame = meYes) and E.EndBunny);
+      AssertEquals('enter picture', 'CREDIT', E.EnterPic);
+      AssertTrue('nointermission', E.NoIntermission);
+      I := MapInfoEntries.Count;
+      AssertTrue('clearepisodes before the episode', MapInfoEntries[I - 2].EpisodeClear);
+      AssertEquals('episode name', 'MapInfo Episode', MapInfoEntries[I - 1].EpisodeName);
+      AssertEquals('episode map', 'E1M3', MapInfoEntries[I - 1].MapName);
+      { Back to plain Freedoom (the entries are global). }
+      FreeAndNil(W);
+      W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+      LoadMapInfo(W);
+      AssertTrue('cleared', MapInfoFor('E1M1') = nil);
+    finally
+      FreeAndNil(W);
+    end;
+  finally
+    FreeAndNil(Errors);
+    FreeAndNil(List);
+  end;
+end;
+
 procedure TTestWad.TestUMapInfo;
 var
   W: TDoomWad;

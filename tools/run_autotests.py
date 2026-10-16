@@ -213,6 +213,18 @@ TESTS = [
     ('umapinfo-episode', 'MENUKEYS', 'W:1,S,Q', [r'Load: E1M3: map parsed', r'Message: Third Test'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad'),
       '--menukeys', 'E,D,D,D,D,E,E'], None),
+    # ZDoom MAPINFO (tools/make_mapinfo_wad.py, the new syntax): E1M1's
+    # exit picture behind its statistics, E1M3's enter picture while
+    # "Entering", cluster 1's exit text, then E1M3 ends with the bunny.
+    ('mapinfo', 'E1M1', 'Y,W:0.5,E,W:3,S,U,W:0.5,S,U,W:1,U,W:0.5,U,W:3,E,W:2,Q',
+     [r'MapInfo: MAPINFO: 2 maps', r'MapInfo: episode "MapInfo Episode"', r'Message: E1M1: MapInfo Hangar',
+      r'Finale: Finale after E1M1', r'Load: E1M3: map parsed', r'Message: E1M3: Waste Disposal',
+      r'MapInfo: E1M3: no intermission', r'Finale: Finale after E1M3 \(stage 2\)'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mapinfo.wad'), '--fixed-step'],
+     None),
+    ('mapinfo-episode', 'MENUKEYS', 'W:1,S,Q', [r'Load: E1M3: map parsed'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mapinfo.wad'),
+      '--menukeys', 'E,E,E'], None),
     ('umapinfo-boss', 'E1M1', 'Y,W:0.5,D,W:4,SAVE:1,Q',
      [r'BossDeath: E1M1: all TROO dead, UMAPINFO special 23 on tag 1'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad')],
@@ -453,6 +465,7 @@ GOLDEN = [
     'donut_1.png', 'select-thing_1.png', 'key-bindings_1.png', 'translucency_1.png',
     'translucent-things_1.png', 'transfers_1.png', 'touch-controls_1.png',
     'controls-pad_menucontrolspad.png', 'deep-water_1.png', 'deep-water_2.png',
+    'mapinfo_1.png', 'mapinfo_2.png',
 ]
 
 

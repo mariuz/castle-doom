@@ -88,7 +88,7 @@ Sizes, for orientation (lines of Pascal):
 | `doommenu.pas` | 420 | Doom's menu from `M_*` graphics |
 | `doomintermission.pas` | 330 | intermission screen |
 | `doomfinale.pas` | 520 | finale text, end pictures, bunny scroller, cast call |
-| `doommapinfo.pas` | 380 | UMAPINFO: per-map names, music, sky, par, next maps, story texts, endings |
+| `doommapinfo.pas` | 1000 | UMAPINFO and ZDoom (Z)MAPINFO: per-map names, music, sky, par, next maps, story texts, endings |
 | `doomstates.pas` | 230 | vanilla's state table and mobjinfo rows (`doomstates_table.inc`, generated from info.c): what DeHackEd edits and the things' sequences come from |
 | `doomdehacked.pas` | 560 | DeHackEd patches (`DEHACKED` lumps, `-deh` files): BEX strings, things, frames, code pointers, Misc, Ammo, par times |
 | `doomautomap.pas` | 210 | automap drawn with 2D primitives |
@@ -988,7 +988,28 @@ episode list (`TDoomMenuScreen.SetupEpisodes`, built after vanilla's
 ExM1 / `M_EPIn` episodes; a missing patch shows the name as text) and
 `EpisodeMap` gives the start map. `bossaction` entries replace a map's
 vanilla `BossDeath` table: the last monster of the type runs the line
-special on the tag through line 0. Patch backdrops are not supported.
+special on the tag through line 0. `interbackdrop` may also name a patch
+(drawn at the top left when no flat has the name), and `exitpic` /
+`enterpic` replace the intermission's background behind the statistics
+of the finished map / behind "Entering" the next one.
+
+Without a UMAPINFO lump, ZDoom's ZMAPINFO or else MAPINFO is read into
+the same entries (`ParseZMapInfo`, one parser for both syntaxes: a key's
+values are the tokens after it, and an optional `=`, on its line, a
+trailing comma continuing them; blocks are braces or, in the old syntax,
+run to the next top-level keyword, `cluster N` counting as one only when
+a brace follows; `;` starts a comment). Map titles (`lookup` and `$NAME`
+values are left to the vanilla strings), `titlepatch`, `next` /
+`secretnext` (with ZDoom's `EndGame1`...`EndGameC`, `EndPic, NAME`,
+`EndTitle`), `sky1`, `par`, `music`, `nointermission`, `exitpic` /
+`enterpic` and `defaultmap` / `adddefaultmap` become the UMAPINFO
+fields; clusters become story texts: a map whose next map is in another
+cluster (or that ends the game) gets its cluster's `exittext`, else the
+next cluster's `entertext` (`exittextislump` reads a lump), on the
+cluster's `flat` or `pic` with its `music`. `episode MAP { name, key,
+picname }` and `clearepisodes` are entries added after the maps (a
+clearing entry first), so the menu builds them like UMAPINFO's.
+`gameinfo`, `skill`, `intermission` and other ports' blocks are skipped.
 
 The texts are not in Doom's WADs but in the executable; Freedoom puts its
 own (BSD-licensed) story, background flats and cast names in a `DEHACKED`

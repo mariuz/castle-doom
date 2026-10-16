@@ -110,7 +110,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   teleports, light and sky transfers, scrollers driven by moving sectors, deep water
   (pools drawn at another sector's heights, tinted under the surface), `ANIMATED` and
   `SWITCHES` lumps give PWADs their own animated textures and switches, and a `UMAPINFO`
-  lump their level names, music, skies, par times, map order, story texts and endings.
+  lump (or ZDoom's `MAPINFO` / `ZMAPINFO`, old or new syntax: maps, clusters, episodes) their
+  level names, music, skies, par times, map order, story texts, intermission pictures and
+  endings.
 - Music: MUS and MIDI lumps played on an emulated OPL3 (Nuked OPL3, loaded as a shared
   library packaged with the game) driven by the WAD's GENMIDI instrument bank, the AdLib /
   Sound Blaster sound of the original; a built-in FM model plays when the library is
