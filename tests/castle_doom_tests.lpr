@@ -57,6 +57,8 @@ type
     procedure TestLineGrid;
     procedure TestGeneralized;
     procedure TestScrollers;
+    procedure TestDynScrollers;
+    procedure TestDeepWater;
     procedure TestFriction;
     procedure TestTranslucency;
     procedure TestTransfers;
@@ -450,6 +452,98 @@ end;
 
 { Boom's scrollers on tools/testdata/scroll.wad (tools/make_scroll_wad.py):
   a 254 wall, a 255 wall, sector 141's floor, ceiling and carry. }
+procedure TTestMap.TestDeepWater;
+var
+  W: TDoomWad;
+  M: TDoomMap;
+  Path: String;
+  I, Count: Integer;
+  Tint: TVector3;
+  Amount: Single;
+begin
+  Path := 'tools/testdata/water.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/water.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      { Line 829 (front sector 140) is a 242 for the tagged sector 141. }
+      AssertEquals('control', 140, M.HeightSec[141]);
+      Count := 0;
+      for I := 0 to High(M.HeightSec) do
+        if M.HeightSec[I] >= 0 then Inc(Count);
+      AssertEquals('one deep water sector', 1, Count);
+      AssertEquals('under water colormap', 'WATERMAP', M.WaterColormaps[141][0]);
+      AssertEquals('a texture is no colormap', '', M.WaterColormaps[141][1]);
+      AssertEquals('real floor', -96, M.Sectors[141].FloorHeight, 1e-4);
+    finally
+      FreeAndNil(M);
+    end;
+    { WATERMAP pulls colours 40% towards a blue-green. }
+    AssertTrue('tint', W.ColormapTint('WATERMAP', Tint, Amount));
+    AssertTrue(Format('amount %g', [Amount]), (Amount > 0.3) and (Amount < 0.5));
+    AssertTrue('blue-green', (Tint.Z > Tint.X) and (Tint.Y > Tint.X));
+    AssertFalse('COLORMAP is no tint', W.ColormapTint('COLORMAP', Tint, Amount));
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+procedure TTestMap.TestDynScrollers;
+var
+  W: TDoomWad;
+  M: TDoomMap;
+  Path: String;
+  I, Wall, Floor, Carry: Integer;
+begin
+  Path := 'tools/testdata/dynscroll.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/dynscroll.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      { 248 (displacement floor + carry) and 218 (accelerative wall),
+        both controlled by the lift (sector 98, floor 12, ceiling 128). }
+      AssertEquals('runtime scrollers', 3, Length(M.DynScrollers));
+      Wall := -1;
+      Floor := -1;
+      Carry := -1;
+      for I := 0 to High(M.DynScrollers) do
+      begin
+        AssertEquals('control', 98, M.DynScrollers[I].Control);
+        AssertEquals('last height', 140, M.DynScrollers[I].LastHeight, 1e-4);
+        case M.DynScrollers[I].Target of
+          stSide: Wall := I;
+          stFloor: Floor := I;
+          stCarry: Carry := I;
+          else ;
+        end;
+      end;
+      AssertTrue('wall found', Wall >= 0);
+      AssertTrue('floor found', Floor >= 0);
+      AssertTrue('carry found', Carry >= 0);
+      AssertTrue('wall accelerates', M.DynScrollers[Wall].Accel);
+      AssertFalse('floor displaces', M.DynScrollers[Floor].Accel);
+      AssertEquals('wall side', M.Linedefs[911].Side[0], M.DynScrollers[Wall].Index);
+      AssertEquals('floor sector', 141, M.DynScrollers[Floor].Index);
+      AssertTrue('wall drawn from offsets', M.SideDynamic[M.Linedefs[911].Side[0]]);
+      AssertTrue('floor drawn from offsets', M.FloorDynamic[141]);
+      AssertFalse('ceiling constant', M.CeilingDynamic[141]);
+      AssertEquals('carry is the floor rate times CARRYFACTOR',
+        M.DynScrollers[Floor].Rate.Length * 0.1875, M.DynScrollers[Carry].Rate.Length, 1e-4);
+      AssertEquals('no constant floor scroll', 0, M.FloorScroll[141].Length, 1e-6);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
 procedure TTestMap.TestScrollers;
 var
   W: TDoomWad;

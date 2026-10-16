@@ -75,9 +75,16 @@ type
       per texture and speed. }
     Scrolling: Boolean;
     ScrollPerTic: TVector2;
+    { A surface moved by Boom's runtime scrollers (DynIndex >= 0, the
+      sidedef or sector): its translation is the map's offset of it. }
+    DynTarget: TScrollTarget;
+    DynIndex: Integer;
     { Boom's translucent middle textures (260): opacity below 1 makes a
       blended shape outside the atlas. }
     Alpha: Single;
+    { Boom's deep water: the real walls and flats of the sectors drawn at
+      other heights, only for collisions (an invisible scene). }
+    CollisionOnly: Boolean;
     { Vertex count the nodes were created with; topology changes force a rebuild. }
     CommittedVertices: Integer;
     constructor Create;
@@ -103,14 +110,25 @@ type
     Line, Side: Integer;
   end;
 
+  { How TMapChunk.Batch files what is emitted: as usual, only drawn (the
+    deep water sectors' fake heights) or only collided with (their real
+    ones). }
+  TEmitMode = (emNormal, emVisual, emCollision);
+
   TMapChunk = class
   strict private
     FOwner: TDoomGeometry;
     FBatches: TGeomBatchDict;
     FBuilt: Boolean;
-    FRootSolid, FRootPassable: TX3DRootNode;
+    FRootSolid, FRootPassable, FRootCollision: TX3DRootNode;
+    FEmitMode: TEmitMode;
+    { What collision mode discards (passable middle textures). }
+    FDiscard: TGeomBatch;
+    function IsWaterLine(const Line: Integer): Boolean;
+    function IsWaterSub(const Sub: Integer): Boolean;
     function Batch(const Img: TDoomImage; const Passable: Boolean; const ScrollPerTic: TVector2;
-      const SwitchLine: Integer = -1; const Alpha: Single = 1): TGeomBatch;
+      const SwitchLine: Integer = -1; const Alpha: Single = 1;
+      const DynTarget: TScrollTarget = stSide; const DynIndex: Integer = -1): TGeomBatch;
     procedure EmitLineSide(const Line, Side: Integer);
     procedure EmitFlats(const Sub: Integer);
     procedure EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
@@ -119,6 +137,8 @@ type
   public
     Name: String;
     SceneSolid, ScenePassable: TCastleScene;
+    { Invisible: the deep water sectors' real geometry. }
+    SceneCollision: TCastleScene;
     Lines: array of TLineSideRef;
     Subsectors: array of Integer;
     constructor Create(const AOwner: TDoomGeometry; const AName: String);
@@ -133,6 +153,10 @@ type
   end;
 
   TMapChunkList = {$ifdef FPC}specialize{$endif} TObjectList<TMapChunk>;
+
+  { The viewer in a deep water sector: between the control sector's floor
+    and ceiling, below its floor (under water) or above its ceiling. }
+  TWaterView = (wvNormal, wvUnder, wvAbove);
   TChunkSet = {$ifdef FPC}specialize{$endif} TList<TMapChunk>;
 
   TDoomGeometry = class
@@ -150,6 +174,10 @@ type
     FScrollOffset: Single;
     FLineChunk: array of TMapChunk;
     FVisible: Boolean;
+    FWaterView: TWaterView;
+    { The deep water sectors' real state while ApplyFakeSectors runs. }
+    FSavedSectors: array of TDoomSector;
+    procedure SetWaterView(const Value: TWaterView);
     procedure SetVisible(const Value: Boolean);
     procedure AssignChunks;
     procedure BuildCollisionScene;
@@ -179,6 +207,14 @@ type
     property Map: TDoomMap read FMap;
     property Graphics: TDoomGraphics read FGraphics;
     property SkyScene: TCastleScene read FSkyScene;
+    { Boom's deep water (242): where the viewer is relative to their
+      sector's control sector; a change regenerates the deep water
+      sectors (R_FakeFlat). }
+    property WaterView: TWaterView read FWaterView write SetWaterView;
+    { Give the deep water sectors the heights, flats and light they are
+      drawn with in the current view (TMapChunk.Generate), and back. }
+    procedure ApplyFakeSectors;
+    procedure RestoreSectors;
   end;
 
 implementation
@@ -389,24 +425,52 @@ begin
   { Not PreciseCollisions, so a ray would hit the whole chunk's box: the
     inspector's F9 auto-select (and SELECT) could not reach a thing. }
   ScenePassable.Pickable := false;
+  SceneCollision := TCastleScene.Create(nil);
+  SceneCollision.Visible := false;
+  SceneCollision.Pickable := false;
+  SceneCollision.PreciseCollisions := true;
+  FDiscard := TGeomBatch.Create;
 end;
 
 destructor TMapChunk.Destroy;
 begin
   FreeAndNil(SceneSolid);
   FreeAndNil(ScenePassable);
+  FreeAndNil(SceneCollision);
+  FreeAndNil(FDiscard);
   FreeAndNil(FBatches);
   inherited;
 end;
 
 function TMapChunk.Batch(const Img: TDoomImage; const Passable: Boolean; const ScrollPerTic: TVector2;
-  const SwitchLine: Integer; const Alpha: Single): TGeomBatch;
+  const SwitchLine: Integer; const Alpha: Single;
+  const DynTarget: TScrollTarget; const DynIndex: Integer): TGeomBatch;
 var
   Key: String;
   Page: Integer;
-  Scrolling: Boolean;
+  Scrolling, IsPassable: Boolean;
 begin
-  Scrolling := not ScrollPerTic.IsPerfectlyZero;
+  if FEmitMode = emCollision then
+  begin
+    { One invisible batch of everything that blocks; passable middle
+      textures do not. }
+    if Passable then Exit(FDiscard);
+    if not FBatches.TryGetValue('collide', Result) then
+    begin
+      Result := TGeomBatch.Create;
+      Result.Key := 'collide';
+      Result.AtlasPage := -1;
+      Result.Img := Img;
+      Result.Alpha := 1;
+      Result.DynIndex := -1;
+      Result.CollisionOnly := true;
+      FBatches.Add('collide', Result);
+    end;
+    Exit;
+  end;
+  { Drawn only: the passable scenes do not collide. }
+  IsPassable := Passable or (FEmitMode = emVisual);
+  Scrolling := (not ScrollPerTic.IsPerfectlyZero) or (DynIndex >= 0);
   { In the atlas: one batch per page (and passability); switches (their
     texture is swapped in place), scrolling walls (their texture
     transform) and animated textures (their URL changes) keep their own. }
@@ -418,8 +482,10 @@ begin
   else
     Key := Img.Url;
   if SwitchLine >= 0 then Key := 'switch' + IntToStr(SwitchLine);
-  if Passable then Key := Key + 'P';
-  if Scrolling then
+  if IsPassable then Key := Key + 'P';
+  if DynIndex >= 0 then
+    Key := Key + Format('D%d,%d', [Ord(DynTarget), DynIndex])
+  else if Scrolling then
     Key := Key + Format('S%g,%g', [ScrollPerTic.X, ScrollPerTic.Y]);
   if Alpha < 1 then
     Key := Key + Format('T%g', [Alpha]);
@@ -432,9 +498,11 @@ begin
       Result.Img := FOwner.Graphics.AtlasPage(Page)
     else
       Result.Img := Img;
-    Result.Passable := Passable;
+    Result.Passable := IsPassable;
     Result.Scrolling := Scrolling;
     Result.ScrollPerTic := ScrollPerTic;
+    Result.DynTarget := DynTarget;
+    Result.DynIndex := DynIndex;
     Result.Alpha := Alpha;
     FBatches.Add(Key, Result);
   end;
@@ -499,7 +567,7 @@ var
   Light: TVector2;
   Img: TDoomImage;
   U0, U1: Single;
-  SwitchLine: Integer;
+  SwitchLine, DynSide: Integer;
   FloorZ, CeilZ, OFloorZ, OCeilZ: Single;
   TexTopZ, ZB, ZT, OpenBottom, OpenTop: Single;
   Passable: Boolean;
@@ -531,6 +599,7 @@ begin
   U0 := Sd.XOffset;
   U1 := Sd.XOffset + L.Length;
   Rate := Map.SideScroll[L.Side[Side]];
+  if Map.SideDynamic[L.Side[Side]] then DynSide := L.Side[Side] else DynSide := -1;
   { Switches get a private batch per line so SW1 -> SW2 flips only that wall. }
   SwitchLine := -1;
   if (Side = 0) and (L.Special <> 0) and
@@ -550,7 +619,7 @@ begin
       TexTopZ := FloorZ + Img.Height + Sd.YOffset
     else
       TexTopZ := CeilZ + Sd.YOffset;
-    EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
+    EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine, 1, stSide, DynSide), VA.X, VA.Y, VB.X, VB.Y,
       FloorZ, CeilZ, U0, U1, TexTopZ, Img, Light);
     Exit;
   end;
@@ -568,7 +637,7 @@ begin
       TexTopZ := OFloorZ + Sd.YOffset;
     ZB := FloorZ;
     ZT := Min(OFloorZ, CeilZ);
-    EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
+    EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine, 1, stSide, DynSide), VA.X, VA.Y, VB.X, VB.Y,
       ZB, ZT, U0, U1, TexTopZ, Img, Light);
   end;
 
@@ -585,7 +654,7 @@ begin
         TexTopZ := OCeilZ + Img.Height + Sd.YOffset;
       ZB := Max(OCeilZ, FloorZ);
       ZT := CeilZ;
-      EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine), VA.X, VA.Y, VB.X, VB.Y,
+      EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine, 1, stSide, DynSide), VA.X, VA.Y, VB.X, VB.Y,
         ZB, ZT, U0, U1, TexTopZ, Img, Light);
     end;
   end;
@@ -604,7 +673,7 @@ begin
     ZB := Max(OpenBottom, TexTopZ - Img.Height);
     ZT := Min(OpenTop, TexTopZ);
     Passable := (L.Flags and ML_BLOCKING) = 0;
-    EmitWall(Batch(Img, Passable, WallScroll(Rate, Img), SwitchLine, Map.LineAlpha[Line]), VA.X, VA.Y, VB.X, VB.Y,
+    EmitWall(Batch(Img, Passable, WallScroll(Rate, Img), SwitchLine, Map.LineAlpha[Line], stSide, DynSide), VA.X, VA.Y, VB.X, VB.Y,
       ZB, ZT, U0, U1, TexTopZ, Img, Light);
   end;
 end;
@@ -614,7 +683,7 @@ var
   Map: TDoomMap;
   B: TGeomBatch;
   S: TDoomSubsector;
-  Sec: Integer;
+  Sec, DynSec: Integer;
   Light: TVector2;
   Img: TDoomImage;
   Pts: array of TVector3;
@@ -651,7 +720,8 @@ begin
       Pts[I] := DoomToCge(S.Poly[I].X, S.Poly[I].Y, Z);
       Tex[I] := Vector2(S.Poly[I].X / 64, S.Poly[I].Y / 64);
     end;
-    B := Batch(Img, false, FlatScroll(Map.FloorScroll[Sec], Img));
+    if Map.FloorDynamic[Sec] then DynSec := Sec else DynSec := -1;
+    B := Batch(Img, false, FlatScroll(Map.FloorScroll[Sec], Img), -1, 1, stFloor, DynSec);
     B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
   end;
 
@@ -671,24 +741,70 @@ begin
         Pts[I] := DoomToCge(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y, Z);
         Tex[I] := Vector2(S.Poly[N - 1 - I].X / 64, S.Poly[N - 1 - I].Y / 64);
       end;
-      B := Batch(Img, false, FlatScroll(Map.CeilingScroll[Sec], Img));
+      if Map.CeilingDynamic[Sec] then DynSec := Sec else DynSec := -1;
+      B := Batch(Img, false, FlatScroll(Map.CeilingScroll[Sec], Img), -1, 1, stCeiling, DynSec);
       B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
     end;
   end;
+end;
+
+function TMapChunk.IsWaterLine(const Line: Integer): Boolean;
+var
+  Map: TDoomMap;
+begin
+  Map := FOwner.Map;
+  Result := ((Map.Linedefs[Line].FrontSector >= 0) and (Map.HeightSec[Map.Linedefs[Line].FrontSector] >= 0)) or
+    ((Map.Linedefs[Line].BackSector >= 0) and (Map.HeightSec[Map.Linedefs[Line].BackSector] >= 0));
+end;
+
+function TMapChunk.IsWaterSub(const Sub: Integer): Boolean;
+begin
+  Result := (FOwner.Map.Subsectors[Sub].Sector >= 0) and
+    (FOwner.Map.HeightSec[FOwner.Map.Subsectors[Sub].Sector] >= 0);
 end;
 
 procedure TMapChunk.Generate;
 var
   B: TGeomBatch;
   I: Integer;
-  NeedRebuild: Boolean;
+  NeedRebuild, HasWater: Boolean;
 begin
   for B in FBatches.Values do
     B.Reset;
+  FDiscard.Reset;
+  HasWater := false;
+  FEmitMode := emNormal;
   for I := 0 to High(Lines) do
-    EmitLineSide(Lines[I].Line, Lines[I].Side);
+    if IsWaterLine(Lines[I].Line) then
+      HasWater := true
+    else
+      EmitLineSide(Lines[I].Line, Lines[I].Side);
   for I := 0 to High(Subsectors) do
-    EmitFlats(Subsectors[I]);
+    if IsWaterSub(Subsectors[I]) then
+      HasWater := true
+    else
+      EmitFlats(Subsectors[I]);
+  if HasWater then
+  begin
+    { Boom's deep water: the real heights collide, the fake ones (the
+      sectors temporarily changed by ApplyFakeSectors) are drawn. }
+    FEmitMode := emCollision;
+    for I := 0 to High(Lines) do
+      if IsWaterLine(Lines[I].Line) then EmitLineSide(Lines[I].Line, Lines[I].Side);
+    for I := 0 to High(Subsectors) do
+      if IsWaterSub(Subsectors[I]) then EmitFlats(Subsectors[I]);
+    FEmitMode := emVisual;
+    FOwner.ApplyFakeSectors;
+    try
+      for I := 0 to High(Lines) do
+        if IsWaterLine(Lines[I].Line) then EmitLineSide(Lines[I].Line, Lines[I].Side);
+      for I := 0 to High(Subsectors) do
+        if IsWaterSub(Subsectors[I]) then EmitFlats(Subsectors[I]);
+    finally
+      FOwner.RestoreSectors;
+      FEmitMode := emNormal;
+    end;
+  end;
 
   NeedRebuild := not FBuilt;
   if FBuilt then
@@ -700,6 +816,7 @@ begin
   begin
     FRootSolid := TX3DRootNode.Create;
     FRootPassable := TX3DRootNode.Create;
+    FRootCollision := TX3DRootNode.Create;
     FRootSolid.AddChildren(DoomLightingInstance.GeometryEffect);
     FRootPassable.AddChildren(DoomLightingInstance.GeometryEffect);
     for B in FBatches.Values do
@@ -708,13 +825,16 @@ begin
       if B.Coords.Count > 0 then
       begin
         B.CreateNodes;
-        if B.Passable then
+        if B.CollisionOnly then
+          FRootCollision.AddChildren(B.Shape)
+        else if B.Passable then
           FRootPassable.AddChildren(B.Shape)
         else
           FRootSolid.AddChildren(B.Shape);
       end;
     SceneSolid.Load(FRootSolid, true);
     ScenePassable.Load(FRootPassable, true);
+    SceneCollision.Load(FRootCollision, true);
     FBuilt := true;
   end else
   begin
@@ -733,12 +853,25 @@ end;
 procedure TMapChunk.UpdateScroll(const Tics: Single);
 var
   B: TGeomBatch;
+  T: TVector2;
+  Map: TDoomMap;
 begin
+  Map := FOwner.Map;
   { Only the fraction matters (the textures repeat), and keeps the
     numbers small. }
   for B in FBatches.Values do
     if B.Scrolling and (B.TexTransform <> nil) then
-      B.TexTransform.Translation := Vector2(Frac(B.ScrollPerTic.X * Tics), Frac(B.ScrollPerTic.Y * Tics));
+    begin
+      if B.DynIndex < 0 then
+        T := B.ScrollPerTic * Tics
+      else
+        case B.DynTarget of
+          stSide: T := WallScroll(Map.SideOffset[B.DynIndex], B.Img);
+          stFloor: T := FlatScroll(Map.FloorOffset[B.DynIndex], B.Img);
+          else T := FlatScroll(Map.CeilingOffset[B.DynIndex], B.Img);
+        end;
+      B.TexTransform.Translation := Vector2(Frac(T.X), Frac(T.Y));
+    end;
 end;
 
 { TDoomGeometry -------------------------------------------------------------- }
@@ -879,6 +1012,8 @@ begin
     { A light transfer's source changes these flats too. }
     if FMap.FloorLightSector[Sec] >= 0 then Dependency(FMap.FloorLightSector[Sec], C);
     if FMap.CeilingLightSector[Sec] >= 0 then Dependency(FMap.CeilingLightSector[Sec], C);
+    { Deep water: drawn at the control sector's heights. }
+    if FMap.HeightSec[Sec] >= 0 then Dependency(FMap.HeightSec[Sec], C);
   end;
 
   { Each line side goes to the chunk of the first dynamic sector it touches
@@ -902,6 +1037,8 @@ begin
       if Side = 0 then FLineChunk[I] := C;
       Dependency(Front, C);
       Dependency(Back, C);
+      if (Front >= 0) and (FMap.HeightSec[Front] >= 0) then Dependency(FMap.HeightSec[Front], C);
+      if (Back >= 0) and (FMap.HeightSec[Back] >= 0) then Dependency(FMap.HeightSec[Back], C);
     end;
   end;
 end;
@@ -1098,8 +1235,10 @@ begin
     C := FChunks[I];
     C.SceneSolid.Name := Format('Chunk%d_Solid', [I]);
     C.ScenePassable.Name := Format('Chunk%d_Passable', [I]);
+    C.SceneCollision.Name := Format('Chunk%d_Collision', [I]);
     Parent.Add(C.SceneSolid);
     Parent.Add(C.ScenePassable);
+    Parent.Add(C.SceneCollision);
   end;
   FCollisionScene.Name := 'LineCollision';
   FSkyScene.Name := 'Sky';
@@ -1115,6 +1254,66 @@ begin
   for C in FSectorDependents[Sec] do
     if FDirty.IndexOf(C) < 0 then
       FDirty.Add(C);
+end;
+
+procedure TDoomGeometry.SetWaterView(const Value: TWaterView);
+var
+  I: Integer;
+begin
+  if FWaterView = Value then Exit;
+  FWaterView := Value;
+  for I := 0 to High(FMap.HeightSec) do
+    if FMap.HeightSec[I] >= 0 then
+      SectorChanged(I);
+end;
+
+procedure TDoomGeometry.ApplyFakeSectors;
+var
+  I, H: Integer;
+  C: TDoomSector;
+begin
+  SetLength(FSavedSectors, Length(FMap.Sectors));
+  for I := 0 to High(FMap.Sectors) do
+  begin
+    H := FMap.HeightSec[I];
+    if H < 0 then Continue;
+    FSavedSectors[I] := FMap.Sectors[I];
+    C := FMap.Sectors[H];
+    { Boom's R_FakeFlat. }
+    if FWaterView = wvUnder then
+    begin
+      FMap.Sectors[I].CeilingHeight := C.FloorHeight - 1;
+      FMap.Sectors[I].FloorTex := C.FloorTex;
+      if FMap.HasSkyCeiling(H) then
+      begin
+        FMap.Sectors[I].FloorHeight := FMap.Sectors[I].CeilingHeight + 1;
+        FMap.Sectors[I].CeilingTex := C.FloorTex;
+      end else
+        FMap.Sectors[I].CeilingTex := C.CeilingTex;
+      FMap.Sectors[I].LightLevel := C.LightLevel;
+    end else
+    if (FWaterView = wvAbove) and (FSavedSectors[I].CeilingHeight > C.CeilingHeight) then
+    begin
+      FMap.Sectors[I].CeilingHeight := C.CeilingHeight;
+      FMap.Sectors[I].FloorHeight := C.CeilingHeight + 1;
+      FMap.Sectors[I].FloorTex := C.CeilingTex;
+      FMap.Sectors[I].CeilingTex := C.CeilingTex;
+      FMap.Sectors[I].LightLevel := C.LightLevel;
+    end else
+    begin
+      FMap.Sectors[I].FloorHeight := C.FloorHeight;
+      FMap.Sectors[I].CeilingHeight := C.CeilingHeight;
+    end;
+  end;
+end;
+
+procedure TDoomGeometry.RestoreSectors;
+var
+  I: Integer;
+begin
+  for I := 0 to High(FMap.Sectors) do
+    if (FMap.HeightSec[I] >= 0) and (I <= High(FSavedSectors)) then
+      FMap.Sectors[I] := FSavedSectors[I];
 end;
 
 procedure TDoomGeometry.FlushDirty;

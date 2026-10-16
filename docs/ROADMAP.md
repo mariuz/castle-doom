@@ -6,6 +6,20 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Boom's displacement (245-249) and accelerative (214-218) scrollers:
+  runtime scrollers (`TDoomMap.DynScrollers`, `TDoomWorld.TicScrollers`)
+  move walls, flats and carrying floors by the control sector's height
+  changes; their surfaces draw from offsets kept in the map and saved.
+  Test PWAD `tools/testdata/dynscroll.wad`, autotest `dynscrollers`,
+  unit test `TestDynScrollers`.
+- Boom's deep water (242): tagged sectors drawn at their control sector's
+  heights, under water with the real floor and the control's flats and
+  light, above its ceiling the other way round; the real heights collide
+  (an invisible scene per chunk), the drawn ones do not, and the
+  colormaps the line names tint the screen. Test PWAD
+  `tools/testdata/water.wad`, autotest `deep-water` (golden screenshots),
+  unit test `TestDeepWater`.
+
 - Touch controls (`GameTouch`): in the browser on phones and tablets
   (and with `--touch` on the desktop) a floating stick on the left
   walks and runs, a drag elsewhere turns and looks, and round buttons
@@ -808,7 +822,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **UDMF** (`TEXTMAP`) maps, and glBSP's `GL_LEVEL` markers for map names over 5 letters. | Remaining community map formats. | `DoomMap` | L (UDMF), S (`GL_LEVEL`) |
-| **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types are done (see above); left are the accelerative and displacement scrollers (214-218, 245-249: speed from a control sector's height changes), deep water (242, Boom's fake floors and ceilings: a second set of planes drawn from another sector), per-sector skies (one sky is drawn: a 271 / 272 transfer replaces it only when it covers most sky sectors) and MBF's friction for monsters' own walking. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomWorld` | M each, deep water L |
+| **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done (see above; deep water's colormaps are a screen tint, not a remapping of every colour); left are per-sector skies (one sky is drawn: a 271 / 272 transfer replaces it only when it covers most sky sectors) and MBF's friction for monsters' own walking. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomWorld` | M each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -847,12 +861,12 @@ play.
 
 ## Suggested next three
 
-1. Boom's accelerative and displacement scrollers (214-218, 245-249, S-M,
-   see Content and formats), then deep water (242, L).
-2. Android builds (M, see Engine and tooling): the touch controls are
-   there now; a CI job and the package's data are what is missing.
-3. The rest of UMAPINFO and ZDoom's MAPINFO (M, see Other suggested
+1. Android builds (M, see Engine and tooling): the touch controls are
+   there; a CI job and the package's data are what is missing.
+2. The rest of UMAPINFO and ZDoom's MAPINFO (M, see Other suggested
    improvements).
+3. Per-sector skies and MBF's friction for monsters' own walking (M, see
+   Content and formats), finishing the Boom / MBF specials.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

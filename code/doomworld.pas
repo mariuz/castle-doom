@@ -149,6 +149,9 @@ type
       one buffer per caller so that none overwrites another's. }
     FLinesSight, FLinesMove, FLinesShot, FLinesMissile: TLineList;
     FFloatZ: Single;
+    { Boom's deep water: the colormap of the viewer's region and its tint. }
+    FColormapName: String;
+    FColormapTint: TVector4;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
     FSounds: TDoomSounds;
@@ -227,6 +230,15 @@ type
     { Boom's carrying floors (252, 253): things standing on them gain
       momentum each tic (T_Scroll's sc_carry). }
     procedure TicCarry;
+    { Boom's displacement and accelerative scrollers (T_Scroll with a
+      control sector): the map's offsets and this tic's carry. }
+    procedure TicScrollers;
+    { Boom's deep water: the viewer's region (TDoomGeometry.WaterView)
+      and its colormap's tint (ColormapTint). }
+    procedure UpdateWaterView(const EyeZ: Single);
+    { The offset of what runtime scroller I moves (saves). }
+    function ScrollerOffset(const I: Integer): TVector2;
+    procedure RestoreScrollers(const Arr: TJSONArray);
     { Boom's wind, currents and point pushers (T_Pusher). }
     procedure TicPushers;
     { The momentum kept each tic on the floor of Sec: Boom's friction
@@ -465,6 +477,9 @@ type
     { ST_doPaletteStuff: which PLAYPAL palette the screen shows now (0 none,
       1..8 damage / berserk red, 9..12 bonus gold, 13 radiation suit). }
     function PaletteIndex: Integer;
+    { The colormap of the viewer's deep water region as a screen tint
+      (RGB, opacity; zero when none). }
+    property ColormapTint: TVector4 read FColormapTint;
     { R_SetupFrame's fixedcolormap: InverseColormap during invulnerability,
       colormap 1 with the light amplification visor (both blink in their
       last 4 seconds), NoFixedColormap otherwise. }
@@ -493,6 +508,9 @@ function NextMapName(const Current: String; const Secret: Boolean; const IsDoom2
 implementation
 
 uses Math, CastleLog, CastleStringUtils, CastleBehaviors, CastleTimeUtils, DoomMapInfo;
+
+const
+  WaterViewNames: array [TWaterView] of String = ('normal', 'under water', 'above the ceiling');
 
 const
   { Boom's sector types: bit 7 is the secret, bits 5-6 the damage, bit 8
@@ -1167,6 +1185,11 @@ begin
       until false;
     end;
   end;
+  { Boom's deep water: drawn differently from each side of the water
+    level, so regenerated when the viewer crosses it. }
+  for I := 0 to High(FDynamic) do
+    if FMap.HeightSec[I] >= 0 then
+      FDynamic[I] := true;
   { Boom's light transfers: a sector showing a dynamic sector's light
     changes with it, so it needs its own chunk too. }
   for I := 0 to High(FDynamic) do
@@ -1536,6 +1559,7 @@ begin
     Inc(Steps);
   end;
   T := Timer;
+  UpdateWaterView(CgeToDoom(CameraPos).Z);
   FGeometry.Update(SecondsPassed, CameraPos);
   FGeometry.FlushDirty;
   FSpriteBatch.Flush;
@@ -1589,6 +1613,7 @@ begin
   TicLights;
   TicButtons;
   Lap(2);
+  TicScrollers;
   TicCarry;
   TicPushers;
   TicActors;
@@ -2666,6 +2691,79 @@ begin
   end;
 end;
 
+procedure TDoomWorld.UpdateWaterView(const EyeZ: Single);
+var
+  H, Region: Integer;
+  View: TWaterView;
+  Name: String;
+  Tint: TVector3;
+  Amount: Single;
+begin
+  View := wvNormal;
+  Name := '';
+  H := -1;
+  if (Player.Sector >= 0) and (Player.Sector <= High(FMap.HeightSec)) then
+    H := FMap.HeightSec[Player.Sector];
+  if H >= 0 then
+  begin
+    if EyeZ <= FMap.Sectors[H].FloorHeight then
+      View := wvUnder
+    else if EyeZ >= FMap.Sectors[H].CeilingHeight then
+      View := wvAbove;
+    case View of
+      wvUnder: Region := 0;
+      wvAbove: Region := 2;
+      else Region := 1;
+    end;
+    Name := FMap.WaterColormaps[Player.Sector][Region];
+  end;
+  if View <> FGeometry.WaterView then
+    WritelnLog('Water', 'View %s (sector %d, control %d)', [WaterViewNames[View], Player.Sector, H]);
+  FGeometry.WaterView := View;
+  if Name <> FColormapName then
+  begin
+    FColormapName := Name;
+    FColormapTint := Vector4(0, 0, 0, 0);
+    if (Name <> '') and FWad.ColormapTint(Name, Tint, Amount) then
+      FColormapTint := Vector4(Tint, Amount);
+    WritelnLog('Water', 'Colormap %s: tint %s', [Name, FColormapTint.ToString]);
+  end;
+end;
+
+procedure TDoomWorld.TicScrollers;
+var
+  I: Integer;
+  H: Single;
+  Amount: TVector2;
+begin
+  if Length(FMap.DynScrollers) = 0 then Exit;
+  for I := 0 to High(FMap.CarryNow) do
+    FMap.CarryNow[I] := TVector2.Zero;
+  for I := 0 to High(FMap.DynScrollers) do
+  begin
+    Amount := FMap.DynScrollers[I].Rate;
+    if FMap.DynScrollers[I].Control >= 0 then
+    begin
+      H := FMap.Sectors[FMap.DynScrollers[I].Control].FloorHeight +
+        FMap.Sectors[FMap.DynScrollers[I].Control].CeilingHeight;
+      Amount := Amount * (H - FMap.DynScrollers[I].LastHeight);
+      FMap.DynScrollers[I].LastHeight := H;
+    end;
+    if FMap.DynScrollers[I].Accel then
+    begin
+      Amount := Amount + FMap.DynScrollers[I].Velocity;
+      FMap.DynScrollers[I].Velocity := Amount;
+    end;
+    if Amount.IsPerfectlyZero then Continue;
+    case FMap.DynScrollers[I].Target of
+      stSide: FMap.SideOffset[FMap.DynScrollers[I].Index] := FMap.SideOffset[FMap.DynScrollers[I].Index] + Amount;
+      stFloor: FMap.FloorOffset[FMap.DynScrollers[I].Index] := FMap.FloorOffset[FMap.DynScrollers[I].Index] + Amount;
+      stCeiling: FMap.CeilingOffset[FMap.DynScrollers[I].Index] := FMap.CeilingOffset[FMap.DynScrollers[I].Index] + Amount;
+      stCarry: FMap.CarryNow[FMap.DynScrollers[I].Index] := FMap.CarryNow[FMap.DynScrollers[I].Index] + Amount;
+    end;
+  end;
+end;
+
 procedure TDoomWorld.TicCarry;
 var
   A: TDoomActor;
@@ -2676,7 +2774,7 @@ begin
   Sec := FMap.SectorAt(Player.X, Player.Y);
   if (Sec >= 0) and not Player.Dead and (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) then
   begin
-    C := FMap.Carry[Sec];
+    C := FMap.Carry[Sec] + FMap.CarryNow[Sec];
     PlayerPushVX := PlayerPushVX + C.X;
     PlayerPushVY := PlayerPushVY + C.Y;
   end;
@@ -2686,7 +2784,7 @@ begin
   begin
     if A.Removed or (A.Sector < 0) or (A.State in [asMissile, asEffect]) or A.Charging then Continue;
     if not ((A.Info^.Kind = tkMonster) or (A.Info^.Num = 2035)) then Continue;
-    C := FMap.Carry[A.Sector];
+    C := FMap.Carry[A.Sector] + FMap.CarryNow[A.Sector];
     if C.IsPerfectlyZero or (A.DoomZ > FMap.Sectors[A.Sector].FloorHeight + 1) then Continue;
     A.VelX := A.VelX + C.X;
     A.VelY := A.VelY + C.Y;

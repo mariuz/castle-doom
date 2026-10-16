@@ -34,6 +34,19 @@
       "Stretch": true
     },
     {
+      "$$ClassName": "TCastleRectangleControl",
+      "Name": "ColormapTint",
+      "FullSize": true,
+      "Exists": false,
+      "ColorPersistent": {
+        "$$ClassName": "TCastleColorPersistent",
+        "Red": 0.0,
+        "Green": 0.0,
+        "Blue": 0.0,
+        "Alpha": 0.0
+      }
+    },
+    {
       "$$ClassName": "TDoomStatusBar",
       "Name": "StatusBar",
       "SmoothScaling": false,

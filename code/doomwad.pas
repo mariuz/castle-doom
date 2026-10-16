@@ -62,6 +62,11 @@ type
       from the black and white entries. False when the WAD has no such
       palette. }
     function PaletteTint(const PalIndex: Integer; out Color: TVector3; out Amount: Single): Boolean;
+    { A colormap lump (Boom's 242 underwater maps) as a blend towards one
+      colour: row 0 maps every palette colour p to about
+      p + (Color - p) * Amount (fitted by least squares). False when the
+      lump is missing or too small. }
+    function ColormapTint(const Name: String; out Color: TVector3; out Amount: Single): Boolean;
     { URL of the IWAD. }
     function Url: String;
     { All loaded files, IWAD first. }
@@ -287,6 +292,46 @@ begin
   SetLength(Result, FLumps[Index].Size);
   if FLumps[Index].Size > 0 then
     Move(LumpPointer(Index)^, Result[0], FLumps[Index].Size);
+end;
+
+function TDoomWad.ColormapTint(const Name: String; out Color: TVector3; out Amount: Single): Boolean;
+var
+  Pal, Map, I, C: Integer;
+  P, M: PByte;
+  X, Y, SX, SY, SXX, SXY, Slope, Offset, SlopeSum: Single;
+  Offsets: TVector3;
+begin
+  Result := false;
+  Color := Vector3(0, 0, 0);
+  Amount := 0;
+  Pal := FindLump('PLAYPAL');
+  Map := FindLump(Name);
+  if (Pal < 0) or (Map < 0) or (LumpSize(Pal) < 768) or (LumpSize(Map) < 256) then Exit;
+  P := LumpPointer(Pal);
+  M := LumpPointer(Map);
+  { Per channel out = Slope * in + Offset; the blend is Slope = 1 - Amount,
+    Offset = Color * Amount. }
+  SlopeSum := 0;
+  for C := 0 to 2 do
+  begin
+    SX := 0; SY := 0; SXX := 0; SXY := 0;
+    for I := 0 to 255 do
+    begin
+      X := P[I * 3 + C] / 255;
+      Y := P[M[I] * 3 + C] / 255;
+      SX := SX + X; SY := SY + Y; SXX := SXX + X * X; SXY := SXY + X * Y;
+    end;
+    if Abs(256 * SXX - SX * SX) < 1e-6 then Exit;
+    Slope := (256 * SXY - SX * SY) / (256 * SXX - SX * SX);
+    Offset := (SY - Slope * SX) / 256;
+    SlopeSum := SlopeSum + Slope;
+    Offsets.Data[C] := Offset;
+  end;
+  Amount := Clamped(1 - SlopeSum / 3, 0, 1);
+  if Amount < 0.01 then Exit;
+  for C := 0 to 2 do
+    Color.Data[C] := Clamped(Offsets.Data[C] / Amount, 0, 1);
+  Result := true;
 end;
 
 function TDoomWad.PaletteTint(const PalIndex: Integer; out Color: TVector3; out Amount: Single): Boolean;

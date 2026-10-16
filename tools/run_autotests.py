@@ -251,6 +251,22 @@ TESTS = [
      [r'Map: E1M1: 2 friction lines, 2 pushers'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'friction.wad'), '--fixed-step'],
      lambda config: check_pushers(config)),
+    # Boom's displacement / accelerative scrollers driven by the lift
+    # (tools/make_dynscroll_wad.py): the corridor floor carries the player
+    # while the lift moves, the south wall speeds up while it goes down.
+    ('dynscrollers', 'E1M1', 'Y,G:-240:256,A:0,W:0.3,SAVE:1,LINE:593,W:2,SAVE:2,W:5,SAVE:3,Q',
+     [r'Map: E1M1: scrollers: .* \(2 displacement, 1 accelerative\)'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'dynscroll.wad'), '--fixed-step'],
+     lambda config: check_dynscrollers(config)),
+    # Boom's deep water (tools/make_water_wad.py): the corridor east of the
+    # start room is a 96-unit pool drawn at the start room's heights; the
+    # player sinks to its real floor, the view goes under water (WATERMAP
+    # tint) and back.
+    ('deep-water', 'E1M1', 'Y,G:-400:256,A:0,W:0.5,S,G:-240:256,A:0,W:1.5,SAVE:1,S,G:-400:256,A:0,W:0.5,Q',
+     [r'Map: E1M1: 1 deep water lines for 1 sectors', r'Water: View under water \(sector 141, control 140\)',
+      r'Water: Colormap WATERMAP: tint', r'Water: View normal'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'water.wad'), '--fixed-step'],
+     lambda config: check_deep_water(config)),
     ('boom-elevators', 'E1M1',
      'Y,W:0.3,LINE:618:232,LINE:753:236,LINE:593:212,W:4,SAVE:1,LINE:593:212,W:0.2,SAVE:2,Q',
      [r'Line: line 618 special 232 tag 2: activated', r'Line: line 593 special 212 tag 1: activated'],
@@ -327,6 +343,32 @@ def check_pushers(config):
     p = [None] + [save_json(config, n)['player'] for n in range(1, 5)]
     assert p[2]['x'] < p[1]['x'] - 30, 'current: %s -> %s' % (p[1]['x'], p[2]['x'])
     assert p[4]['x'] > p[3]['x'] + 30, 'point pusher: %s -> %s' % (p[3]['x'], p[4]['x'])
+
+
+def check_dynscrollers(config):
+    """tools/testdata/dynscroll.wad: nothing moves before the lift does;
+    with the lift down the accelerative wall keeps a speed, the floor has
+    moved and carried the player; with the lift back up the speed is gone
+    and the wall has moved further."""
+    s = [None] + [save_json(config, n) for n in range(1, 4)]
+    sc = [None] + [x['scrollers'] for x in s[1:]]
+    assert all(v == 0 for row in sc[1] for v in row[:2] + row[3:]), 'moved early: %s' % sc[1]
+    assert s[2]['sectorFloor'][98] < 0, 'lift not down: %s' % s[2]['sectorFloor'][98]
+    accel = [i for i in range(3) if abs(sc[2][i][0]) + abs(sc[2][i][1]) > 100]
+    assert len(accel) == 1, 'no accelerative speed: %s' % sc[2]
+    a = accel[0]
+    assert any(abs(sc[2][i][3]) + abs(sc[2][i][4]) > 100 for i in range(3) if i != a), 'floor still: %s' % sc[2]
+    assert abs(s[2]['player']['y'] - s[1]['player']['y']) > 30, 'not carried: %s' % s[2]['player']
+    assert s[3]['sectorFloor'][98] == 12, 'lift not back: %s' % s[3]['sectorFloor'][98]
+    assert abs(sc[3][a][0]) + abs(sc[3][a][1]) < 1e-3, 'speed kept: %s' % sc[3][a]
+    assert abs(sc[3][a][3]) > abs(sc[2][a][3]), 'wall stopped early: %s -> %s' % (sc[2][a], sc[3][a])
+
+
+def check_deep_water(config):
+    """The player stands on the pool's real floor (-96), not on the water
+    surface drawn at 0."""
+    p = save_json(config, 1)['player']
+    assert p['z'] < -90, 'not in the water: z %s' % p['z']
 
 
 def check_elevators(config):
@@ -410,7 +452,7 @@ GOLDEN = [
     'save-round-trip_1.png', 'save-round-trip_2.png', 'knockback_1.png', 'melee-turn_1.png',
     'donut_1.png', 'select-thing_1.png', 'key-bindings_1.png', 'translucency_1.png',
     'translucent-things_1.png', 'transfers_1.png', 'touch-controls_1.png',
-    'controls-pad_menucontrolspad.png',
+    'controls-pad_menucontrolspad.png', 'deep-water_1.png', 'deep-water_2.png',
 ]
 
 

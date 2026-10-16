@@ -213,6 +213,23 @@ begin
   Arr := TJSONArray.Create;
   for I := 0 to High(FMap.Sectors) do Arr.Add(FMap.Sectors[I].LightLevel);
   Result.Add('sectorLight', Arr);
+  { Boom's runtime scrollers: speed, last control height, the offset of
+    what they move. }
+  if Length(FMap.DynScrollers) > 0 then
+  begin
+    Arr := TJSONArray.Create;
+    for I := 0 to High(FMap.DynScrollers) do
+    begin
+      Sub := TJSONArray.Create;
+      Sub.Add(Double(FMap.DynScrollers[I].Velocity.X));
+      Sub.Add(Double(FMap.DynScrollers[I].Velocity.Y));
+      Sub.Add(Double(FMap.DynScrollers[I].LastHeight));
+      Sub.Add(Double(ScrollerOffset(I).X));
+      Sub.Add(Double(ScrollerOffset(I).Y));
+      Arr.Add(Sub);
+    end;
+    Result.Add('scrollers', Arr);
+  end;
   Arr := TJSONArray.Create;
   for I := 0 to High(FMap.Sectors) do Arr.Add(FMap.Sectors[I].OrigLight);
   Result.Add('sectorOrigLight', Arr);
@@ -373,6 +390,39 @@ begin
   LoadMapCore(State.Get('map', ''), false, State);
 end;
 
+function TDoomWorld.ScrollerOffset(const I: Integer): TVector2;
+begin
+  case FMap.DynScrollers[I].Target of
+    stSide: Result := FMap.SideOffset[FMap.DynScrollers[I].Index];
+    stFloor: Result := FMap.FloorOffset[FMap.DynScrollers[I].Index];
+    stCeiling: Result := FMap.CeilingOffset[FMap.DynScrollers[I].Index];
+    else Result := TVector2.Zero;
+  end;
+end;
+
+procedure TDoomWorld.RestoreScrollers(const Arr: TJSONArray);
+var
+  I: Integer;
+  Sub: TJSONArray;
+  Offset: TVector2;
+begin
+  if (Arr = nil) or (Arr.Count <> Length(FMap.DynScrollers)) then Exit;
+  for I := 0 to High(FMap.DynScrollers) do
+  begin
+    if not (Arr.Items[I] is TJSONArray) then Continue;
+    Sub := TJSONArray(Arr.Items[I]);
+    FMap.DynScrollers[I].Velocity := Vector2(ArrayItemFloat(Sub, 0, 0), ArrayItemFloat(Sub, 1, 0));
+    FMap.DynScrollers[I].LastHeight := ArrayItemFloat(Sub, 2, FMap.DynScrollers[I].LastHeight);
+    Offset := Vector2(ArrayItemFloat(Sub, 3, 0), ArrayItemFloat(Sub, 4, 0));
+    case FMap.DynScrollers[I].Target of
+      stSide: FMap.SideOffset[FMap.DynScrollers[I].Index] := Offset;
+      stFloor: FMap.FloorOffset[FMap.DynScrollers[I].Index] := Offset;
+      stCeiling: FMap.CeilingOffset[FMap.DynScrollers[I].Index] := Offset;
+      else ;
+    end;
+  end;
+end;
+
 { Map state, applied before the geometry is generated so walls, floors and
   switch textures come out right. }
 procedure TDoomWorld.RestoreMapState(const State: TJSONObject);
@@ -396,6 +446,7 @@ begin
     FMap.Sectors[I].FloorTex := ArrayItemStr(ObjArray(State, 'sectorFloorTex'), I, FMap.Sectors[I].FloorTex);
     FMap.Sectors[I].CeilingTex := ArrayItemStr(ObjArray(State, 'sectorCeilingTex'), I, FMap.Sectors[I].CeilingTex);
   end;
+  RestoreScrollers(ObjArray(State, 'scrollers'));
   Arr := ObjArray(State, 'lineSpecial');
   if (Arr = nil) or (Arr.Count = Length(FMap.Linedefs)) then
     for I := 0 to High(FMap.Linedefs) do

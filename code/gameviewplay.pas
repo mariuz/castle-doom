@@ -23,6 +23,8 @@ type
     FWeaponImageName, FFlashImageName: String;
     { The PLAYPAL palette shifts as a full-screen tint (see PaletteTint). }
     FPaletteFlash: TCastleRectangleControl;
+    { Boom's deep water colormaps as a tint of the 3D view and the weapon. }
+    FColormapTint: TCastleRectangleControl;
     FPaletteTints: array [0..13] of TVector4;
     FInfoLabel, FHelpLabel: TCastleLabel;
     FWorldStatus: TDoomWorldStatus;
@@ -285,6 +287,7 @@ begin
     bar, crosshair, texts, labels, the full-screen screens, the melt. }
   FAutomap := DesignedComponent('Automap') as TDoomAutomap;
   FPaletteFlash := DesignedComponent('PaletteFlash') as TCastleRectangleControl;
+  FColormapTint := DesignedComponent('ColormapTint') as TCastleRectangleControl;
   { Every PLAYPAL palette is palette 0 blended towards one colour, so an
     alpha-blended rectangle of that colour reproduces it exactly. }
   for I := 0 to High(FPaletteTints) do
@@ -1883,6 +1886,7 @@ begin
     FFlashImage.Exists := false;
     FCrosshair.Exists := false;
     FMessageText.Exists := false;
+    FColormapTint.Exists := false;
     if FIntermissionScreen.Exists then
     begin
       { 320x200 shown 4:3, as tall as the viewport. }
@@ -2067,6 +2071,8 @@ begin
 
   P := FWorld.Player;
   FPaletteFlash.Color := FPaletteTints[FWorld.PaletteIndex];
+  FColormapTint.Color := FWorld.ColormapTint;
+  FColormapTint.Exists := (FWorld.ColormapTint.W > 0) and not FAutomap.Exists;
   { Doom's colormaps: the gun flash lights the room, invulnerability and
     the light amplification visor fix the colormap (DoomLighting). }
   DoomLightingInstance.ExtraLight := FWorld.Player.ExtraLight;

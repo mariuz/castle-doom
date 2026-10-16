@@ -73,7 +73,7 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 30 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 32 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -465,6 +465,23 @@ like sector 133 (213, 261) and makes STARTAN3 the mirrored sky (272;
 autotest `transfers` with a golden screenshot of the sky, unit test
 `TestTransfers`). `LINE:834:263` tries the reversed type from wherever
 the player stands (the position is projected on the source line).
+Boom's displacement / accelerative scrollers:
+`tools/testdata/dynscroll.wad` (`tools/make_dynscroll_wad.py`) flips two
+of E1M1's lift lines so the lift (98) controls a 248 (floor + carry of
+sector 141) and a 218 (wall 911); the log says `scrollers: ... (2
+displacement, 1 accelerative)`, `Y,G:-240:256,A:0,W:0.3,SAVE:1,LINE:593,W:2,SAVE:2`
+carries the player while the lift moves, and the saves' `scrollers`
+rows are [speed x, speed y, last control height, offset x, offset y]
+(autotest `dynscrollers`, unit test `TestDynScrollers`). Boom's scale is
+large: a 128-unit control line moves 4 units per unit of height change.
+Boom deep water: `tools/testdata/water.wad` (`tools/make_water_wad.py`)
+makes the corridor east of E1M1's start room (141) a 96-unit pool
+controlled by the start room (242 on line 829, WATERMAP colormap);
+`G:-240:256` sinks the player to z -96 and logs `Water: View under
+water (sector 141, control 140)` and the colormap's tint (autotest
+`deep-water` with golden screenshots, unit test `TestDeepWater`). A
+deep water sector's sides need lower textures for the pool's walls, or
+nothing is drawn there (Doom's HOM).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

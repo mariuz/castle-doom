@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Boom's displacement and accelerative scrollers (214-218, 245-249):
+  walls, floors and conveyors driven by a moving sector, such as a lift.
+- Boom's deep water (242): swimmable pools drawn at another sector's
+  heights, with their own look and colour tint under the surface.
+
 ## v0.19.0 (2026-10-16)
 
 - Touch controls for phones and tablets in the browser: a stick to move,

@@ -118,6 +118,26 @@ type
   { Linedef indices returned by the grid queries (reused between calls). }
   TLineList = array of Integer;
 
+  { What a runtime scroller moves (TDynScroller). }
+  TScrollTarget = (stSide, stFloor, stCeiling, stCarry);
+
+  { Boom's displacement (245-249) and accelerative (214-218) scrollers,
+    T_Scroll: each tic they move their target by Rate times the change of
+    the control sector's floor + ceiling height since the last tic;
+    accelerative ones add that to a speed (Velocity) they keep and move by
+    it. Control -1: a constant scroller of a surface that also has one of
+    those (its offset is then kept here too). }
+  TDynScroller = record
+    Target: TScrollTarget;
+    { Sidedef or sector. }
+    Index: Integer;
+    Rate: TVector2;
+    Control: Integer;
+    Accel: Boolean;
+    LastHeight: Single;
+    Velocity: TVector2;
+  end;
+
   TDoomMap = class
   strict private
     FWad: TDoomWad;
@@ -142,9 +162,12 @@ type
     procedure BuildSectorLists;
     procedure BuildSubsectorPolygons;
     procedure BuildScrollers;
+    function DynScrollerSummary: String;
     procedure BuildFrictionAndPushers;
     procedure BuildTranslucency;
     procedure BuildTransfers;
+    { TexName when it names a colormap lump (Boom's 242), else ''. }
+    function ColormapName(const TexName: String): String;
     function TranslucencyMapAlpha(const Lump: Integer): Single;
   public
     Vertices: array of TDoomVertex;
@@ -169,6 +192,14 @@ type
     FloorScroll, CeilingScroll, Carry: array of TVector2;
     { How many sides, floors, ceilings and carrying floors scroll. }
     ScrollingSides, ScrollingFloors, ScrollingCeilings, CarryingFloors: Integer;
+    { The runtime scrollers (TDoomWorld.TicScrollers runs them), the
+      surfaces they move (those draw from the offsets below instead of a
+      constant speed), the offsets so far (SideOffset in texels like
+      SideScroll, the flats' in map units like FloorScroll) and the carry
+      they add this tic. }
+    DynScrollers: array of TDynScroller;
+    SideDynamic, FloorDynamic, CeilingDynamic: array of Boolean;
+    SideOffset, FloorOffset, CeilingOffset, CarryNow: array of TVector2;
     { Boom's friction (223, P_SpawnFriction) per sector, used where the
       sector type has the friction bit (256): Friction multiplies the
       momentum each tic (Doom's 0.90625 elsewhere), MoveFactor the
@@ -191,6 +222,17 @@ type
       when it covers more than half of them; empty when none is. }
     SkyTransferTexture: String;
     SkyTransferFlipped: Boolean;
+    { Boom's deep water (242, "height transfer"): the control sector (the
+      242 line's front sector) of each tagged sector, -1 for none; such a
+      sector is drawn at its control sector's heights, and differently
+      when the viewer is below the control's floor or above its ceiling
+      (TDoomGeometry.WaterView). The colormaps the 242 line's front side
+      names for those three views (lower: below the floor, middle:
+      between, upper: above the ceiling; '' when the name is not a
+      colormap lump). }
+    HeightSec: array of Integer;
+    WaterColormaps: array of array [0..2] of String;
+    HeightTransfers: Integer;
 
     constructor Create(const AWad: TDoomWad; const MapName: String);
 
@@ -336,8 +378,9 @@ begin
   BuildTranslucency;
   BuildTransfers;
   if ScrollingSides + ScrollingFloors + ScrollingCeilings + CarryingFloors > 0 then
-    WritelnLog('Map', '%s: scrollers: %d walls, %d floors, %d ceilings, %d carrying floors', [
-      FName, ScrollingSides, ScrollingFloors, ScrollingCeilings, CarryingFloors]);
+    WritelnLog('Map', '%s: scrollers: %d walls, %d floors, %d ceilings, %d carrying floors%s', [
+      FName, ScrollingSides, ScrollingFloors, ScrollingCeilings, CarryingFloors,
+      DynScrollerSummary]);
   WritelnLog('Map', '%s: %d vertices, %d linedefs, %d sectors, %d things, %d subsectors, %d nodes, line grid %d x %d', [
     FName, Length(Vertices), Length(Linedefs), Length(Sectors), Length(Things),
     Length(Subsectors), Length(Nodes), FGridW, FGridH]);
@@ -1261,6 +1304,16 @@ begin
     CeilingLightSector[I] := -1;
   end;
   LightTransfers := 0;
+  HeightTransfers := 0;
+  SetLength(HeightSec, Length(Sectors));
+  SetLength(WaterColormaps, Length(Sectors));
+  for I := 0 to High(Sectors) do
+  begin
+    HeightSec[I] := -1;
+    WaterColormaps[I][0] := '';
+    WaterColormaps[I][1] := '';
+    WaterColormaps[I][2] := '';
+  end;
   SkyTransferTexture := '';
   SkyTransferFlipped := false;
   SkySectors := 0;
@@ -1284,6 +1337,22 @@ begin
               FloorLightSector[S] := Front
             else
               CeilingLightSector[S] := Front;
+          until false;
+        end;
+      242:
+        if (Front >= 0) and (Linedefs[I].Side[0] >= 0) then
+        begin
+          Inc(HeightTransfers);
+          S := -1;
+          repeat
+            S := FindSectorFromTag(Linedefs[I].Tag, S);
+            if S < 0 then Break;
+            { The control sector itself is never transferred. }
+            if S = Front then Continue;
+            HeightSec[S] := Front;
+            WaterColormaps[S][0] := ColormapName(Sidedefs[Linedefs[I].Side[0]].LowerTex);
+            WaterColormaps[S][1] := ColormapName(Sidedefs[Linedefs[I].Side[0]].MiddleTex);
+            WaterColormaps[S][2] := ColormapName(Sidedefs[Linedefs[I].Side[0]].UpperTex);
           until false;
         end;
       271, 272:
@@ -1317,6 +1386,33 @@ begin
   end;
   if LightTransfers > 0 then
     WritelnLog('Map', '%s: %d light transfer lines', [FName, LightTransfers]);
+  if HeightTransfers > 0 then
+  begin
+    Covered := 0;
+    for I := 0 to High(Sectors) do
+      if HeightSec[I] >= 0 then Inc(Covered);
+    WritelnLog('Map', '%s: %d deep water lines for %d sectors', [FName, HeightTransfers, Covered]);
+  end;
+end;
+
+function TDoomMap.ColormapName(const TexName: String): String;
+var
+  N: String;
+  L, CStart, CEnd: Integer;
+begin
+  { A colormap is 34 rows of 256 bytes (at least 33: Boom's own maps). }
+  N := UpperCase(Trim(TexName));
+  Result := '';
+  if (N = '') or (N = '-') then Exit;
+  L := FWad.FindLump(N);
+  if L < 0 then Exit;
+  { Boom's colormaps sit between C_START and C_END; elsewhere only a lump
+    of exactly a colormap's size counts (wall patches have other sizes). }
+  CStart := FWad.FindLump('C_START');
+  CEnd := FWad.FindLump('C_END');
+  if ((CStart >= 0) and (CEnd > CStart) and (L > CStart) and (L < CEnd)) or
+     (FWad.LumpSize(L) = 33 * 256) or (FWad.LumpSize(L) = 34 * 256) then
+    Result := N;
 end;
 
 procedure TDoomMap.BuildTranslucency;
@@ -1464,20 +1560,86 @@ begin
     WritelnLog('Map', '%s: %d friction lines, %d pushers', [FName, FrictionLines, Length(Pushers)]);
 end;
 
+function TDoomMap.DynScrollerSummary: String;
+var
+  I, Displacement, Accelerative: Integer;
+begin
+  Displacement := 0;
+  Accelerative := 0;
+  for I := 0 to High(DynScrollers) do
+    if DynScrollers[I].Control >= 0 then
+      if DynScrollers[I].Accel then Inc(Accelerative) else Inc(Displacement);
+  if Displacement + Accelerative = 0 then
+    Result := ''
+  else
+    Result := Format(' (%d displacement, %d accelerative)', [Displacement, Accelerative]);
+end;
+
 procedure TDoomMap.BuildScrollers;
 const
   { Boom's CARRYFACTOR (0x3000 / 0x10000): with Doom's friction a thing
     then drifts at twice the floor's scroll speed. }
   CarryFactor = 0.1875;
 var
-  I, J, S: Integer;
+  I, J, S, Special, Control: Integer;
+  Accel: Boolean;
   DX, DY, LX, LY, Len: Single;
   V: TVector2;
 
+  { A scroller of Target Index at Rate: constant (Control < 0) into the
+    tables, else a runtime one. }
+  procedure Add(const Target: TScrollTarget; const Index: Integer; const Rate: TVector2);
+  var
+    D: TDynScroller;
+  begin
+    if Index < 0 then Exit;
+    if Control < 0 then
+    begin
+      case Target of
+        stSide: if Index <= High(SideScroll) then SideScroll[Index] := SideScroll[Index] + Rate;
+        stFloor: FloorScroll[Index] := FloorScroll[Index] + Rate;
+        stCeiling: CeilingScroll[Index] := CeilingScroll[Index] + Rate;
+        stCarry: Carry[Index] := Carry[Index] + Rate;
+      end;
+      Exit;
+    end;
+    if (Target = stSide) and (Index > High(SideScroll)) then Exit;
+    D.Target := Target;
+    D.Index := Index;
+    D.Rate := Rate;
+    D.Control := Control;
+    D.Accel := Accel;
+    D.LastHeight := Sectors[Control].FloorHeight + Sectors[Control].CeilingHeight;
+    D.Velocity := TVector2.Zero;
+    SetLength(DynScrollers, Length(DynScrollers) + 1);
+    DynScrollers[High(DynScrollers)] := D;
+    case Target of
+      stSide: SideDynamic[Index] := true;
+      stFloor: FloorDynamic[Index] := true;
+      stCeiling: CeilingDynamic[Index] := true;
+      else ;
+    end;
+  end;
+
   procedure AddSide(const Side: Integer; const Rate: TVector2);
   begin
-    if (Side < 0) or (Side > High(SideScroll)) then Exit;
-    SideScroll[Side] := SideScroll[Side] + Rate;
+    Add(stSide, Side, Rate);
+  end;
+
+  { A surface moved by a runtime scroller keeps its constant speed as
+    one more runtime scroller (its offset is drawn from the tables). }
+  procedure MoveConstant(const Target: TScrollTarget; const Index: Integer; var Rate: TVector2);
+  begin
+    if Rate.IsPerfectlyZero then Exit;
+    SetLength(DynScrollers, Length(DynScrollers) + 1);
+    DynScrollers[High(DynScrollers)].Target := Target;
+    DynScrollers[High(DynScrollers)].Index := Index;
+    DynScrollers[High(DynScrollers)].Rate := Rate;
+    DynScrollers[High(DynScrollers)].Control := -1;
+    DynScrollers[High(DynScrollers)].Accel := false;
+    DynScrollers[High(DynScrollers)].LastHeight := 0;
+    DynScrollers[High(DynScrollers)].Velocity := TVector2.Zero;
+    Rate := TVector2.Zero;
   end;
 
 begin
@@ -1485,12 +1647,36 @@ begin
   SetLength(FloorScroll, Length(Sectors));
   SetLength(CeilingScroll, Length(Sectors));
   SetLength(Carry, Length(Sectors));
+  SetLength(DynScrollers, 0);
+  SetLength(SideDynamic, Length(Sidedefs));
+  SetLength(FloorDynamic, Length(Sectors));
+  SetLength(CeilingDynamic, Length(Sectors));
+  SetLength(SideOffset, Length(Sidedefs));
+  SetLength(FloorOffset, Length(Sectors));
+  SetLength(CeilingOffset, Length(Sectors));
+  SetLength(CarryNow, Length(Sectors));
   for I := 0 to High(Linedefs) do
   begin
     { The line's vector, 32 units = 1 unit a tic (SCROLL_SHIFT). }
     DX := (Vertices[Linedefs[I].V2].X - Vertices[Linedefs[I].V1].X) / 32;
     DY := (Vertices[Linedefs[I].V2].Y - Vertices[Linedefs[I].V1].Y) / 32;
-    case Linedefs[I].Special of
+    { 245-249 (displacement) and 214-218 (accelerative) are 250-254
+      driven by the height changes of the line's front sector. }
+    Special := Linedefs[I].Special;
+    Control := -1;
+    Accel := false;
+    if (Special >= 245) and (Special <= 249) then
+      Special := Special + 5
+    else if (Special >= 214) and (Special <= 218) then
+    begin
+      Special := Special + 36;
+      Accel := true;
+    end;
+    if (Special <> Linedefs[I].Special) and (Linedefs[I].Side[0] >= 0) then
+      Control := Sidedefs[Linedefs[I].Side[0]].Sector;
+    if (Special <> Linedefs[I].Special) and ((Control < 0) or (Control > High(Sectors))) then
+      Continue;
+    case Special of
       48: AddSide(Linedefs[I].Side[0], Vector2(1, 0));
       85: AddSide(Linedefs[I].Side[0], Vector2(-1, 0));
       250, 251, 252, 253:
@@ -1499,14 +1685,14 @@ begin
           repeat
             S := FindSectorFromTag(Linedefs[I].Tag, S);
             if S < 0 then Break;
-            case Linedefs[I].Special of
-              250: CeilingScroll[S] := CeilingScroll[S] + Vector2(DX, DY);
-              251: FloorScroll[S] := FloorScroll[S] + Vector2(DX, DY);
-              252: Carry[S] := Carry[S] + Vector2(DX, DY) * CarryFactor;
+            case Special of
+              250: Add(stCeiling, S, Vector2(DX, DY));
+              251: Add(stFloor, S, Vector2(DX, DY));
+              252: Add(stCarry, S, Vector2(DX, DY) * CarryFactor);
               else
                 begin
-                  FloorScroll[S] := FloorScroll[S] + Vector2(DX, DY);
-                  Carry[S] := Carry[S] + Vector2(DX, DY) * CarryFactor;
+                  Add(stFloor, S, Vector2(DX, DY));
+                  Add(stCarry, S, Vector2(DX, DY) * CarryFactor);
                 end;
             end;
           until false;
@@ -1532,6 +1718,13 @@ begin
             Sidedefs[Linedefs[I].Side[0]].YOffset));
     end;
   end;
+  for I := 0 to High(SideScroll) do
+    if SideDynamic[I] then MoveConstant(stSide, I, SideScroll[I]);
+  for I := 0 to High(Sectors) do
+  begin
+    if FloorDynamic[I] then MoveConstant(stFloor, I, FloorScroll[I]);
+    if CeilingDynamic[I] then MoveConstant(stCeiling, I, CeilingScroll[I]);
+  end;
   ScrollingSides := 0;
   for I := 0 to High(SideScroll) do
     if not SideScroll[I].IsPerfectlyZero then Inc(ScrollingSides);
@@ -1544,6 +1737,13 @@ begin
     if not CeilingScroll[I].IsPerfectlyZero then Inc(ScrollingCeilings);
     if not Carry[I].IsPerfectlyZero then Inc(CarryingFloors);
   end;
+  for I := 0 to High(DynScrollers) do
+    case DynScrollers[I].Target of
+      stSide: if DynScrollers[I].Control >= 0 then Inc(ScrollingSides);
+      stFloor: if DynScrollers[I].Control >= 0 then Inc(ScrollingFloors);
+      stCeiling: if DynScrollers[I].Control >= 0 then Inc(ScrollingCeilings);
+      stCarry: Inc(CarryingFloors);
+    end;
 end;
 
 procedure TDoomMap.BuildSectorLists;

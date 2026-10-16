@@ -302,6 +302,41 @@ one per texture with `--no-atlas`. Each batch becomes one `TShapeNode` with:
   `TDoomMap.Carry`: `TDoomWorld.TicCarry` adds it each tic to the momentum of
   the player and of monsters and barrels standing on the floor (the knockback
   momentum, so Doom's friction gives twice the floor's speed, like Boom).
+  Boom's displacement (245-249) and accelerative (214-218) scrollers are
+  250-254 whose amount each tic is the line's rate times the change of the
+  control sector's (the line's front sector) floor + ceiling height;
+  accelerative ones add it to a speed they keep (`T_Scroll`). They are
+  `TDoomMap.DynScrollers` (a surface with one also keeps its constant
+  speed there, as a scroller without control), run by
+  `TDoomWorld.TicScrollers` into the map's `SideOffset` / `FloorOffset` /
+  `CeilingOffset` and this tic's `CarryNow`; the surfaces they move
+  (`SideDynamic`...) get a batch of their own keyed by the sidedef or
+  sector (`DynIndex`), whose translation `UpdateScroll` takes from those
+  offsets. Their speeds, last heights and offsets are saved
+  (`scrollers`).
+- Boom's deep water (242, `R_FakeFlat`): `TDoomMap.HeightSec` gives each
+  tagged sector its control sector (the 242 line's front sector) and
+  `WaterColormaps` the colormaps the line's front side names (lower:
+  under water, middle, upper: above the control's ceiling; a name counts
+  as a colormap between `C_START` / `C_END` or at exactly a colormap's
+  size). Such sectors are dynamic (own chunks, which also depend on the
+  control sector). `TMapChunk.Generate` emits their flats and the lines
+  touching them twice: with the real heights into an invisible
+  collision-only batch (`SceneCollision`; the navigation walks on the real
+  floor), and with the heights they are drawn at into non-colliding
+  (passable) batches, `TDoomGeometry.ApplyFakeSectors` temporarily
+  rewriting those sectors' heights, flats and light for the current
+  `WaterView` and `RestoreSectors` putting them back. Normally the sector
+  is drawn at the control's floor and ceiling; with the eye below the
+  control's floor (`wvUnder`, `TDoomWorld.UpdateWaterView`, from the
+  sector the player is in) its real floor in the control's floor flat and
+  a ceiling just under the water surface in the control's ceiling flat
+  and light; above the control's ceiling the opposite. A change of view
+  regenerates those sectors. The colormap of the viewer's region becomes
+  a screen tint (`TDoomWad.ColormapTint`: row 0 of the colormap fitted as
+  a blend towards one colour; the play design's `ColormapTint`
+  rectangle, over the 3D view and the weapon, under the HUD). Things need
+  nothing: the drawn surfaces hide what is below or above them.
 
 The atlas (`TDoomGraphics.BuildAtlas`, called by `TDoomGeometry.Create`
 with every texture and flat the map's sidedefs and sectors name): pages
