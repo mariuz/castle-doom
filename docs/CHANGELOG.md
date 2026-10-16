@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.19.0 (2026-10-16)
 
 - Touch controls for phones and tablets in the browser: a stick to move,
   drag to look, and buttons to fire, use, change weapons, open the
