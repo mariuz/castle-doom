@@ -514,6 +514,11 @@ begin
     Sec := FWorld.Map.SectorAt(Arg, Arg2);
     if Sec >= 0 then
       PlacePlayer(Arg, Arg2, FWorld.Map.Sectors[Sec].FloorHeight, DoomAngleFromCamera);
+    { A scripted jump lands exactly: no momentum (knockback, a line
+      teleport's kept speed) carries over. }
+    FWorld.PlayerPushVX := 0;
+    FWorld.PlayerPushVY := 0;
+    FWalkKnown := false;
   end
   else if Cmd = 'M' then
     FAutomap.Exists := not FAutomap.Exists

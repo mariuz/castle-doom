@@ -279,7 +279,7 @@ TESTS = [
      [r'DeHackEd: translucent.deh: 2 values applied'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'translucent.deh'), '--fixed-step'],
      None),
-    ('transfers', 'E1M1', 'Y,G:-300:256,A:0,W:0.2,F:1,W:0.3,SAVE:1,G:900:-500,A:90,LOOK:45,W:0.3,S,Q',
+    ('transfers', 'E1M1', 'Y,G:-300:256,A:0,W:0.2,F:1,W:0.3,SAVE:1,D,G:900:-500,A:90,LOOK:45,W:0.3,S,Q',
      [r'Map: E1M1: sky transfer: line 1016 gives STARTAN3 \(mirrored\) to 19 of 19 sky sectors',
       r'Map: E1M1: 2 light transfer lines',
       r'Teleport: player through line 834 to line 679 at \(728, -384\), angle 270'],
