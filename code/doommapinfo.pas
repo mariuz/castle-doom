@@ -471,6 +471,7 @@ var
   ClearEpisodes: Boolean;
   Key: String;
   ExitIsLump, EnterIsLump: Boolean;
+  Includes: Integer;
 
   procedure Error(const Msg: String);
   begin
@@ -541,6 +542,36 @@ var
       Move(Bytes[0], Result[1], Length(Bytes));
     Result := StringReplace(Result, #13, '', [rfReplaceAll]);
   end;
+
+  { exitpic / enterpic: a picture, or "$LUMP", a ZDoom intermission
+    script (the vanilla episode maps' format: Background, Splat, Spots,
+    Animation...) whose background picture is taken; its animations are
+    not played. }
+  function PictureValue: String;
+  var
+    Script: TTokenizer;
+  begin
+    Result := UpperCase(First);
+    if Copy(Result, 1, 1) <> '$' then Exit;
+    Script := TTokenizer.Create(LumpText(Copy(Result, 2, MaxInt)));
+    try
+      Result := '';
+      while Script.Kind <> tkEnd do
+      begin
+        if (Script.Kind = tkIdent) and SameText(Script.Value, 'background') then
+        begin
+          Script.Next;
+          Result := UpperCase(Script.Value);
+          Exit;
+        end;
+        Script.Next;
+      end;
+      Error('intermission script ' + First + ' has no background');
+    finally
+      FreeAndNil(Script);
+    end;
+  end;
+
 
   { A key's values: the tokens after it (and an optional "=") on its line,
     a trailing comma carrying them over to the next line. }
@@ -623,14 +654,9 @@ var
     end
     else if SameText(Key, 'nointermission') then E.NoIntermission := true
     else if SameText(Key, 'exitpic') then
-    begin
-      { "$name" is an intermission script, not a picture. }
-      if not IsLookup then E.ExitPic := UpperCase(First);
-    end
+      E.ExitPic := PictureValue
     else if SameText(Key, 'enterpic') then
-    begin
-      if not IsLookup then E.EnterPic := UpperCase(First);
-    end;
+      E.EnterPic := PictureValue;
     { levelnum, sucktime, flags of other ports... are skipped. }
   end;
 
@@ -910,6 +936,7 @@ begin
   Episodes := TMapInfoList.Create(false);
   Defaults := TMapInfoEntry.Create;
   ClearEpisodes := false;
+  Includes := 0;
   try
     while T.Kind <> tkEnd do
     begin
@@ -938,7 +965,16 @@ begin
         ClearEpisodes := true
       else if SameText(Key, 'include') then
       begin
-        Error('include is not supported');
+        { The lump's text is parsed in place (16 includes at most, so a
+          lump including itself stops). }
+        Inc(Includes);
+        if Includes > 16 then
+          Error('too many includes, ' + T.Value + ' skipped')
+        else if (AWad = nil) or (AWad.FindLump(UpperCase(T.Value)) < 0) then
+          Error('include: no lump ' + T.Value)
+        else
+          T.Text := Copy(T.Text, 1, T.Pos_ - 1) + #10 + LumpText(T.Value) + #10 +
+            Copy(T.Text, T.Pos_, MaxInt);
         T.Next;
       end else
       begin

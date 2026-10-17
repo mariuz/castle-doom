@@ -262,6 +262,12 @@ TESTS = [
       r'Message: E1M1: Language Hangar', r'Message: Picked up language shells\.',
       r'Finale: Finale after E1M1', r'Load: E1M2: map parsed', r'Message: E1M2: Communications Center'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'language.wad')], None),
+    # MAPINFO include and intermission scripts (tools/make_include_wad.py):
+    # the maps come from an included lump, the pictures from "$LUMP"s.
+    ('mapinfo-include', 'E1M1', 'Y,W:0.5,E,W:3,U,W:0.5,U,W:2,Q',
+     [r'MapInfo: E1M1: "Included Hangar" next E1M2.*exit picture CREDIT',
+      r'MapInfo: E1M2: .*enter picture TITLEPIC', r'Load: E1M2: map parsed'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'include.wad')], None),
     ('umapinfo-boss', 'E1M1', 'Y,W:0.5,D,W:4,SAVE:1,Q',
      [r'BossDeath: E1M1: all TROO dead, UMAPINFO special 23 on tag 1'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad')],
@@ -658,9 +664,20 @@ def crash_test(exe, out):
     if code != 1:
         problems.append('exit code %d, expected 1' % code)
     for rx in [r'Warning: Crash: Castle DOOM [\d.]+ stopped on an error:',
-               r'Exception: Test crash from the CRASH demo command', r'its last lines:\n  ']:
+               r'Exception: Test crash from the CRASH demo command', r'its last lines:\n  ',
+               r'Crash: Report saved to .*crash-report\.txt']:
         if not re.search(rx, log):
             problems.append('missing log line /%s/' % rx)
+    # The saved report reaches back to the map's load (the ring buffer
+    # keeps 100 lines; CGE's own memory only 10).
+    report = os.path.join(config, 'castle-doom', 'crash-report.txt')
+    if not os.path.exists(report):
+        problems.append('no %s' % report)
+    else:
+        with open(report) as f:
+            text = f.read()
+        if not re.search(r'\n  Load: E1M1: map parsed', text):
+            problems.append('crash-report.txt does not reach the map load (%d lines)' % len(text.splitlines()))
     return problems, secs
 
 

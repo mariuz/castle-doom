@@ -209,6 +209,23 @@ begin
       AssertTrue('clearepisodes before the episode', MapInfoEntries[I - 2].EpisodeClear);
       AssertEquals('episode name', 'MapInfo Episode', MapInfoEntries[I - 1].EpisodeName);
       AssertEquals('episode map', 'E1M3', MapInfoEntries[I - 1].MapName);
+      { tools/testdata/include.wad: MAPINFO only includes MAPINF2, whose
+        exitpic / enterpic name intermission scripts. }
+      FreeAndNil(W);
+      Path := StringReplace(Path, 'mapinfo.wad', 'include.wad', []);
+      W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+      W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+      LoadMapInfo(W);
+      E := MapInfoFor('E1M1');
+      AssertTrue('included map', E <> nil);
+      AssertEquals('included title', 'Included Hangar', E.LevelName);
+      AssertEquals('script background as the exit picture', 'CREDIT', E.ExitPic);
+      AssertEquals('enter script', 'TITLEPIC', MapInfoFor('E1M2').EnterPic);
+      { A lump including itself stops after 16 includes. }
+      List.Clear;
+      Errors.Clear;
+      AssertTrue('the loop parses', ParseZMapInfo('include "LOOPINF"', List, Errors, W) >= 1);
+      AssertTrue('and says so', Pos('too many includes', Errors.Text) > 0);
       { Back to plain Freedoom (the entries are global). }
       FreeAndNil(W);
       W := TDoomWad.Create(WadUrl('freedoom1.wad'));

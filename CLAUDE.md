@@ -249,10 +249,15 @@ the pointer lock, so Doom's menu opens over the paused game; log
 
 Crash reports: `CRASH` in a demo raises a test exception; on the
 desktop `GameCrash` logs `Warning: Crash: Castle DOOM ... stopped on an
-error:` with the last log lines and exits with code 1 in autotests
-(else a continue / quit dialog; autotest `crash-report`). In the browser
-`play/?map=E1M1&demo=W:2,CRASH` stops the program and the page shows the
-`castle-doom-crash` overlay with the last 40 console lines.
+error:` with the last log lines (a 100-line ring buffer), saves it as
+`crash-report.txt` in the config directory (log `Crash: Report saved
+to`) and exits with code 1 in autotests (else it copies the report to
+the clipboard and shows a continue / quit dialog; autotest
+`crash-report`). In the browser `play/?map=E1M1&demo=W:2,CRASH` stops
+the program and the page shows the `castle-doom-crash` overlay with the
+last 200 console lines and a `castle-doom-crash-copy` button (test it
+with Playwright on a page holding `CRASH_NEW` from
+`tools/patch_web_page.py`, granting `clipboard-read`).
 Offline web build: `pages/sw.js` (service worker; the play page
 registers it through `tools/patch_web_page.py`). Test it on a `web-site`
 artifact with `pages/index.html` and `pages/sw.js` copied in (the CI
@@ -461,7 +466,12 @@ its strings up: E1M1 "E1M1: Language Hangar", music `$MUSIC_LNG`
 (D_E1M5), a looked-up cluster text, a "Language Episode" and a new
 GOTSHELLS (`Y,G:416:864,W:0.3` logs `Message: Picked up language
 shells.`); the log says `Strings: LANGUAGE lump: 6 strings` (autotest
-`language`, unit test `TestLanguage`). UMAPINFO wins when a WAD has
+`language`, unit test `TestLanguage`). MAPINFO `include` and intermission scripts:
+`tools/testdata/include.wad` (`tools/make_include_wad.py`) has a
+MAPINFO that only includes MAPINF2, whose E1M1 exits on `"$IN_EXIT"`
+(Background CREDIT) and E1M2 enters on `"$IN_ENTER"` (TITLEPIC); a
+self-including LOOPINF tests the limit (autotest `mapinfo-include`,
+unit test `TestZMapInfo`). UMAPINFO wins when a WAD has
 both.
 Boom generalized lines: `tools/testdata/generalized.wad`
 (`tools/make_generalized_wad.py`) turns E1M1's door, lift, switch, blue

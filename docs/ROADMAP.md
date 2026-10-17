@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- MAPINFO `include` (the lump's text parsed in place, 16 at most) and
+  ZDoom intermission scripts in `exitpic` / `enterpic = "$LUMP"` (their
+  `Background` picture). Test PWAD `tools/testdata/include.wad`,
+  autotest `mapinfo-include`, unit test `TestZMapInfo`.
+- Longer crash reports: `GameCrash` keeps the last 100 log lines
+  (`ApplicationProperties.OnLog`), saves the report as
+  `crash-report.txt` in the config directory and copies it to the
+  clipboard (the dialog shows the newest 20); the web overlay keeps 200
+  console lines and has a "Copy report" button. Autotest `crash-report`.
+
 - Mouse bindings and the touch layout: each action has a mouse button
   or wheel direction (`Settings.Mouse`, the Controls page's third
   column), the touch controls mirror for the left hand and scale from
@@ -900,18 +910,17 @@ play.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Touch layout editor**: the touch controls mirror and scale (see above); dragging each button to a place of one's own (saved per button) and an opacity setting would go further. | Phones of every shape. | `GameTouch`, `GameSettings` | S |
-| **MAPINFO, the rest**: UMAPINFO and the common ZDoom MAPINFO keys are done (see above); left are `include`, ZDoom's intermission scripts (`exitpic = "$..."`), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomDehacked` (strings) | M |
+| **MAPINFO, the rest**: UMAPINFO, the common ZDoom MAPINFO keys, LANGUAGE, `include` and the intermission scripts' backgrounds are done (see above); left are the scripts' animations and pointers (the vanilla episode maps' format; only the `Background` is used), MAPINFO's `intermission` blocks (scripted finales), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
 | **Fixed step everywhere**: `--fixed-step` makes 7 moving-scene autotests reproducible (see above); running the whole suite with it would make every screenshot comparable but triples its real time (software GL draws about 12 frames a second, each now a single tic). | Every screenshot a regression check. | `tools/run_autotests.py` | S |
-| **Longer crash reports**: the desktop dialog shows CGE's last 10 log lines (`CastleLog.LastLog`), the web overlay 40; a game-side ring buffer (fed by `ApplicationProperties.OnLog`) and a "copy to clipboard" button would make reports more complete. | Better bug reports. | `GameCrash`, `tools/patch_web_page.py` | S |
 
 ## Suggested next three
 
 1. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-2. MAPINFO, the rest (M, see Other suggested improvements): `include`
-   and ZDoom's intermission scripts.
-3. Longer crash reports (S, see Other suggested improvements): a
-   game-side ring buffer of log lines and a "copy to clipboard" button.
+2. Touch layout editor (S, see Other suggested improvements): drag the
+   touch buttons into place, and their opacity.
+3. Fixed step everywhere (S, see Other suggested improvements): more
+   screenshots as regression checks.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

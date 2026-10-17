@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- ZDoom MAPINFO's `include`, and intermission scripts as exit / enter
+  pictures (their background is shown).
+- Longer crash reports: the last 100 log lines, saved to
+  `crash-report.txt` and copied to the clipboard on the desktop; 200
+  lines and a "Copy report" button in the browser.
+
 ## v0.26.0 (2026-10-17)
 
 - Rebindable mouse buttons and wheel: every action can take a mouse

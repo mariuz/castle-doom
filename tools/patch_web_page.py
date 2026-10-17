@@ -74,7 +74,7 @@ CRASH_NEW = """
       const log = console.log.bind(console);
       console.log = function (...args) {
         lines.push(args.join(' ').replace(/\\s+$/, ''));
-        if (lines.length > 40) lines.shift();
+        if (lines.length > 200) lines.shift();
         log(...args);
       };
       let shown = false;
@@ -86,10 +86,31 @@ CRASH_NEW = """
         box.style.cssText = 'position:fixed;left:5%;top:5%;width:90%;height:90%;z-index:10000;' +
           'background:#1a0000;color:#fdd;font:13px monospace;padding:16px;box-sizing:border-box;' +
           'overflow:auto;border:2px solid #f44;white-space:pre-wrap';
-        box.textContent = 'Castle DOOM stopped: ' + reason +
-          '\\n\\nThe last log lines (please add them to a bug report at ' +
-          'https://github.com/mariuz/castle-doom/issues):\\n\\n' + lines.join('\\n') +
-          '\\n\\nReload the page to play again (your saves are kept).';
+        const report = 'Castle DOOM stopped: ' + reason +
+          '\\n\\nThe last log lines:\\n\\n' + lines.join('\\n');
+        const copy = document.createElement('button');
+        copy.id = 'castle-doom-crash-copy';
+        copy.textContent = 'Copy report';
+        copy.style.cssText = 'font:14px sans-serif;padding:6px 14px;margin-bottom:12px';
+        copy.onclick = () => {
+          const done = () => { copy.textContent = 'Copied'; };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(report).then(done, () => { copy.textContent = 'Select the text to copy'; });
+          } else {
+            copy.textContent = 'Select the text to copy';
+          }
+        };
+        const intro = document.createElement('div');
+        intro.textContent = 'Please add the report to a bug report at ' +
+          'https://github.com/mariuz/castle-doom/issues. Reload the page to play again ' +
+          '(your saves are kept).';
+        intro.style.marginBottom = '8px';
+        const text = document.createElement('div');
+        text.id = 'castle-doom-crash-text';
+        text.textContent = report;
+        box.appendChild(intro);
+        box.appendChild(copy);
+        box.appendChild(text);
         document.body.appendChild(box);
       }
       window.addEventListener('error', e => showCrash(e.message || 'an error'));

@@ -1022,6 +1022,11 @@ cluster's `flat` or `pic` with its `music`. `episode MAP { name, key,
 picname }` and `clearepisodes` are entries added after the maps (a
 clearing entry first), so the menu builds them like UMAPINFO's.
 `gameinfo`, `skill`, `intermission` and other ports' blocks are skipped.
+`include "LUMP"` splices the lump's text into the tokenizer's text right
+after the name (16 includes at most, so a lump including itself stops
+with an error), and `exitpic` / `enterpic = "$LUMP"` read a ZDoom
+intermission script (the vanilla episode maps' format) for its
+`Background` picture; its splats, pointers and animations are not used.
 
 LANGUAGE lookups (`map E1M1 lookup "NAME"`, `"$NAME"`, `exittext =
 lookup, "NAME"`) of titles, cluster texts, episode names and music
@@ -1417,11 +1422,14 @@ Things that differ on the web and shaped the code:
   `castle-data:` and the custom protocols work unchanged.
 - Sound uses Web Audio; it needs a user gesture, which the START click is.
 - Crash report: the page patch also wraps `console.log` before the
-  game's script loads (keeping the last 40 lines) and shows them in an
-  overlay (`castle-doom-crash`) on the window's error event, which a
-  stopped WebAssembly program raises. On the desktop `GameCrash` is the
-  `Application.OnException` handler: the report in the log and a
-  continue / quit dialog.
+  game's script loads (keeping the last 200 lines) and shows them in an
+  overlay (`castle-doom-crash`, with a "Copy report" button using
+  `navigator.clipboard`) on the window's error event, which a stopped
+  WebAssembly program raises. On the desktop `GameCrash` is the
+  `Application.OnException` handler: it keeps the last 100 log lines
+  (`ApplicationProperties.OnLog`), writes the report to the log and to
+  `crash-report.txt` in the config directory, copies it to the
+  clipboard and shows its newest 20 lines in a continue / quit dialog.
 - Installable: `pages/manifest.webmanifest` and the icons
   (`tools/make_web_icons.py`) are linked from both pages (the play
   page's link comes from `tools/patch_web_page.py`).
