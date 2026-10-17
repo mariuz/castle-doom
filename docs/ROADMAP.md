@@ -6,6 +6,12 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- More bindable actions: the weapon slots, next / previous weapon and
+  the hotkeys are `TGameAction`s (30 in all) on the Controls page's
+  three pages (Movement, Weapons, Hotkeys); stored settings keep their
+  keys over the new defaults. Autotests `controls-hotkeys` (golden
+  screenshot) and `hotkey-bindings`, unit test `TestKeyBindings`.
+
 - LANGUAGE lumps (`DoomMapInfo.ParseLanguage`): `TDoomStrings` reads
   them with the DEHACKED lumps in WAD order, so MAPINFO's `lookup` /
   `$NAME` titles, cluster texts, episode names and `$MUSIC_` music
@@ -886,7 +892,7 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **More bindable actions**: keys and gamepad buttons are rebindable (see above); weapon selection by number, the hotkeys (F, M, J...), the mouse buttons and the touch buttons' layout are not yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameTouch` | S |
+| **More bindable actions**: keys (weapons and hotkeys included) and gamepad buttons are rebindable (see above); the mouse buttons and the touch buttons' layout are not yet. `pages/index.html` lists the default keys. | Left-handed players, touch layouts. | `GameSettings`, `GameTouch` | S |
 | **MAPINFO, the rest**: UMAPINFO and the common ZDoom MAPINFO keys are done (see above); left are `include`, ZDoom's intermission scripts (`exitpic = "$..."`), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomDehacked` (strings) | M |
 | **Fixed step everywhere**: `--fixed-step` makes 7 moving-scene autotests reproducible (see above); running the whole suite with it would make every screenshot comparable but triples its real time (software GL draws about 12 frames a second, each now a single tic). | Every screenshot a regression check. | `tools/run_autotests.py` | S |
 | **Longer crash reports**: the desktop dialog shows CGE's last 10 log lines (`CastleLog.LastLog`), the web overlay 40; a game-side ring buffer (fed by `ApplicationProperties.OnLog`) and a "copy to clipboard" button would make reports more complete. | Better bug reports. | `GameCrash`, `tools/patch_web_page.py` | S |
@@ -895,8 +901,8 @@ play.
 
 1. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-2. More bindable actions (S, see Other suggested improvements): weapon
-   numbers and the hotkeys on keys, the touch buttons' layout.
+2. More bindable actions (S, see Other suggested improvements): the
+   mouse buttons and the touch buttons' layout.
 3. MAPINFO, the rest (M, see Other suggested improvements): `include`
    and ZDoom's intermission scripts.
 

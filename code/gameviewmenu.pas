@@ -28,6 +28,9 @@ type
       for a key (FWaitSlot -1: none). }
     FControls: TCastleRectangleControl;
     FKeyButtons: array [TGameAction, 0..1] of TCastleButton;
+    { The keyboard half's pages (GameSettings.ControlsPageNames). }
+    FControlsPage: Integer;
+    FControlsPageGroups: array [0..ControlsPageCount - 1] of TCastleVerticalGroup;
     FWaitAction: TGameAction;
     FWaitSlot: Integer;
     { The page's gamepad half: its rows, the action waiting for a button. }
@@ -123,6 +126,7 @@ type
     procedure ClickPadButton(Sender: TObject);
     { Switch the Controls page between the keys and the gamepad. }
     procedure ClickControlsPad(Sender: TObject);
+    procedure ClickControlsPage(Sender: TObject);
     procedure ShowControlsMode;
     { Bind the gamepad button the page waits for (pbNone clears). }
     procedure BindWaitingPad(const B: TPadButton);
@@ -154,7 +158,7 @@ var
   ViewMenu: TViewMenu;
   { Set from the command line (--autotest MAP PREFIX): start this map at once.
     MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENUQUIT, MENULOAD, MENUOPTIONS, MENUCONTROLS,
-    MENUCONTROLSPAD,
+    MENUCONTROLSPAD, MENUCONTROLSHOTKEYS,
     MENUDOOM2, MENUTITLE (title pages, menu closed) or MENUREADTHIS takes a
     screenshot of that menu page instead. }
   AutoTestMap: String;
@@ -275,6 +279,7 @@ begin
   Click('ButtonControlsBack', {$ifdef FPC}@{$endif} ClickControlsBack);
   Click('ButtonKeysDefaults', {$ifdef FPC}@{$endif} ClickKeysDefaults);
   Click('ButtonControlsPad', {$ifdef FPC}@{$endif} ClickControlsPad);
+  Click('ButtonControlsPage', {$ifdef FPC}@{$endif} ClickControlsPage);
   FControls := DesignedComponent('ControlsPanel') as TCastleRectangleControl;
   FWaitSlot := -1;
   BuildControlsRows;
@@ -948,9 +953,16 @@ var
   B: TCastleButton;
   A: TGameAction;
   P: TPadAction;
-  I: Integer;
+  I, Page: Integer;
 begin
   List := DesignedComponent('ControlsList') as TCastleVerticalGroup;
+  for Page := 0 to ControlsPageCount - 1 do
+  begin
+    FControlsPageGroups[Page] := TCastleVerticalGroup.Create(FreeAtStop);
+    FControlsPageGroups[Page].Spacing := List.Spacing;
+    FControlsPageGroups[Page].Alignment := List.Alignment;
+    List.InsertFront(FControlsPageGroups[Page]);
+  end;
   for A := Low(TGameAction) to High(TGameAction) do
   begin
     Row := TCastleHorizontalGroup.Create(FreeAtStop);
@@ -971,7 +983,9 @@ begin
       FKeyButtons[A, I] := B;
       Row.InsertFront(B);
     end;
-    List.InsertFront(Row);
+    for Page := 0 to ControlsPageCount - 1 do
+      if (A >= ControlsPageFirst[Page]) and (A <= ControlsPageLast[Page]) then
+        FControlsPageGroups[Page].InsertFront(Row);
   end;
   List := DesignedComponent('PadList') as TCastleVerticalGroup;
   for P := Low(TPadAction) to High(TPadAction) do
@@ -1020,9 +1034,21 @@ begin
 end;
 
 procedure TViewMenu.ShowControlsMode;
+var
+  Page: Integer;
+  PageButton: TCastleButton;
 begin
   (DesignedComponent('ControlsList') as TCastleUserInterface).Exists := not FPadMode;
   (DesignedComponent('PadList') as TCastleUserInterface).Exists := FPadMode;
+  for Page := 0 to ControlsPageCount - 1 do
+    FControlsPageGroups[Page].Exists := Page = FControlsPage;
+  PageButton := DesignedComponent('ButtonControlsPage') as TCastleButton;
+  PageButton.Exists := not FPadMode;
+  PageButton.Caption := ControlsPageNames[(FControlsPage + 1) mod ControlsPageCount] + ' >';
+  if FPadMode then
+    (DesignedComponent('ControlsHeader') as TCastleLabel).Caption := 'Controls: Gamepad'
+  else
+    (DesignedComponent('ControlsHeader') as TCastleLabel).Caption := 'Controls: ' + ControlsPageNames[FControlsPage];
   if FPadMode then
   begin
     (DesignedComponent('ControlsHint') as TCastleLabel).Caption :=
@@ -1035,6 +1061,13 @@ begin
     (DesignedComponent('ButtonControlsPad') as TCastleButton).Caption := 'Gamepad';
   end;
   UpdateKeyButtons;
+end;
+
+procedure TViewMenu.ClickControlsPage(Sender: TObject);
+begin
+  FControlsPage := (FControlsPage + 1) mod ControlsPageCount;
+  FWaitSlot := -1;
+  ShowControlsMode;
 end;
 
 procedure TViewMenu.ClickControlsPad(Sender: TObject);
@@ -1265,6 +1298,16 @@ begin
     ClickControls(nil);
     ClickKeyButton(FKeyButtons[gaUse, 0]);
     ControlsKey(InputKey(TVector2.Zero, keyQ, 'q', []));
+  end
+  else if AutoTestMap = 'MENUCONTROLSHOTKEYS' then
+  begin
+    { The Controls page's hotkeys, after binding K to light diminishing. }
+    ShowOptions(true);
+    ClickControls(nil);
+    ClickControlsPage(nil);
+    ClickControlsPage(nil);
+    ClickKeyButton(FKeyButtons[gaLightDiminish, 0]);
+    ControlsKey(InputKey(TVector2.Zero, keyK, 'k', []));
   end
   else if AutoTestMap = 'MENUCONTROLSPAD' then
   begin

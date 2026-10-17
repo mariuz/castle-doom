@@ -12,9 +12,16 @@ uses CastleKeysMouse;
 
 type
   { The bindable actions of the game (two keys each; the mouse's left
-    button always fires). }
+    button always fires and its wheel changes weapons). The Controls page
+    shows them in three pages: movement and actions, weapons, hotkeys
+    (ControlsPages). The menus' keys (F1-F4, Esc, arrows, Enter) and the
+    automap's zoom stay fixed. }
   TGameAction = (gaForward, gaBackward, gaStrafeLeft, gaStrafeRight,
-    gaTurnLeft, gaTurnRight, gaRun, gaFire, gaUse, gaAutomap);
+    gaTurnLeft, gaTurnRight, gaRun, gaFire, gaUse, gaAutomap,
+    gaWeapon1, gaWeapon2, gaWeapon3, gaWeapon4, gaWeapon5, gaWeapon6, gaWeapon7,
+    gaNextWeapon, gaPrevWeapon,
+    gaLightDiminish, gaMouseLook, gaMusic, gaHelp, gaGrid, gaRevealMap,
+    gaNextMap, gaPrevMap, gaScreenshot, gaQuickSave, gaQuickLoad);
 
   { The gamepad's bindable actions (the sticks move and look, Start opens
     the menu, and the menus use the D-pad, A and B whatever is bound). }
@@ -65,15 +72,39 @@ const
 const
   ActionNames: array [TGameAction] of String = (
     'Move forward', 'Move backward', 'Strafe left', 'Strafe right',
-    'Turn left', 'Turn right', 'Run', 'Fire', 'Use / open', 'Automap');
+    'Turn left', 'Turn right', 'Run', 'Fire', 'Use / open', 'Automap',
+    'Fist / chainsaw', 'Pistol', 'Shotguns', 'Chaingun', 'Rocket launcher',
+    'Plasma rifle', 'BFG 9000', 'Next weapon', 'Previous weapon',
+    'Light diminishing', 'Mouse look', 'Music on / off', 'Help', 'Automap grid',
+    'Reveal map', 'Next map', 'Previous map', 'Screenshot', 'Quick save',
+    'Quick load');
   { The JSON keys of settings.json's "keys" object. }
   ActionIds: array [TGameAction] of String = (
     'forward', 'backward', 'strafeLeft', 'strafeRight',
-    'turnLeft', 'turnRight', 'run', 'fire', 'use', 'automap');
+    'turnLeft', 'turnRight', 'run', 'fire', 'use', 'automap',
+    'weapon1', 'weapon2', 'weapon3', 'weapon4', 'weapon5', 'weapon6', 'weapon7',
+    'nextWeapon', 'prevWeapon',
+    'lightDiminish', 'mouseLook', 'music', 'help', 'grid', 'revealMap',
+    'nextMap', 'prevMap', 'screenshot', 'quickSave', 'quickLoad');
   DefaultKeys: array [TGameAction, 0..1] of TKey = (
     (keyW, keyArrowUp), (keyS, keyArrowDown), (keyA, keyNone), (keyD, keyNone),
     (keyArrowLeft, keyNone), (keyArrowRight, keyNone), (keyShift, keyNone),
-    (keyCtrl, keyNone), (keyE, keySpace), (keyTab, keyNone));
+    (keyCtrl, keyNone), (keyE, keySpace), (keyTab, keyNone),
+    (key1, keyNone), (key2, keyNone), (key3, keyNone), (key4, keyNone),
+    (key5, keyNone), (key6, keyNone), (key7, keyNone),
+    (keyNone, keyNone), (keyNone, keyNone),
+    (keyF, keyNone), (keyM, keyNone), (keyJ, keyNone), (keyH, keyNone),
+    (keyG, keyNone), (keyI, keyNone), (keyN, keyNone), (keyP, keyNone),
+    (keyF5, keyNone), (keyF6, keyNone), (keyF9, keyNone));
+
+  { The Controls page's pages: their titles and first / last actions. }
+  ControlsPageCount = 3;
+  ControlsPageNames: array [0..ControlsPageCount - 1] of String = (
+    'Movement', 'Weapons', 'Hotkeys');
+  ControlsPageFirst: array [0..ControlsPageCount - 1] of TGameAction = (
+    gaForward, gaWeapon1, gaLightDiminish);
+  ControlsPageLast: array [0..ControlsPageCount - 1] of TGameAction = (
+    gaAutomap, gaPrevWeapon, gaQuickLoad);
 
   PadActionNames: array [TPadAction] of String = (
     'Fire', 'Use / open', 'Automap', 'Next weapon', 'Previous weapon');
@@ -126,13 +157,16 @@ function KeyIs(const Key: TKey; const Action: TGameAction): Boolean;
 function ActionOfKey(const Key: TKey; out Action: TGameAction): Boolean;
 { Bind Key to slot Slot of Action, removing it from wherever else it was;
   keyNone clears the slot. False for keys that cannot be bound (Escape,
-  the function keys, which the game and the engine's inspector use). }
+  F1-F4 of the menus, F8 of the engine's inspector). }
 function BindKey(const Action: TGameAction; const Slot: Integer; const Key: TKey): Boolean;
 { "W / Up", "Tab", "-" for the help panel and the Controls page. }
 function KeyName(const Key: TKey): String;
 function ActionKeysText(const Action: TGameAction): String;
 { The bindings for the log. }
 function KeysSummary: String;
+{ Read a "keys" object (settings.json's, as JSON text) over the current
+  bindings, like LoadSettings (for the unit tests). }
+procedure ApplyKeysJson(const JsonText: String);
 
 { Gamepad bindings, like the keys'. }
 procedure ResetPad;
@@ -197,7 +231,7 @@ var
   A: TGameAction;
   I: Integer;
 begin
-  if Key in [keyEscape, keyF1..keyF12] then Exit(false);
+  if Key in [keyEscape, keyF1..keyF4, keyF8] then Exit(false);
   if Key <> keyNone then
     for A := Low(TGameAction) to High(TGameAction) do
       for I := 0 to 1 do
@@ -312,20 +346,47 @@ begin
 end;
 
 { settings.json's "keys": {"forward": ["W", "Up"], ...} (KeyToStr names;
-  a missing action keeps its defaults). }
+  a missing action keeps its defaults, except keys a stored action uses:
+  settings from before the weapon and hotkey actions existed may have
+  given F or 1 to another action). }
 procedure ReadKeys(const J: TJSONObject);
 var
-  A: TGameAction;
+  A, B: TGameAction;
   Arr: TJSONArray;
-  I: Integer;
+  I, K: Integer;
+  Stored: array [TGameAction] of Boolean;
 begin
   for A := Low(TGameAction) to High(TGameAction) do
-    if J.Find(ActionIds[A], Arr) then
+  begin
+    Stored[A] := J.Find(ActionIds[A], Arr);
+    if Stored[A] then
       for I := 0 to 1 do
         if I < Arr.Count then
           Settings.Keys[A, I] := StrToKey(Arr.Strings[I], keyNone)
         else
           Settings.Keys[A, I] := keyNone;
+  end;
+  for A := Low(TGameAction) to High(TGameAction) do
+    if not Stored[A] then
+      for I := 0 to 1 do
+        for B := Low(TGameAction) to High(TGameAction) do
+          if Stored[B] then
+            for K := 0 to 1 do
+              if (Settings.Keys[A, I] <> keyNone) and (Settings.Keys[B, K] = Settings.Keys[A, I]) then
+                Settings.Keys[A, I] := keyNone;
+end;
+
+procedure ApplyKeysJson(const JsonText: String);
+var
+  Data: TJSONData;
+begin
+  Data := GetJSON(JsonText);
+  try
+    if Data is TJSONObject then
+      ReadKeys(TJSONObject(Data));
+  finally
+    FreeAndNil(Data);
+  end;
 end;
 
 function WriteKeys: TJSONObject;

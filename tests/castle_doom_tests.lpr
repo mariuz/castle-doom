@@ -91,6 +91,7 @@ type
   published
     procedure TestWebPadMapping;
     procedure TestPadBindings;
+    procedure TestKeyBindings;
     procedure TestTouchControls;
   end;
 
@@ -1458,6 +1459,42 @@ begin
   AssertTrue('fire held through X', GamepadFireHeld);
   SimulatedPadHeld := [];
   ResetPad;
+end;
+
+procedure TTestGamepad.TestKeyBindings;
+var
+  A: TGameAction;
+begin
+  ResetKeys;
+  AssertTrue('1: fist', KeyIs(key1, gaWeapon1));
+  AssertTrue('F: light diminishing', KeyIs(keyF, gaLightDiminish));
+  AssertTrue('F6: quick save', KeyIs(keyF6, gaQuickSave));
+  AssertEquals('next weapon unbound', '-', ActionKeysText(gaNextWeapon));
+  { A key moves from the action that had it. }
+  AssertTrue('bound', BindKey(gaStrafeLeft, 1, keyF));
+  AssertFalse('F left light diminishing', KeyIs(keyF, gaLightDiminish));
+  AssertTrue('F strafes', KeyIs(keyF, gaStrafeLeft));
+  AssertFalse('F2 stays the save menu''s', BindKey(gaFire, 0, keyF2));
+  AssertFalse('F8 stays the inspector''s', BindKey(gaFire, 0, keyF8));
+  AssertTrue('F10 binds', BindKey(gaQuickSave, 1, keyF10));
+  { Settings from before the weapon and hotkey actions: their own keys
+    win over the new actions' defaults. }
+  ResetKeys;
+  ApplyKeysJson('{"strafeLeft": ["A", "F"], "fire": ["Ctrl", "1"]}');
+  AssertTrue('stored F strafes', KeyIs(keyF, gaStrafeLeft));
+  AssertEquals('light diminishing lost F', '-', ActionKeysText(gaLightDiminish));
+  AssertEquals('fist lost 1', '-', ActionKeysText(gaWeapon1));
+  AssertTrue('2 still the pistol', KeyIs(key2, gaWeapon2));
+  { Every action has a JSON name and a Controls page. }
+  for A := Low(TGameAction) to High(TGameAction) do
+  begin
+    AssertTrue('id', ActionIds[A] <> '');
+    AssertTrue('on a page', (A <= ControlsPageLast[0]) or
+      ((A >= ControlsPageFirst[1]) and (A <= ControlsPageLast[1])) or
+      ((A >= ControlsPageFirst[2]) and (A <= ControlsPageLast[2])));
+  end;
+  AssertTrue('pages cover all', ControlsPageLast[ControlsPageCount - 1] = High(TGameAction));
+  ResetKeys;
 end;
 
 procedure TTestGamepad.TestTouchControls;

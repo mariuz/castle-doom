@@ -543,6 +543,12 @@
               "$Children": [
                 {
                   "$$ClassName": "TCastleButton",
+                  "Name": "ButtonControlsPage",
+                  "Caption": "Weapons >",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
                   "Name": "ButtonControlsPad",
                   "Caption": "Gamepad",
                   "FontSize": 22.0

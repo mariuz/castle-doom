@@ -785,15 +785,31 @@ procedure TViewPlay.ApplyKeyBindings;
     Input.Assign(Settings.Keys[Action, 0], Settings.Keys[Action, 1]);
   end;
 
-  { The fixed hotkey's help text, '' when an action took the key over. }
-  function Hot(const Key: TKey; const Text: String): String;
-  var
-    A: TGameAction;
+  { "G: grid" for a bound action, '' when it has no key. }
+  function Hot(const Action: TGameAction; const Text: String): String;
   begin
-    if ActionOfKey(Key, A) then
+    if (Settings.Keys[Action, 0] = keyNone) and (Settings.Keys[Action, 1] = keyNone) then
       Result := ''
     else
-      Result := Text;
+      Result := ActionKeysText(Action) + ': ' + Text;
+  end;
+
+  { Weapon keys: "1-7" when they are the default ones in a row. }
+  function WeaponKeysText: String;
+  var
+    A: TGameAction;
+    Run: Boolean;
+  begin
+    Run := true;
+    for A := gaWeapon1 to gaWeapon7 do
+      if (Settings.Keys[A, 0] <> DefaultKeys[A, 0]) or (Settings.Keys[A, 1] <> keyNone) then
+        Run := false;
+    if Run then Exit('1-7');
+    Result := '';
+    for A := gaWeapon1 to gaWeapon7 do
+      if Settings.Keys[A, 0] <> keyNone then
+        Result := Result + KeyName(Settings.Keys[A, 0]) + ' ';
+    Result := Trim(Result);
   end;
 
   function SameAsDefaults: Boolean;
@@ -834,12 +850,22 @@ begin
     FHelpLabel.Text[1] := Format('Mouse: look   Turn: %s, %s   LMB / %s: fire', [
       ActionKeysText(gaTurnLeft), ActionKeysText(gaTurnRight), ActionKeysText(gaFire)]);
     FHelpLabel.Text[2] := ActionKeysText(gaUse) + ': use (doors, switches)';
-    FHelpLabel.Text[4] := ActionKeysText(gaAutomap) + ': automap   + / -: zoom' +
-      Hot(keyG, '   G: grid') + Hot(keyI, '   I: reveal map');
-    FHelpLabel.Text[5] := Trim(Hot(keyF, 'F: light diminishing on/off   ') + Hot(keyM, 'M: mouse look'));
-    FHelpLabel.Text[6] := Trim(Hot(keyN, 'N / P: next / previous map   ') + Hot(keyJ, 'J: music on/off   ') + 'F4: volume');
+    if (Hot(gaPrevWeapon, '') <> '') or (Hot(gaNextWeapon, '') <> '') then
+      FHelpLabel.Text[3] := Format('%s, wheel, %s / %s: weapons', [WeaponKeysText,
+        ActionKeysText(gaPrevWeapon), ActionKeysText(gaNextWeapon)])
+    else
+      FHelpLabel.Text[3] := WeaponKeysText + ', wheel: weapons';
+    FHelpLabel.Text[4] := Trim(Hot(gaAutomap, 'automap   ') + '+ / -: zoom   ' + Hot(gaGrid, 'grid   ') +
+      Hot(gaRevealMap, 'reveal map'));
+    FHelpLabel.Text[5] := Trim(Hot(gaLightDiminish, 'light diminishing on/off   ') + Hot(gaMouseLook, 'mouse look'));
+    FHelpLabel.Text[6] := Trim(Hot(gaNextMap, 'next map   ') + Hot(gaPrevMap, 'previous map   ') +
+      Hot(gaMusic, 'music on/off   ') + 'F4: volume');
+    FHelpLabel.Text[7] := Trim('F2 / F3: save / load   ' + Hot(gaQuickSave, 'quick save   ') + Hot(gaQuickLoad, 'quick load'));
     if FHelpLabel.Text.Count >= 11 then
-      FHelpLabel.Text[10] := Hot(keyH, 'H: hide this help   ') + 'Esc: menu (pauses; Esc again resumes)';
+    begin
+      FHelpLabel.Text[8] := Trim(Hot(gaScreenshot, 'screenshot   ') + 'F1: Read This! (title menu)');
+      FHelpLabel.Text[10] := Hot(gaHelp, 'hide this help   ') + 'Esc: menu (pauses; Esc again resumes)';
+    end;
   end;
   if (FHelpLabel <> nil) and not PadSameAsDefaults and (FHelpLabel.Text.Count >= 13) then
   begin
@@ -2205,10 +2231,19 @@ begin
     if Event.MouseWheelScroll > 0 then FWorld.NextWeapon(1) else FWorld.NextWeapon(-1);
     Exit(true);
   end;
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaNextWeapon) then
+  begin
+    FWorld.NextWeapon(1);
+    Exit(true);
+  end;
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaPrevWeapon) then
+  begin
+    FWorld.NextWeapon(-1);
+    Exit(true);
+  end;
   for Idx := 1 to 7 do
   begin
-    K := TKey(Ord(key0) + Idx);
-    if Event.IsKey(K) and not ActionOfKey(K, BoundAction) then
+    if (Event.EventType = itKey) and KeyIs(Event.Key, TGameAction(Ord(gaWeapon1) + Idx - 1)) then
     begin
       case Idx of
         1: if (wpChainsaw in FWorld.Player.Weapons) and (FWorld.Player.Weapon <> wpChainsaw) then
@@ -2265,12 +2300,12 @@ begin
     OpenSlotMenu(SlotMenuLoad);
     Exit(true);
   end;
-  if Event.IsKey(keyF6) then
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaQuickSave) then
   begin
     SaveGame(0);
     Exit(true);
   end;
-  if Event.IsKey(keyF9) then
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaQuickLoad) then
   begin
     LoadGame(0);
     Exit(true);
@@ -2280,10 +2315,12 @@ begin
     FAutomap.Exists := not FAutomap.Exists;
     Exit(true);
   end;
-  { A key bound to an action (moving, turning, running are the
-    navigation's) does nothing else, e.g. F bound to strafing must not
-    toggle light diminishing. }
-  if (Event.EventType = itKey) and ActionOfKey(Event.Key, BoundAction) then
+  { A key bound to an action handled elsewhere (moving, turning and
+    running are the navigation's) does nothing else, e.g. "-" bound to
+    strafing must not zoom the automap. }
+  if (Event.EventType = itKey) and ActionOfKey(Event.Key, BoundAction) and
+     not (BoundAction in [gaGrid, gaRevealMap, gaLightDiminish, gaMouseLook, gaMusic, gaHelp,
+       gaNextMap, gaPrevMap, gaScreenshot]) then
     Exit;
   if FAutomap.Exists then
   begin
@@ -2297,7 +2334,7 @@ begin
       FAutomap.ZoomBy(1 / 1.25);
       Exit(true);
     end;
-    if Event.IsKey(keyG) then
+    if (Event.EventType = itKey) and KeyIs(Event.Key, gaGrid) then
     begin
       FAutomap.Grid := not FAutomap.Grid;
       if FAutomap.Grid then
@@ -2306,7 +2343,7 @@ begin
         FWorld.ShowMessage(FWorld.Text('AMSTR_GRIDOFF', 'Grid OFF'));
       Exit(true);
     end;
-    if Event.IsKey(keyI) then
+    if (Event.EventType = itKey) and KeyIs(Event.Key, gaRevealMap) then
     begin
       FAutomap.ShowAll := not FAutomap.ShowAll;
       Exit(true);
@@ -2318,21 +2355,21 @@ begin
     end;
   end;
   { The toggles are remembered (GameSettings). }
-  if Event.IsKey(keyF) then
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaLightDiminish) then
   begin
     DoomLightingInstance.Diminish := not DoomLightingInstance.Diminish;
     Settings.Diminish := DoomLightingInstance.Diminish;
     SaveSettings;
     Exit(true);
   end;
-  if Event.IsKey(keyM) then
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaMouseLook) then
   begin
     FNavigation.MouseLook := not FNavigation.MouseLook;
     Settings.MouseLook := FNavigation.MouseLook;
     SaveSettings;
     Exit(true);
   end;
-  if Event.IsKey(keyJ) and (Music <> nil) then
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaMusic) and (Music <> nil) then
   begin
     Music.Enabled := not Music.Enabled;
     Settings.MusicOn := Music.Enabled;
@@ -2340,22 +2377,22 @@ begin
     FWorld.ShowMessage('Music ' + BoolToStr(Music.Enabled, 'on', 'off'));
     Exit(true);
   end;
-  if Event.IsKey(keyH) then
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaHelp) then
   begin
     FHelpVisible := not FHelpVisible;
     FHelpLabel.Exists := FHelpVisible;
     Exit(true);
   end;
-  if Event.IsKey(keyN) or Event.IsKey(keyP) then
+  if (Event.EventType = itKey) and (KeyIs(Event.Key, gaNextMap) or KeyIs(Event.Key, gaPrevMap)) then
   begin
     Idx := Wad.MapNames.IndexOf(FMapName);
-    if Event.IsKey(keyN) then Inc(Idx) else Dec(Idx);
+    if KeyIs(Event.Key, gaNextMap) then Inc(Idx) else Dec(Idx);
     if Idx < 0 then Idx := Wad.MapNames.Count - 1;
     if Idx >= Wad.MapNames.Count then Idx := 0;
     StartMap(Wad.MapNames[Idx], true);
     Exit(true);
   end;
-  if Event.IsKey(keyF5) then
+  if (Event.EventType = itKey) and KeyIs(Event.Key, gaScreenshot) then
   begin
     FWorld.ShowMessage('Screenshot saved: ' + Container.SaveScreenToDefaultFile);
     Exit(true);

@@ -175,6 +175,16 @@ TESTS = [
     ('key-bindings', 'E1M1', 'Y,SHOTS,BIND:fire:F,BIND:forward:I,W:0.3,F:1,KEY:F,W:0.3,S,Q',
      [r'Settings: Keys: forward I / Up;.* fire F;', r'Shot: ', r'Saved screenshot 1 at E1M1 \(player -[1-3]\d\d\.'],
      ['--fixed-step'], lambda config: check_keys(config, 'fire', ['F', 'None'])),
+    # The Controls page's hotkeys page binds K to light diminishing; in a
+    # game Q selects the rocket launcher, R the next weapon, L turns the
+    # light diminishing off and F (no longer bound) does nothing.
+    ('controls-hotkeys', 'MENUCONTROLSHOTKEYS', None, [r'Settings: Keys: .*lightDiminish K;'], [],
+     lambda config: check_keys(config, 'lightDiminish', ['K', 'None'])),
+    ('hotkey-bindings', 'E1M1',
+     'Y,K,BIND:weapon5:Q,BIND:nextWeapon:R,BIND:lightDiminish:L,W:0.3,KEY:Q,W:1.5,SAVE:1,'
+     'KEY:R,W:1.5,SAVE:2,KEY:L,KEY:F,W:0.3,Q',
+     [r'Settings: Keys: .*weapon5 Q;.*nextWeapon R;.*lightDiminish L;'], [],
+     lambda config: check_hotkeys(config)),
     # Gamepad bindings (GameSettings.Pad): the right trigger fires, RB
     # changes weapon, then Y is bound to fire and LT to the automap.
     ('gamepad-bindings', 'E1M1',
@@ -451,6 +461,16 @@ def check_keys(config, action, keys):
     assert settings['keys'][action] == keys, 'keys.%s is %s' % (action, settings['keys'][action])
 
 
+def check_hotkeys(config):
+    """Q gave the rocket launcher (4), R the plasma rifle after it (5), L
+    turned the light diminishing off and F, unbound, left it off."""
+    weapons = [save_json(config, n)['player']['weapon'] for n in (1, 2)]
+    assert weapons == [4, 5], 'weapons %s' % weapons
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        settings = json.load(f)
+    assert settings['diminish'] is False, 'diminish %s' % settings['diminish']
+
+
 def check_pad(config, action, buttons):
     with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
         settings = json.load(f)
@@ -484,7 +504,7 @@ GOLDEN_MAX_CHANGED = 0.015
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
     'menu_menu.png', 'title-pages_menutitle.png', 'read-this_menureadthis.png',
-    'controls-page_menucontrols.png', 'map-component_design.png',
+    'controls-page_menucontrols.png', 'controls-hotkeys_menucontrolshotkeys.png', 'map-component_design.png',
     'palette_1.png', 'palette_2.png', 'palette_3.png', 'fuzz_1.png', 'fuzz_2.png',
     'glbsp-v2_1.png', 'glbsp-v5_1.png', 'boom-lumps_1.png', 'umapinfo_1.png',
     'click-prompt_1.png', 'door-crush_1.png', 'ingame-options_1.png', 'ingame-options_2.png',

@@ -91,7 +91,7 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 35 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 36 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -196,7 +196,14 @@ Key bindings (`GameSettings.Keys`, `settings.json`'s `keys`):
 key as `KeyToStr` names it: `F`, `Space`, `Up`) and `RESETKEYS` in a
 demo, logged as `Settings: Keys: forward W / Up; ...`; `KEY:name` now
 presses any key by that name. `MENUCONTROLS` screenshots the Controls
-page after binding Q to Use (autotests `controls-page`, `key-bindings`).
+page after binding Q to Use (autotests `controls-page`, `key-bindings`),
+`MENUCONTROLSHOTKEYS` its third page (Movement / Weapons / Hotkeys)
+after binding K to light diminishing. The weapon keys and hotkeys are
+actions too (`weapon1`..`weapon7`, `nextWeapon`, `prevWeapon`,
+`lightDiminish`, `mouseLook`, `music`, `help`, `grid`, `revealMap`,
+`nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`):
+`BIND:weapon5:Q,KEY:Q` selects the rocket launcher (autotest
+`hotkey-bindings`, unit test `TestKeyBindings`).
 Settings (`GameSettings`, `settings.json` next to the saves; the log
 prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
 like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a

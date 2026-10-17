@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Rebindable weapon keys, next / previous weapon keys and hotkeys (light
+  diminishing, mouse look, music, help, automap grid and reveal, map
+  skipping, screenshot, quick save / load): the Controls page now has
+  Movement, Weapons and Hotkeys pages.
+
 ## v0.24.0 (2026-10-17)
 
 - ZDoom's LANGUAGE lumps: MAPINFO's `lookup` / `$NAME` level names,

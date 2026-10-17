@@ -1102,20 +1102,25 @@ and an alpha-blended rectangle reproduces the palette shift exactly. The
 help panel is a `TCastleLabel`.
 
 Key bindings: `GameSettings.Keys` holds two keys per `TGameAction`
-(forward, backward, strafes, turns, run, fire, use, automap; JSON
-`keys` with `KeyToStr` names). `TViewPlay.ApplyKeyBindings` assigns the
-walk navigation's `Input_Forward`... from them and rewrites the help
-panel's first lines when they differ from the defaults; `Press` fires,
-uses and toggles the automap through `KeyIs`, and stops at any other
-bound key, so a key taken by an action no longer runs the fixed hotkey
-(F, M, the weapon digits) it shadows. Gamepad bindings:
+(forward, backward, strafes, turns, run, fire, use, automap; the seven
+weapon slots, next / previous weapon; the hotkeys: light diminishing,
+mouse look, music, help, automap grid and reveal, next / previous map,
+screenshot, quick save / load; JSON `keys` with `KeyToStr` names; a
+stored file without the newer actions keeps its keys, and the new
+actions' defaults that clash with them are dropped in `ReadKeys`).
+`TViewPlay.ApplyKeyBindings` assigns the walk navigation's
+`Input_Forward`... from them and rewrites the help panel when they
+differ from the defaults; `Press` handles every other action through
+`KeyIs`, and a key bound to a navigation action does nothing else (the
+automap's fixed + / - zoom included). Esc, F1-F4 (menus) and F8 (the
+inspector) cannot be bound. Gamepad bindings:
 `GameSettings.Pad` holds two `TPadButton`s per `TPadAction` (fire, use,
 automap, next and previous weapon; JSON `pad` with the Xbox names A, RT,
 DPadUp...); the triggers count as buttons past half way. The title
 screen's Controls page (`ControlsPanel`, a row per action built in
-`BuildControlsRows`) binds the next key pressed through `BindKey`, which
-takes the key away from any other action and refuses Escape and the
-function keys; its Gamepad button swaps in the pad rows (`PadList`),
+`BuildControlsRows`, in three pages of `ControlsPageNames` switched by
+`ButtonControlsPage`) binds the next key pressed through `BindKey`, which
+takes the key away from any other action; its Gamepad button swaps in the pad rows (`PadList`),
 which bind the next controller button (`BindPad`; the triggers are
 polled in `TViewMenu.Update`, Start cancels and cannot be bound).
 
