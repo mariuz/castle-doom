@@ -259,6 +259,12 @@ TESTS = [
      [r'Map: E1M1: 2 friction lines, 2 pushers'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'friction.wad'), '--fixed-step'],
      lambda config: check_friction(config)),
+    # MBF's monster friction: an imp in the mud corridor (141) walks at
+    # half its speed (about 25 units in a second, 48 on a normal floor).
+    ('monster-friction', 'E1M1', 'Y,G:-224:150,A:90,W:0.2,P:3001:200,SAVE:1,W:1,SAVE:2,Q',
+     [r'Map: E1M1: 2 friction lines, 2 pushers'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'friction.wad'), '--fixed-step'],
+     lambda config: check_monster_friction(config)),
     ('pushers', 'E1M1', 'Y,G:900:-500,A:0,W:0.2,SAVE:1,W:1,SAVE:2,G:1064:-900,A:0,W:0.2,SAVE:3,W:1,SAVE:4,Q',
      [r'Map: E1M1: 2 friction lines, 2 pushers'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'friction.wad'), '--fixed-step'],
@@ -347,6 +353,15 @@ def check_friction(config):
     assert p[2]['x'] - p[1]['x'] > 30, 'ice: no slide, %s -> %s' % (p[1]['x'], p[2]['x'])
     walked = p[4]['y'] - p[3]['y']
     assert 20 < walked < 120, 'mud: walked %s' % walked
+
+
+def check_monster_friction(config):
+    """The imp spawned last (at 350) walks south through the mud."""
+    a = [save_json(config, n)['actors'] for n in (1, 2)]
+    i = len(a[0]) - 1
+    assert a[0][i]['sprite'] == 'TROO', 'not the imp: %s' % a[0][i]['sprite']
+    walked = a[0][i]['y'] - a[1][i]['y']
+    assert 15 < walked < 35, 'mud walk: %s units' % walked
 
 
 def check_pushers(config):

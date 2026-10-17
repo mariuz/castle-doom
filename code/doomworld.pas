@@ -511,6 +511,10 @@ uses Math, CastleLog, CastleStringUtils, CastleBehaviors, CastleTimeUtils, DoomM
 
 const
   WaterViewNames: array [TWaterView] of String = ('normal', 'under water', 'above the ceiling');
+  { P_XYMovement: MAXMOVE, STOPSPEED and FRICTION in Doom units a tic. }
+  MaxMove = 30;
+  StopSpeed = 1 / 16;
+  Friction = $E800 / $10000;
 
 const
   { Boom's sector types: bit 7 is the secret, bits 5-6 the damage, bit 8
@@ -2465,7 +2469,7 @@ var
   DX, DY, Dist, Ang, Step, TX, TY, TZ, TR, RangeDist: Single;
   Blocked: Integer;
   Tries: Integer;
-  Moved: Boolean;
+  Moved, OnFriction: Boolean;
 begin
   { A dead target (monster corpse, or the player) sends the monster back to the player. }
   if (A.Target <> nil) and not TargetAlive(A) then A.Target := nil;
@@ -2550,6 +2554,15 @@ begin
   { Nightmare halves the demons' walking frame tics: twice as fast. }
   if (Skill = 4) and ((A.Info^.Num = 3002) or (A.Info^.Num = 58)) then
     Step := Step * 2;
+  { MBF's monster friction (P_Move with P_GetMoveFactor): on the floor of
+    a Boom friction sector, sludge slows the walk to (1 + movefactor) / 2
+    of it (never below 1). MBF's other half, ice turning a step into
+    momentum, gives under a unit of slide there (the momentum falls below
+    STOPSPEED within a few tics) and nothing with steps made every tic. }
+  OnFriction := (A.Sector >= 0) and ((FMap.Sectors[A.Sector].Special and SectorFrictionBit) <> 0) and
+    (A.DoomZ <= FMap.Sectors[A.Sector].FloorHeight + 1) and not A.Info^.Floats;
+  if OnFriction and (FMap.Friction[A.Sector] < Friction) then
+    Step := Max(1, Step * (1 + FMap.MoveFactor[A.Sector]) / 2);
   Moved := false;
   Tries := 0;
   OldX := A.DoomX;
@@ -2630,12 +2643,6 @@ begin
   end;
   A.DoomZ := Clamped(A.DoomZ, Floor, Top);
 end;
-
-const
-  { P_XYMovement: MAXMOVE, STOPSPEED and FRICTION in Doom units a tic. }
-  MaxMove = 30;
-  StopSpeed = 1 / 16;
-  Friction = $E800 / $10000;
 
 { P_DamageMobj's thrust: away from the inflictor by damage * 12.5 / mass,
   and a small hit that kills a target standing over 64 units above the
