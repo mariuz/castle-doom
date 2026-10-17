@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.27.0 (2026-10-17)
 
 - ZDoom MAPINFO's `include`, and intermission scripts as exit / enter
   pictures (their background is shown).
