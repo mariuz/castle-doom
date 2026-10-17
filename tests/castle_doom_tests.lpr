@@ -60,6 +60,7 @@ type
     procedure TestScrollers;
     procedure TestDynScrollers;
     procedure TestDeepWater;
+    procedure TestSectorSkies;
     procedure TestFriction;
     procedure TestTranslucency;
     procedure TestTransfers;
@@ -538,6 +539,37 @@ end;
 
 { Boom's scrollers on tools/testdata/scroll.wad (tools/make_scroll_wad.py):
   a 254 wall, a 255 wall, sector 141's floor, ceiling and carry. }
+procedure TTestMap.TestSectorSkies;
+var
+  W: TDoomWad;
+  M: TDoomMap;
+  Path: String;
+  I, Own: Integer;
+begin
+  Path := 'tools/testdata/skies.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/skies.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      { One sky sector of 19 tagged by the 271: not the main sky. }
+      AssertEquals('own sky', 'SKY3', M.SectorSky[29]);
+      AssertFalse('not mirrored', M.SectorSkyFlipped[29]);
+      Own := 0;
+      for I := 0 to High(M.SectorSky) do
+        if M.SectorSky[I] <> '' then Inc(Own);
+      AssertEquals('one sector', 1, Own);
+      AssertEquals('no main transfer', '', M.SkyTransferTexture);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
 procedure TTestMap.TestDeepWater;
 var
   W: TDoomWad;

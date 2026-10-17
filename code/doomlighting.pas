@@ -87,6 +87,13 @@ type
       coordinates wrap inside the vertex's tile (doom_tile), so walls and
       flats repeat as they did with their own textures. }
     function AtlasTextureEffect: TEffectNode;
+    { A sky texture on a sector's ceiling (per-sector skies): sampled by
+      the direction from the eye (EyeField, Doom coordinates, sent every
+      frame) to the fragment's Doom position (the doom_tile attribute),
+      the way the sky cylinder maps it; Flipped mirrors it (Boom's 272),
+      TextureHeight is the sky's height in rows. }
+    function SkyTextureEffect(const Flipped: Boolean; const TextureHeight: Integer;
+      out EyeField: TSFVec3f): TEffectNode;
     { Doom's colormap index (0 = full bright, 31 = darkest) for a light
       level seen at the nearest scale, as the player's weapon is lit. }
     function WeaponColormap(const Light: Integer): Integer;
@@ -242,6 +249,23 @@ const
     '#else' + NL +
     '  texture_color = texture2D(atlas, doom_tile_v.xy + fract(tex_coord.xy) * doom_tile_v.zw);' + NL +
     '#endif' + NL +
+    '}';
+  { Per-sector skies: the sky cylinder's mapping (TDoomGeometry.BuildSky)
+    from the direction to the fragment: 4 tiles a turn, the texture's row
+    R at the slope (100 - R) / 160, row 0 stretched upwards, the rows
+    repeating downwards. doom_tile_v holds the Doom position here. }
+  SkyTextureFragment =
+    'varying vec4 doom_tile_v;' + NL +
+    'uniform vec3 doom_sky_eye;' + NL +
+    'uniform float doom_sky_flip;' + NL +
+    'uniform float doom_sky_height;' + NL +
+    'void PLUG_texture_color(inout vec4 texture_color, const in sampler2D sky, const in vec4 tex_coord)' + NL +
+    '{' + NL +
+    '  vec3 d = doom_tile_v.xyz - doom_sky_eye;' + NL +
+    '  float u = atan(d.y, d.x) / 1.5707963 * doom_sky_flip;' + NL +
+    '  float row = 100.0 - 160.0 * d.z / max(length(d.xy), 0.001);' + NL +
+    '  float v = row < 0.0 ? 1.0 : 1.0 - fract(row / doom_sky_height);' + NL +
+    '  texture_color = texture2D(sky, vec2(u, v));' + NL +
     '}';
   GeometryFragmentInput =
     'varying vec3 doom_light_info;' + NL;
@@ -409,6 +433,26 @@ begin
   FragmentPart := TEffectPartNode.Create;
   FragmentPart.ShaderType := stFragment;
   FragmentPart.Contents := AtlasTextureFragment;
+  Result.SetParts([FragmentPart]);
+end;
+
+function TDoomLighting.SkyTextureEffect(const Flipped: Boolean; const TextureHeight: Integer;
+  out EyeField: TSFVec3f): TEffectNode;
+var
+  FragmentPart: TEffectPartNode;
+begin
+  Result := TEffectNode.Create;
+  Result.Language := slGLSL;
+  EyeField := TSFVec3f.Create(Result, true, 'doom_sky_eye', TVector3.Zero);
+  Result.AddCustomField(EyeField);
+  if Flipped then
+    Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_sky_flip', -1))
+  else
+    Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_sky_flip', 1));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_sky_height', Max(1, TextureHeight)));
+  FragmentPart := TEffectPartNode.Create;
+  FragmentPart.ShaderType := stFragment;
+  FragmentPart.Contents := SkyTextureFragment;
   Result.SetParts([FragmentPart]);
 end;
 

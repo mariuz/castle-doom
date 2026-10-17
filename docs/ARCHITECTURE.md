@@ -606,8 +606,21 @@ Light transfers (213 floor, 261 ceiling) are `TDoomMap.FloorLightSector`
 / `CeilingLightSector`: the flats take that sector's light, depend on it
 in the geometry's chunks and are dynamic when it is. The sky transfer
 (271, 272 mirrored: the line's front upper texture) replaces the level's
-one sky (`TDoomGeometry.Create`'s `SkyFlipped`) when it covers more than
-half of the sky sectors. Not yet: deep water (242).
+one sky cylinder (`TDoomGeometry.Create`'s `SkyFlipped`) when it covers
+more than half of the sky sectors. Every sky sector keeps its own sky in
+`TDoomMap.SectorSky` / `SectorSkyFlipped`, and those whose sky is not
+the cylinder's (`TDoomGeometry.SectorOwnSky`: a transfer covering fewer
+sectors, or the map's sky under a transfer covering most) get their sky
+ceiling drawn (`EmitFlats` into a `SkyBatch`, passable, never in the
+deep water's collision pass) with `DoomLighting.SkyTextureEffect`: each
+vertex's Doom position goes into the `doom_tile` attribute, and the
+fragment samples the sky by the direction from the eye (the effect's
+`doom_sky_eye`, sent every frame by `TMapChunk.UpdateScroll`) the way
+`BuildSky` maps the cylinder (4 tiles a turn, row R at the slope
+(100 - R) / 160, row 0 stretched up, rows repeating down), so the two
+meet without a seam and, unlike the open-topped cylinder, have no hole
+straight up. Upper walls between two sky sectors are still skipped (the
+sky hack), where the cylinder's sky shows.
 
 MBF's translucent things: `BitsValue` knows MBF's bit names up to 31
 (`TRANSLUCENT`) and numbers with bit 31 set; `TThingInfo.Translucent`

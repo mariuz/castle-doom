@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Per-sector skies: every sky sector keeps the sky its 271 / 272 gives
+  it (`TDoomMap.SectorSky`); the ones not shown by the sky cylinder get
+  their ceilings drawn with a sky effect that maps the texture by the
+  view direction like the cylinder (`DoomLighting.SkyTextureEffect`).
+  Test PWAD `tools/testdata/skies.wad`, autotest `sector-skies` (golden
+  screenshots), unit test `TestSectorSkies`.
+- MBF's monster friction: monsters on Boom mud walk at
+  (1 + movefactor) / 2 of their speed (ice's momentum is below Doom's
+  stop speed there). Autotest `monster-friction`.
+
 - ZDoom MAPINFO / ZMAPINFO (`ParseZMapInfo`, old and new syntax) into
   the UMAPINFO entries: maps, `defaultmap`, clusters as story texts,
   episodes, EndGame targets, enter / exit pictures; and the rest of
@@ -837,7 +847,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **UDMF** (`TEXTMAP`) maps, and glBSP's `GL_LEVEL` markers for map names over 5 letters. | Remaining community map formats. | `DoomMap` | L (UDMF), S (`GL_LEVEL`) |
-| **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done (see above; deep water's colormaps are a screen tint, not a remapping of every colour); left are per-sector skies (one sky is drawn: a 271 / 272 transfer replaces it only when it covers most sky sectors) and MBF's friction for monsters' own walking. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomWorld` | M each |
+| **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
 
@@ -876,12 +886,12 @@ play.
 
 ## Suggested next three
 
-1. Per-sector skies and MBF's friction for monsters' own walking (M, see
-   Content and formats), finishing the Boom / MBF specials.
-2. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
+1. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-3. LANGUAGE lumps (S-M, see MAPINFO, the rest): the strings ZDoom-era
+2. LANGUAGE lumps (S-M, see MAPINFO, the rest): the strings ZDoom-era
    PWADs name with `lookup` / `$NAME`.
+3. More bindable actions (S, see Other suggested improvements): weapon
+   numbers and the hotkeys on keys, the touch buttons' layout.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

@@ -222,6 +222,11 @@ type
       when it covers more than half of them; empty when none is. }
     SkyTransferTexture: String;
     SkyTransferFlipped: Boolean;
+    { Each sky sector's own sky by a 271 / 272 tagging it ('' = the map's
+      sky): the geometry draws the ones that differ from the one sky
+      cylinder as sky-textured ceilings (per-sector skies). }
+    SectorSky: array of String;
+    SectorSkyFlipped: array of Boolean;
     { Boom's deep water (242, "height transfer"): the control sector (the
       242 line's front sector) of each tagged sector, -1 for none; such a
       sector is drawn at its control sector's heights, and differently
@@ -1316,6 +1321,13 @@ begin
   end;
   SkyTransferTexture := '';
   SkyTransferFlipped := false;
+  SetLength(SectorSky, Length(Sectors));
+  SetLength(SectorSkyFlipped, Length(Sectors));
+  for I := 0 to High(Sectors) do
+  begin
+    SectorSky[I] := '';
+    SectorSkyFlipped[I] := false;
+  end;
   SkySectors := 0;
   for I := 0 to High(Sectors) do
     if HasSkyCeiling(I) then Inc(SkySectors);
@@ -1362,7 +1374,15 @@ begin
           repeat
             S := FindSectorFromTag(Linedefs[I].Tag, S);
             if S < 0 then Break;
-            if HasSkyCeiling(S) then Inc(Covered);
+            if HasSkyCeiling(S) then
+            begin
+              Inc(Covered);
+              if Linedefs[I].Side[0] >= 0 then
+              begin
+                SectorSky[S] := UpperCase(Sidedefs[Linedefs[I].Side[0]].UpperTex);
+                SectorSkyFlipped[S] := Linedefs[I].Special = 272;
+              end;
+            end;
           until false;
           if Covered > Best then
           begin
@@ -1381,7 +1401,7 @@ begin
       WritelnLog('Map', '%s: sky transfer: line %d gives %s%s to %d of %d sky sectors', [FName, BestLine,
         SkyTransferTexture, BoolToStr(SkyTransferFlipped, ' (mirrored)', ''), Best, SkySectors]);
     end else
-      WritelnLog('Map', '%s: sky transfer of line %d covers only %d of %d sky sectors: the map''s sky stays',
+      WritelnLog('Map', '%s: sky transfer of line %d covers only %d of %d sky sectors: the map''s sky stays the main one',
         [FName, BestLine, Best, SkySectors]);
   end;
   if LightTransfers > 0 then

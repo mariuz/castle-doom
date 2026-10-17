@@ -1325,9 +1325,11 @@ begin
   FGraphics.BeginLevel;
   { Boom's sky transfer (271, 272) when it covers most of the sky. }
   if (FMap.SkyTransferTexture <> '') and (FGraphics.Texture(FMap.SkyTransferTexture) <> nil) then
-    FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FMap.SkyTransferTexture, FMap.SkyTransferFlipped)
+    FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FMap.SkyTransferTexture, FMap.SkyTransferFlipped,
+      FGraphics.SkyTextureName(MapName))
   else
-    FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName));
+    FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName), false,
+      FGraphics.SkyTextureName(MapName));
   FGeometry.AddToWorld(FMapGroup);
   { The previous level's geometry is gone: its textures can go too. }
   FGraphics.ReleaseUnused;

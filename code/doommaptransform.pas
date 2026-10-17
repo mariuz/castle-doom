@@ -168,9 +168,11 @@ begin
   FGraphics.BeginLevel;
   { Every sector static: one chunk for the whole map. }
   if (FMap.SkyTransferTexture <> '') and (FGraphics.Texture(FMap.SkyTransferTexture) <> nil) then
-    FGeometry := TDoomGeometry.Create(FMap, FGraphics, [], FMap.SkyTransferTexture, FMap.SkyTransferFlipped)
+    FGeometry := TDoomGeometry.Create(FMap, FGraphics, [], FMap.SkyTransferTexture, FMap.SkyTransferFlipped,
+      FGraphics.SkyTextureName(Lump))
   else
-    FGeometry := TDoomGeometry.Create(FMap, FGraphics, [], FGraphics.SkyTextureName(Lump));
+    FGeometry := TDoomGeometry.Create(FMap, FGraphics, [], FGraphics.SkyTextureName(Lump), false,
+      FGraphics.SkyTextureName(Lump));
   FGeometry.AddToWorld(FMapGroup);
   FBatch := TSpriteBatch.Create(FSpritesGroup);
   SpawnThings;

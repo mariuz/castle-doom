@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Per-sector skies: a map can give some outdoor areas a different sky
+  (MBF's 271 / 272 on part of the sky).
+- Monsters walk slower through Boom mud, like in MBF.
+
 ## v0.22.0 (2026-10-17)
 
 - ZDoom's MAPINFO and ZMAPINFO lumps: PWADs made for ZDoom-family ports

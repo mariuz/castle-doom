@@ -91,7 +91,7 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 33 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 34 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -503,6 +503,14 @@ carries the player while the lift moves, and the saves' `scrollers`
 rows are [speed x, speed y, last control height, offset x, offset y]
 (autotest `dynscrollers`, unit test `TestDynScrollers`). Boom's scale is
 large: a 128-unit control line moves 4 units per unit of height change.
+Per-sector skies: `tools/testdata/skies.wad` (`tools/make_skies_wad.py`)
+puts a 271 with SKY3 on sector 29 only (behind the start room's west
+window); the log says `sky transfer of line 829 covers only 1 of 19 sky
+sectors` and `Geometry: E1M1: 1 sky sectors show their own sky`
+(autotest `sector-skies` with golden screenshots through the window and
+looking up inside sector 29, unit test `TestSectorSkies`). MBF monster
+friction: an imp spawned in `friction.wad`'s mud corridor walks half as
+far (autotest `monster-friction` reads the actors in its saves).
 Boom deep water: `tools/testdata/water.wad` (`tools/make_water_wad.py`)
 makes the corridor east of E1M1's start room (141) a 96-unit pool
 controlled by the start room (242 on line 829, WATERMAP colormap);
