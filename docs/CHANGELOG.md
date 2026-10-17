@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.25.0 (2026-10-17)
 
 - Rebindable weapon keys, next / previous weapon keys and hotkeys (light
   diminishing, mouse look, music, help, automap grid and reveal, map
