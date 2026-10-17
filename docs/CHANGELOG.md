@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.24.0 (2026-10-17)
 
 - ZDoom's LANGUAGE lumps: MAPINFO's `lookup` / `$NAME` level names,
   story texts, episode names and music now resolve, and a PWAD's
