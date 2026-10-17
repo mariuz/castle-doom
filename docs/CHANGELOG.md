@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.23.0 (2026-10-17)
 
 - Per-sector skies: a map can give some outdoor areas a different sky
   (MBF's 271 / 272 on part of the sky).
