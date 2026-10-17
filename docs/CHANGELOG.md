@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.26.0 (2026-10-17)
 
 - Rebindable mouse buttons and wheel: every action can take a mouse
   button or wheel direction besides its two keys (a third column on the
