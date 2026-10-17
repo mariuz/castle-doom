@@ -17,12 +17,16 @@
   targets), clusters (their exit / enter texts become the story text
   after the last map of a cluster, with the cluster's flat or picture and
   music), episodes and defaultmap. LANGUAGE lookups ("lookup", "$NAME")
-  are left to the vanilla strings. }
+  of titles, cluster texts, episode names and music ("$MUSIC_X" names
+  D_ plus the string) resolve through the strings of the loaded WADs
+  (TDoomStrings: their LANGUAGE lumps, ParseLanguage, and BEX strings);
+  an unknown name, or a map's own vanilla title (HUSTR_E1M1), leaves the
+  vanilla value. }
 unit DoomMapInfo;
 
 interface
 
-uses Classes, Generics.Collections, DoomWad;
+uses Classes, Generics.Collections, DoomWad, DoomDehacked;
 
 type
   TMapInfoEndGame = (meUnset, meNo, meYes);
@@ -81,7 +85,14 @@ function ParseUMapInfo(const Text: String; const List: TMapInfoList; const Error
   nil) gives the lumps "exittextislump" names. Unknown blocks and keys are
   skipped. }
 function ParseZMapInfo(const Text: String; const List: TMapInfoList; const Errors: TStrings;
-  const AWad: TDoomWad = nil): Integer;
+  const AWad: TDoomWad = nil; const Strings: TDoomStrings = nil): Integer;
+
+{ Parse a ZDoom LANGUAGE lump into Values ("NAME=text" lines, names in
+  upper case; an existing name is replaced): the strings of sections
+  for English ([enu], [en], [eng]) win over [default] ones, other
+  languages are skipped, and so are "$ifgame(...)" lines for games other
+  than Doom. Returns the number of strings set. }
+function ParseLanguage(const Text: String; const Values: TStrings; const Errors: TStrings = nil): Integer;
 
 { Read the UMAPINFO lump of AWad, else its ZMAPINFO or MAPINFO (nothing
   when it has none). }
@@ -449,7 +460,7 @@ type
   TMapInfoClusterList = {$ifdef FPC}specialize{$endif} TObjectList<TMapInfoCluster>;
 
 function ParseZMapInfo(const Text: String; const List: TMapInfoList; const Errors: TStrings;
-  const AWad: TDoomWad): Integer;
+  const AWad: TDoomWad; const Strings: TDoomStrings): Integer;
 var
   T: TTokenizer;
   Values: TStringList;
@@ -477,6 +488,30 @@ var
   begin
     Result := ((Values.Count > 0) and (Copy(Values[0], 1, 1) = '$')) or
       ((Values.Count > 0) and SameText(Values[0], 'lookup'));
+  end;
+
+  { The text a lookup value names ('' when unknown). }
+  function Lookup(const Name: String): String;
+  begin
+    if Strings = nil then Exit('');
+    Result := Strings.Get(Name, '');
+  end;
+
+  function LookupValue: String;
+  begin
+    Result := '';
+    if Values.Count = 0 then Exit;
+    if Copy(Values[0], 1, 1) = '$' then
+      Result := Lookup(Copy(Values[0], 2, MaxInt))
+    else if Values.Count > 1 then
+      Result := Lookup(Values[1]);
+  end;
+
+  { "$MUSIC_RUNNIN" names the lump D_ plus the string (ZDoom's rule). }
+  function LookupMusic: String;
+  begin
+    Result := LookupValue;
+    if Result <> '' then Result := 'D_' + UpperCase(Result);
   end;
 
   function JoinedText: String;
@@ -583,7 +618,8 @@ var
     end
     else if SameText(Key, 'music') then
     begin
-      if not IsLookup then E.Music := UpperCase(First);
+      if not IsLookup then E.Music := UpperCase(First)
+      else if LookupMusic <> '' then E.Music := LookupMusic;
     end
     else if SameText(Key, 'nointermission') then E.NoIntermission := true
     else if SameText(Key, 'exitpic') then
@@ -602,11 +638,13 @@ var
   begin
     if SameText(Key, 'exittext') then
     begin
-      if not IsLookup then C.ExitText := JoinedText;
+      if not IsLookup then C.ExitText := JoinedText
+      else C.ExitText := LookupValue;
     end
     else if SameText(Key, 'entertext') then
     begin
-      if not IsLookup then C.EnterText := JoinedText;
+      if not IsLookup then C.EnterText := JoinedText
+      else C.EnterText := LookupValue;
     end
     else if SameText(Key, 'exittextislump') then ExitIsLump := true
     else if SameText(Key, 'entertextislump') then EnterIsLump := true
@@ -614,7 +652,8 @@ var
     else if SameText(Key, 'pic') then C.Pic := UpperCase(First)
     else if SameText(Key, 'music') then
     begin
-      if not IsLookup then C.Music := UpperCase(First);
+      if not IsLookup then C.Music := UpperCase(First)
+      else C.Music := LookupMusic;
     end;
   end;
 
@@ -689,7 +728,8 @@ var
         akEpisode:
           if SameText(Key, 'name') then
           begin
-            if not IsLookup then E.EpisodeName := First;
+            if not IsLookup then E.EpisodeName := First
+            else E.EpisodeName := LookupValue;
           end
           else if SameText(Key, 'picname') then E.EpisodePatch := UpperCase(First)
           else if SameText(Key, 'key') then E.EpisodeKey := First;
@@ -709,6 +749,22 @@ var
     Clusters.Add(Result);
   end;
 
+  { The map's own vanilla title (HUSTR_E1M1 for E1M1, HUSTR_1 for MAP01)
+    stays vanilla, with its intermission patch; another name is shown as
+    it is. }
+  procedure LookupTitle(const E: TMapInfoEntry; const Name: String);
+  var
+    VanillaKey: String;
+  begin
+    if (Copy(E.MapName, 1, 3) = 'MAP') then
+      VanillaKey := 'HUSTR_' + IntToStr(StrToIntDef(Copy(E.MapName, 4, 2), 0))
+    else
+      VanillaKey := 'HUSTR_' + E.MapName;
+    if SameText(Name, VanillaKey) then Exit;
+    E.LevelName := Lookup(Name);
+    E.LabelClear := E.LevelName <> '';
+  end;
+
   procedure ReadMap;
   var
     E: TMapInfoEntry;
@@ -718,10 +774,18 @@ var
     E.CopySettings(Defaults);
     E.MapName := MapNameOf(T.Value);
     T.Next;
-    { The title: a string, or "lookup" and a LANGUAGE name. }
+    { The title: a string, or "lookup" and a LANGUAGE name (or "$NAME").
+      A looked-up title is shown as it is, like vanilla's HUSTR strings
+      that carry their own "E1M1: " (no label). }
     if (T.Kind = tkIdent) and SameText(T.Value, 'lookup') then
     begin
       T.Next;
+      LookupTitle(E, T.Value);
+      T.Next;
+    end else
+    if (T.Kind = tkString) and (Copy(T.Value, 1, 1) = '$') then
+    begin
+      LookupTitle(E, Copy(T.Value, 2, MaxInt));
       T.Next;
     end else
     if T.Kind = tkString then
@@ -905,12 +969,131 @@ begin
   end;
 end;
 
+function ParseLanguage(const Text: String; const Values: TStrings; const Errors: TStrings): Integer;
+var
+  T: TTokenizer;
+  { 2: an English section, 1: [default] only, 0: another language. }
+  Rank: Integer;
+  Ranks: TStringList;
+  Name, Value, Game: String;
+  Skip: Boolean;
+
+  procedure Error(const Msg: String);
+  begin
+    if Errors <> nil then
+      Errors.Add(Format('LANGUAGE line %d: %s', [T.Line, Msg]));
+  end;
+
+  procedure ReadSection;
+  var
+    L: String;
+  begin
+    Rank := 0;
+    T.Next;
+    while (T.Kind <> tkEnd) and (T.Value <> ']') do
+    begin
+      L := LowerCase(T.Value);
+      if (L = 'enu') or (L = 'en') or (L = 'eng') then
+        Rank := 2
+      else if ((L = 'default') or (L = '*')) and (Rank < 1) then
+        Rank := 1;
+      T.Next;
+    end;
+    T.Next;
+  end;
+
+  procedure SetValue;
+  var
+    Idx, Old: Integer;
+  begin
+    Name := UpperCase(Name);
+    Old := StrToIntDef(Ranks.Values[Name], 0);
+    { Within a lump, English beats [default] whatever their order. }
+    if Rank < Old then Exit;
+    Ranks.Values[Name] := IntToStr(Rank);
+    Idx := Values.IndexOfName(Name);
+    if Idx >= 0 then
+      Values.ValueFromIndex[Idx] := Value
+    else
+      Values.Add(Name + '=' + Value);
+    Inc(Result);
+  end;
+
+begin
+  Result := 0;
+  { Without a section header the strings count as [default]. }
+  Rank := 1;
+  T := TTokenizer.Create('');
+  Ranks := TStringList.Create;
+  try
+    T.Text := Text;
+    T.Pos_ := 1;
+    T.Line := 1;
+    T.Next;
+    while T.Kind <> tkEnd do
+    begin
+      if T.Value = '[' then
+      begin
+        ReadSection;
+        Continue;
+      end;
+      Skip := false;
+      { "$ifgame(doom2) NAME = ...": only Doom's games. }
+      if T.Value = '$' then
+      begin
+        T.Next;
+        if SameText(T.Value, 'ifgame') then
+        begin
+          T.Next;
+          if T.Value = '(' then T.Next;
+          Game := LowerCase(T.Value);
+          Skip := not ((Game = 'doom') or (Game = 'doom1') or (Game = 'doom2') or
+            (Game = 'plutonia') or (Game = 'tnt') or (Game = 'freedoom') or (Game = 'any'));
+          T.Next;
+          if T.Value = ')' then T.Next;
+        end;
+      end;
+      if T.Kind <> tkIdent then
+      begin
+        Error('a string name expected, not "' + T.Value + '"');
+        T.Next;
+        Continue;
+      end;
+      Name := T.Value;
+      T.Next;
+      if T.Value <> '=' then
+      begin
+        Error('"=" expected after ' + Name);
+        Continue;
+      end;
+      T.Next;
+      { Strings in a row join: "line one\n" "line two"; }
+      Value := '';
+      while T.Kind = tkString do
+      begin
+        Value := Value + T.Value;
+        T.Next;
+      end;
+      if T.Value = ';' then
+        T.Next
+      else
+        Error('";" expected after ' + Name);
+      if (Rank > 0) and not Skip then
+        SetValue;
+    end;
+  finally
+    FreeAndNil(Ranks);
+    FreeAndNil(T);
+  end;
+end;
+
 procedure LoadMapInfo(const AWad: TDoomWad);
 var
   Lump, N: Integer;
   Bytes: TBytes;
   Text, LumpName: String;
   Errors: TStringList;
+  Strings: TDoomStrings;
   I: Integer;
 begin
   Entries.Clear;
@@ -933,14 +1116,20 @@ begin
   if Length(Bytes) > 0 then
     Move(Bytes[0], Text[1], Length(Bytes));
   Errors := TStringList.Create;
+  Strings := nil;
   try
     if LumpName = 'UMAPINFO' then
       N := ParseUMapInfo(Text, Entries, Errors)
     else
-      N := ParseZMapInfo(Text, Entries, Errors, AWad);
+    begin
+      { The LANGUAGE and BEX strings for "lookup" / "$NAME". }
+      Strings := TDoomStrings.Create(AWad);
+      N := ParseZMapInfo(Text, Entries, Errors, AWad, Strings);
+    end;
     for I := 0 to Errors.Count - 1 do
       WritelnWarning('MapInfo', Errors[I]);
   finally
+    FreeAndNil(Strings);
     FreeAndNil(Errors);
   end;
   WritelnLog('MapInfo', '%s: %d maps', [LumpName, N]);

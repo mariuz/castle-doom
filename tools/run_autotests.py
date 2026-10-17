@@ -225,6 +225,14 @@ TESTS = [
     ('mapinfo-episode', 'MENUKEYS', 'W:1,S,Q', [r'Load: E1M3: map parsed'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mapinfo.wad'),
       '--menukeys', 'E,E,E'], None),
+    # LANGUAGE lump (tools/make_language_wad.py): MAPINFO's lookups name
+    # E1M1, its music and cluster text, an episode; GOTSHELLS replaced.
+    ('language', 'E1M1', 'Y,G:416:864,W:0.3,E,W:3,U,W:0.5,U,W:1,U,W:0.5,U,W:3,Q',
+     [r'Strings: LANGUAGE lump: 6 strings', r'MapInfo: episode "Language Episode"',
+      r'MapInfo: E1M1: "E1M1: Language Hangar" next E1M2, secret , music D_E1M5',
+      r'Message: E1M1: Language Hangar', r'Message: Picked up language shells\.',
+      r'Finale: Finale after E1M1', r'Load: E1M2: map parsed', r'Message: E1M2: Communications Center'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'language.wad')], None),
     ('umapinfo-boss', 'E1M1', 'Y,W:0.5,D,W:4,SAVE:1,Q',
      [r'BossDeath: E1M1: all TROO dead, UMAPINFO special 23 on tag 1'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad')],

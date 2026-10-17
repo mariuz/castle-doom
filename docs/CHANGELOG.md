@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- ZDoom's LANGUAGE lumps: MAPINFO's `lookup` / `$NAME` level names,
+  story texts, episode names and music now resolve, and a PWAD's
+  LANGUAGE strings replace the game's messages and texts.
+
 ## v0.23.0 (2026-10-17)
 
 - Per-sector skies: a map can give some outdoor areas a different sky

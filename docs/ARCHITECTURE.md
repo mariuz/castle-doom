@@ -1011,8 +1011,7 @@ the same entries (`ParseZMapInfo`, one parser for both syntaxes: a key's
 values are the tokens after it, and an optional `=`, on its line, a
 trailing comma continuing them; blocks are braces or, in the old syntax,
 run to the next top-level keyword, `cluster N` counting as one only when
-a brace follows; `;` starts a comment). Map titles (`lookup` and `$NAME`
-values are left to the vanilla strings), `titlepatch`, `next` /
+a brace follows; `;` starts a comment). Map titles, `titlepatch`, `next` /
 `secretnext` (with ZDoom's `EndGame1`...`EndGameC`, `EndPic, NAME`,
 `EndTitle`), `sky1`, `par`, `music`, `nointermission`, `exitpic` /
 `enterpic` and `defaultmap` / `adddefaultmap` become the UMAPINFO
@@ -1023,6 +1022,22 @@ cluster's `flat` or `pic` with its `music`. `episode MAP { name, key,
 picname }` and `clearepisodes` are entries added after the maps (a
 clearing entry first), so the menu builds them like UMAPINFO's.
 `gameinfo`, `skill`, `intermission` and other ports' blocks are skipped.
+
+LANGUAGE lookups (`map E1M1 lookup "NAME"`, `"$NAME"`, `exittext =
+lookup, "NAME"`) of titles, cluster texts, episode names and music
+resolve through a `TDoomStrings` that `LoadMapInfo` makes for the
+parse: a `$MUSIC_X` value names `D_` plus the string (ZDoom's rule), a
+looked-up title is shown as it is (`LabelClear`, like the vanilla
+`HUSTR` strings that carry their own "E1M1: "), and a map looking up its
+own vanilla title (`HUSTR_E1M1`, `HUSTR_1` for MAP01) keeps the vanilla
+name and intermission patch; an unknown name leaves the vanilla value.
+`ParseLanguage` reads ZDoom's LANGUAGE syntax (`[enu default]` sections,
+`NAME = "text" "joined";`, `$ifgame(doom2)` prefixes, C comments):
+English sections (`enu`, `en`, `eng`) beat `[default]` within a lump,
+other languages are skipped. `TDoomStrings` reads the LANGUAGE and
+DEHACKED lumps in the WADs' order, so a PWAD's LANGUAGE also replaces
+Freedoom's BEX strings and the messages the game asks for by their BEX
+names (`GOTSHELLS`, `C1TEXT`...); ZDoom-only names are kept for lookups.
 
 The texts are not in Doom's WADs but in the executable; Freedoom puts its
 own (BSD-licensed) story, background flats and cast names in a `DEHACKED`

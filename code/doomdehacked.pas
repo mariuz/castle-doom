@@ -3,7 +3,8 @@
 
   - Strings (Boom's BEX "[STRINGS]" section): Freedoom ships its own finale
     texts, finale background flats and cast-call names this way (E1TEXT,
-    C1TEXT, BGFLATE1, CC_ZOMBIE...); TDoomStrings.
+    C1TEXT, BGFLATE1, CC_ZOMBIE...); TDoomStrings. ZDoom's LANGUAGE lumps
+    (DoomMapInfo.ParseLanguage) use the same names and join them.
   - "[PARS]": par times for the intermission (Freedoom has its own).
   - "Thing N": hit points, speed, width, height, mass and pain chance of the
     things this port knows (N is info.c's mobjtype + 1), their frames
@@ -506,10 +507,14 @@ begin
   inherited Create;
   FValues := TStringList.Create;
   FValues.CaseSensitive := false;
+  { DEHACKED and ZDoom's LANGUAGE lumps in the WADs' order (a PWAD's
+    strings replace the IWAD's), then the -deh files. }
   if AWad <> nil then
     for I := 0 to AWad.LumpCount - 1 do
       if AWad.LumpName(I) = 'DEHACKED' then
-        ParseLump(LumpText(AWad, I));
+        ParseLump(LumpText(AWad, I))
+      else if AWad.LumpName(I) = 'LANGUAGE' then
+        WritelnLog('Strings', 'LANGUAGE lump: %d strings', [ParseLanguage(LumpText(AWad, I), FValues)]);
   for I := 0 to DehFileTexts.Count - 1 do
     ParseLump(DehFileTexts[I]);
 end;

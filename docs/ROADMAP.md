@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- LANGUAGE lumps (`DoomMapInfo.ParseLanguage`): `TDoomStrings` reads
+  them with the DEHACKED lumps in WAD order, so MAPINFO's `lookup` /
+  `$NAME` titles, cluster texts, episode names and `$MUSIC_` music
+  resolve, and a PWAD's strings replace the game's messages and texts.
+  Test PWAD `tools/testdata/language.wad`, autotest `language`, unit
+  test `TestLanguage`.
+
 - Per-sector skies: every sky sector keeps the sky its 271 / 272 gives
   it (`TDoomMap.SectorSky`); the ones not shown by the sky cylinder get
   their ceilings drawn with a sky effect that maps the texture by the
@@ -880,7 +887,7 @@ play.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **More bindable actions**: keys and gamepad buttons are rebindable (see above); weapon selection by number, the hotkeys (F, M, J...), the mouse buttons and the touch buttons' layout are not yet. `pages/index.html` lists the default keys. | Left-handed and non-QWERTY players. | `GameSettings`, `GameTouch` | S |
-| **MAPINFO, the rest**: UMAPINFO and the common ZDoom MAPINFO keys are done (see above); left are LANGUAGE lumps (the `lookup` / `$NAME` strings), `include`, ZDoom's intermission scripts (`exitpic = "$..."`), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomDehacked` (strings) | M |
+| **MAPINFO, the rest**: UMAPINFO and the common ZDoom MAPINFO keys are done (see above); left are `include`, ZDoom's intermission scripts (`exitpic = "$..."`), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomDehacked` (strings) | M |
 | **Fixed step everywhere**: `--fixed-step` makes 7 moving-scene autotests reproducible (see above); running the whole suite with it would make every screenshot comparable but triples its real time (software GL draws about 12 frames a second, each now a single tic). | Every screenshot a regression check. | `tools/run_autotests.py` | S |
 | **Longer crash reports**: the desktop dialog shows CGE's last 10 log lines (`CastleLog.LastLog`), the web overlay 40; a game-side ring buffer (fed by `ApplicationProperties.OnLog`) and a "copy to clipboard" button would make reports more complete. | Better bug reports. | `GameCrash`, `tools/patch_web_page.py` | S |
 
@@ -888,10 +895,10 @@ play.
 
 1. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-2. LANGUAGE lumps (S-M, see MAPINFO, the rest): the strings ZDoom-era
-   PWADs name with `lookup` / `$NAME`.
-3. More bindable actions (S, see Other suggested improvements): weapon
+2. More bindable actions (S, see Other suggested improvements): weapon
    numbers and the hotkeys on keys, the touch buttons' layout.
+3. MAPINFO, the rest (M, see Other suggested improvements): `include`
+   and ZDoom's intermission scripts.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

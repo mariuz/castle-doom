@@ -44,6 +44,7 @@ type
     procedure TestLogFilter;
     procedure TestUMapInfo;
     procedure TestZMapInfo;
+    procedure TestLanguage;
   end;
 
   TTestMap = class(TTestCase)
@@ -199,7 +200,7 @@ begin
       AssertEquals('cluster flat', 'FLOOR7_2', E.InterBackdrop);
       AssertEquals('cluster music', 'D_VICTOR', E.InterMusic);
       E := MapInfoFor('E1M3');
-      AssertEquals('lookup leaves the vanilla name', '', E.LevelName);
+      AssertEquals('looking up its own HUSTR_E1M3 leaves the vanilla name (and patch)', '', E.LevelName);
       AssertTrue('EndGame3 is the bunny', (E.EndGame = meYes) and E.EndBunny);
       AssertEquals('enter picture', 'CREDIT', E.EnterPic);
       AssertTrue('nointermission', E.NoIntermission);
@@ -218,6 +219,84 @@ begin
   finally
     FreeAndNil(Errors);
     FreeAndNil(List);
+  end;
+end;
+
+procedure TTestWad.TestLanguage;
+var
+  W: TDoomWad;
+  Path: String;
+  Values, Errors: TStringList;
+  Strings: TDoomStrings;
+  List: TMapInfoList;
+  E: TMapInfoEntry;
+begin
+  Values := TStringList.Create;
+  Errors := TStringList.Create;
+  try
+    { Sections, joined strings, escapes, comments, $ifgame. }
+    AssertEquals('strings set', 4, ParseLanguage(
+      'A = "no section: default";' + LineEnding +
+      '[enu default]' + LineEnding +
+      'greeting = "Hello,\n" // joined' + LineEnding +
+      '  "world \"quoted\"";' + LineEnding +
+      '$ifgame(doom2) D2 = "Doom 2 only";' + LineEnding +
+      '$ifgame(hexen) HX = "skipped";' + LineEnding +
+      '[de]' + LineEnding +
+      'GREETING = "Hallo";' + LineEnding +
+      '[default]' + LineEnding +
+      'GREETING = "loses to English"; A = "default again";', Values, Errors));
+    AssertEquals('joined, escaped, name in upper case', 'Hello,' + #10 + 'world "quoted"', Values.Values['GREETING']);
+    AssertEquals('$ifgame(doom2)', 'Doom 2 only', Values.Values['D2']);
+    AssertEquals('other game skipped', '', Values.Values['HX']);
+    AssertEquals('default replaces default', 'default again', Values.Values['A']);
+    AssertEquals('no errors', 0, Errors.Count);
+    ParseLanguage('X "missing equals"; Y = "fine"', Values, Errors);
+    AssertTrue('error reported', Errors.Count > 0);
+    AssertEquals('and parsing goes on', 'fine', Values.Values['Y']);
+
+    { tools/testdata/language.wad: the strings and MAPINFO's lookups. }
+    Path := 'tools/testdata/language.wad';
+    if not FileExists(Path) then
+      Path := '../tools/testdata/language.wad';
+    W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+    try
+      W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+      Strings := TDoomStrings.Create(W);
+      try
+        AssertEquals('replaces a BEX string', 'Picked up language shells.', Strings.Get('GOTSHELLS'));
+        AssertEquals('English beats [default] and [fr]', 'E1M1: Language Hangar', Strings.Get('LNG_E1M1'));
+        AssertEquals('[default] only', 'From the default section', Strings.Get('lng_default_only'));
+        AssertEquals('Freedoom''s other strings stay', 'E1M2: Communications Center', Strings.Get('HUSTR_E1M2'));
+        List := TMapInfoList.Create(true);
+        try
+          ParseZMapInfo('map E1M4 "$LNG_E1M1" {}' + LineEnding + 'map E1M5 "$HUSTR_E1M2" {}', List, Errors, nil, Strings);
+          AssertEquals('"$NAME" title', 'E1M1: Language Hangar', List[0].LevelName);
+          AssertEquals('another map''s BEX title', 'E1M2: Communications Center', List[1].LevelName);
+        finally
+          FreeAndNil(List);
+        end;
+      finally
+        FreeAndNil(Strings);
+      end;
+      LoadMapInfo(W);
+      E := MapInfoFor('E1M1');
+      AssertEquals('lookup title', 'E1M1: Language Hangar', E.LevelName);
+      AssertTrue('shown without a label', E.LabelClear);
+      AssertEquals('$MUSIC_ names D_ plus the string', 'D_E1M5', E.Music);
+      AssertEquals('looked-up exit text', 'The LANGUAGE lump wrote this,' + #10 + 'over two lines.', E.InterText);
+      AssertEquals('"$HUSTR_E1M2" on E1M2: its own vanilla title', '', MapInfoFor('E1M2').LevelName);
+      E := MapInfoEntries[MapInfoEntries.Count - 1];
+      AssertEquals('episode name', 'Language Episode', E.EpisodeName);
+      FreeAndNil(W);
+      W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+      LoadMapInfo(W);
+    finally
+      FreeAndNil(W);
+    end;
+  finally
+    FreeAndNil(Errors);
+    FreeAndNil(Values);
   end;
 end;
 

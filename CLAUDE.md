@@ -91,7 +91,7 @@ xvfb run matches them too. Screenshots of moving scenes need
 exactly one tic and the random seed is fixed, so two runs agree; the
 waits take about 3x longer in real time under software GL).
 
-Unit tests (FPCUnit, no window, about 20 s, 34 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 35 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -437,7 +437,13 @@ FLOOR7_2; E1M3 keeps its vanilla name (`lookup`), shows CREDIT while
 and one episode starting E1M3. The log says `MapInfo: MAPINFO: 2 maps`
 and a summary per entry (autotests `mapinfo` with golden screenshots of
 the two intermission pictures: `E,W:3,S,U,W:0.5,S` under
-`--fixed-step`, and `mapinfo-episode`). UMAPINFO wins when a WAD has
+`--fixed-step`, and `mapinfo-episode`). LANGUAGE lumps: `tools/testdata/language.wad`
+(`tools/make_language_wad.py`) has a LANGUAGE and a MAPINFO that looks
+its strings up: E1M1 "E1M1: Language Hangar", music `$MUSIC_LNG`
+(D_E1M5), a looked-up cluster text, a "Language Episode" and a new
+GOTSHELLS (`Y,G:416:864,W:0.3` logs `Message: Picked up language
+shells.`); the log says `Strings: LANGUAGE lump: 6 strings` (autotest
+`language`, unit test `TestLanguage`). UMAPINFO wins when a WAD has
 both.
 Boom generalized lines: `tools/testdata/generalized.wad`
 (`tools/make_generalized_wad.py`) turns E1M1's door, lift, switch, blue
