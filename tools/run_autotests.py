@@ -170,7 +170,7 @@ TESTS = [
      ['ENV:CASTLE_DOOM_LOG=Load,Shot'], lambda config: check_log_filtered(config)),
     # Key rebinding: the Controls page binds Q to "Use" (saved), and in a
     # game BIND moves fire to F and forward to I.
-    ('controls-page', 'MENUCONTROLS', None, [r'Settings: Keys: .*use Q / Space;'], [],
+    ('controls-page', 'MENUCONTROLS', None, [r'Settings: Keys: .*use Q / Space;', r'Settings: Mouse: .*use Right;'], [],
      lambda config: check_keys(config, 'use', ['Q', 'Space'])),
     ('key-bindings', 'E1M1', 'Y,SHOTS,BIND:fire:F,BIND:forward:I,W:0.3,F:1,KEY:F,W:0.3,S,Q',
      [r'Settings: Keys: forward I / Up;.* fire F;', r'Shot: ', r'Saved screenshot 1 at E1M1 \(player -[1-3]\d\d\.'],
@@ -185,6 +185,15 @@ TESTS = [
      'KEY:R,W:1.5,SAVE:2,KEY:L,KEY:F,W:0.3,Q',
      [r'Settings: Keys: .*weapon5 Q;.*nextWeapon R;.*lightDiminish L;'], [],
      lambda config: check_hotkeys(config)),
+    # Mouse bindings: the right button fires and the left one uses, so a
+    # left click spends no bullet and a right one does; the wheel still
+    # changes weapons (pistol -> fist). The Controls page (MENUCONTROLS
+    # above) also binds the right button to Use.
+    ('mouse-bindings', 'E1M1',
+     'Y,MBIND:fire:Right,MBIND:use:Left,W:0.5,MOUSE:Left,W:1,SAVE:1,MOUSE:Right,W:1,SAVE:2,'
+     'MOUSE:WheelUp,W:1.5,SAVE:3,Q',
+     [r'Settings: Mouse: fire Right; .*use Left;'], [],
+     lambda config: check_mouse(config)),
     # Gamepad bindings (GameSettings.Pad): the right trigger fires, RB
     # changes weapon, then Y is bound to fire and LT to the automap.
     ('gamepad-bindings', 'E1M1',
@@ -203,6 +212,16 @@ TESTS = [
      'TDOWN:3:0.904:0.388,W:0.3,TUP:3,TDOWN:4:0.955:0.92,TUP:4,W:0.3,S,Q',
      [r'Touch: Finger 1 down', r'Shot: ', r'Touch: Button MENU'], ['--touch', '--fixed-step'],
      lambda config: check_touch(config)),
+    # The left-handed touch layout at 125%: the stick takes the right side
+    # (a finger at 80% of the width walks east), FIRE is on the left (at
+    # 0.12:0.44 in a 16:9 window), MENU stays at the top right (0.944:0.9).
+    ('touch-layout', 'E1M1',
+     'Y,TOUCHLAYOUT:left,TOUCHSIZE:125,W:0.3,S,SAVE:1,TDOWN:1:0.8:0.5,TMOVE:1:0.8:0.65,W:1,TUP:1,SAVE:2,SHOTS,'
+     'TDOWN:3:0.12:0.44,W:0.3,TUP:3,TDOWN:4:0.944:0.9,TUP:4,W:0.3,Q',
+     [r'Settings: Touch: left-handed, size 125%', r'Shot: ', r'Touch: Button MENU'], ['--touch', '--fixed-step'],
+     lambda config: check_touch_walk(config)),
+    ('controls-touch', 'MENUCONTROLSTOUCH', None, [r'Settings: Touch: left-handed, size 125%'], [],
+     lambda config: check_touch_settings(config)),
     # UMAPINFO from a PWAD (tools/make_umapinfo_wad.py): E1M1 renamed with a
     # story text after its intermission, then E1M3 without intermission
     # ending the game with the bunny.
@@ -471,6 +490,32 @@ def check_hotkeys(config):
     assert settings['diminish'] is False, 'diminish %s' % settings['diminish']
 
 
+def check_mouse(config):
+    """Bullets 50 after the left click (use), 49 after the right (fire),
+    then the fist (0) after the wheel; settings.json keeps the buttons."""
+    bullets = [save_json(config, n)['player']['ammo'][0] for n in (1, 2)]
+    assert bullets == [50, 49], 'bullets %s' % bullets
+    weapon = save_json(config, 3)['player']['weapon']
+    assert weapon == 0, 'weapon %s' % weapon
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        settings = json.load(f)
+    assert settings['mouse'].get('fire') == 'Right' and settings['mouse'].get('use') == 'Left', \
+        'mouse %s' % settings['mouse']
+
+
+def check_touch_walk(config):
+    """The stick on the right walked the player east."""
+    p = [save_json(config, n)['player'] for n in (1, 2)]
+    assert p[1]['x'] - p[0]['x'] > 300, 'stick: %s -> %s' % (p[0]['x'], p[1]['x'])
+
+
+def check_touch_settings(config):
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        settings = json.load(f)
+    assert settings['touchLeftHanded'] is True and settings['touchSize'] == 125, \
+        'touch %s %s' % (settings['touchLeftHanded'], settings['touchSize'])
+
+
 def check_pad(config, action, buttons):
     with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
         settings = json.load(f)
@@ -504,7 +549,8 @@ GOLDEN_MAX_CHANGED = 0.015
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
     'menu_menu.png', 'title-pages_menutitle.png', 'read-this_menureadthis.png',
-    'controls-page_menucontrols.png', 'controls-hotkeys_menucontrolshotkeys.png', 'map-component_design.png',
+    'controls-page_menucontrols.png', 'controls-hotkeys_menucontrolshotkeys.png',
+    'controls-touch_menucontrolstouch.png', 'touch-layout_1.png', 'map-component_design.png',
     'palette_1.png', 'palette_2.png', 'palette_3.png', 'fuzz_1.png', 'fuzz_2.png',
     'glbsp-v2_1.png', 'glbsp-v5_1.png', 'boom-lumps_1.png', 'umapinfo_1.png',
     'click-prompt_1.png', 'door-crush_1.png', 'ingame-options_1.png', 'ingame-options_2.png',

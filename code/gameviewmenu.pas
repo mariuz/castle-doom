@@ -28,6 +28,8 @@ type
       for a key (FWaitSlot -1: none). }
     FControls: TCastleRectangleControl;
     FKeyButtons: array [TGameAction, 0..1] of TCastleButton;
+    { The mouse column (FWaitSlot 2 waits for a mouse button or wheel). }
+    FMouseButtons: array [TGameAction] of TCastleButton;
     { The keyboard half's pages (GameSettings.ControlsPageNames). }
     FControlsPage: Integer;
     FControlsPageGroups: array [0..ControlsPageCount - 1] of TCastleVerticalGroup;
@@ -35,6 +37,9 @@ type
     FWaitSlot: Integer;
     { The page's gamepad half: its rows, the action waiting for a button. }
     FPadMode: Boolean;
+    { The page's touch half (after the gamepad's): layout and size. }
+    FTouchMode: Boolean;
+    FTouchHandButton, FTouchSizeButton: TCastleButton;
     FPadButtons: array [TPadAction, 0..1] of TCastleButton;
     FWaitPadAction: TPadAction;
     FStatus: TCastleLabel;
@@ -127,6 +132,9 @@ type
     { Switch the Controls page between the keys and the gamepad. }
     procedure ClickControlsPad(Sender: TObject);
     procedure ClickControlsPage(Sender: TObject);
+    procedure ClickMouseButton(Sender: TObject);
+    procedure ClickTouchHand(Sender: TObject);
+    procedure ClickTouchSize(Sender: TObject);
     procedure ShowControlsMode;
     { Bind the gamepad button the page waits for (pbNone clears). }
     procedure BindWaitingPad(const B: TPadButton);
@@ -152,13 +160,16 @@ type
     procedure Stop; override;
     procedure Update(const SecondsPassed: Single; var HandleInput: Boolean); override;
     function Press(const Event: TInputPressRelease): Boolean; override;
+    { The Controls page waiting for a mouse button takes the next click
+      or wheel step before the buttons under the pointer see it. }
+    function PreviewPress(const Event: TInputPressRelease): Boolean; override;
   end;
 
 var
   ViewMenu: TViewMenu;
   { Set from the command line (--autotest MAP PREFIX): start this map at once.
     MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENUQUIT, MENULOAD, MENUOPTIONS, MENUCONTROLS,
-    MENUCONTROLSPAD, MENUCONTROLSHOTKEYS,
+    MENUCONTROLSPAD, MENUCONTROLSHOTKEYS, MENUCONTROLSTOUCH,
     MENUDOOM2, MENUTITLE (title pages, menu closed) or MENUREADTHIS takes a
     screenshot of that menu page instead. }
   AutoTestMap: String;
@@ -983,6 +994,14 @@ begin
       FKeyButtons[A, I] := B;
       Row.InsertFront(B);
     end;
+    B := TCastleButton.Create(FreeAtStop);
+    B.FontSize := 22;
+    B.AutoSizeWidth := false;
+    B.Width := 200;
+    B.Tag := Ord(A);
+    B.OnClick := {$ifdef FPC}@{$endif} ClickMouseButton;
+    FMouseButtons[A] := B;
+    Row.InsertFront(B);
     for Page := 0 to ControlsPageCount - 1 do
       if (A >= ControlsPageFirst[Page]) and (A <= ControlsPageLast[Page]) then
         FControlsPageGroups[Page].InsertFront(Row);
@@ -1010,6 +1029,32 @@ begin
     end;
     List.InsertFront(Row);
   end;
+  List := DesignedComponent('TouchList') as TCastleVerticalGroup;
+  for I := 0 to 1 do
+  begin
+    Row := TCastleHorizontalGroup.Create(FreeAtStop);
+    Row.Spacing := 10;
+    Lab := TCastleLabel.Create(FreeAtStop);
+    if I = 0 then Lab.Caption := 'Layout' else Lab.Caption := 'Size';
+    Lab.FontSize := 22;
+    Lab.Color := White;
+    Row.InsertFront(Lab);
+    B := TCastleButton.Create(FreeAtStop);
+    B.FontSize := 22;
+    B.AutoSizeWidth := false;
+    B.Width := 300;
+    if I = 0 then
+    begin
+      B.OnClick := {$ifdef FPC}@{$endif} ClickTouchHand;
+      FTouchHandButton := B;
+    end else
+    begin
+      B.OnClick := {$ifdef FPC}@{$endif} ClickTouchSize;
+      FTouchSizeButton := B;
+    end;
+    Row.InsertFront(B);
+    List.InsertFront(Row);
+  end;
   UpdateKeyButtons;
 end;
 
@@ -1025,40 +1070,109 @@ begin
         FKeyButtons[A, I].Caption := 'press a key...'
       else
         FKeyButtons[A, I].Caption := KeyName(Settings.Keys[A, I]);
+  for A := Low(TGameAction) to High(TGameAction) do
+    if (not FPadMode) and (FWaitSlot = 2) and (FWaitAction = A) then
+      FMouseButtons[A].Caption := 'click...'
+    else
+      FMouseButtons[A].Caption := MouseBindNames[Settings.Mouse[A]];
   for P := Low(TPadAction) to High(TPadAction) do
     for I := 0 to 1 do
       if FPadMode and (FWaitSlot = I) and (FWaitPadAction = P) then
         FPadButtons[P, I].Caption := 'press a button...'
       else
         FPadButtons[P, I].Caption := PadButtonNames[Settings.Pad[P, I]];
+  if FTouchHandButton <> nil then
+  begin
+    FTouchHandButton.Caption := BoolToStr(Settings.TouchLeftHanded, 'Left-handed', 'Right-handed');
+    FTouchSizeButton.Caption := IntToStr(Settings.TouchSize) + '%';
+  end;
 end;
 
 procedure TViewMenu.ShowControlsMode;
 var
   Page: Integer;
   PageButton: TCastleButton;
+  Header, Hint: TCastleLabel;
+  KeysShown: Boolean;
 begin
-  (DesignedComponent('ControlsList') as TCastleUserInterface).Exists := not FPadMode;
+  KeysShown := not (FPadMode or FTouchMode);
+  (DesignedComponent('ControlsList') as TCastleUserInterface).Exists := KeysShown;
   (DesignedComponent('PadList') as TCastleUserInterface).Exists := FPadMode;
+  (DesignedComponent('TouchList') as TCastleUserInterface).Exists := FTouchMode;
   for Page := 0 to ControlsPageCount - 1 do
     FControlsPageGroups[Page].Exists := Page = FControlsPage;
   PageButton := DesignedComponent('ButtonControlsPage') as TCastleButton;
-  PageButton.Exists := not FPadMode;
+  PageButton.Exists := KeysShown;
   PageButton.Caption := ControlsPageNames[(FControlsPage + 1) mod ControlsPageCount] + ' >';
-  if FPadMode then
-    (DesignedComponent('ControlsHeader') as TCastleLabel).Caption := 'Controls: Gamepad'
-  else
-    (DesignedComponent('ControlsHeader') as TCastleLabel).Caption := 'Controls: ' + ControlsPageNames[FControlsPage];
+  Header := DesignedComponent('ControlsHeader') as TCastleLabel;
+  Hint := DesignedComponent('ControlsHint') as TCastleLabel;
+  { The mode button names the next mode: keyboard, gamepad, touch. }
   if FPadMode then
   begin
-    (DesignedComponent('ControlsHint') as TCastleLabel).Caption :=
-      'Click an action, then press the gamepad button (Backspace clears it, Esc or Start cancels)';
+    Header.Caption := 'Controls: Gamepad';
+    Hint.Caption := 'Click an action, then press the gamepad button (Backspace clears it, Esc or Start cancels)';
+    (DesignedComponent('ButtonControlsPad') as TCastleButton).Caption := 'Touch';
+  end else
+  if FTouchMode then
+  begin
+    Header.Caption := 'Controls: Touch';
+    Hint.Caption := 'The touch controls show on touch screens (desktop: --touch)';
     (DesignedComponent('ButtonControlsPad') as TCastleButton).Caption := 'Keyboard';
   end else
   begin
-    (DesignedComponent('ControlsHint') as TCastleLabel).Caption :=
-      'Click a key, then press the new one (Backspace clears it, Esc cancels)';
+    Header.Caption := 'Controls: ' + ControlsPageNames[FControlsPage];
+    Hint.Caption := 'Click a key or mouse slot, then press the new key or mouse button (Backspace clears, Esc cancels)';
     (DesignedComponent('ButtonControlsPad') as TCastleButton).Caption := 'Gamepad';
+  end;
+  UpdateKeyButtons;
+end;
+
+procedure TViewMenu.ClickTouchHand(Sender: TObject);
+begin
+  Settings.TouchLeftHanded := not Settings.TouchLeftHanded;
+  SaveSettings;
+  WritelnLog('Settings', TouchSummary);
+  UpdateKeyButtons;
+end;
+
+procedure TViewMenu.ClickTouchSize(Sender: TObject);
+begin
+  Settings.TouchSize := NextTouchSize(Settings.TouchSize);
+  SaveSettings;
+  WritelnLog('Settings', TouchSummary);
+  UpdateKeyButtons;
+end;
+
+procedure TViewMenu.ClickMouseButton(Sender: TObject);
+begin
+  FWaitAction := TGameAction((Sender as TCastleButton).Tag);
+  FWaitSlot := 2;
+  UpdateKeyButtons;
+end;
+
+function TViewMenu.PreviewPress(const Event: TInputPressRelease): Boolean;
+var
+  B: TMouseBind;
+begin
+  Result := inherited;
+  if Result then Exit;
+  if (FControls = nil) or not FControls.Exists or FPadMode or (FWaitSlot <> 2) then Exit;
+  Result := true;
+  if Event.IsKey(keyEscape) then
+    FWaitSlot := -1
+  else
+  begin
+    if Event.IsKey(keyBackSpace) then
+      B := mbNone
+    else
+    begin
+      B := MouseBindOfEvent(Event);
+      if B = mbNone then Exit; { another key: keep waiting }
+    end;
+    BindMouse(FWaitAction, B);
+    SaveSettings;
+    WritelnLog('Settings', MouseSummary);
+    FWaitSlot := -1;
   end;
   UpdateKeyButtons;
 end;
@@ -1072,7 +1186,16 @@ end;
 
 procedure TViewMenu.ClickControlsPad(Sender: TObject);
 begin
-  FPadMode := not FPadMode;
+  { Keyboard and mouse -> gamepad -> touch -> keyboard and mouse. }
+  if FPadMode then
+  begin
+    FPadMode := false;
+    FTouchMode := true;
+  end else
+  if FTouchMode then
+    FTouchMode := false
+  else
+    FPadMode := true;
   FWaitSlot := -1;
   ShowControlsMode;
 end;
@@ -1116,9 +1239,17 @@ begin
     ResetPad;
     WritelnLog('Settings', PadSummary);
   end else
+  if FTouchMode then
+  begin
+    Settings.TouchLeftHanded := false;
+    Settings.TouchSize := 100;
+    WritelnLog('Settings', TouchSummary);
+  end else
   begin
     ResetKeys;
+    ResetMouse;
     WritelnLog('Settings', KeysSummary);
+    WritelnLog('Settings', MouseSummary);
   end;
   SaveSettings;
   UpdateKeyButtons;
@@ -1298,6 +1429,10 @@ begin
     ClickControls(nil);
     ClickKeyButton(FKeyButtons[gaUse, 0]);
     ControlsKey(InputKey(TVector2.Zero, keyQ, 'q', []));
+    { And the right mouse button to "Use", like a click on its mouse slot
+      and a right click. }
+    ClickMouseButton(FMouseButtons[gaUse]);
+    PreviewPress(InputMouseButton(TVector2.Zero, buttonRight, 0, []));
   end
   else if AutoTestMap = 'MENUCONTROLSHOTKEYS' then
   begin
@@ -1308,6 +1443,17 @@ begin
     ClickControlsPage(nil);
     ClickKeyButton(FKeyButtons[gaLightDiminish, 0]);
     ControlsKey(InputKey(TVector2.Zero, keyK, 'k', []));
+  end
+  else if AutoTestMap = 'MENUCONTROLSTOUCH' then
+  begin
+    { The Controls page's touch half, after switching to the left hand and
+      the next size (125%). }
+    ShowOptions(true);
+    ClickControls(nil);
+    ClickControlsPad(nil);
+    ClickControlsPad(nil);
+    ClickTouchHand(nil);
+    ClickTouchSize(nil);
   end
   else if AutoTestMap = 'MENUCONTROLSPAD' then
   begin

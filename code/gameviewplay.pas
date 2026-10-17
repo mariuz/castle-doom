@@ -134,6 +134,9 @@ type
     procedure ApplyTouch(const SecondsPassed: Single);
     { The first key bound to Action (the second if the first is unset). }
     function BoundKey(const Action: TGameAction): TKey;
+    { The mouse button B is held (wheel directions never are). }
+    function MouseHeld(const B: TMouseBind): Boolean;
+    procedure DemoMouse(const Cmd, Spec: String);
     { Select a thing in the engine's inspector (opening it): by name, or
       the one under the crosshair when Name is ''. }
     procedure SelectInInspector(const ThingName: String);
@@ -603,6 +606,17 @@ begin
     TouchForced := true;
     TouchMode := true;
   end
+  else if (Cmd = 'TOUCHLAYOUT') or (Cmd = 'TOUCHSIZE') then
+  begin
+    { TOUCHLAYOUT:left|right and TOUCHSIZE:percent like the Controls
+      page's Touch mode (saved). }
+    if Cmd = 'TOUCHLAYOUT' then
+      Settings.TouchLeftHanded := SameText(Rest, 'left')
+    else
+      Settings.TouchSize := EnsureRange(Round(Arg), TouchSizes[0], TouchSizes[High(TouchSizes)]);
+    SaveSettings;
+    WritelnLog('Settings', TouchSummary);
+  end
   else if (Cmd = 'TDOWN') or (Cmd = 'TMOVE') or (Cmd = 'TUP') then
     DemoTouch(Cmd, Rest)
   else if (Cmd = 'PADDOWN') or (Cmd = 'PADUP') or (Cmd = 'PADBIND') then
@@ -702,6 +716,8 @@ begin
     if K <> keyNone then
       Press(InputKey(TVector2.Zero, K, '', []));
   end
+  else if (Cmd = 'MOUSE') or (Cmd = 'MBIND') then
+    DemoMouse(Cmd, Rest)
   else if Cmd = 'UNLOCK' then
     { What the browser's Esc does: the pointer lock is cancelled. }
     PointerLockUserCancelled(nil)
@@ -780,18 +796,33 @@ end;
   render statistics (shapes, scenes, draw calls). }
 procedure TViewPlay.ApplyKeyBindings;
 
+  { Two keys and the mouse binding: a button held, or a wheel step. }
   procedure AssignInput(const Input: TInputShortcut; const Action: TGameAction);
+  const
+    Buttons: array [mbLeft..mbButton5] of TCastleMouseButton = (
+      buttonLeft, buttonMiddle, buttonRight, buttonExtra1, buttonExtra2);
+  var
+    B: TMouseBind;
   begin
-    Input.Assign(Settings.Keys[Action, 0], Settings.Keys[Action, 1]);
+    B := Settings.Mouse[Action];
+    if B in [mbLeft..mbButton5] then
+      Input.Assign(Settings.Keys[Action, 0], Settings.Keys[Action, 1], '', true, Buttons[B])
+    else if B = mbWheelUp then
+      Input.Assign(Settings.Keys[Action, 0], Settings.Keys[Action, 1], '', false, buttonLeft, mwUp)
+    else if B = mbWheelDown then
+      Input.Assign(Settings.Keys[Action, 0], Settings.Keys[Action, 1], '', false, buttonLeft, mwDown)
+    else
+      Input.Assign(Settings.Keys[Action, 0], Settings.Keys[Action, 1]);
   end;
 
   { "G: grid" for a bound action, '' when it has no key. }
   function Hot(const Action: TGameAction; const Text: String): String;
   begin
-    if (Settings.Keys[Action, 0] = keyNone) and (Settings.Keys[Action, 1] = keyNone) then
+    if (Settings.Keys[Action, 0] = keyNone) and (Settings.Keys[Action, 1] = keyNone) and
+       (Settings.Mouse[Action] = mbNone) then
       Result := ''
     else
-      Result := ActionKeysText(Action) + ': ' + Text;
+      Result := ActionInputText(Action) + ': ' + Text;
   end;
 
   { Weapon keys: "1-7" when they are the default ones in a row. }
@@ -817,7 +848,8 @@ procedure TViewPlay.ApplyKeyBindings;
     A: TGameAction;
   begin
     for A := Low(TGameAction) to High(TGameAction) do
-      if (Settings.Keys[A, 0] <> DefaultKeys[A, 0]) or (Settings.Keys[A, 1] <> DefaultKeys[A, 1]) then
+      if (Settings.Keys[A, 0] <> DefaultKeys[A, 0]) or (Settings.Keys[A, 1] <> DefaultKeys[A, 1]) or
+         (Settings.Mouse[A] <> DefaultMouse[A]) then
         Exit(false);
     Result := true;
   end;
@@ -845,16 +877,16 @@ begin
   if (FHelpLabel <> nil) and not SameAsDefaults and (FHelpLabel.Text.Count >= 5) then
   begin
     FHelpLabel.Text[0] := Format('Move: %s, %s   Strafe: %s, %s   Run: %s', [
-      ActionKeysText(gaForward), ActionKeysText(gaBackward), ActionKeysText(gaStrafeLeft),
-      ActionKeysText(gaStrafeRight), ActionKeysText(gaRun)]);
-    FHelpLabel.Text[1] := Format('Mouse: look   Turn: %s, %s   LMB / %s: fire', [
-      ActionKeysText(gaTurnLeft), ActionKeysText(gaTurnRight), ActionKeysText(gaFire)]);
-    FHelpLabel.Text[2] := ActionKeysText(gaUse) + ': use (doors, switches)';
+      ActionInputText(gaForward), ActionInputText(gaBackward), ActionInputText(gaStrafeLeft),
+      ActionInputText(gaStrafeRight), ActionInputText(gaRun)]);
+    FHelpLabel.Text[1] := Format('Mouse: look   Turn: %s, %s   %s: fire', [
+      ActionInputText(gaTurnLeft), ActionInputText(gaTurnRight), ActionInputText(gaFire)]);
+    FHelpLabel.Text[2] := ActionInputText(gaUse) + ': use (doors, switches)';
     if (Hot(gaPrevWeapon, '') <> '') or (Hot(gaNextWeapon, '') <> '') then
-      FHelpLabel.Text[3] := Format('%s, wheel, %s / %s: weapons', [WeaponKeysText,
-        ActionKeysText(gaPrevWeapon), ActionKeysText(gaNextWeapon)])
+      FHelpLabel.Text[3] := Format('%s, %s / %s: weapons', [WeaponKeysText,
+        ActionInputText(gaPrevWeapon), ActionInputText(gaNextWeapon)])
     else
-      FHelpLabel.Text[3] := WeaponKeysText + ', wheel: weapons';
+      FHelpLabel.Text[3] := WeaponKeysText + ': weapons';
     FHelpLabel.Text[4] := Trim(Hot(gaAutomap, 'automap   ') + '+ / -: zoom   ' + Hot(gaGrid, 'grid   ') +
       Hot(gaRevealMap, 'reveal map'));
     FHelpLabel.Text[5] := Trim(Hot(gaLightDiminish, 'light diminishing on/off   ') + Hot(gaMouseLook, 'mouse look'));
@@ -1052,6 +1084,68 @@ begin
       Exit;
     end;
   WritelnWarning('Settings', 'Unknown action "%s"', [ActionId]);
+end;
+
+{ MOUSE:button clicks a mouse button or turns the wheel through Press
+  (settings.json's names: Left, Right, Middle, Button4, Button5, WheelUp,
+  WheelDown); MBIND:action:button binds it like the Controls page's mouse
+  column (None clears the action's). }
+procedure TViewPlay.DemoMouse(const Cmd, Spec: String);
+const
+  Buttons: array [mbLeft..mbButton5] of TCastleMouseButton = (
+    buttonLeft, buttonMiddle, buttonRight, buttonExtra1, buttonExtra2);
+var
+  P: Integer;
+  A: TGameAction;
+  B: TMouseBind;
+  ButtonText: String;
+begin
+  if Cmd = 'MBIND' then
+  begin
+    P := Pos(':', Spec);
+    if P = 0 then Exit;
+    ButtonText := Copy(Spec, P + 1, MaxInt);
+    B := StrToMouseBind(ButtonText);
+    if (B = mbNone) and not SameText(ButtonText, 'None') then
+    begin
+      WritelnWarning('Settings', 'Unknown mouse button "%s"', [ButtonText]);
+      Exit;
+    end;
+    for A := Low(TGameAction) to High(TGameAction) do
+      if SameText(ActionIds[A], Copy(Spec, 1, P - 1)) then
+      begin
+        BindMouse(A, B);
+        SaveSettings;
+        WritelnLog('Settings', MouseSummary);
+        ApplyKeyBindings;
+        Exit;
+      end;
+    WritelnWarning('Settings', 'Unknown action "%s"', [Copy(Spec, 1, P - 1)]);
+    Exit;
+  end;
+  B := StrToMouseBind(Spec);
+  case B of
+    mbLeft..mbButton5:
+      begin
+        Press(InputMouseButton(TVector2.Zero, Buttons[B], 0, []));
+        Release(InputMouseButton(TVector2.Zero, Buttons[B], 0, []));
+      end;
+    mbWheelUp: Press(InputMouseWheel(TVector2.Zero, 1, true, []));
+    mbWheelDown: Press(InputMouseWheel(TVector2.Zero, -1, true, []));
+    else WritelnWarning('AutoTest', 'Unknown mouse button "%s"', [Spec]);
+  end;
+end;
+
+function TViewPlay.MouseHeld(const B: TMouseBind): Boolean;
+begin
+  case B of
+    mbLeft: Result := buttonLeft in Container.MousePressed;
+    mbMiddle: Result := buttonMiddle in Container.MousePressed;
+    mbRight: Result := buttonRight in Container.MousePressed;
+    mbButton4: Result := buttonExtra1 in Container.MousePressed;
+    mbButton5: Result := buttonExtra2 in Container.MousePressed;
+    else Result := false;
+  end;
 end;
 
 function TViewPlay.BoundKey(const Action: TGameAction): TKey;
@@ -1901,6 +1995,8 @@ begin
   { Touch controls while the game is played (the browser's fingers are
     read here; the menus and the intermission take taps as clicks). }
   TouchPlaying := (not FIntermission) and (FSlotMenu = SlotMenuNone) and (FPendingMap = '');
+  FTouch.LeftHanded := Settings.TouchLeftHanded;
+  FTouch.SizePercent := Settings.TouchSize;
   if TouchPlaying then PollTouches(FTouch) else PollTouches(nil);
   TouchShown := TouchMode and TouchPlaying;
   if FTouch.Exists <> TouchShown then
@@ -2092,7 +2188,7 @@ begin
     resumed the game or took the mouse back). }
   if FSuppressFire and not (buttonLeft in Container.MousePressed) then
     FSuppressFire := false;
-  if ((buttonLeft in Container.MousePressed) and not FSuppressFire) or
+  if (MouseHeld(Settings.Mouse[gaFire]) and not FSuppressFire) or
      ((Settings.Keys[gaFire, 0] <> keyNone) and Container.Pressed.Items[Settings.Keys[gaFire, 0]]) or
      ((Settings.Keys[gaFire, 1] <> keyNone) and Container.Pressed.Items[Settings.Keys[gaFire, 1]]) or
      GamepadFireHeld or (FTouch.Exists and FTouch.FireHeld) then
@@ -2193,7 +2289,7 @@ begin
     if FPendingMap <> '' then Exit;
     if (FIntermissionTime > 0.3) and (Event.IsKey(keyE) or Event.IsKey(keySpace) or
        Event.IsKey(keyEnter) or Event.IsMouseButton(buttonLeft) or Event.IsKey(keyCtrl) or
-       ((Event.EventType = itKey) and (KeyIs(Event.Key, gaUse) or KeyIs(Event.Key, gaFire)))) then
+       EventIs(Event, gaUse) or EventIs(Event, gaFire)) then
     begin
       AccelerateScreen;
       Exit(true);
@@ -2206,7 +2302,7 @@ begin
     Exit;
   end;
 
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaUse) then
+  if EventIs(Event, gaUse) then
   begin
     FWorld.UseInFront;
     Exit(true);
@@ -2221,29 +2317,30 @@ begin
     FSuppressFire := true;
     Exit(true);
   end;
-  if Event.IsMouseButton(buttonLeft) or ((Event.EventType = itKey) and KeyIs(Event.Key, gaFire)) then
+  if EventIs(Event, gaFire) then
   begin
     FWorld.FireWeapon;
     Exit(true);
   end;
-  if Event.EventType = itMouseWheel then
+  { The wheel zooms the automap while it is shown. }
+  if FAutomap.Exists and (Event.EventType = itMouseWheel) then
   begin
-    if Event.MouseWheelScroll > 0 then FWorld.NextWeapon(1) else FWorld.NextWeapon(-1);
+    if Event.MouseWheelScroll > 0 then FAutomap.ZoomBy(1.25) else FAutomap.ZoomBy(1 / 1.25);
     Exit(true);
   end;
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaNextWeapon) then
+  if EventIs(Event, gaNextWeapon) then
   begin
     FWorld.NextWeapon(1);
     Exit(true);
   end;
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaPrevWeapon) then
+  if EventIs(Event, gaPrevWeapon) then
   begin
     FWorld.NextWeapon(-1);
     Exit(true);
   end;
   for Idx := 1 to 7 do
   begin
-    if (Event.EventType = itKey) and KeyIs(Event.Key, TGameAction(Ord(gaWeapon1) + Idx - 1)) then
+    if EventIs(Event, TGameAction(Ord(gaWeapon1) + Idx - 1)) then
     begin
       case Idx of
         1: if (wpChainsaw in FWorld.Player.Weapons) and (FWorld.Player.Weapon <> wpChainsaw) then
@@ -2300,17 +2397,17 @@ begin
     OpenSlotMenu(SlotMenuLoad);
     Exit(true);
   end;
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaQuickSave) then
+  if EventIs(Event, gaQuickSave) then
   begin
     SaveGame(0);
     Exit(true);
   end;
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaQuickLoad) then
+  if EventIs(Event, gaQuickLoad) then
   begin
     LoadGame(0);
     Exit(true);
   end;
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaAutomap) then
+  if EventIs(Event, gaAutomap) then
   begin
     FAutomap.Exists := not FAutomap.Exists;
     Exit(true);
@@ -2318,7 +2415,7 @@ begin
   { A key bound to an action handled elsewhere (moving, turning and
     running are the navigation's) does nothing else, e.g. "-" bound to
     strafing must not zoom the automap. }
-  if (Event.EventType = itKey) and ActionOfKey(Event.Key, BoundAction) and
+  if ActionOfEvent(Event, BoundAction) and
      not (BoundAction in [gaGrid, gaRevealMap, gaLightDiminish, gaMouseLook, gaMusic, gaHelp,
        gaNextMap, gaPrevMap, gaScreenshot]) then
     Exit;
@@ -2334,7 +2431,7 @@ begin
       FAutomap.ZoomBy(1 / 1.25);
       Exit(true);
     end;
-    if (Event.EventType = itKey) and KeyIs(Event.Key, gaGrid) then
+    if EventIs(Event, gaGrid) then
     begin
       FAutomap.Grid := not FAutomap.Grid;
       if FAutomap.Grid then
@@ -2343,33 +2440,28 @@ begin
         FWorld.ShowMessage(FWorld.Text('AMSTR_GRIDOFF', 'Grid OFF'));
       Exit(true);
     end;
-    if (Event.EventType = itKey) and KeyIs(Event.Key, gaRevealMap) then
+    if EventIs(Event, gaRevealMap) then
     begin
       FAutomap.ShowAll := not FAutomap.ShowAll;
       Exit(true);
     end;
-    if Event.EventType = itMouseWheel then
-    begin
-      if Event.MouseWheelScroll > 0 then FAutomap.ZoomBy(1.25) else FAutomap.ZoomBy(1 / 1.25);
-      Exit(true);
-    end;
   end;
   { The toggles are remembered (GameSettings). }
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaLightDiminish) then
+  if EventIs(Event, gaLightDiminish) then
   begin
     DoomLightingInstance.Diminish := not DoomLightingInstance.Diminish;
     Settings.Diminish := DoomLightingInstance.Diminish;
     SaveSettings;
     Exit(true);
   end;
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaMouseLook) then
+  if EventIs(Event, gaMouseLook) then
   begin
     FNavigation.MouseLook := not FNavigation.MouseLook;
     Settings.MouseLook := FNavigation.MouseLook;
     SaveSettings;
     Exit(true);
   end;
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaMusic) and (Music <> nil) then
+  if EventIs(Event, gaMusic) and (Music <> nil) then
   begin
     Music.Enabled := not Music.Enabled;
     Settings.MusicOn := Music.Enabled;
@@ -2377,22 +2469,22 @@ begin
     FWorld.ShowMessage('Music ' + BoolToStr(Music.Enabled, 'on', 'off'));
     Exit(true);
   end;
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaHelp) then
+  if EventIs(Event, gaHelp) then
   begin
     FHelpVisible := not FHelpVisible;
     FHelpLabel.Exists := FHelpVisible;
     Exit(true);
   end;
-  if (Event.EventType = itKey) and (KeyIs(Event.Key, gaNextMap) or KeyIs(Event.Key, gaPrevMap)) then
+  if EventIs(Event, gaNextMap) or EventIs(Event, gaPrevMap) then
   begin
     Idx := Wad.MapNames.IndexOf(FMapName);
-    if KeyIs(Event.Key, gaNextMap) then Inc(Idx) else Dec(Idx);
+    if EventIs(Event, gaNextMap) then Inc(Idx) else Dec(Idx);
     if Idx < 0 then Idx := Wad.MapNames.Count - 1;
     if Idx >= Wad.MapNames.Count then Idx := 0;
     StartMap(Wad.MapNames[Idx], true);
     Exit(true);
   end;
-  if (Event.EventType = itKey) and KeyIs(Event.Key, gaScreenshot) then
+  if EventIs(Event, gaScreenshot) then
   begin
     FWorld.ShowMessage('Screenshot saved: ' + Container.SaveScreenToDefaultFile);
     Exit(true);

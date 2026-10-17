@@ -1495,6 +1495,21 @@ begin
   end;
   AssertTrue('pages cover all', ControlsPageLast[ControlsPageCount - 1] = High(TGameAction));
   ResetKeys;
+  { Mouse: the left button fires, the wheel changes weapons; a button
+    moves from the action that had it; events find their action. }
+  ResetMouse;
+  AssertTrue('left fires', MouseIs(mbLeft, gaFire));
+  AssertTrue('wheel up: next weapon',
+    EventIs(InputMouseWheel(TVector2.Zero, 1, true, []), gaNextWeapon));
+  AssertTrue('wheel down: previous weapon',
+    EventIs(InputMouseWheel(TVector2.Zero, -1, true, []), gaPrevWeapon));
+  AssertEquals('fire text', 'Ctrl / Left button', ActionInputText(gaFire));
+  BindMouse(gaUse, mbLeft);
+  AssertFalse('left no longer fires', EventIs(InputMouseButton(TVector2.Zero, buttonLeft, 0, []), gaFire));
+  AssertTrue('left uses', EventIs(InputMouseButton(TVector2.Zero, buttonLeft, 0, []), gaUse));
+  AssertTrue('names', StrToMouseBind('button4') = mbButton4);
+  AssertTrue('a key event is no mouse binding', MouseBindOfEvent(InputKey(TVector2.Zero, keyA, 'a', [])) = mbNone);
+  ResetMouse;
 end;
 
 procedure TTestGamepad.TestTouchControls;
@@ -1545,6 +1560,27 @@ begin
     ApplyTouchState('0', T);
     AssertFalse('mouse again', TouchMode);
     AssertEquals('all lifted', 0, T.TouchCount);
+    { Left-handed at 125%: fire on the left, larger; "<" still left of
+      ">"; MENU stays at the top right; the stick takes the right side. }
+    T.LeftHanded := true;
+    T.SizePercent := 125;
+    T.ButtonCircle(tbFire, Middle, Radius);
+    AssertEquals('fire on the left', 0.17 * 1125, Middle.X, 0.01);
+    AssertEquals('fire larger', 0.12 * 1125, Radius, 0.01);
+    T.ButtonCircle(tbPrevWeapon, Middle, Radius);
+    V := Middle;
+    T.ButtonCircle(tbNextWeapon, Middle, Radius);
+    AssertTrue('< left of >', V.X < Middle.X);
+    T.ButtonCircle(tbMenu, Middle, Radius);
+    AssertTrue('menu at the right', Middle.X > 1400);
+    T.TouchDown(5, Vector2(1300, 400));
+    T.TouchMove(5, Vector2(1300, 500));
+    AssertTrue('stick on the right', T.MoveVector.Y > 0.5);
+    T.TouchUp(5);
+    T.TouchDown(6, Vector2(500, 400));
+    T.TouchMove(6, Vector2(500, 500));
+    AssertEquals('the left drags the view', 0, T.MoveVector.Length, 0.0001);
+    T.ReleaseAll;
   finally
     FreeAndNil(T);
   end;

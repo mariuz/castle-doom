@@ -148,10 +148,10 @@ Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 the items resumes; in the browser, Esc releasing the mouse opens it the same way, and a
 "click to look around" prompt shows until a click captures the mouse again). These are the
 default keys: the title screen's Options -> Controls... rebinds moving, turning, running,
-firing, using and the automap, the weapon keys and next / previous weapon (unbound by
-default), and the hotkeys from light diminishing to quick save / load (two keys each, on
-three pages, saved in `settings.json`; the help panel shows the new keys). Esc, F1-F4 and
-F8 stay fixed.
+firing, using and the automap, the weapon keys and next / previous weapon, and the hotkeys
+from light diminishing to quick save / load (two keys and a mouse button or wheel direction
+each, on three pages, saved in `settings.json`; the help panel shows the new bindings). The
+left button fires and the wheel changes weapons until rebound; Esc, F1-F4 and F8 stay fixed.
 
 Gamepad (Windows, Linux and the browser, where the pad shows up after a button press):
 left stick move / strafe, right stick turn / look, right trigger fire, A / X use,
@@ -171,7 +171,9 @@ mouse is one finger): a stick appears where the left thumb lands (pushed to its 
 runs), dragging anywhere else on the right turns and looks, and round buttons fire (drag
 the fire button to aim while shooting), use, change weapons, toggle the automap and open
 the menu. The controls show when a finger touches the screen and hide again when the
-mouse is used; taps work as clicks in the menus and on the intermission.
+mouse is used; taps work as clicks in the menus and on the intermission. Options ->
+Controls... -> Touch mirrors them for the left hand (the stick on the right) and makes them
+75 to 150% as large.
 
 Automated smoke test (loads a map, runs a script, saves screenshots, quits):
 

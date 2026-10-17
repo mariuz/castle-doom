@@ -43,6 +43,13 @@ type
     FLabelsMade: Boolean;
     FOnButton: TTouchButtonEvent;
     FWidth, FHeight: Single;
+    FLeftHanded: Boolean;
+    FSizePercent: Integer;
+    { The layout's unit: the shorter side, times the size setting. }
+    function LayoutUnit: Single;
+    { Left-handed layouts mirror the right-handed one. }
+    function Mirror(const P: TVector2): TVector2;
+    function InStickZone(const P: TVector2): Boolean;
     function IndexOf(const Id: Integer): Integer;
     procedure UpdateSize;
     { Status bar height: the play view's bar is a tenth of the width. }
@@ -79,6 +86,12 @@ type
     function TouchCount: Integer;
     function TouchId(const Index: Integer): Integer;
     property Graphics: TDoomGraphics read FGraphics write FGraphics;
+    { The layout (GameSettings' touchLeftHanded, touchSize): the stick on
+      the right and the buttons on the left (MAP and MENU stay at the top
+      right); the stick and buttons scaled
+      by SizePercent (MinTouchSize..MaxTouchSize, 100 = the default). }
+    property LeftHanded: Boolean read FLeftHanded write FLeftHanded;
+    property SizePercent: Integer read FSizePercent write FSizePercent;
     property OnButton: TTouchButtonEvent read FOnButton write FOnButton;
   end;
 
@@ -120,6 +133,28 @@ begin
   FullSize := true;
   FWidth := 1600;
   FHeight := 900;
+  FSizePercent := 100;
+end;
+
+function TDoomTouchControls.LayoutUnit: Single;
+begin
+  Result := Min(FWidth, FHeight) * EnsureRange(FSizePercent, 50, 200) / 100;
+end;
+
+function TDoomTouchControls.Mirror(const P: TVector2): TVector2;
+begin
+  if FLeftHanded then
+    Result := Vector2(FWidth - P.X, P.Y)
+  else
+    Result := P;
+end;
+
+function TDoomTouchControls.InStickZone(const P: TVector2): Boolean;
+begin
+  if FLeftHanded then
+    Result := P.X > (1 - StickZone) * FWidth
+  else
+    Result := P.X < StickZone * FWidth;
 end;
 
 destructor TDoomTouchControls.Destroy;
@@ -181,26 +216,31 @@ end;
 
 function TDoomTouchControls.StickRadius: Single;
 begin
-  Result := 0.13 * Min(FWidth, FHeight);
+  Result := 0.13 * LayoutUnit;
 end;
 
 function TDoomTouchControls.StickHome: TVector2;
 var
   U: Single;
 begin
-  U := Min(FWidth, FHeight);
-  Result := Vector2(0.25 * U, BottomMargin + 0.25 * U);
+  U := LayoutUnit;
+  Result := Mirror(Vector2(0.25 * U, BottomMargin + 0.25 * U));
 end;
 
 procedure TDoomTouchControls.ButtonCircle(const B: TTouchButton; out Middle: TVector2; out Radius: Single);
 var
   U, M, W, H: Single;
+  Spot: TTouchButton;
 begin
   W := FWidth;
   H := FHeight;
-  U := Min(W, H);
+  U := LayoutUnit;
   M := BottomMargin;
-  case B of
+  { Mirrored, "<" must stay left of ">": they trade places first. }
+  Spot := B;
+  if FLeftHanded and (B = tbPrevWeapon) then Spot := tbNextWeapon
+  else if FLeftHanded and (B = tbNextWeapon) then Spot := tbPrevWeapon;
+  case Spot of
     tbFire: begin Middle := Vector2(W - 0.17 * U, M + 0.21 * U); Radius := 0.12 * U; end;
     tbUse: begin Middle := Vector2(W - 0.43 * U, M + 0.11 * U); Radius := 0.085 * U; end;
     tbPrevWeapon: begin Middle := Vector2(W - 0.30 * U, M + 0.45 * U); Radius := 0.06 * U; end;
@@ -209,6 +249,9 @@ begin
     tbMenu: begin Middle := Vector2(W - 0.08 * U, H - 0.08 * U); Radius := 0.06 * U; end;
     else begin Middle := TVector2.Zero; Radius := 0; end;
   end;
+  { MAP and MENU stay at the top right, away from Doom's messages. }
+  if not (B in [tbAutomap, tbMenu]) then
+    Middle := Mirror(Middle);
 end;
 
 function TDoomTouchControls.ButtonAt(const Position: TVector2): TTouchButton;
@@ -266,7 +309,7 @@ begin
   T.Button := ButtonAt(Position);
   if T.Button <> tbNone then
     T.Role := trButton
-  else if Position.X < StickZone * FWidth then
+  else if InStickZone(Position) then
     T.Role := trStick
   else
     T.Role := trLook;

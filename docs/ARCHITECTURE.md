@@ -1109,9 +1109,11 @@ screenshot, quick save / load; JSON `keys` with `KeyToStr` names; a
 stored file without the newer actions keeps its keys, and the new
 actions' defaults that clash with them are dropped in `ReadKeys`).
 `TViewPlay.ApplyKeyBindings` assigns the walk navigation's
-`Input_Forward`... from them and rewrites the help panel when they
-differ from the defaults; `Press` handles every other action through
-`KeyIs`, and a key bound to a navigation action does nothing else (the
+`Input_Forward`... from them (with the action's mouse button or wheel
+direction, `Settings.Mouse`: one per action, `mouse` in the JSON, fire
+on the left button and weapons on the wheel by default) and rewrites
+the help panel when they differ from the defaults; `Press` handles every
+other action through `EventIs` (a key or a mouse event), and a key bound to a navigation action does nothing else (the
 automap's fixed + / - zoom included). Esc, F1-F4 (menus) and F8 (the
 inspector) cannot be bound. Gamepad bindings:
 `GameSettings.Pad` holds two `TPadButton`s per `TPadAction` (fire, use,
@@ -1271,7 +1273,12 @@ listener on `window`) while the game asks every frame
 (`castleDoomTouches(1)`, from `PollTouches`; a menu, the intermission,
 or half a second without asking lets taps through as clicks), and
 answers whether the last pointer was a finger (`TouchMode`, which shows
-or hides the controls) and where each finger is.
+or hides the controls) and where each finger is. `LeftHanded` mirrors
+the layout (the stick zone becomes the right 40%, the buttons move left,
+"<" and ">" trade places so "<" stays left, MAP and MENU stay top
+right) and `SizePercent` scales the stick and buttons (both from
+`Settings.TouchLeftHanded` / `TouchSize`, set every frame by the play
+view and on the Controls page's Touch mode).
 
 Collisions use the map chunks' `PreciseCollisions` triangles, the invisible
 blocking-line scene, and the actors' bounding boxes (`Collides`). The

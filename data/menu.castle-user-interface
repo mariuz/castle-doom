@@ -537,6 +537,13 @@
               "Alignment": "hpRight"
             },
             {
+              "$$ClassName": "TCastleVerticalGroup",
+              "Name": "TouchList",
+              "Exists": false,
+              "Spacing": 6.0,
+              "Alignment": "hpRight"
+            },
+            {
               "$$ClassName": "TCastleHorizontalGroup",
               "Name": "RowControlsButtons",
               "Spacing": 10.0,

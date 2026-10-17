@@ -28,6 +28,11 @@ type
   TPadAction = (gpaFire, gpaUse, gpaAutomap, gpaNextWeapon, gpaPrevWeapon);
   { A gamepad button in the standard (Xbox) layout; the triggers count as
     buttons when pressed past half way. Start and Guide are not bindable. }
+  { A mouse button or wheel direction bound to an action (one per action,
+    besides its two keys; Chocolate Doom's mouseb_ settings). }
+  TMouseBind = (mbNone, mbLeft, mbMiddle, mbRight, mbButton4, mbButton5,
+    mbWheelUp, mbWheelDown);
+
   TPadButton = (pbNone, pbA, pbB, pbX, pbY, pbLeftBumper, pbRightBumper,
     pbLeftTrigger, pbRightTrigger, pbLeftStick, pbRightStick,
     pbDPadUp, pbDPadDown, pbDPadLeft, pbDPadRight, pbView);
@@ -54,6 +59,12 @@ type
     FrameCap: Integer;
     { Key bindings: two keys per action (keyNone = unused). }
     Keys: array [TGameAction, 0..1] of TKey;
+    { Mouse bindings: a button or wheel direction per action. }
+    Mouse: array [TGameAction] of TMouseBind;
+    { Touch controls: mirrored for the left hand, and their size in
+      percent (TouchSizes). }
+    TouchLeftHanded: Boolean;
+    TouchSize: Integer;
     { Gamepad bindings: two buttons per action (pbNone = unused). }
     Pad: array [TPadAction, 0..1] of TPadButton;
   end;
@@ -66,6 +77,8 @@ const
   MaxUiScale = 200;
   MinRenderScale = 25;
   MaxRenderScale = 100;
+  { The touch controls' size choices, in percent. }
+  TouchSizes: array [0..3] of Integer = (75, 100, 125, 150);
   { The frame rate cap's choices (0 = no cap); 120 is CGE's default. }
   FrameCaps: array [0..4] of Integer = (35, 60, 120, 144, 0);
 
@@ -96,6 +109,17 @@ const
     (keyF, keyNone), (keyM, keyNone), (keyJ, keyNone), (keyH, keyNone),
     (keyG, keyNone), (keyI, keyNone), (keyN, keyNone), (keyP, keyNone),
     (keyF5, keyNone), (keyF6, keyNone), (keyF9, keyNone));
+
+  { settings.json's mouse names and the Controls page's. }
+  MouseBindIds: array [TMouseBind] of String = ('None', 'Left', 'Middle',
+    'Right', 'Button4', 'Button5', 'WheelUp', 'WheelDown');
+  MouseBindNames: array [TMouseBind] of String = ('-', 'Left button',
+    'Middle button', 'Right button', 'Button 4', 'Button 5', 'Wheel up',
+    'Wheel down');
+  DefaultMouse: array [TGameAction] of TMouseBind = (
+    mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbLeft, mbNone, mbNone,
+    mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbWheelUp, mbWheelDown,
+    mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone);
 
   { The Controls page's pages: their titles and first / last actions. }
   ControlsPageCount = 3;
@@ -146,6 +170,10 @@ function VideoSummary: String;
 
 { The frame cap Steps choices further in FrameCaps (wrapping). }
 function NextFrameCap(const Cap, Steps: Integer): Integer;
+{ The touch layout for the log: "Touch: right-handed, size 100%". }
+function TouchSummary: String;
+{ The next touch size in TouchSizes (wrapping). }
+function NextTouchSize(const Size: Integer): Integer;
 { "60 FPS", "no cap". }
 function FrameCapText(const Cap: Integer): String;
 
@@ -162,8 +190,24 @@ function BindKey(const Action: TGameAction; const Slot: Integer; const Key: TKey
 { "W / Up", "Tab", "-" for the help panel and the Controls page. }
 function KeyName(const Key: TKey): String;
 function ActionKeysText(const Action: TGameAction): String;
+{ The keys and the mouse binding: "Ctrl / Left button". }
+function ActionInputText(const Action: TGameAction): String;
 { The bindings for the log. }
 function KeysSummary: String;
+{ Mouse bindings: the defaults (the left button fires, the wheel changes
+  weapons), the action a button or wheel event is bound to, binding one
+  (taken from any other action; mbNone clears the action's). }
+procedure ResetMouse;
+function MouseIs(const B: TMouseBind; const Action: TGameAction): Boolean;
+function MouseBindOfEvent(const Event: TInputPressRelease): TMouseBind;
+procedure BindMouse(const Action: TGameAction; const B: TMouseBind);
+function StrToMouseBind(const S: String): TMouseBind;
+function MouseSummary: String;
+{ The event is a key or mouse input bound to Action. }
+function EventIs(const Event: TInputPressRelease; const Action: TGameAction): Boolean;
+{ The action of a key or mouse event (False when none). }
+function ActionOfEvent(const Event: TInputPressRelease; out Action: TGameAction): Boolean;
+
 { Read a "keys" object (settings.json's, as JSON text) over the current
   bindings, like LoadSettings (for the unit tests). }
 procedure ApplyKeysJson(const JsonText: String);
@@ -241,6 +285,95 @@ begin
   Result := true;
 end;
 
+procedure ResetMouse;
+var
+  A: TGameAction;
+begin
+  for A := Low(TGameAction) to High(TGameAction) do
+    Settings.Mouse[A] := DefaultMouse[A];
+end;
+
+function MouseIs(const B: TMouseBind; const Action: TGameAction): Boolean;
+begin
+  Result := (B <> mbNone) and (Settings.Mouse[Action] = B);
+end;
+
+function MouseBindOfEvent(const Event: TInputPressRelease): TMouseBind;
+begin
+  Result := mbNone;
+  if Event.EventType = itMouseButton then
+    case Event.MouseButton of
+      buttonLeft: Result := mbLeft;
+      buttonMiddle: Result := mbMiddle;
+      buttonRight: Result := mbRight;
+      buttonExtra1: Result := mbButton4;
+      buttonExtra2: Result := mbButton5;
+    end
+  else
+  if (Event.EventType = itMouseWheel) and (Event.MouseWheelScroll <> 0) and Event.MouseWheelVertical then
+  begin
+    if Event.MouseWheelScroll > 0 then
+      Result := mbWheelUp
+    else
+      Result := mbWheelDown;
+  end;
+end;
+
+procedure BindMouse(const Action: TGameAction; const B: TMouseBind);
+var
+  A: TGameAction;
+begin
+  if B <> mbNone then
+    for A := Low(TGameAction) to High(TGameAction) do
+      if Settings.Mouse[A] = B then
+        Settings.Mouse[A] := mbNone;
+  Settings.Mouse[Action] := B;
+end;
+
+function StrToMouseBind(const S: String): TMouseBind;
+var
+  B: TMouseBind;
+begin
+  for B := Low(TMouseBind) to High(TMouseBind) do
+    if SameText(MouseBindIds[B], S) then
+      Exit(B);
+  Result := mbNone;
+end;
+
+function MouseSummary: String;
+var
+  A: TGameAction;
+begin
+  Result := 'Mouse:';
+  for A := Low(TGameAction) to High(TGameAction) do
+    if Settings.Mouse[A] <> mbNone then
+      Result := Result + ' ' + ActionIds[A] + ' ' + MouseBindIds[Settings.Mouse[A]] + ';';
+end;
+
+function EventIs(const Event: TInputPressRelease; const Action: TGameAction): Boolean;
+begin
+  if Event.EventType = itKey then
+    Result := KeyIs(Event.Key, Action)
+  else
+    Result := MouseIs(MouseBindOfEvent(Event), Action);
+end;
+
+function ActionOfEvent(const Event: TInputPressRelease; out Action: TGameAction): Boolean;
+var
+  A: TGameAction;
+begin
+  if Event.EventType = itKey then
+    Exit(ActionOfKey(Event.Key, Action));
+  for A := Low(TGameAction) to High(TGameAction) do
+    if MouseIs(MouseBindOfEvent(Event), A) then
+    begin
+      Action := A;
+      Exit(true);
+    end;
+  Action := gaForward;
+  Result := false;
+end;
+
 function KeyName(const Key: TKey): String;
 begin
   if Key = keyNone then
@@ -257,6 +390,18 @@ begin
     Result := KeyName(Settings.Keys[Action, 0])
   else
     Result := KeyName(Settings.Keys[Action, 0]) + ' / ' + KeyName(Settings.Keys[Action, 1]);
+end;
+
+function ActionInputText(const Action: TGameAction): String;
+begin
+  Result := ActionKeysText(Action);
+  if Settings.Mouse[Action] <> mbNone then
+  begin
+    if Result = '-' then
+      Result := MouseBindNames[Settings.Mouse[Action]]
+    else
+      Result := Result + ' / ' + MouseBindNames[Settings.Mouse[Action]];
+  end;
 end;
 
 function KeysSummary: String;
@@ -341,7 +486,10 @@ begin
   Settings.RenderScale := 100;
   Settings.VSync := false;
   Settings.FrameCap := 120;
+  Settings.TouchLeftHanded := false;
+  Settings.TouchSize := 100;
   ResetKeys;
+  ResetMouse;
   ResetPad;
 end;
 
@@ -387,6 +535,33 @@ begin
   finally
     FreeAndNil(Data);
   end;
+end;
+
+{ settings.json's "mouse": {"fire": "Left", ...}; without it, the
+  defaults. }
+procedure ReadMouse(const J: TJSONObject);
+var
+  A: TGameAction;
+  S: String;
+begin
+  for A := Low(TGameAction) to High(TGameAction) do
+  begin
+    S := J.Get(ActionIds[A], '');
+    if S <> '' then
+      BindMouse(A, StrToMouseBind(S))
+    else
+      Settings.Mouse[A] := mbNone;
+  end;
+end;
+
+function WriteMouse: TJSONObject;
+var
+  A: TGameAction;
+begin
+  Result := TJSONObject.Create;
+  for A := Low(TGameAction) to High(TGameAction) do
+    if Settings.Mouse[A] <> mbNone then
+      Result.Add(ActionIds[A], MouseBindIds[Settings.Mouse[A]]);
 end;
 
 function WriteKeys: TJSONObject;
@@ -443,7 +618,7 @@ procedure LoadSettings;
 var
   Text: String;
   D: TJSONData;
-  J, KeysJ, PadJ: TJSONObject;
+  J, KeysJ, MouseJ, PadJ: TJSONObject;
 begin
   Defaults;
   if not SaveStorageRead(SettingsUrl, Text) then Exit;
@@ -474,8 +649,12 @@ begin
     Settings.RenderScale := Clamped(J.Get('renderScale', Settings.RenderScale), MinRenderScale, MaxRenderScale);
     Settings.VSync := J.Get('vsync', Settings.VSync);
     Settings.FrameCap := Clamped(J.Get('frameCap', Settings.FrameCap), 0, 1000);
+    Settings.TouchLeftHanded := J.Get('touchLeftHanded', Settings.TouchLeftHanded);
+    Settings.TouchSize := Clamped(J.Get('touchSize', Settings.TouchSize), TouchSizes[0], TouchSizes[High(TouchSizes)]);
     if J.Find('keys', KeysJ) then
       ReadKeys(KeysJ);
+    if J.Find('mouse', MouseJ) then
+      ReadMouse(MouseJ);
     if J.Find('pad', PadJ) then
       ReadPad(PadJ);
   finally
@@ -486,6 +665,8 @@ begin
     BoolToStr(Settings.Diminish, 'on', 'off'), BoolToStr(Settings.MouseLook, 'on', 'off')]);
   WritelnLog('Settings', VideoSummary);
   WritelnLog('Settings', KeysSummary);
+  WritelnLog('Settings', MouseSummary);
+  WritelnLog('Settings', TouchSummary);
   WritelnLog('Settings', PadSummary);
 end;
 
@@ -508,7 +689,10 @@ begin
     J.Add('renderScale', Settings.RenderScale);
     J.Add('vsync', Settings.VSync);
     J.Add('frameCap', Settings.FrameCap);
+    J.Add('touchLeftHanded', Settings.TouchLeftHanded);
+    J.Add('touchSize', Settings.TouchSize);
     J.Add('keys', WriteKeys);
+    J.Add('mouse', WriteMouse);
     J.Add('pad', WritePad);
     SaveStorageWrite(SettingsUrl, J.FormatJSON(AsCompressedJSON));
   finally
@@ -541,6 +725,22 @@ begin
     Settings.FieldOfView, BoolToStr(Settings.Fullscreen, 'fullscreen', 'window'),
     Settings.UiScale, Settings.RenderScale, BoolToStr(Settings.VSync, 'on', 'off'),
     FrameCapText(Settings.FrameCap)]);
+end;
+
+function TouchSummary: String;
+begin
+  Result := Format('Touch: %s, size %d%%', [BoolToStr(Settings.TouchLeftHanded, 'left-handed', 'right-handed'),
+    Settings.TouchSize]);
+end;
+
+function NextTouchSize(const Size: Integer): Integer;
+var
+  I: Integer;
+begin
+  for I := 0 to High(TouchSizes) do
+    if TouchSizes[I] > Size then
+      Exit(TouchSizes[I]);
+  Result := TouchSizes[0];
 end;
 
 function NextFrameCap(const Cap, Steps: Integer): Integer;

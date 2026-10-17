@@ -203,7 +203,13 @@ actions too (`weapon1`..`weapon7`, `nextWeapon`, `prevWeapon`,
 `lightDiminish`, `mouseLook`, `music`, `help`, `grid`, `revealMap`,
 `nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`):
 `BIND:weapon5:Q,KEY:Q` selects the rocket launcher (autotest
-`hotkey-bindings`, unit test `TestKeyBindings`).
+`hotkey-bindings`, unit test `TestKeyBindings`). Each action also has
+one mouse binding (`GameSettings.Mouse`, `settings.json`'s `mouse`:
+Left, Middle, Right, Button4, Button5, WheelUp, WheelDown; defaults
+fire Left, nextWeapon WheelUp, prevWeapon WheelDown): `MBIND:action:button`
+binds and `MOUSE:button` clicks through `Press` (log `Settings: Mouse:
+fire Left; ...`; autotest `mouse-bindings`; the Controls page's third
+column catches the next click in `TViewMenu.PreviewPress`).
 Settings (`GameSettings`, `settings.json` next to the saves; the log
 prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
 like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a
@@ -285,6 +291,11 @@ them on the desktop, where the mouse is one finger; `TDOWN:id:x:y`,
 window, y up): the stick takes the left 40%, FIRE is at about
 `0.904:0.388` and MENU at `0.955:0.92` in a 16:9 window (log `Touch:
 Button ...`; autotest `touch-controls`, unit test `TestTouchControls`).
+`TOUCHLAYOUT:left|right` and `TOUCHSIZE:75..150` (`settings.json`'s
+`touchLeftHanded`, `touchSize`; the Controls page's Touch mode,
+`MENUCONTROLSTOUCH`) mirror the stick and buttons (MAP and MENU stay
+top right) and scale them; at left / 125% FIRE is at `0.12:0.44`
+(autotests `touch-layout`, `controls-touch`, both with goldens).
 In the browser the page script (`tools/patch_web_page.py`) tracks the
 fingers; Playwright tests them with `hasTouch: true` and CDP
 `Input.dispatchTouchEvent` (several touch points at once).

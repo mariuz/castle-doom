@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Rebindable mouse buttons and wheel: every action can take a mouse
+  button or wheel direction besides its two keys (a third column on the
+  Controls page).
+- Touch controls for the left hand (the stick on the right) and in four
+  sizes, on the Controls page's new Touch mode.
+
 ## v0.25.0 (2026-10-17)
 
 - Rebindable weapon keys, next / previous weapon keys and hotkeys (light
