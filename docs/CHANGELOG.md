@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.22.0 (2026-10-17)
 
 - ZDoom's MAPINFO and ZMAPINFO lumps: PWADs made for ZDoom-family ports
   get their level names, music, skies, par times, map order, cluster
