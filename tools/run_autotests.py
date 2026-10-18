@@ -276,6 +276,18 @@ TESTS = [
      [r'MapInfo: E1M1: "Included Hangar" next E1M2.*exit picture CREDIT',
       r'MapInfo: E1M2: .*enter picture TITLEPIC', r'Load: E1M2: map parsed'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'include.wad')], None),
+    # Intermission scripts (tools/make_wiscript_wad.py: visible splat,
+    # pointer and animation patches): Doom's built-in E1 map after E1M1,
+    # and IN_TEST (MAPINFO exitpic / enterpic) after E1M2.
+    ('wiscript-vanilla', 'E1M1', 'Y,W:0.5,E,W:3,S,U,W:0.2,S,Q',
+     [r'Intermission: E1M1: exit script with 9 spots, 10 animations'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'wiscript.wad'), '--fixed-step'],
+     None),
+    ('wiscript', 'E1M2', 'Y,W:0.5,E,W:3,S,U,W:0.2,S,Q',
+     [r'Intermission: E1M2: exit script with 3 spots, 3 animations',
+      r'Intermission: E1M3: enter script with 3 spots, 3 animations'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'wiscript.wad'), '--fixed-step'],
+     None),
     ('umapinfo-boss', 'E1M1', 'Y,W:0.5,D,W:4,SAVE:1,Q',
      [r'BossDeath: E1M1: all TROO dead, UMAPINFO special 23 on tag 1'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'umapinfo.wad')],
@@ -576,6 +588,7 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'wiscript-vanilla_1.png', 'wiscript-vanilla_2.png', 'wiscript_1.png', 'wiscript_2.png',
     'inspector_1.png', 'gamepad-bindings_1.png', 'touch-controls_2.png', 'umapinfo-episode_1.png',
     'mapinfo-episode_1.png', 'scrollers_1.png', 'icon-of-sin_1.png',
     'menu_menu.png', 'title-pages_menutitle.png', 'read-this_menureadthis.png',

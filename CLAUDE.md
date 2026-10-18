@@ -94,7 +94,7 @@ and the random seed is fixed, so two runs agree; the waits take about
 takes is in `GOLDEN` now: a new test's screenshots belong there too,
 after two runs agree.
 
-Unit tests (FPCUnit, no window, about 20 s, 36 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 37 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -482,7 +482,13 @@ shells.`); the log says `Strings: LANGUAGE lump: 6 strings` (autotest
 MAPINFO that only includes MAPINF2, whose E1M1 exits on `"$IN_EXIT"`
 (Background CREDIT) and E1M2 enters on `"$IN_ENTER"` (TITLEPIC); a
 self-including LOOPINF tests the limit (autotest `mapinfo-include`,
-unit test `TestZMapInfo`). UMAPINFO wins when a WAD has
+unit test `TestZMapInfo`). Intermission scripts (`DoomWiScript`):
+Freedoom's splat, pointer and animation patches are blank, so
+`tools/testdata/wiscript.wad` (`tools/make_wiscript_wad.py`) gives
+visible ones; `E1M1 ... --fixed-step --demo "Y,W:0.5,E,W:3,S,U,W:0.2,S,Q"`
+shows Doom's built-in E1 map (log `Intermission: E1M1: exit script with
+9 spots, 10 animations`), E1M2 the PWAD's `IN_TEST` (autotests
+`wiscript-vanilla`, `wiscript` with goldens, unit test `TestWiScript`). UMAPINFO wins when a WAD has
 both.
 Boom generalized lines: `tools/testdata/generalized.wad`
 (`tools/make_generalized_wad.py`) turns E1M1's door, lift, switch, blue

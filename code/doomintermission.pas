@@ -9,7 +9,7 @@ interface
 
 uses Classes,
   CastleControls, CastleImages,
-  DoomGraphics, DoomSound;
+  DoomGraphics, DoomSound, DoomWiScript;
 
 type
   TIntermissionStage = (isNone, isKills, isItems, isSecrets, isTime, isStatsDone, isEntering, isDone);
@@ -25,6 +25,14 @@ type
     FStage: TIntermissionStage;
     FPause: Integer;
     FTic: Integer;
+    { Intermission scripts (DoomWiScript) behind the statistics and the
+      "Entering" screen; nil for a plain picture. }
+    FExitScript, FEnterScript: TWiScript;
+    procedure LoadScripts;
+    function LoadScript(const LumpName: String): TWiScript;
+    { The script's background, animations and, on the "Entering" screen,
+      the visited levels' splats and the blinking pointer. }
+    procedure DrawScript(const Img: TRGBAlphaImage; const Script: TWiScript; const Entering: Boolean);
     procedure Compose;
     procedure DrawNumber(const Img: TRGBAlphaImage; const RightX, Y, Value: Integer);
     procedure DrawPercent(const Img: TRGBAlphaImage; const RightX, Y, Value: Integer);
@@ -35,6 +43,7 @@ type
     procedure SetStage(const S: TIntermissionStage);
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     { Begin the intermission for a finished map. }
     procedure Start(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds;
       const AIsDoom2: Boolean; const AMapName, ANextMap: String;
@@ -52,7 +61,7 @@ function ParTime(const MapName: String; const IsDoom2: Boolean): Integer;
 
 implementation
 
-uses SysUtils, Math, DoomMapInfo,
+uses SysUtils, Math, CastleLog, DoomMapInfo,
   CastleVectors, CastleUIControls,
   DoomHud, DoomFont, DoomDehacked, CastleComponentSerialize;
 
@@ -97,6 +106,139 @@ begin
   Stretch := true;
 end;
 
+destructor TDoomIntermission.Destroy;
+begin
+  FreeAndNil(FExitScript);
+  FreeAndNil(FEnterScript);
+  inherited;
+end;
+
+function TDoomIntermission.LoadScript(const LumpName: String): TWiScript;
+var
+  Lump: Integer;
+  Bytes: TBytes;
+  Text: String;
+begin
+  Result := nil;
+  if (FGraphics = nil) or (FGraphics.Wad = nil) then Exit;
+  Lump := FGraphics.Wad.FindLump(LumpName);
+  if Lump < 0 then Exit;
+  Bytes := FGraphics.Wad.LumpBytes(Lump);
+  SetLength(Text, Length(Bytes));
+  if Length(Bytes) > 0 then
+    Move(Bytes[0], Text[1], Length(Bytes));
+  Result := ParseWiScript(Text);
+end;
+
+procedure TDoomIntermission.LoadScripts;
+var
+  Info: TMapInfoEntry;
+  E: Integer;
+  Vanilla: String;
+begin
+  FreeAndNil(FExitScript);
+  FreeAndNil(FEnterScript);
+  { Doom's episode maps (when no MAPINFO picture replaces them). }
+  Vanilla := '';
+  if not FIsDoom2 then
+  begin
+    E := StrToIntDef(Copy(FMapName, 2, 1), 0);
+    if FGraphics.Patch(Format('WIMAP%d', [E - 1])) <> nil then
+      Vanilla := VanillaWiScript(E);
+  end;
+  Info := MapInfoFor(FMapName);
+  if (Info <> nil) and (Info.ExitScript <> '') then
+    FExitScript := LoadScript(Info.ExitScript)
+  else if ((Info = nil) or (Info.ExitPic = '')) and (Vanilla <> '') then
+    FExitScript := ParseWiScript(Vanilla);
+  Info := MapInfoFor(FNextMap);
+  if (Info <> nil) and (Info.EnterScript <> '') then
+    FEnterScript := LoadScript(Info.EnterScript)
+  else if ((Info = nil) or (Info.EnterPic = '')) and (Vanilla <> '') then
+    FEnterScript := ParseWiScript(Vanilla);
+  if FExitScript <> nil then
+    WritelnLog('Intermission', '%s: exit script with %d spots, %d animations', [FMapName,
+      FExitScript.SpotNames.Count, FExitScript.Animations.Count]);
+  if FEnterScript <> nil then
+    WritelnLog('Intermission', '%s: enter script with %d spots, %d animations', [FNextMap,
+      FEnterScript.SpotNames.Count, FEnterScript.Animations.Count]);
+end;
+
+procedure TDoomIntermission.DrawScript(const Img: TRGBAlphaImage; const Script: TWiScript;
+  const Entering: Boolean);
+var
+  Finished, Next, I, Frame: Integer;
+  A: TWiAnimation;
+  P: TDoomImage;
+  Shown: Boolean;
+
+  { A patch at X, Y with its offsets (V_DrawPatch). }
+  procedure DrawAt(const Patch: TDoomImage; const X, Y: Integer);
+  begin
+    if Patch <> nil then
+      BlitDoomImage(Img, Patch, X - Patch.LeftOffset, Y - Patch.TopOffset);
+  end;
+
+  function Fits(const Patch: TDoomImage; const X, Y: Integer): Boolean;
+  var
+    L, T: Integer;
+  begin
+    L := X - Patch.LeftOffset;
+    T := Y - Patch.TopOffset;
+    Result := (L >= 0) and (L + Patch.Width < 320) and (T >= 0) and (T + Patch.Height < 200);
+  end;
+
+  { Visited: the levels up to the finished one in the spots' order
+    (vanilla's "levels done" of a linear episode). }
+  function Visited(const MapName: String): Boolean;
+  var
+    Index: Integer;
+  begin
+    Index := Script.SpotIndex(MapName);
+    Result := (Index >= 0) and (Finished >= 0) and (Index <= Finished);
+  end;
+
+begin
+  Finished := Script.SpotIndex(FMapName);
+  Next := Script.SpotIndex(FNextMap);
+  for A in Script.Animations do
+  begin
+    case A.Condition of
+      wcEntering: Shown := SameText(FNextMap, A.ConditionMap);
+      wcNotEntering: Shown := not SameText(FNextMap, A.ConditionMap);
+      wcLeaving: Shown := SameText(FMapName, A.ConditionMap);
+      wcNotLeaving: Shown := not SameText(FMapName, A.ConditionMap);
+      wcVisited: Shown := Visited(A.ConditionMap);
+      wcNotVisited: Shown := not Visited(A.ConditionMap);
+      else Shown := true;
+    end;
+    if (not Shown) or (A.Frames.Count = 0) then Continue;
+    Frame := FTic div Max(1, A.Period);
+    if A.Condition = wcAlways then
+      Frame := Frame mod A.Frames.Count
+    else
+      Frame := Min(Frame, A.Frames.Count - 1);
+    DrawAt(FGraphics.Patch(A.Frames[Frame]), A.X, A.Y);
+  end;
+  if not Entering then Exit;
+  P := FGraphics.Patch(Script.Splat);
+  if P <> nil then
+    for I := 0 to Script.SpotNames.Count - 1 do
+      if Visited(Script.SpotNames[I]) then
+        DrawAt(P, Script.SpotX[I], Script.SpotY[I]);
+  { "You are here", blinking like vanilla's (FTic and 31) < 20. }
+  if (Next >= 0) and ((FTic and 31) < 20) then
+    for I := 0 to 1 do
+    begin
+      P := FGraphics.Patch(Script.Pointers[I]);
+      if (P <> nil) and Fits(P, Script.SpotX[Next], Script.SpotY[Next]) then
+      begin
+        DrawAt(P, Script.SpotX[Next], Script.SpotY[Next]);
+        Break;
+      end;
+    end;
+end;
+
 function TDoomIntermission.Done: Boolean;
 begin
   Result := FStage = isDone;
@@ -130,6 +272,7 @@ begin
   FPause := 35;
   FStage := isNone;
   Exists := true;
+  LoadScripts;
   Compose;
 end;
 
@@ -321,6 +464,7 @@ var
   Back, P: TDoomImage;
   E, LineH, NameH: Integer;
   Info: TMapInfoEntry;
+  Script: TWiScript;
 begin
   if FGraphics = nil then Exit;
   Img := TRGBAlphaImage.Create(320, 200);
@@ -343,6 +487,12 @@ begin
     if Info.ExitPic <> '' then
       Back := FGraphics.Patch(Info.ExitPic);
   end;
+  if FStage in [isEntering, isDone] then
+    Script := FEnterScript
+  else
+    Script := FExitScript;
+  if (Back = nil) and (Script <> nil) then
+    Back := FGraphics.Patch(Script.Background);
   if (Back = nil) and not FIsDoom2 then
   begin
     E := StrToIntDef(Copy(FMapName, 2, 1), 1);
@@ -350,6 +500,8 @@ begin
   end;
   if Back = nil then Back := FGraphics.Patch('INTERPIC');
   if Back <> nil then BlitDoomImage(Img, Back, 0, 0);
+  if Script <> nil then
+    DrawScript(Img, Script, FStage in [isEntering, isDone]);
 
   P := FGraphics.Patch('WINUM0');
   if P <> nil then LineH := (3 * P.Height) div 2 else LineH := 22;

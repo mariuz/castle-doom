@@ -79,7 +79,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   screen melt between levels.
 - Automap (Tab) with Doom's line colours, player arrow, zoom, grid and a reveal-all cheat.
 - Doom's text font for messages, and the real intermission screen (level names, FINISHED,
-  animated kills/items/secrets/time with sounds, par times, ENTERING).
+  animated kills/items/secrets/time with sounds, par times, ENTERING), with the episode
+  maps' animations, visited-level splats and blinking "you are here" pointer (ZDoom's
+  intermission scripts; Freedoom's own maps leave them blank).
 - Freedoom's own wording from the WAD's `DEHACKED` strings: pickup and door messages, level
   titles (also on the automap), the Nightmare and quit questions.
 - Finales: Freedoom's story texts (read from the WAD's `DEHACKED` strings), the end

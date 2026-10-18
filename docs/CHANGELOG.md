@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The intermission's episode maps animate, mark the levels you have
+  finished and point at the next one, as in Doom (with PWAD art: Freedoom
+  leaves them blank), and PWADs' ZDoom intermission scripts work the
+  same way.
+
 ## v0.28.0 (2026-10-18)
 
 - Touch layout editor: drag each touch button where your thumbs want it

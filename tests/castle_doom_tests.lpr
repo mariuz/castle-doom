@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized;
+  DoomGeneralized, DoomWiScript;
 
 function DataPath(const Name: String): String;
 begin
@@ -45,6 +45,7 @@ type
     procedure TestUMapInfo;
     procedure TestZMapInfo;
     procedure TestLanguage;
+    procedure TestWiScript;
   end;
 
   TTestMap = class(TTestCase)
@@ -315,6 +316,59 @@ begin
   finally
     FreeAndNil(Errors);
     FreeAndNil(Values);
+  end;
+end;
+
+procedure TTestWad.TestWiScript;
+var
+  Script: TWiScript;
+  Errors: TStringList;
+begin
+  Errors := TStringList.Create;
+  try
+    { Doom's own E1: wi_stuff.c's spots and ten looping animations. }
+    Script := ParseWiScript(VanillaWiScript(1), Errors);
+    try
+      AssertEquals('background', 'WIMAP0', Script.Background);
+      AssertEquals('spots', 9, Script.SpotNames.Count);
+      AssertEquals('E1M2 x', 148, Script.SpotX[Script.SpotIndex('e1m2')]);
+      AssertEquals('E1M2 y', 143, Script.SpotY[Script.SpotIndex('E1M2')]);
+      AssertEquals('animations', 10, Script.Animations.Count);
+      AssertEquals('frames', 'WIA00102', Script.Animations[1].Frames[2]);
+      AssertEquals('period', 11, Script.Animations[0].Period);
+      AssertEquals('pointer', 'WIURH1', Script.Pointers[1]);
+    finally
+      FreeAndNil(Script);
+    end;
+    { E2: level animations shown when entering a map. }
+    Script := ParseWiScript(VanillaWiScript(2), Errors);
+    try
+      AssertEquals('E2 animations', 9, Script.Animations.Count);
+      AssertTrue('conditional', Script.Animations[0].Condition = wcEntering);
+      AssertEquals('entering', 'E2M2', Script.Animations[0].ConditionMap);
+    finally
+      FreeAndNil(Script);
+    end;
+    AssertEquals('no E4 map', '', VanillaWiScript(4));
+    AssertEquals('vanilla scripts parse cleanly', 0, Errors.Count);
+    { ZDoom's syntax: comments, a Pic, IfLeaving / IfNotVisited, unknown
+      words reported. }
+    Script := ParseWiScript('// test' + LineEnding + 'Background "INTERPIC"' + LineEnding +
+      'Spots { E1M1 10 20 } /* c */ IfLeaving E1M1 Pic 5 6 WIBOX0' + LineEnding +
+      'IfNotVisited E1M5 Animation 1 2 3 { A B }' + LineEnding + 'Bogus', Errors);
+    try
+      AssertEquals('quoted background', 'INTERPIC', Script.Background);
+      AssertEquals('one spot', 1, Script.SpotNames.Count);
+      AssertTrue('pic leaving', Script.Animations[0].Condition = wcLeaving);
+      AssertEquals('pic patch', 'WIBOX0', Script.Animations[0].Frames[0]);
+      AssertTrue('not visited', Script.Animations[1].Condition = wcNotVisited);
+      AssertEquals('two frames', 2, Script.Animations[1].Frames.Count);
+      AssertEquals('unknown word reported', 1, Errors.Count);
+    finally
+      FreeAndNil(Script);
+    end;
+  finally
+    FreeAndNil(Errors);
   end;
 end;
 

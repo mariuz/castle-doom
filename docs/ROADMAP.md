@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Intermission scripts (`DoomWiScript`): the episode maps' animations,
+  visited-level splats and blinking pointer, from ZDoom's script format;
+  Doom's E1-E3 built in from `wi_stuff.c`'s tables, PWADs' through
+  MAPINFO `exitpic` / `enterpic = "$LUMP"`. Test PWAD
+  `tools/testdata/wiscript.wad`, autotests `wiscript-vanilla` and
+  `wiscript` (goldens), unit test `TestWiScript`.
+
 - Every screenshot a regression check: the autotests whose screenshots
   were not golden (moving monsters, scrollers, the inspector's FPS) run
   with `--fixed-step` (the harness's `FIXED_STEP` set adds it) and their
@@ -923,16 +930,16 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **MAPINFO, the rest**: UMAPINFO, the common ZDoom MAPINFO keys, LANGUAGE, `include` and the intermission scripts' backgrounds are done (see above); left are the scripts' animations and pointers (the vanilla episode maps' format; only the `Background` is used), MAPINFO's `intermission` blocks (scripted finales), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
+| **MAPINFO, the rest**: UMAPINFO, the common ZDoom MAPINFO keys, LANGUAGE, `include` and the intermission scripts' backgrounds are done (see above); left are MAPINFO's `intermission` blocks (scripted finales), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
 
 ## Suggested next three
 
 1. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-2. MAPINFO, the rest (M, see Other suggested improvements): the
-   intermission scripts' animations and pointers.
-3. Inspector in the browser (S, see Engine and tooling): F8 on the live
+2. Inspector in the browser (S, see Engine and tooling): F8 on the live
    page.
+3. Debug drawing (M, see Engine and tooling): subsectors, blocking
+   lines, radii and the line of fire as wireframes.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

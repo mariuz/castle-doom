@@ -86,7 +86,8 @@ Sizes, for orientation (lines of Pascal):
 | `doomthings.pas` | 363 | thing type table (info.c reduced) |
 | `gameviewmenu.pas` | 780 | title screen: Doom menu and options |
 | `doommenu.pas` | 420 | Doom's menu from `M_*` graphics |
-| `doomintermission.pas` | 330 | intermission screen |
+| `doomintermission.pas` | 500 | intermission screen |
+| `doomwiscript.pas` | 300 | intermission scripts (episode maps: animations, splats, pointer) |
 | `doomfinale.pas` | 520 | finale text, end pictures, bunny scroller, cast call |
 | `doommapinfo.pas` | 1000 | UMAPINFO and ZDoom (Z)MAPINFO: per-map names, music, sky, par, next maps, story texts, endings |
 | `doomstates.pas` | 230 | vanilla's state table and mobjinfo rows (`doomstates_table.inc`, generated from info.c): what DeHackEd edits and the things' sequences come from |
@@ -965,7 +966,20 @@ screen: a 320x200 image rebuilt every tic from `WIMAP0..2` or `INTERPIC`, the
 `WIOSTS`/`WITIME`/`WIPAR` and the `WINUM` digits at `wi_stuff.c` positions,
 with Doom's count-up (2% per tic, pistol click every 4 tics, explosion at the
 end, one-second pauses), par times, the ENTERING screen, and use/fire to skip.
-The control is kept 4:3 and centred on the viewport.
+The control is kept 4:3 and centred on the viewport. The episode maps
+come from intermission scripts (`doomwiscript.pas`, ZDoom's text format:
+`Background`, `Splat`, `Pointer`, `Spots`, `Animation x y tics { frames }`,
+`Pic`, `IfEntering` / `IfLeaving` / `IfVisited` and their `IfNot` forms):
+Doom's E1-E3 are built in as script text from `wi_stuff.c`'s tables
+(`VanillaWiScript`), a MAPINFO `exitpic` / `enterpic = "$LUMP"` loads a
+PWAD's (`TMapInfoEntry.ExitScript` / `EnterScript`). `DrawScript` draws
+the animations (looping; conditional ones play once and keep the last
+frame), and on the ENTERING screen the splat on every level up to the
+finished one in the spots' order and the blinking pointer (`(tic and 31)
+< 20`) on the next one, the first pointer patch that fits on the screen.
+Freedoom's `WISPLAT`, `WIURH*` and `WIA*` patches are blank 1x1
+pictures (its episode maps have no level spots), so only PWADs show them
+(test PWAD `tools/testdata/wiscript.wad`).
 
 The finale (`doomfinale.pas`, `f_finale.c`) is a third such screen. Doom 1
 goes to it straight from ExM8 (`G_DoCompleted` skips the intermission
@@ -1025,8 +1039,8 @@ clearing entry first), so the menu builds them like UMAPINFO's.
 `include "LUMP"` splices the lump's text into the tokenizer's text right
 after the name (16 includes at most, so a lump including itself stops
 with an error), and `exitpic` / `enterpic = "$LUMP"` read a ZDoom
-intermission script (the vanilla episode maps' format) for its
-`Background` picture; its splats, pointers and animations are not used.
+intermission script (the vanilla episode maps' format): its
+`Background` is the picture, and DoomIntermission draws the rest.
 
 LANGUAGE lookups (`map E1M1 lookup "NAME"`, `"$NAME"`, `exittext =
 lookup, "NAME"`) of titles, cluster texts, episode names and music

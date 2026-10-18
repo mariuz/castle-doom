@@ -53,6 +53,10 @@ type
     { Intermission backgrounds: ExitPic behind this map's statistics,
       EnterPic behind "Entering" this map (patches). }
     ExitPic, EnterPic: String;
+    { The intermission script lumps behind them ("$LUMP"; '' for a plain
+      picture): DoomIntermission draws their animations, splats and
+      pointer. }
+    ExitScript, EnterScript: String;
     EndGame: TMapInfoEndGame;
     EndPic: String;
     EndBunny, EndCast: Boolean;
@@ -151,6 +155,8 @@ begin
   ParTimeSet := Src.ParTimeSet;
   ExitPic := Src.ExitPic;
   EnterPic := Src.EnterPic;
+  ExitScript := Src.ExitScript;
+  EnterScript := Src.EnterScript;
   NoIntermission := Src.NoIntermission;
   EndGame := Src.EndGame;
   EndPic := Src.EndPic;
@@ -508,6 +514,14 @@ var
       Result := Lookup(Values[1]);
   end;
 
+  function ScriptValue: String;
+  begin
+    if Copy(First, 1, 1) = '$' then
+      Result := UpperCase(Copy(First, 2, MaxInt))
+    else
+      Result := '';
+  end;
+
   { "$MUSIC_RUNNIN" names the lump D_ plus the string (ZDoom's rule). }
   function LookupMusic: String;
   begin
@@ -654,9 +668,15 @@ var
     end
     else if SameText(Key, 'nointermission') then E.NoIntermission := true
     else if SameText(Key, 'exitpic') then
-      E.ExitPic := PictureValue
+    begin
+      E.ExitPic := PictureValue;
+      E.ExitScript := ScriptValue;
+    end
     else if SameText(Key, 'enterpic') then
+    begin
       E.EnterPic := PictureValue;
+      E.EnterScript := ScriptValue;
+    end;
     { levelnum, sucktime, flags of other ports... are skipped. }
   end;
 
