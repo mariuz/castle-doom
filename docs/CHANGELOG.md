@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.31.0 (2026-10-18)
 
 - Debug drawing: subsectors, blocking lines, actor boxes and the
   player's shots as wireframes, switched in the engine inspector (F8).
