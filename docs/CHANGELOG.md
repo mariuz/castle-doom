@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.38.0 (2026-10-18)
 
 - Level statistics: `L` shows kills, items, secrets and the time on
   screen, and each level's best time is kept and shown after it
