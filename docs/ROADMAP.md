@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Profiled the actors on a 300+ monster map (Phase 2 MAP11, everything
+  awake): 2.2 ms a tic, of which the actor-vs-actor collision loop was
+  0.2 ms (so no thing grid yet) and new sprite shapes most: each one
+  rebuilt its group scene's shape tree (about 0.8 ms, 610 shapes in the
+  first 10 s). `TSpriteGroup` now collects a frame's new shapes and adds
+  them in one change (`AddPending`, from `TSpriteBatch.Flush`): actors
+  1.35 ms a tic, and no stall when a horde first shows up.
+
 - Debug drawing (`GameDebugDraw`): wireframes of the subsector
   polygons, the blocking lines, the actors' boxes and the player's last
   hitscans, four scenes under a `Debug` group that the inspector's Exists
@@ -924,7 +932,7 @@ L = several days). Items inside a section are in suggested order.
 | **More unit tests**: `DoomGeometry`'s sector chunks (needs the graphics cache without a window), the automap and HUD composition, the save file's round trip through `doomworld_save.inc` on a world without a viewport. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
 | **Mobile, the rest**: Android builds are done (see above); left are testing on devices (pause / resume and the GL context, the soft keyboard for save names, performance), release signing keys in the repository's secrets, 32-bit ARM (needs an FPC with a fixed ARM code generator), an Android App Bundle for stores, and iOS (`castle-engine package --target=ios` on a macOS runner, needs Apple signing). | CGE's mobile support is a selling point. | `CastleEngineManifest.xml`, `.github/workflows/build.yml` | M |
 | **Web gamepads in CGE itself**: the game's `GameGamepad` polls the Gamepad API through JOB (done, see above); a real `CastleInternalGameControllersWeb` backend inside CGE (`gamepadconnected` events, `mapping` other than `standard`) would serve every CGE web game. Best contributed upstream. | One less game-side workaround. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
-| **Performance**: a thing grid for the actor-vs-actor checks (they still loop over every actor); merge per-sector dynamic chunks that never actually move; profile `TicActors` on 300+ thing maps. | Headroom on big maps. | `DoomGeometry`, `DoomWorld` | S-M |
+| **Performance**: `TicActors` on Phase 2's MAP11 (325 monsters, 835 actors, all awake) was profiled (see above): the actor-vs-actor loop of `TryMove2D` is 0.2 ms of the tic and sight 0.05 ms, so a thing grid waits until a map needs it; left are the sprite changes themselves (`AnimateTic` -> `ApplySprite`: the collision quad's coordinates, 0.3 ms, and the batch's dictionary lookup per frame change) and merging per-sector dynamic chunks that never actually move. | Headroom on big maps. | `DoomActors`, `DoomGeometry` | S-M |
 
 ## 6. Inspectability (Castle Game Engine's tools)
 
@@ -951,8 +959,8 @@ play.
    then signing keys and the soft keyboard for save names.
 2. MAPINFO, the rest (M, see Other suggested improvements): the
    `intermission` blocks (scripted finales).
-3. Performance (M, see Engine and tooling): a thing grid for the
-   actor-vs-actor checks.
+3. More unit tests (M, see Engine and tooling): the sector chunks, the
+   automap and the HUD without a window.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

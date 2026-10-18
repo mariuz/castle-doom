@@ -217,9 +217,16 @@ type
     { The light effect on every shape's Appearance. }
     Effect: TEffectNode;
     Shapes: TSpriteShapeDict;
+    { Shapes made since the last flush, not in the scene yet: adding a
+      child rebuilds the scene's shape tree, so the frame's new shapes go
+      in together (TSpriteBatch.Flush). }
+    Pending: array of TAbstractChildNode;
     destructor Destroy; override;
-    { The shape for a texture URL, made (and added to the scene) on demand. }
+    { The shape for a texture URL, made on demand (in the scene after the
+      next flush). }
     function ShapeFor(const Url: String): TSpriteShape;
+    { Add the pending shapes to the scene in one change. }
+    procedure AddPending;
   end;
   TGroupDict = {$ifdef FPC}specialize{$endif} TDictionary<Integer, TSpriteGroup>;
 
@@ -394,7 +401,12 @@ end;
 destructor TSpriteGroup.Destroy;
 var
   S: TSpriteShape;
+  N: TAbstractChildNode;
 begin
+  { Shapes never added to the scene belong to no one else. }
+  for N in Pending do
+    N.FreeIfUnused;
+  SetLength(Pending, 0);
   if Shapes <> nil then
     for S in Shapes.Values do
       S.Free;
@@ -409,15 +421,25 @@ begin
     Result := TSpriteShape.Create(Url, Kind, Translucent);
     Result.Shape.Appearance.SetEffects([Effect]);
     Shapes.Add(Url, Result);
-    { Adding children rebuilds the scene's shape tree (ChangedAll), but CGE
-      (snapshot, castlescenecore.pas ChangedAll -> BeforeNodesFree(true))
-      keeps its list of transforms changed since the last frame
-      (TransformationDirty) pointing at the freed tree, which crashed the
-      next Update once; BeforeNodesFree without the flag clears it. This
-      happens once per texture in a light group, not per thing. }
-    Scene.BeforeNodesFree;
-    Root.AddChildren(Result.Shape);
+    SetLength(Pending, Length(Pending) + 1);
+    Pending[High(Pending)] := Result.Shape;
   end;
+end;
+
+procedure TSpriteGroup.AddPending;
+begin
+  if Length(Pending) = 0 then Exit;
+  { Adding children rebuilds the scene's shape tree (ChangedAll), but CGE
+    (snapshot, castlescenecore.pas ChangedAll -> BeforeNodesFree(true))
+    keeps its list of transforms changed since the last frame
+    (TransformationDirty) pointing at the freed tree, which crashed the
+    next Update once; BeforeNodesFree without the flag clears it. Once a
+    frame per group at most: a level's start or a horde waking makes
+    hundreds of shapes, and a rebuild per shape (about 0.8 ms each on
+    MAP11 under software GL) stalled those frames. }
+  Scene.BeforeNodesFree;
+  Root.AddChildren(Pending, true);
+  SetLength(Pending, 0);
 end;
 
 { TSpriteBatch ------------------------------------------------------------- }
@@ -499,9 +521,12 @@ var
   S: TSpriteShape;
 begin
   for Group in FGroups.Values do
+  begin
+    Group.AddPending;
     for S in Group.Shapes.Values do
       if S.IndexDirty or S.CoordsDirty then
         S.Flush;
+  end;
 end;
 
 function TSpriteBatch.SceneCount: Integer;

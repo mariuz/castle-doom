@@ -2,6 +2,8 @@
 
 ## v0.31.0 (2026-10-18)
 
+- Smoother frames when many monsters first appear: new sprite shapes
+  join their scene once a frame instead of one at a time.
 - Debug drawing: subsectors, blocking lines, actor boxes and the
   player's shots as wireframes, switched in the engine inspector (F8).
 

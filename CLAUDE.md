@@ -323,7 +323,12 @@ their candidate lines from `TDoomMap.LinesInBox` / `LinesNearSegment`
 (a 128-unit grid, ascending line order); a new linedef scan in the
 simulation should too. MAP12 of Phase 2 (7245 lines) with its monsters
 awake: `-skill 4 --demo "Y,X,W:1,X,W:12,PERF,Q"` logs `actors` about
-1 ms per tic (7.8 before the grid).
+1 ms per tic (7.8 before the grid). MAP11 (835 actors) with the same
+demo logs about 1.35 ms (2.3 before new sprite shapes were added to
+their scenes once a frame); to find where a tic goes, wrap parts of
+`TicActors` in `CastleTimeUtils.Timer` / `TimerSeconds` sums logged
+every 350 tics (temporary code: the timers themselves roughly double
+the total).
 
 Profiling: `PERF` logs a `PerfView:` line at once (also every 10 s): our
 per-frame costs, CGE's FPS (`only render` = without display waits) and the
