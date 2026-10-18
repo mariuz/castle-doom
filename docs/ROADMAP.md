@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Touch layout editor: Controls -> Touch -> Edit... shows the controls
+  over a dark backdrop and a finger (the mouse) drags each button to a
+  place of its own (`TDoomTouchControls.Editing`, `SetButtonPlace`;
+  settings.json's `touchButtons`, fractions of the screen, not
+  mirrored); Reset puts them back, and an opacity setting (25-100%)
+  fades them. Autotests `touch-edit` and `touch-places` (goldens), unit
+  test `TestTouchControls`.
+
 - MAPINFO `include` (the lump's text parsed in place, 16 at most) and
   ZDoom intermission scripts in `exitpic` / `enterpic = "$LUMP"` (their
   `Background` picture). Test PWAD `tools/testdata/include.wad`,
@@ -909,18 +917,17 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Touch layout editor**: the touch controls mirror and scale (see above); dragging each button to a place of one's own (saved per button) and an opacity setting would go further. | Phones of every shape. | `GameTouch`, `GameSettings` | S |
 | **MAPINFO, the rest**: UMAPINFO, the common ZDoom MAPINFO keys, LANGUAGE, `include` and the intermission scripts' backgrounds are done (see above); left are the scripts' animations and pointers (the vanilla episode maps' format; only the `Background` is used), MAPINFO's `intermission` blocks (scripted finales), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
-| **Fixed step everywhere**: `--fixed-step` makes 7 moving-scene autotests reproducible (see above); running the whole suite with it would make every screenshot comparable but triples its real time (software GL draws about 12 frames a second, each now a single tic). | Every screenshot a regression check. | `tools/run_autotests.py` | S |
+| **Fixed step everywhere**: `--fixed-step` makes 8 moving-scene autotests reproducible (see above); running the whole suite with it would make every screenshot comparable but triples its real time (software GL draws about 12 frames a second, each now a single tic). | Every screenshot a regression check. | `tools/run_autotests.py` | S |
 
 ## Suggested next three
 
 1. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-2. Touch layout editor (S, see Other suggested improvements): drag the
-   touch buttons into place, and their opacity.
-3. Fixed step everywhere (S, see Other suggested improvements): more
+2. Fixed step everywhere (S, see Other suggested improvements): more
    screenshots as regression checks.
+3. MAPINFO, the rest (M, see Other suggested improvements): the
+   intermission scripts' animations and pointers.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

@@ -140,7 +140,7 @@ TESTS = [
     ('palette', 'E1M1', 'W:0.5,S,INVUL,W:0.3,S,PALMAP,W:0.3,S,Q',
      [r'Graphics: Palette lookup images made', r'Saved screenshot 3'], [], None),
     ('fuzz', 'E1M1', 'Y,W:1,P:58:250,W:0.2,S,INVIS,W:0.3,S,Q',
-     [r'Spawn: SARG', r'Saved screenshot 2'], [], None),
+     [r'Spawn: SARG', r'Saved screenshot 2'], ['--fixed-step'], None),
     # A -deh patch: a 1 HP imp dies to one bullet, Freedoom's DEHACKED lump
     # is read too, the patch's par time (999 s) is what the intermission uses.
     ('dehacked', 'E1M1', 'Y,W:0.3,SAVE:1,SHOTS,P:3001:300,W:0.3,X,W:0.5,Q',
@@ -222,6 +222,14 @@ TESTS = [
      lambda config: check_touch_walk(config)),
     ('controls-touch', 'MENUCONTROLSTOUCH', None, [r'Settings: Touch: left-handed, size 125%'], [],
      lambda config: check_touch_settings(config)),
+    # The touch layout editor (Controls -> Touch -> Edit...) drags FIRE to
+    # the screen's middle; in a game FIRE placed at 0.5:0.3 at half
+    # opacity shoots there.
+    ('touch-edit', 'MENUTOUCHEDIT', None, [r'Settings: Touch: .*opacity 50%, fire at 0\.500 0\.500'], [],
+     lambda config: check_touch_places(config)),
+    ('touch-places', 'E1M1',
+     'Y,TOUCHPOS:fire:0.5:0.3,TOUCHOPACITY:50,W:0.3,S,SHOTS,TDOWN:1:0.5:0.3,W:0.3,TUP:1,W:0.3,Q',
+     [r'Settings: Touch: .*opacity 50%, fire at 0\.500 0\.300', r'Shot: '], ['--touch', '--fixed-step'], None),
     # UMAPINFO from a PWAD (tools/make_umapinfo_wad.py): E1M1 renamed with a
     # story text after its intermission, then E1M3 without intermission
     # ending the game with the bunny.
@@ -522,6 +530,14 @@ def check_touch_settings(config):
         'touch %s %s' % (settings['touchLeftHanded'], settings['touchSize'])
 
 
+def check_touch_places(config):
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        settings = json.load(f)
+    fire = settings['touchButtons'].get('fire')
+    assert fire and abs(fire[0] - 0.5) < 0.01 and abs(fire[1] - 0.5) < 0.01, 'fire %s' % fire
+    assert settings['touchOpacity'] == 50, 'opacity %s' % settings['touchOpacity']
+
+
 def check_pad(config, action, buttons):
     with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
         settings = json.load(f)
@@ -556,7 +572,8 @@ GOLDEN_MAX_CHANGED = 0.015
 GOLDEN = [
     'menu_menu.png', 'title-pages_menutitle.png', 'read-this_menureadthis.png',
     'controls-page_menucontrols.png', 'controls-hotkeys_menucontrolshotkeys.png',
-    'controls-touch_menucontrolstouch.png', 'touch-layout_1.png', 'map-component_design.png',
+    'controls-touch_menucontrolstouch.png', 'touch-layout_1.png', 'touch-edit_menutouchedit.png',
+    'touch-places_1.png', 'map-component_design.png',
     'palette_1.png', 'palette_2.png', 'palette_3.png', 'fuzz_1.png', 'fuzz_2.png',
     'glbsp-v2_1.png', 'glbsp-v5_1.png', 'boom-lumps_1.png', 'umapinfo_1.png',
     'click-prompt_1.png', 'door-crush_1.png', 'ingame-options_1.png', 'ingame-options_2.png',

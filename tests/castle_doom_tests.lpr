@@ -1598,6 +1598,23 @@ begin
     T.TouchMove(6, Vector2(500, 500));
     AssertEquals('the left drags the view', 0, T.MoveVector.Length, 0.0001);
     T.ReleaseAll;
+    { A place of one's own (fractions of the size) wins over the mirrored
+      default; in editing a finger drags a button instead of pressing it. }
+    T.LeftHanded := false;
+    T.SizePercent := 100;
+    T.SetButtonPlace(tbUse, Vector2(0.5, 0.25));
+    T.ButtonCircle(tbUse, Middle, Radius);
+    AssertEquals('own place x', 800, Middle.X, 0.01);
+    AssertEquals('own place y', 225, Middle.Y, 0.01);
+    T.Editing := true;
+    T.ButtonCircle(tbFire, Middle, Radius);
+    T.TouchDown(8, Middle);
+    AssertFalse('no fire while editing', T.FireHeld);
+    T.TouchMove(8, Vector2(400, 450));
+    T.TouchUp(8);
+    AssertEquals('dragged x', 0.25, T.ButtonPlace(tbFire).X, 0.001);
+    AssertEquals('dragged y', 0.5, T.ButtonPlace(tbFire).Y, 0.001);
+    T.Editing := false;
   finally
     FreeAndNil(T);
   end;

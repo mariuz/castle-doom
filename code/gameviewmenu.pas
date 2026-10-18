@@ -10,7 +10,7 @@ interface
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
   CastleDownload, CastleZip,
-  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked, DoomMapInfo, GameSettings;
+  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked, DoomMapInfo, GameSettings, GameTouch;
 
 type
   TViewMenu = class(TCastleView)
@@ -39,7 +39,11 @@ type
     FPadMode: Boolean;
     { The page's touch half (after the gamepad's): layout and size. }
     FTouchMode: Boolean;
-    FTouchHandButton, FTouchSizeButton: TCastleButton;
+    FTouchHandButton, FTouchSizeButton, FTouchOpacityButton: TCastleButton;
+    { The touch layout editor: the controls over a dark backdrop, a finger
+      (the mouse) drags the buttons. }
+    FTouchEditor: TCastleRectangleControl;
+    FTouchEditControls: TDoomTouchControls;
     FPadButtons: array [TPadAction, 0..1] of TCastleButton;
     FWaitPadAction: TPadAction;
     FStatus: TCastleLabel;
@@ -56,6 +60,8 @@ type
     FSkill: Integer;
     FTicAccum: Single;
     FAutoTestTics: Integer;
+    { MENUTOUCHEDIT: drag FIRE once the editor has its size. }
+    FTouchEditDrag: Boolean;
     FMenuKeys: TStringList;
     FMenuKeyTics, FMenuShots: Integer;
     { Freedoom Phase 2 downloaded on demand (the web build ships only Phase
@@ -133,8 +139,15 @@ type
     procedure ClickControlsPad(Sender: TObject);
     procedure ClickControlsPage(Sender: TObject);
     procedure ClickMouseButton(Sender: TObject);
+    procedure ShowTouchEditor(const Show: Boolean);
+    procedure TouchButtonMoved(const Button: TTouchButton; const Position: TVector2);
+    procedure DragTouchFire;
     procedure ClickTouchHand(Sender: TObject);
     procedure ClickTouchSize(Sender: TObject);
+    procedure ClickTouchOpacity(Sender: TObject);
+    procedure ClickTouchEdit(Sender: TObject);
+    procedure ClickTouchEditDone(Sender: TObject);
+    procedure ClickTouchResetPlaces(Sender: TObject);
     procedure ShowControlsMode;
     { Bind the gamepad button the page waits for (pbNone clears). }
     procedure BindWaitingPad(const B: TPadButton);
@@ -169,7 +182,7 @@ var
   ViewMenu: TViewMenu;
   { Set from the command line (--autotest MAP PREFIX): start this map at once.
     MAP = MENU, MENUEPISODE, MENUSKILL, MENUNIGHTMARE, MENUQUIT, MENULOAD, MENUOPTIONS, MENUCONTROLS,
-    MENUCONTROLSPAD, MENUCONTROLSHOTKEYS, MENUCONTROLSTOUCH,
+    MENUCONTROLSPAD, MENUCONTROLSHOTKEYS, MENUCONTROLSTOUCH, MENUTOUCHEDIT,
     MENUDOOM2, MENUTITLE (title pages, menu closed) or MENUREADTHIS takes a
     screenshot of that menu page instead. }
   AutoTestMap: String;
@@ -198,7 +211,7 @@ var
 
 implementation
 
-uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils,
+uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils, CastleRectangles,
   CastleStringUtils,
   CastleFilesUtils,
   GameViewPlay, GameSaveBundle, GameSaveStorage, GameGamepad, GameViewDesign;
@@ -1030,12 +1043,17 @@ begin
     List.InsertFront(Row);
   end;
   List := DesignedComponent('TouchList') as TCastleVerticalGroup;
-  for I := 0 to 1 do
+  for I := 0 to 3 do
   begin
     Row := TCastleHorizontalGroup.Create(FreeAtStop);
     Row.Spacing := 10;
     Lab := TCastleLabel.Create(FreeAtStop);
-    if I = 0 then Lab.Caption := 'Layout' else Lab.Caption := 'Size';
+    case I of
+      0: Lab.Caption := 'Layout';
+      1: Lab.Caption := 'Size';
+      2: Lab.Caption := 'Opacity';
+      else Lab.Caption := 'Button places';
+    end;
     Lab.FontSize := 22;
     Lab.Color := White;
     Row.InsertFront(Lab);
@@ -1043,16 +1061,21 @@ begin
     B.FontSize := 22;
     B.AutoSizeWidth := false;
     B.Width := 300;
-    if I = 0 then
-    begin
-      B.OnClick := {$ifdef FPC}@{$endif} ClickTouchHand;
-      FTouchHandButton := B;
-    end else
-    begin
-      B.OnClick := {$ifdef FPC}@{$endif} ClickTouchSize;
-      FTouchSizeButton := B;
+    case I of
+      0: begin B.OnClick := {$ifdef FPC}@{$endif} ClickTouchHand; FTouchHandButton := B; end;
+      1: begin B.OnClick := {$ifdef FPC}@{$endif} ClickTouchSize; FTouchSizeButton := B; end;
+      2: begin B.OnClick := {$ifdef FPC}@{$endif} ClickTouchOpacity; FTouchOpacityButton := B; end;
+      else begin B.OnClick := {$ifdef FPC}@{$endif} ClickTouchEdit; B.Caption := 'Edit...'; end;
     end;
     Row.InsertFront(B);
+    if I = 3 then
+    begin
+      B := TCastleButton.Create(FreeAtStop);
+      B.FontSize := 22;
+      B.Caption := 'Reset';
+      B.OnClick := {$ifdef FPC}@{$endif} ClickTouchResetPlaces;
+      Row.InsertFront(B);
+    end;
     List.InsertFront(Row);
   end;
   UpdateKeyButtons;
@@ -1085,6 +1108,7 @@ begin
   begin
     FTouchHandButton.Caption := BoolToStr(Settings.TouchLeftHanded, 'Left-handed', 'Right-handed');
     FTouchSizeButton.Caption := IntToStr(Settings.TouchSize) + '%';
+    FTouchOpacityButton.Caption := IntToStr(Settings.TouchOpacity) + '%';
   end;
 end;
 
@@ -1133,6 +1157,94 @@ begin
   SaveSettings;
   WritelnLog('Settings', TouchSummary);
   UpdateKeyButtons;
+end;
+
+procedure TViewMenu.ClickTouchOpacity(Sender: TObject);
+begin
+  Settings.TouchOpacity := NextTouchOpacity(Settings.TouchOpacity);
+  SaveSettings;
+  WritelnLog('Settings', TouchSummary);
+  UpdateKeyButtons;
+end;
+
+procedure TViewMenu.ClickTouchResetPlaces(Sender: TObject);
+begin
+  ResetTouchPlaces;
+  SaveSettings;
+  WritelnLog('Settings', TouchSummary);
+end;
+
+procedure TViewMenu.ClickTouchEdit(Sender: TObject);
+begin
+  ShowTouchEditor(true);
+end;
+
+procedure TViewMenu.ClickTouchEditDone(Sender: TObject);
+begin
+  ShowTouchEditor(false);
+end;
+
+procedure TViewMenu.TouchButtonMoved(const Button: TTouchButton; const Position: TVector2);
+begin
+  Settings.TouchPlaces[Ord(Button) - 1] := Position;
+  SaveSettings;
+  WritelnLog('Settings', TouchSummary);
+end;
+
+procedure TViewMenu.DragTouchFire;
+var
+  Middle: TVector2;
+  Radius: Single;
+  R: TFloatRectangle;
+begin
+  R := FTouchEditControls.RenderRect;
+  FTouchEditControls.ButtonCircle(tbFire, Middle, Radius);
+  FTouchEditControls.TouchDown(1, Middle + Vector2(10, 10));
+  FTouchEditControls.TouchMove(1, Vector2(R.Width * 0.5, R.Height * 0.5) + Vector2(10, 10));
+  FTouchEditControls.TouchUp(1);
+end;
+
+procedure TViewMenu.ShowTouchEditor(const Show: Boolean);
+var
+  Hint: TCastleLabel;
+  Done: TCastleButton;
+  I: Integer;
+begin
+  if FTouchEditor = nil then
+  begin
+    FTouchEditor := TCastleRectangleControl.Create(FreeAtStop);
+    FTouchEditor.Name := 'TouchEditor';
+    FTouchEditor.FullSize := true;
+    FTouchEditor.Color := Vector4(0.08, 0.02, 0.02, 1);
+    FTouchEditControls := TDoomTouchControls.Create(FreeAtStop);
+    FTouchEditControls.Name := 'TouchEditControls';
+    FTouchEditControls.Graphics := FGraphics;
+    FTouchEditControls.Editing := true;
+    FTouchEditControls.OnButtonMoved := {$ifdef FPC}@{$endif} TouchButtonMoved;
+    FTouchEditor.InsertFront(FTouchEditControls);
+    Hint := TCastleLabel.Create(FreeAtStop);
+    Hint.Caption := 'Drag the buttons where your thumbs want them';
+    Hint.FontSize := 22;
+    Hint.Color := White;
+    Hint.Anchor(hpMiddle);
+    Hint.Anchor(vpTop, -20);
+    FTouchEditor.InsertFront(Hint);
+    Done := TCastleButton.Create(FreeAtStop);
+    Done.Caption := 'Done';
+    Done.FontSize := 22;
+    Done.Anchor(hpMiddle);
+    Done.Anchor(vpTop, -60);
+    Done.OnClick := {$ifdef FPC}@{$endif} ClickTouchEditDone;
+    FTouchEditor.InsertFront(Done);
+    InsertFront(FTouchEditor);
+  end;
+  FTouchEditControls.LeftHanded := Settings.TouchLeftHanded;
+  FTouchEditControls.SizePercent := Settings.TouchSize;
+  FTouchEditControls.Opacity := Max(0.5, Settings.TouchOpacity / 100);
+  for I := 0 to High(Settings.TouchPlaces) do
+    FTouchEditControls.SetButtonPlace(TTouchButton(I + 1), Settings.TouchPlaces[I]);
+  FTouchEditControls.ReleaseAll;
+  FTouchEditor.Exists := Show;
 end;
 
 procedure TViewMenu.ClickTouchSize(Sender: TObject);
@@ -1243,6 +1355,8 @@ begin
   begin
     Settings.TouchLeftHanded := false;
     Settings.TouchSize := 100;
+    Settings.TouchOpacity := 100;
+    ResetTouchPlaces;
     WritelnLog('Settings', TouchSummary);
   end else
   begin
@@ -1455,6 +1569,19 @@ begin
     ClickTouchHand(nil);
     ClickTouchSize(nil);
   end
+  else if AutoTestMap = 'MENUTOUCHEDIT' then
+  begin
+    { The touch layout editor, after dragging FIRE to the middle of the
+      screen like a finger would, and the opacity set to 50%. }
+    ShowOptions(true);
+    ClickControls(nil);
+    ClickControlsPad(nil);
+    ClickControlsPad(nil);
+    ClickTouchOpacity(nil);
+    ClickTouchOpacity(nil);
+    ClickTouchEdit(nil);
+    FTouchEditDrag := true;
+  end
   else if AutoTestMap = 'MENUCONTROLSPAD' then
   begin
     { The Controls page's gamepad half, after binding Y to the second
@@ -1553,6 +1680,8 @@ begin
     if FAutoTestTics > 0 then
     begin
       Dec(FAutoTestTics);
+      if FTouchEditDrag and (FAutoTestTics = 5) then
+        DragTouchFire;
       if FAutoTestTics = 0 then
       begin
         AutoScreenshot;
@@ -1573,6 +1702,13 @@ var
 begin
   Result := inherited;
   if Result then Exit;
+  { The touch layout editor: Esc (or Start, B) closes it. }
+  if (FTouchEditor <> nil) and FTouchEditor.Exists then
+  begin
+    if Event.IsKey(keyEscape) or Event.IsController(gbMenu) or Event.IsController(gbEast) then
+      ShowTouchEditor(false);
+    Exit(true);
+  end;
   { Gamepad: the D-pad and A / B drive the menu like the arrows, Enter, Esc. }
   if FControls.Exists then
     Exit(ControlsKey(Event));

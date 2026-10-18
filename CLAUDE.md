@@ -301,6 +301,14 @@ Button ...`; autotest `touch-controls`, unit test `TestTouchControls`).
 `MENUCONTROLSTOUCH`) mirror the stick and buttons (MAP and MENU stay
 top right) and scale them; at left / 125% FIRE is at `0.12:0.44`
 (autotests `touch-layout`, `controls-touch`, both with goldens).
+`TOUCHPOS:button:x:y` (`fire`, `use`, `prevWeapon`, `nextWeapon`,
+`automap`, `menu`; fractions, y up; `TOUCHPOS:fire:reset`) places a
+button and `TOUCHOPACITY:25..100` fades them (`settings.json`'s
+`touchButtons`, `touchOpacity`; autotest `touch-places`). The layout
+editor (Controls -> Touch -> Edit..., `TViewMenu.ShowTouchEditor`) is a
+`TDoomTouchControls` with `Editing` on: `MENUTOUCHEDIT` drags FIRE to
+the middle (autotest `touch-edit`, log `Settings: Touch: ..., fire at
+0.500 0.500`).
 In the browser the page script (`tools/patch_web_page.py`) tracks the
 fingers; Playwright tests them with `hasTouch: true` and CDP
 `Input.dispatchTouchEvent` (several touch points at once).

@@ -137,6 +137,8 @@ type
     { The mouse button B is held (wheel directions never are). }
     function MouseHeld(const B: TMouseBind): Boolean;
     procedure DemoMouse(const Cmd, Spec: String);
+    procedure DemoTouchPlace(const Spec: String);
+    procedure ApplyTouchSettings;
     { Select a thing in the engine's inspector (opening it): by name, or
       the one under the crosshair when Name is ''. }
     procedure SelectInInspector(const ThingName: String);
@@ -606,6 +608,16 @@ begin
     TouchForced := true;
     TouchMode := true;
   end
+  else if Cmd = 'TOUCHOPACITY' then
+  begin
+    { TOUCHOPACITY:percent and TOUCHPOS:button:x:y (fractions of the
+      window, y up; TOUCHPOS:button:reset) like the Controls page. }
+    Settings.TouchOpacity := EnsureRange(Round(Arg), TouchOpacities[0], 100);
+    SaveSettings;
+    WritelnLog('Settings', TouchSummary);
+  end
+  else if Cmd = 'TOUCHPOS' then
+    DemoTouchPlace(Rest)
   else if (Cmd = 'TOUCHLAYOUT') or (Cmd = 'TOUCHSIZE') then
   begin
     { TOUCHLAYOUT:left|right and TOUCHSIZE:percent like the Controls
@@ -1090,6 +1102,47 @@ end;
   (settings.json's names: Left, Right, Middle, Button4, Button5, WheelUp,
   WheelDown); MBIND:action:button binds it like the Controls page's mouse
   column (None clears the action's). }
+{ The touch layout from the settings (they change on the Controls page and
+  through the demo commands). }
+procedure TViewPlay.ApplyTouchSettings;
+var
+  I: Integer;
+begin
+  FTouch.LeftHanded := Settings.TouchLeftHanded;
+  FTouch.SizePercent := Settings.TouchSize;
+  FTouch.Opacity := Settings.TouchOpacity / 100;
+  for I := 0 to High(Settings.TouchPlaces) do
+    FTouch.SetButtonPlace(TTouchButton(I + 1), Settings.TouchPlaces[I]);
+end;
+
+procedure TViewPlay.DemoTouchPlace(const Spec: String);
+var
+  Parts: TStringList;
+  I: Integer;
+begin
+  Parts := TStringList.Create;
+  try
+    Parts.Delimiter := ':';
+    Parts.StrictDelimiter := true;
+    Parts.DelimitedText := Spec;
+    if Parts.Count < 2 then Exit;
+    for I := 0 to High(TouchButtonIds) do
+      if SameText(TouchButtonIds[I], Parts[0]) then
+      begin
+        if SameText(Parts[1], 'reset') or (Parts.Count < 3) then
+          Settings.TouchPlaces[I] := Vector2(-1, -1)
+        else
+          Settings.TouchPlaces[I] := Vector2(StrToFloatDefDot(Parts[1], 0.5), StrToFloatDefDot(Parts[2], 0.5));
+        SaveSettings;
+        WritelnLog('Settings', TouchSummary);
+        Exit;
+      end;
+    WritelnWarning('Settings', 'Unknown touch button "%s"', [Parts[0]]);
+  finally
+    FreeAndNil(Parts);
+  end;
+end;
+
 procedure TViewPlay.DemoMouse(const Cmd, Spec: String);
 const
   Buttons: array [mbLeft..mbButton5] of TCastleMouseButton = (
@@ -1995,8 +2048,7 @@ begin
   { Touch controls while the game is played (the browser's fingers are
     read here; the menus and the intermission take taps as clicks). }
   TouchPlaying := (not FIntermission) and (FSlotMenu = SlotMenuNone) and (FPendingMap = '');
-  FTouch.LeftHanded := Settings.TouchLeftHanded;
-  FTouch.SizePercent := Settings.TouchSize;
+  ApplyTouchSettings;
   if TouchPlaying then PollTouches(FTouch) else PollTouches(nil);
   TouchShown := TouchMode and TouchPlaying;
   if FTouch.Exists <> TouchShown then

@@ -172,8 +172,9 @@ runs), dragging anywhere else on the right turns and looks, and round buttons fi
 the fire button to aim while shooting), use, change weapons, toggle the automap and open
 the menu. The controls show when a finger touches the screen and hide again when the
 mouse is used; taps work as clicks in the menus and on the intermission. Options ->
-Controls... -> Touch mirrors them for the left hand (the stick on the right) and makes them
-75 to 150% as large.
+Controls... -> Touch mirrors them for the left hand (the stick on the right), makes them
+75 to 150% as large and 25 to 100% opaque, and its Edit... lets you drag each button where
+your thumbs want it.
 
 Automated smoke test (loads a map, runs a script, saves screenshots, quits):
 

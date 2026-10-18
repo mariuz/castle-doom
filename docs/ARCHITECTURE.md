@@ -1283,7 +1283,11 @@ the layout (the stick zone becomes the right 40%, the buttons move left,
 "<" and ">" trade places so "<" stays left, MAP and MENU stay top
 right) and `SizePercent` scales the stick and buttons (both from
 `Settings.TouchLeftHanded` / `TouchSize`, set every frame by the play
-view and on the Controls page's Touch mode).
+view and on the Controls page's Touch mode). `SetButtonPlace` gives a
+button a place of its own (fractions of the size, `Settings.TouchPlaces`,
+not mirrored), `Opacity` fades the drawing, and with `Editing` on (the
+menu's layout editor, `TViewMenu.ShowTouchEditor`) a finger on a button
+drags it and `OnButtonMoved` reports where it was dropped.
 
 Collisions use the map chunks' `PreciseCollisions` triangles, the invisible
 blocking-line scene, and the actors' bounding boxes (`Collides`). The

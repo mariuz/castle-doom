@@ -22,6 +22,7 @@ uses Classes,
 type
   TTouchButton = (tbNone, tbFire, tbUse, tbPrevWeapon, tbNextWeapon, tbAutomap, tbMenu);
   TTouchButtonEvent = procedure (const Button: TTouchButton) of object;
+  TTouchMovedEvent = procedure (const Button: TTouchButton; const Position: TVector2) of object;
 
   TTouchRole = (trStick, trLook, trButton);
 
@@ -45,6 +46,12 @@ type
     FWidth, FHeight: Single;
     FLeftHanded: Boolean;
     FSizePercent: Integer;
+    FOpacity: Single;
+    { Buttons placed by the player: fractions of the width and height
+      (X < 0: the default place). }
+    FCustom: array [TTouchButton] of TVector2;
+    FEditing: Boolean;
+    FOnButtonMoved: TTouchMovedEvent;
     { The layout's unit: the shorter side, times the size setting. }
     function LayoutUnit: Single;
     { Left-handed layouts mirror the right-handed one. }
@@ -91,6 +98,18 @@ type
       right); the stick and buttons scaled
       by SizePercent (MinTouchSize..MaxTouchSize, 100 = the default). }
     property LeftHanded: Boolean read FLeftHanded write FLeftHanded;
+    { Drawing opacity, 0..1 (GameSettings' touchOpacity). }
+    property Opacity: Single read FOpacity write FOpacity;
+    { A button's own place: its middle as fractions of the width and
+      height from the bottom-left corner; a negative X restores the
+      default place. }
+    procedure SetButtonPlace(const B: TTouchButton; const Fraction: TVector2);
+    function ButtonPlace(const B: TTouchButton): TVector2;
+    { Layout editing: a finger on a button drags it instead of pressing it
+      (OnButtonMoved tells where it was dropped, as fractions); the stick
+      and the look do nothing. }
+    property Editing: Boolean read FEditing write FEditing;
+    property OnButtonMoved: TTouchMovedEvent read FOnButtonMoved write FOnButtonMoved;
     property SizePercent: Integer read FSizePercent write FSizePercent;
     property OnButton: TTouchButtonEvent read FOnButton write FOnButton;
   end;
@@ -128,12 +147,27 @@ const
   StickZone = 0.4;
 
 constructor TDoomTouchControls.Create(AOwner: TComponent);
+var
+  B: TTouchButton;
 begin
   inherited;
   FullSize := true;
   FWidth := 1600;
   FHeight := 900;
   FSizePercent := 100;
+  FOpacity := 1;
+  for B := Low(TTouchButton) to High(TTouchButton) do
+    FCustom[B] := Vector2(-1, -1);
+end;
+
+procedure TDoomTouchControls.SetButtonPlace(const B: TTouchButton; const Fraction: TVector2);
+begin
+  FCustom[B] := Fraction;
+end;
+
+function TDoomTouchControls.ButtonPlace(const B: TTouchButton): TVector2;
+begin
+  Result := FCustom[B];
 end;
 
 function TDoomTouchControls.LayoutUnit: Single;
@@ -252,6 +286,9 @@ begin
   { MAP and MENU stay at the top right, away from Doom's messages. }
   if not (B in [tbAutomap, tbMenu]) then
     Middle := Mirror(Middle);
+  { A place of the player's own wins (it is not mirrored). }
+  if (B <> tbNone) and (FCustom[B].X >= 0) then
+    Middle := Vector2(FCustom[B].X * W, FCustom[B].Y * H);
 end;
 
 function TDoomTouchControls.ButtonAt(const Position: TVector2): TTouchButton;
@@ -294,6 +331,8 @@ procedure TDoomTouchControls.TouchDown(const Id: Integer; const Position: TVecto
 var
   T: TTouchPoint;
   I: Integer;
+  Middle: TVector2;
+  Radius: Single;
 begin
   UpdateSize;
   I := IndexOf(Id);
@@ -307,6 +346,17 @@ begin
   T.Last := Position;
   T.Pos := Position;
   T.Button := ButtonAt(Position);
+  if FEditing then
+  begin
+    { Dragging a button: Start keeps the finger's offset from its middle. }
+    if T.Button = tbNone then Exit;
+    T.Role := trButton;
+    ButtonCircle(T.Button, Middle, Radius);
+    T.Start := Position - Middle;
+    SetLength(FTouches, Length(FTouches) + 1);
+    FTouches[High(FTouches)] := T;
+    Exit;
+  end;
   if T.Button <> tbNone then
     T.Role := trButton
   else if InStickZone(Position) then
@@ -322,12 +372,19 @@ end;
 procedure TDoomTouchControls.TouchMove(const Id: Integer; const Position: TVector2);
 var
   I: Integer;
-  Offset: TVector2;
+  Offset, P: TVector2;
   R, Len, Rate: Single;
 begin
   I := IndexOf(Id);
   if I < 0 then Exit;
   FTouches[I].Pos := Position;
+  if FEditing then
+  begin
+    P := Position - FTouches[I].Start;
+    P := Vector2(EnsureRange(P.X / Max(1, FWidth), 0.02, 0.98), EnsureRange(P.Y / Max(1, FHeight), 0.02, 0.98));
+    FCustom[FTouches[I].Button] := P;
+    Exit;
+  end;
   case FTouches[I].Role of
     trStick:
       begin
@@ -354,6 +411,8 @@ var
 begin
   I := IndexOf(Id);
   if I < 0 then Exit;
+  if FEditing and (FTouches[I].Button <> tbNone) and Assigned(FOnButtonMoved) then
+    FOnButtonMoved(FTouches[I].Button, FCustom[FTouches[I].Button]);
   for J := I to High(FTouches) - 1 do
     FTouches[J] := FTouches[J + 1];
   SetLength(FTouches, Length(FTouches) - 1);
@@ -388,6 +447,7 @@ function TDoomTouchControls.FireHeld: Boolean;
 var
   I: Integer;
 begin
+  if FEditing then Exit(false);
   for I := 0 to High(FTouches) do
     if FTouches[I].Button = tbFire then
       Exit(true);
@@ -441,14 +501,14 @@ begin
     begin
       Middle := Base + FTouches[I].Start;
       Knob := Middle + MoveVector * StickRadius;
-      DrawCircle(Middle, StickRadius, StickRadius, Vector4(1, 1, 1, 0.10));
-      DrawRing(Middle, StickRadius, Line, Vector4(1, 1, 1, 0.45));
-      DrawCircle(Knob, StickRadius * 0.4, StickRadius * 0.4, Vector4(1, 1, 1, 0.35));
+      DrawCircle(Middle, StickRadius, StickRadius, Vector4(1, 1, 1, 0.10 * FOpacity));
+      DrawRing(Middle, StickRadius, Line, Vector4(1, 1, 1, 0.45 * FOpacity));
+      DrawCircle(Knob, StickRadius * 0.4, StickRadius * 0.4, Vector4(1, 1, 1, 0.35 * FOpacity));
       StickShown := true;
       Break;
     end;
   if not StickShown then
-    DrawRing(Base + StickHome, StickRadius, Line, Vector4(1, 1, 1, 0.18));
+    DrawRing(Base + StickHome, StickRadius, Line, Vector4(1, 1, 1, 0.18 * FOpacity));
   for B := Succ(tbNone) to High(TTouchButton) do
   begin
     ButtonCircle(B, Middle, Radius);
@@ -458,17 +518,17 @@ begin
       if FTouches[I].Button = B then
         Pressed := true;
     if Pressed then
-      DrawCircle(Middle, Radius, Radius, Vector4(1, 0.85, 0.6, 0.35))
+      DrawCircle(Middle, Radius, Radius, Vector4(1, 0.85, 0.6, 0.35 * FOpacity))
     else
-      DrawCircle(Middle, Radius, Radius, Vector4(0, 0, 0, 0.30));
-    DrawRing(Middle, Radius, Line, Vector4(1, 1, 1, 0.5));
+      DrawCircle(Middle, Radius, Radius, Vector4(0, 0, 0, 0.30 * FOpacity));
+    DrawRing(Middle, Radius, Line, Vector4(1, 1, 1, 0.5 * FOpacity));
     Img := FLabels[B];
     if Img <> nil then
     begin
       { Doom's font, as large as fits the circle. }
       Scale := Min(Min(FWidth, FHeight) / 200, 1.5 * Radius / Img.Width);
       Size := Vector2(Img.Width * Scale, Img.Height * Scale);
-      Img.Color := Vector4(1, 1, 1, 0.85);
+      Img.Color := Vector4(1, 1, 1, 0.85 * FOpacity);
       Img.Draw(FloatRectangle(Middle - Size / 2, Size.X, Size.Y));
     end;
   end;

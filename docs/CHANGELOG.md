@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Touch layout editor: drag each touch button where your thumbs want it
+  (Options -> Controls... -> Touch -> Edit...), and an opacity setting.
+
 ## v0.27.0 (2026-10-17)
 
 - ZDoom MAPINFO's `include`, and intermission scripts as exit / enter

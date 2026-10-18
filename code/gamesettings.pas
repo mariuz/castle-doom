@@ -8,7 +8,7 @@ unit GameSettings;
 
 interface
 
-uses CastleKeysMouse;
+uses CastleKeysMouse, CastleVectors;
 
 type
   { The bindable actions of the game (two keys each; the mouse's left
@@ -65,6 +65,11 @@ type
       percent (TouchSizes). }
     TouchLeftHanded: Boolean;
     TouchSize: Integer;
+    { Their opacity in percent (TouchOpacities), and the buttons' own
+      places (GameTouch's TTouchButton order without tbNone: fractions of
+      the width and height from the bottom left; X < 0 = the default). }
+    TouchOpacity: Integer;
+    TouchPlaces: array [0..5] of TVector2;
     { Gamepad bindings: two buttons per action (pbNone = unused). }
     Pad: array [TPadAction, 0..1] of TPadButton;
   end;
@@ -79,6 +84,10 @@ const
   MaxRenderScale = 100;
   { The touch controls' size choices, in percent. }
   TouchSizes: array [0..3] of Integer = (75, 100, 125, 150);
+  TouchOpacities: array [0..3] of Integer = (25, 50, 75, 100);
+  { settings.json's names of the touch buttons (TouchPlaces' order). }
+  TouchButtonIds: array [0..5] of String = ('fire', 'use', 'prevWeapon',
+    'nextWeapon', 'automap', 'menu');
   { The frame rate cap's choices (0 = no cap); 120 is CGE's default. }
   FrameCaps: array [0..4] of Integer = (35, 60, 120, 144, 0);
 
@@ -174,6 +183,10 @@ function NextFrameCap(const Cap, Steps: Integer): Integer;
 function TouchSummary: String;
 { The next touch size in TouchSizes (wrapping). }
 function NextTouchSize(const Size: Integer): Integer;
+{ The next opacity in TouchOpacities (wrapping). }
+function NextTouchOpacity(const Opacity: Integer): Integer;
+{ All touch buttons back at their default places. }
+procedure ResetTouchPlaces;
 { "60 FPS", "no cap". }
 function FrameCapText(const Cap: Integer): String;
 
@@ -488,6 +501,8 @@ begin
   Settings.FrameCap := 120;
   Settings.TouchLeftHanded := false;
   Settings.TouchSize := 100;
+  ResetTouchPlaces;
+  Settings.TouchOpacity := 100;
   ResetKeys;
   ResetMouse;
   ResetPad;
@@ -535,6 +550,36 @@ begin
   finally
     FreeAndNil(Data);
   end;
+end;
+
+{ settings.json's "touchButtons": {"fire": [0.9, 0.4], ...} (only the
+  moved buttons). }
+procedure ReadTouchPlaces(const J: TJSONObject);
+var
+  I: Integer;
+  Arr: TJSONArray;
+begin
+  ResetTouchPlaces;
+  for I := 0 to High(TouchButtonIds) do
+    if J.Find(TouchButtonIds[I], Arr) and (Arr.Count = 2) then
+      Settings.TouchPlaces[I] := Vector2(
+        Clamped(Arr.Floats[0], 0, 1), Clamped(Arr.Floats[1], 0, 1));
+end;
+
+function WriteTouchPlaces: TJSONObject;
+var
+  I: Integer;
+  Arr: TJSONArray;
+begin
+  Result := TJSONObject.Create;
+  for I := 0 to High(TouchButtonIds) do
+    if Settings.TouchPlaces[I].X >= 0 then
+    begin
+      Arr := TJSONArray.Create;
+      Arr.Add(Settings.TouchPlaces[I].X);
+      Arr.Add(Settings.TouchPlaces[I].Y);
+      Result.Add(TouchButtonIds[I], Arr);
+    end;
 end;
 
 { settings.json's "mouse": {"fire": "Left", ...}; without it, the
@@ -618,7 +663,7 @@ procedure LoadSettings;
 var
   Text: String;
   D: TJSONData;
-  J, KeysJ, MouseJ, PadJ: TJSONObject;
+  J, KeysJ, MouseJ, PadJ, PlacesJ: TJSONObject;
 begin
   Defaults;
   if not SaveStorageRead(SettingsUrl, Text) then Exit;
@@ -651,6 +696,9 @@ begin
     Settings.FrameCap := Clamped(J.Get('frameCap', Settings.FrameCap), 0, 1000);
     Settings.TouchLeftHanded := J.Get('touchLeftHanded', Settings.TouchLeftHanded);
     Settings.TouchSize := Clamped(J.Get('touchSize', Settings.TouchSize), TouchSizes[0], TouchSizes[High(TouchSizes)]);
+    Settings.TouchOpacity := Clamped(J.Get('touchOpacity', Settings.TouchOpacity), TouchOpacities[0], 100);
+    if J.Find('touchButtons', PlacesJ) then
+      ReadTouchPlaces(PlacesJ);
     if J.Find('keys', KeysJ) then
       ReadKeys(KeysJ);
     if J.Find('mouse', MouseJ) then
@@ -691,6 +739,8 @@ begin
     J.Add('frameCap', Settings.FrameCap);
     J.Add('touchLeftHanded', Settings.TouchLeftHanded);
     J.Add('touchSize', Settings.TouchSize);
+    J.Add('touchOpacity', Settings.TouchOpacity);
+    J.Add('touchButtons', WriteTouchPlaces);
     J.Add('keys', WriteKeys);
     J.Add('mouse', WriteMouse);
     J.Add('pad', WritePad);
@@ -728,9 +778,33 @@ begin
 end;
 
 function TouchSummary: String;
+var
+  I: Integer;
 begin
-  Result := Format('Touch: %s, size %d%%', [BoolToStr(Settings.TouchLeftHanded, 'left-handed', 'right-handed'),
-    Settings.TouchSize]);
+  Result := Format('Touch: %s, size %d%%, opacity %d%%', [BoolToStr(Settings.TouchLeftHanded, 'left-handed', 'right-handed'),
+    Settings.TouchSize, Settings.TouchOpacity]);
+  for I := 0 to High(Settings.TouchPlaces) do
+    if Settings.TouchPlaces[I].X >= 0 then
+      Result := Result + Format(', %s at %.3f %.3f', [TouchButtonIds[I], Settings.TouchPlaces[I].X,
+        Settings.TouchPlaces[I].Y]);
+end;
+
+function NextTouchOpacity(const Opacity: Integer): Integer;
+var
+  I: Integer;
+begin
+  for I := 0 to High(TouchOpacities) do
+    if TouchOpacities[I] > Opacity then
+      Exit(TouchOpacities[I]);
+  Result := TouchOpacities[0];
+end;
+
+procedure ResetTouchPlaces;
+var
+  I: Integer;
+begin
+  for I := 0 to High(Settings.TouchPlaces) do
+    Settings.TouchPlaces[I] := Vector2(-1, -1);
 end;
 
 function NextTouchSize(const Size: Integer): Integer;
