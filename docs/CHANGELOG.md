@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.36.0 (2026-10-18)
 
 - Random maps get stairs between rooms at different heights, windows
   you can see and shoot through, and a secret closet or two behind a
