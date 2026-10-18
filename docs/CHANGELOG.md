@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.33.0 (2026-10-18)
 
 - Random maps: New Game -> RANDOM MAPS (or `-random [SEED]`, or
   `?random=SEED` in the browser) generates eight levels from a seed,
