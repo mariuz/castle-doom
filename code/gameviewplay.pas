@@ -29,6 +29,8 @@ type
     FInfoLabel, FHelpLabel: TCastleLabel;
     FWorldStatus: TDoomWorldStatus;
     FMessageText, FLoadingText, FAutomapTitle: TDoomFontText;
+    { The level statistics overlay (gaStats, Settings.ShowStats). }
+    FStatsText: TDoomFontText;
     { "Click to look around" while mouse look is wanted but the browser
       released the pointer (Esc, another window). }
     FClickPrompt: TDoomFontText;
@@ -342,6 +344,8 @@ begin
   { The level title at the bottom left of the automap (AM_drawTitle). }
   FAutomapTitle := DesignedComponent('AutomapTitle') as TDoomFontText;
   FAutomapTitle.Graphics := Graphics;
+  FStatsText := DesignedComponent('StatsText') as TDoomFontText;
+  FStatsText.Graphics := Graphics;
   FInfoLabel := DesignedComponent('InfoLabel') as TCastleLabel;
   FWorldStatus := DesignedComponent('DoomWorldStatus') as TDoomWorldStatus;
   FHelpLabel := DesignedComponent('HelpLabel') as TCastleLabel;
@@ -955,7 +959,8 @@ begin
     FHelpLabel.Text[5] := Trim(Hot(gaLightDiminish, 'light diminishing on/off   ') + Hot(gaMouseLook, 'mouse look'));
     FHelpLabel.Text[6] := Trim(Hot(gaNextMap, 'next map   ') + Hot(gaPrevMap, 'previous map   ') +
       Hot(gaMusic, 'music on/off   ') + 'F4: volume');
-    FHelpLabel.Text[7] := Trim('F2 / F3: save / load   ' + Hot(gaQuickSave, 'quick save   ') + Hot(gaQuickLoad, 'quick load'));
+    FHelpLabel.Text[7] := Trim('F2 / F3: save / load   ' + Hot(gaQuickSave, 'quick save   ') + Hot(gaQuickLoad, 'quick load   ') +
+      Hot(gaStats, 'stats'));
     if FHelpLabel.Text.Count >= 11 then
     begin
       FHelpLabel.Text[8] := Trim(Hot(gaScreenshot, 'screenshot   ') + 'F1: Read This! (title menu)');
@@ -2066,9 +2071,26 @@ end;
 procedure TViewPlay.StartIntermission;
 var
   P: TPlayerState;
-  Next: String;
+  Next, Key: String;
+  Best, T: Integer;
+  NewBest, Replayed: Boolean;
 begin
+  Replayed := FDemoStarted;
   StopDemos(true);
+  { The level's best time (not from a demo's playback). }
+  T := Trunc(FLevelTime);
+  Key := BestTimeKey(Wad.Description, FMapName, Skill);
+  Best := BestTime(Key);
+  NewBest := (not Replayed) and ((Best < 0) or (T < Best));
+  if NewBest then
+  begin
+    SetBestTime(Key, T);
+    SaveSettings;
+  end;
+  if NewBest then
+    WritelnLog('Stats', '%s: time %d:%2.2d, a new best', [Key, T div 60, T mod 60])
+  else
+    WritelnLog('Stats', '%s: time %d:%2.2d, best %d:%2.2d', [Key, T div 60, T mod 60, Best div 60, Best mod 60]);
   BeginWipe;
   FIntermission := true;
   FIntermissionTime := 0;
@@ -2080,7 +2102,7 @@ begin
   if Music <> nil then
     Music.Play(Music.IntermissionLump);
   FIntermissionScreen.Start(Graphics, Sounds, Wad.IsDoom2, FMapName, Next,
-    P.Kills, P.TotalKills, P.Items, P.TotalItems, P.Secrets, P.TotalSecrets, Trunc(FLevelTime));
+    P.Kills, P.TotalKills, P.Items, P.TotalItems, P.Secrets, P.TotalSecrets, Trunc(FLevelTime), Best, NewBest);
   FWorld.ExitRequested := false;
 end;
 
@@ -2263,6 +2285,7 @@ begin
     FFlashImage.Exists := false;
     FCrosshair.Exists := false;
     FMessageText.Exists := false;
+    FStatsText.Exists := false;
     FColormapTint.Exists := false;
     if FIntermissionScreen.Exists then
     begin
@@ -2478,6 +2501,18 @@ begin
     FAutomapTitle.SetText(UpperCase(FStrings.LevelName(FMapName, Wad.IsDoom2)));
     FAutomapTitle.Anchor(vpBottom, FStatusBar.Height + 4);
   end;
+  { Kills, items, secrets and the level time, above the automap's title. }
+  FStatsText.Exists := Settings.ShowStats;
+  if FStatsText.Exists then
+  begin
+    FStatsText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
+    FStatsText.SetText(Format('K %d/%d  I %d/%d  S %d/%d  %d:%2.2d', [P.Kills, P.TotalKills,
+      P.Items, P.TotalItems, P.Secrets, P.TotalSecrets, Trunc(FLevelTime) div 60, Trunc(FLevelTime) mod 60]));
+    if FAutomapTitle.Exists then
+      FStatsText.Anchor(vpBottom, FStatusBar.Height + 6 + FAutomapTitle.EffectiveHeight)
+    else
+      FStatsText.Anchor(vpBottom, FStatusBar.Height + 4);
+  end;
   if P.MessageTics = 0 then FMessageAlways := false;
   { Options -> Messages OFF hides the player messages (not this one). }
   if (P.MessageTics > 0) and (Settings.ShowMessages or FMessageAlways) then
@@ -2561,6 +2596,13 @@ begin
   if EventIs(Event, gaUse) then
   begin
     FWorld.UseInFront;
+    Exit(true);
+  end;
+  if EventIs(Event, gaStats) then
+  begin
+    Settings.ShowStats := not Settings.ShowStats;
+    SaveSettings;
+    WritelnLog('Stats', 'Overlay %s', [Iff(Settings.ShowStats, 'shown', 'hidden')]);
     Exit(true);
   end;
   { Mouse look wanted but the pointer is free (the browser dropped the

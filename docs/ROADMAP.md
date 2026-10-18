@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Level statistics and best times: the `stats` action (`L`) shows kills,
+  items, secrets and the level time above the status bar (above the
+  automap's title too); each level's best time per WADs, map and skill
+  is kept in `settings.json` and shown on the intermission, "NEW BEST
+  TIME!" when beaten (not by a demo's playback). Autotest `level-stats`
+  (goldens), unit test `TestBestTimes`.
+
 - Demos across levels and in the menu: a recording goes on after each
   intermission (an `L` line with the next level's saved state), the
   playback goes through the intermissions by itself, and the title
@@ -1012,7 +1019,6 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels and the desktop menu are done (see above); left are demos in the browser (files through the save storage and the home page, like the save bundle), the demo-script cheats as recorded events, and a ghost of a recording to race. | Easier bug reports; replays. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | M |
-| **Level statistics overlay and best times**: kills / items / secrets / time on the HUD (a key toggles it), and each map's best time per skill kept in `settings.json`, shown on the intermission. | Speedrunning and 100% runs, often asked of ports. | `DoomHud`, `DoomIntermission` | S |
 | **Gamma / brightness setting** (Doom's `usegamma` 0-4, F11) applied in the palette lookup shader. | Dark monitors and bright rooms. | `DoomLighting`, Video options | S |
 | **Closed captions**: a line per sound ("Imp roars, left") under the messages, with the direction from the sound's position. | Accessibility for players who cannot hear. | `DoomSound`, `DoomHud` | S |
 | **Spectator / photo mode**: a free camera (no clipping, no gravity) with the world paused, and a key to hide the HUD. | Screenshots, map inspection. | `GameViewPlay` | S |
@@ -1021,8 +1027,8 @@ play.
 
 ## Suggested next three
 
-1. Level statistics overlay and best times (S, see New features).
-2. Gamma / brightness setting (S, see New features).
+1. Gamma / brightness setting (S, see New features).
+2. Closed captions (S, see New features).
 3. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
 

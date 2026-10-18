@@ -21,6 +21,10 @@ type
     FIsDoom2: Boolean;
     FMapName, FNextMap: String;
     FKillsPct, FItemsPct, FSecretsPct, FTimeSec, FParSec: Integer;
+    { The level's best time before this one (-1: none), and whether this
+      one beat it. }
+    FBestSec: Integer;
+    FNewBest: Boolean;
     FCntKills, FCntItems, FCntSecrets, FCntTime: Integer;
     FStage: TIntermissionStage;
     FPause: Integer;
@@ -47,7 +51,8 @@ type
     { Begin the intermission for a finished map. }
     procedure Start(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds;
       const AIsDoom2: Boolean; const AMapName, ANextMap: String;
-      const Kills, TotalKills, Items, TotalItems, Secrets, TotalSecrets, TimeSec: Integer);
+      const Kills, TotalKills, Items, TotalItems, Secrets, TotalSecrets, TimeSec: Integer;
+      const BestSec: Integer = -1; const NewBest: Boolean = false);
     { Advance one Doom tic (35 Hz). }
     procedure Tic;
     { The player pressed use/fire: skip the count-up, or go to the next stage. }
@@ -246,7 +251,8 @@ end;
 
 procedure TDoomIntermission.Start(const AGraphics: TDoomGraphics; const ASounds: TDoomSounds;
   const AIsDoom2: Boolean; const AMapName, ANextMap: String;
-  const Kills, TotalKills, Items, TotalItems, Secrets, TotalSecrets, TimeSec: Integer);
+  const Kills, TotalKills, Items, TotalItems, Secrets, TotalSecrets, TimeSec: Integer;
+  const BestSec: Integer; const NewBest: Boolean);
 
   function Pct(const A, B: Integer): Integer;
   begin
@@ -264,6 +270,8 @@ begin
   FSecretsPct := Pct(Secrets, TotalSecrets);
   FTimeSec := TimeSec;
   FParSec := ParTime(AMapName, AIsDoom2);
+  FBestSec := BestSec;
+  FNewBest := NewBest;
   FCntKills := 0;
   FCntItems := 0;
   FCntSecrets := 0;
@@ -533,6 +541,14 @@ begin
     begin
       BlitDoomImage(Img, FGraphics.Patch('WIPAR'), 160 + TimeX, TimeY);
       if FStage >= isTime then DrawTime(Img, 320 - TimeX, TimeY, FParSec);
+    end;
+    { The best time (Castle DOOM's own line, in the HUD font). }
+    if (FStage >= isTime) and (FNewBest or (FBestSec >= 0)) then
+    begin
+      if FNewBest then
+        DrawDoomText(FGraphics, Img, TimeX, 186, 'NEW BEST TIME!')
+      else
+        DrawDoomText(FGraphics, Img, TimeX, 186, Format('BEST %d:%2.2d', [FBestSec div 60, FBestSec mod 60]));
     end;
   end;
   Image := Img;

@@ -377,6 +377,14 @@ TESTS = [
       r'Intermission: E1M1: exit script', r'Load: E1M2: map parsed', r'Message: R2: Black Refinery',
       r'Message: Blue key needed for this door', r'Message: A secret is revealed!', r'Save: Loading .*save1\.json'],
      ['-random', '42', '--fixed-step'], lambda config: check_random(config)),
+    # Level statistics (L) above the status bar and the automap's title;
+    # the first exit is a new best time, the second (a save loaded, then
+    # slower) is not.
+    ('level-stats', 'E1M1',
+     'W:0.3,KEY:L,W:0.5,S,M,W:0.3,S,M,SAVE:1,W:1,E,W:3,S,U,U,U,U,U,W:2,LOAD:1,W:3,E,W:3,S,Q',
+     [r'Stats: Overlay shown', r'Stats: freedoom1\.wad E1M1 skill 3: time 0:0\d, a new best',
+      r'Stats: freedoom1\.wad E1M1 skill 3: time 0:0\d, best 0:0\d'],
+     ['--fixed-step'], lambda config: check_stats(config)),
     ('random-menu', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: E1M1', r'Load: E1M1: map parsed', r'Message: R1: '],
      ['--menukeys', 'E,D,D,D,D,E,E'], None),
     ('random-menu-doom2', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: MAP01', r'Load: MAP01: map parsed', r'Message: R1: '],
@@ -514,6 +522,16 @@ def check_random(config):
     assert s1['map'] == 'E1M1' and s2['map'] == 'E1M2', 'maps: %s %s' % (s1['map'], s2['map'])
 
 
+def check_stats(config):
+    """The overlay stays on and E1M1's best time is the first, faster
+    exit's."""
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        s = json.load(f)
+    assert s['showStats'] is True, 'showStats: %s' % s['showStats']
+    best = s['bestTimes'].get('freedoom1.wad E1M1 skill 3')
+    assert best is not None and best <= 3, 'bestTimes: %s' % s['bestTimes']
+
+
 def check_floor_y(config, below):
     """The player ended south of y = below (a line teleport moved them there)."""
     p = save_json(config, 1)['player']
@@ -645,6 +663,7 @@ GOLDEN = [
     'controls-pad_menucontrolspad.png', 'deep-water_1.png', 'deep-water_2.png',
     'mapinfo_1.png', 'mapinfo_2.png', 'sector-skies_1.png', 'sector-skies_2.png',
     'random-maps_1.png', 'random-maps_2.png', 'random-maps_3.png', 'random-maps_4.png',
+    'level-stats_1.png', 'level-stats_2.png', 'level-stats_3.png', 'level-stats_4.png',
 ]
 
 

@@ -110,6 +110,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   its start or a loaded game) as the world received it and `--playdemo FILE` (Play demo...)
   plays it back on its own random numbers, so it plays the
   same at any frame rate; a checksum every second says where a playback went out of sync.
+- Level statistics: `L` shows kills, items, secrets and the level time above the status bar,
+  and every level's best time (per WADs and skill) is kept and shown on the intermission
+  ("NEW BEST TIME!").
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used
   switches, corpses, monsters mid-fight, inventory and the automap. In the browser saves
@@ -158,7 +161,7 @@ or open `CastleEngineManifest.xml` in the Castle Game Engine editor.
 Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` light diminishing, `M` mouse look on/off,
 `J` music on/off, `F4` sound / music volume, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
-`F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `N`/`P` next/previous map,
+`F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `L` level statistics, `N`/`P` next/previous map,
 `F5` screenshot, `F8` the engine's inspector (the map, every thing and the game state by name; its `F9` selects the monster under the crosshair), `H` help, `Esc` Doom's menu over the paused game
 (Options: end game, messages, mouse sensitivity, sound volume, video; `Esc` again or a click beside
 the items resumes; in the browser, Esc releasing the mouse opens it the same way, and a

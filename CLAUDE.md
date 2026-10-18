@@ -96,7 +96,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 39 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 40 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -206,7 +206,7 @@ page after binding Q to Use (autotests `controls-page`, `key-bindings`),
 after binding K to light diminishing. The weapon keys and hotkeys are
 actions too (`weapon1`..`weapon7`, `nextWeapon`, `prevWeapon`,
 `lightDiminish`, `mouseLook`, `music`, `help`, `grid`, `revealMap`,
-`nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`):
+`nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`, `stats`):
 `BIND:weapon5:Q,KEY:Q` selects the rocket launcher (autotest
 `hotkey-bindings`, unit test `TestKeyBindings`). Each action also has
 one mouse binding (`GameSettings.Mouse`, `settings.json`'s `mouse`:
@@ -215,6 +215,12 @@ fire Left, nextWeapon WheelUp, prevWeapon WheelDown): `MBIND:action:button`
 binds and `MOUSE:button` clicks through `Press` (log `Settings: Mouse:
 fire Left; ...`; autotest `mouse-bindings`; the Controls page's third
 column catches the next click in `TViewMenu.PreviewPress`).
+Level statistics: `KEY:L` toggles the overlay (`Settings.ShowStats`,
+`settings.json`'s `showStats`; log `Stats: Overlay shown`); each level's
+end stores its best time per WADs, map and skill (`bestTimes`, keys
+like `freedoom1.wad E1M1 skill 3`; log `Stats: ... time 0:02, a new
+best` or `best 0:02`), shown on the intermission under TIME / PAR
+(autotest `level-stats` with goldens, unit test `TestBestTimes`).
 Settings (`GameSettings`, `settings.json` next to the saves; the log
 prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
 like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a

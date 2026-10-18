@@ -97,6 +97,16 @@
       }
     },
     {
+      "$$ClassName": "TDoomFontText",
+      "Name": "StatsText",
+      "Exists": false,
+      "TranslationPersistent": {
+        "$$ClassName": "TCastleVector2Persistent",
+        "X": 8.0,
+        "Y": 0.0
+      }
+    },
+    {
       "$$ClassName": "TCastleLabel",
       "Name": "InfoLabel",
       "FontSize": 18.0,
@@ -143,7 +153,7 @@
         "Tab: automap   + / -: zoom   G: grid   I: reveal map",
         "F: light diminishing on/off   M: mouse look",
         "N / P: next / previous map   J: music on/off   F4: volume",
-        "F2 / F3: save / load   F6 / F9: quick save / load",
+        "F2 / F3: save / load   F6 / F9: quick save / load   L: stats",
         "F5: screenshot   F1: Read This! (title menu)",
         "F8: Castle Game Engine inspector",
         "H: hide this help   Esc: menu (pauses; Esc again resumes)",

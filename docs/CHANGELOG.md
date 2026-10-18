@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Level statistics: `L` shows kills, items, secrets and the time on
+  screen, and each level's best time is kept and shown after it
+  ("NEW BEST TIME!").
+
 ## v0.37.0 (2026-10-18)
 
 - Demos go on through the following levels (the playback skips through

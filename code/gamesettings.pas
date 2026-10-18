@@ -21,7 +21,7 @@ type
     gaWeapon1, gaWeapon2, gaWeapon3, gaWeapon4, gaWeapon5, gaWeapon6, gaWeapon7,
     gaNextWeapon, gaPrevWeapon,
     gaLightDiminish, gaMouseLook, gaMusic, gaHelp, gaGrid, gaRevealMap,
-    gaNextMap, gaPrevMap, gaScreenshot, gaQuickSave, gaQuickLoad);
+    gaNextMap, gaPrevMap, gaScreenshot, gaQuickSave, gaQuickLoad, gaStats);
 
   { The gamepad's bindable actions (the sticks move and look, Start opens
     the menu, and the menus use the D-pad, A and B whatever is bound). }
@@ -45,6 +45,11 @@ type
     { Doom's options page: mouse sensitivity 0..9, messages on / off. }
     MouseSensitivity: Integer;
     ShowMessages: Boolean;
+    { The level statistics overlay (kills, items, secrets, time). }
+    ShowStats: Boolean;
+    { Best times in seconds, by BestTimeKey (WADs, map, skill). }
+    BestTimeKeys: array of String;
+    BestTimes: array of Integer;
     { Video: horizontal field of view in degrees (Doom's is 90), window
       or fullscreen (desktop), the 2D layer's scale in percent, and the
       browser's render resolution in percent of the canvas' pixels. }
@@ -99,7 +104,7 @@ const
     'Plasma rifle', 'BFG 9000', 'Next weapon', 'Previous weapon',
     'Light diminishing', 'Mouse look', 'Music on / off', 'Help', 'Automap grid',
     'Reveal map', 'Next map', 'Previous map', 'Screenshot', 'Quick save',
-    'Quick load');
+    'Quick load', 'Level statistics');
   { The JSON keys of settings.json's "keys" object. }
   ActionIds: array [TGameAction] of String = (
     'forward', 'backward', 'strafeLeft', 'strafeRight',
@@ -107,7 +112,7 @@ const
     'weapon1', 'weapon2', 'weapon3', 'weapon4', 'weapon5', 'weapon6', 'weapon7',
     'nextWeapon', 'prevWeapon',
     'lightDiminish', 'mouseLook', 'music', 'help', 'grid', 'revealMap',
-    'nextMap', 'prevMap', 'screenshot', 'quickSave', 'quickLoad');
+    'nextMap', 'prevMap', 'screenshot', 'quickSave', 'quickLoad', 'stats');
   DefaultKeys: array [TGameAction, 0..1] of TKey = (
     (keyW, keyArrowUp), (keyS, keyArrowDown), (keyA, keyNone), (keyD, keyNone),
     (keyArrowLeft, keyNone), (keyArrowRight, keyNone), (keyShift, keyNone),
@@ -117,7 +122,7 @@ const
     (keyNone, keyNone), (keyNone, keyNone),
     (keyF, keyNone), (keyM, keyNone), (keyJ, keyNone), (keyH, keyNone),
     (keyG, keyNone), (keyI, keyNone), (keyN, keyNone), (keyP, keyNone),
-    (keyF5, keyNone), (keyF6, keyNone), (keyF9, keyNone));
+    (keyF5, keyNone), (keyF6, keyNone), (keyF9, keyNone), (keyL, keyNone));
 
   { settings.json's mouse names and the Controls page's. }
   MouseBindIds: array [TMouseBind] of String = ('None', 'Left', 'Middle',
@@ -128,7 +133,7 @@ const
   DefaultMouse: array [TGameAction] of TMouseBind = (
     mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbLeft, mbNone, mbNone,
     mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbWheelUp, mbWheelDown,
-    mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone);
+    mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone);
 
   { The Controls page's pages: their titles and first / last actions. }
   ControlsPageCount = 3;
@@ -137,7 +142,7 @@ const
   ControlsPageFirst: array [0..ControlsPageCount - 1] of TGameAction = (
     gaForward, gaWeapon1, gaLightDiminish);
   ControlsPageLast: array [0..ControlsPageCount - 1] of TGameAction = (
-    gaAutomap, gaPrevWeapon, gaQuickLoad);
+    gaAutomap, gaPrevWeapon, gaStats);
 
   PadActionNames: array [TPadAction] of String = (
     'Fire', 'Use / open', 'Automap', 'Next weapon', 'Previous weapon');
@@ -158,6 +163,12 @@ var
 { Read the stored settings (defaults for anything missing). }
 procedure LoadSettings;
 procedure SaveSettings;
+
+{ The best time of a level (seconds), -1 when none; SetBestTime stores it
+  (SaveSettings writes it). }
+function BestTimeKey(const WadDescription, MapName: String; const Skill: Integer): String;
+function BestTime(const Key: String): Integer;
+procedure SetBestTime(const Key: String; const Seconds: Integer);
 
 { Gains for TCastleSound.Volume / TDoomMusic.Volume. The defaults keep the
   mix the game always had: effects at full volume, music at half. }
@@ -659,13 +670,46 @@ begin
   end;
 end;
 
+function BestTimeKey(const WadDescription, MapName: String; const Skill: Integer): String;
+begin
+  Result := Format('%s %s skill %d', [WadDescription, UpperCase(MapName), Skill + 1]);
+end;
+
+function BestTime(const Key: String): Integer;
+var
+  I: Integer;
+begin
+  for I := 0 to High(Settings.BestTimeKeys) do
+    if Settings.BestTimeKeys[I] = Key then Exit(Settings.BestTimes[I]);
+  Result := -1;
+end;
+
+procedure SetBestTime(const Key: String; const Seconds: Integer);
+var
+  I: Integer;
+begin
+  for I := 0 to High(Settings.BestTimeKeys) do
+    if Settings.BestTimeKeys[I] = Key then
+    begin
+      Settings.BestTimes[I] := Seconds;
+      Exit;
+    end;
+  SetLength(Settings.BestTimeKeys, Length(Settings.BestTimeKeys) + 1);
+  SetLength(Settings.BestTimes, Length(Settings.BestTimes) + 1);
+  Settings.BestTimeKeys[High(Settings.BestTimeKeys)] := Key;
+  Settings.BestTimes[High(Settings.BestTimes)] := Seconds;
+end;
+
 procedure LoadSettings;
 var
   Text: String;
   D: TJSONData;
-  J, KeysJ, MouseJ, PadJ, PlacesJ: TJSONObject;
+  J, KeysJ, MouseJ, PadJ, PlacesJ, BestJ: TJSONObject;
+  BestI: Integer;
 begin
   Defaults;
+  SetLength(Settings.BestTimeKeys, 0);
+  SetLength(Settings.BestTimes, 0);
   if not SaveStorageRead(SettingsUrl, Text) then Exit;
   D := nil;
   try
@@ -688,6 +732,10 @@ begin
     Settings.MouseLook := J.Get('mouseLook', Settings.MouseLook);
     Settings.MouseSensitivity := Clamped(J.Get('mouseSensitivity', Settings.MouseSensitivity), 0, 9);
     Settings.ShowMessages := J.Get('showMessages', Settings.ShowMessages);
+    Settings.ShowStats := J.Get('showStats', Settings.ShowStats);
+    if J.Find('bestTimes', BestJ) then
+      for BestI := 0 to BestJ.Count - 1 do
+        SetBestTime(BestJ.Names[BestI], BestJ.Items[BestI].AsInteger);
     Settings.FieldOfView := Clamped(J.Get('fieldOfView', Settings.FieldOfView), MinFieldOfView, MaxFieldOfView);
     Settings.Fullscreen := J.Get('fullscreen', Settings.Fullscreen);
     Settings.UiScale := Clamped(J.Get('uiScale', Settings.UiScale), MinUiScale, MaxUiScale);
@@ -720,7 +768,8 @@ end;
 
 procedure SaveSettings;
 var
-  J: TJSONObject;
+  J, Best: TJSONObject;
+  BestI: Integer;
 begin
   J := TJSONObject.Create;
   try
@@ -731,6 +780,11 @@ begin
     J.Add('mouseLook', Settings.MouseLook);
     J.Add('mouseSensitivity', Settings.MouseSensitivity);
     J.Add('showMessages', Settings.ShowMessages);
+    J.Add('showStats', Settings.ShowStats);
+    Best := TJSONObject.Create;
+    for BestI := 0 to High(Settings.BestTimeKeys) do
+      Best.Add(Settings.BestTimeKeys[BestI], Settings.BestTimes[BestI]);
+    J.Add('bestTimes', Best);
     J.Add('fieldOfView', Settings.FieldOfView);
     J.Add('fullscreen', Settings.Fullscreen);
     J.Add('uiScale', Settings.UiScale);

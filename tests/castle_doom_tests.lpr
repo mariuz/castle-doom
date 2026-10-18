@@ -97,6 +97,7 @@ type
     procedure TestWebPadMapping;
     procedure TestPadBindings;
     procedure TestKeyBindings;
+    procedure TestBestTimes;
     procedure TestTouchControls;
   end;
 
@@ -1781,6 +1782,26 @@ begin
   AssertEquals('dead player frame', 'W', FindThingInfo(10)^.IdleFrames);
   AssertEquals('brain pain tics', 36, FindThingInfo(88)^.Seqs[skPain].Tics[0]);
   AssertEquals('brain pain sound stays with DoomWorld', '', FindThingInfo(88)^.PainSound);
+end;
+
+{ GameSettings' best times: one per WADs, map and skill, replaced. }
+procedure TTestGamepad.TestBestTimes;
+var
+  K1, K2: String;
+begin
+  SetLength(Settings.BestTimeKeys, 0);
+  SetLength(Settings.BestTimes, 0);
+  K1 := BestTimeKey('freedoom1.wad', 'e1m1', 2);
+  K2 := BestTimeKey('freedoom1.wad + random maps 42', 'E1M1', 2);
+  AssertEquals('key', 'freedoom1.wad E1M1 skill 3', K1);
+  AssertEquals('none yet', -1, BestTime(K1));
+  SetBestTime(K1, 95);
+  SetBestTime(K2, 40);
+  SetBestTime(K1, 61);
+  AssertEquals('replaced', 61, BestTime(K1));
+  AssertEquals('other WADs', 40, BestTime(K2));
+  AssertEquals('two entries', 2, Length(Settings.BestTimeKeys));
+  AssertEquals('the statistics key', 'L', KeyToStr(DefaultKeys[gaStats, 0]));
 end;
 
 { TTestGamepad }
