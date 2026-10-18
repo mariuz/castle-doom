@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.37.0 (2026-10-18)
 
 - Demos go on through the following levels (the playback skips through
   the intermissions), and the title screen's Options panel has "Record
