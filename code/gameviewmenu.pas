@@ -10,7 +10,7 @@ interface
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
   CastleDownload, CastleZip,
-  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked, DoomMapInfo, DoomRandomMap, GameSettings, GameTouch;
+  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked, DoomMapInfo, DoomRandomMap, DoomDemo, GameSettings, GameTouch;
 
 type
   TViewMenu = class(TCastleView)
@@ -90,6 +90,7 @@ type
     procedure RefreshSlots;
     procedure DoomMenuAction(const Action: TDoomMenuAction);
     procedure StartRandomGame;
+    procedure AutoPlayDemo(Sender: TObject);
     procedure ShowOptions(const Value: Boolean);
     procedure ClickOpenIwad(Sender: TObject);
     procedure ClickAddPwad(Sender: TObject);
@@ -346,6 +347,11 @@ begin
     { The design with the Doom map component (GameViewDesign); the view
       cannot change inside Start. }
     WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoDesign);
+    Exit;
+  end;
+  if DemoPlayFile <> '' then
+  begin
+    WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoPlayDemo);
     Exit;
   end;
   if Copy(AutoTestMap, 1, 4) = 'MENU' then
@@ -1538,6 +1544,43 @@ end;
 
 procedure TViewMenu.AutoStart(Sender: TObject);
 begin
+  StartGame;
+end;
+
+{ --playdemo FILE: the demo's WADs, then the play view plays it. }
+procedure TViewMenu.AutoPlayDemo(Sender: TObject);
+var
+  Demo: TDemoPlayer;
+  D: TJSONData;
+  Iwad: String;
+  Pwads: TStringList;
+  I: Integer;
+begin
+  try
+    Demo := TDemoPlayer.Create(DemoPlayFile);
+  except
+    on E: Exception do
+    begin
+      WritelnWarning('Demo', 'Cannot play %s: %s', [DemoPlayFile, E.Message]);
+      DemoPlayFile := '';
+      Exit;
+    end;
+  end;
+  Pwads := TStringList.Create;
+  try
+    Iwad := Freedoom1;
+    D := Demo.State.Find('wads');
+    if (D is TJSONArray) and (TJSONArray(D).Count > 0) then
+    begin
+      Iwad := TJSONArray(D).Strings[0];
+      for I := 1 to TJSONArray(D).Count - 1 do
+        Pwads.Add(TJSONArray(D).Strings[I]);
+    end;
+    if not LoadWads(Iwad, Pwads) then Exit;
+  finally
+    FreeAndNil(Pwads);
+    FreeAndNil(Demo);
+  end;
   StartGame;
 end;
 

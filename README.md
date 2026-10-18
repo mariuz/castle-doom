@@ -17,6 +17,8 @@ vanilla-format Doom 1 / Doom 2 IWADs and PWADs can be loaded from the menu
 castle-doom -iwad DOOM2.WAD -file mymap.wad -deh mymap.deh -warp MAP01
 castle-doom -random 42                       # eight generated maps from seed 42
 castle-doom -random 42 --random-wad r42.wad  # ...written as a PWAD for other ports
+castle-doom --record e1m1.cdemo              # record the level you play
+castle-doom --playdemo e1m1.cdemo            # play it back (it says if it stayed in sync)
 ```
 
 This project is deliberately written as a *tour of the engine*: every Doom subsystem
@@ -104,6 +106,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   (Doom's 90 by default), UI scale for the text and panels, fullscreen, v-sync and a frame
   rate cap on the desktop and,
   in the browser, the render resolution (25-100% of the canvas' pixels, for slow machines).
+- Demos: `--record FILE` records a level (from its start or a loaded game) as the world
+  received it and `--playdemo FILE` plays it back on its own random numbers, so it plays the
+  same at any frame rate; a checksum every second says where a playback went out of sync.
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used
   switches, corpses, monsters mid-fight, inventory and the automap. In the browser saves

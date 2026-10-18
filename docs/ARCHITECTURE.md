@@ -89,6 +89,7 @@ Sizes, for orientation (lines of Pascal):
 | `doomintermission.pas` | 500 | intermission screen |
 | `doomwiscript.pas` | 300 | intermission scripts (episode maps: animations, splats, pointer) |
 | `doomrandommap.pas` | 1280 | random maps: a PWAD of eight generated levels from a seed (`random:/SEED`) |
+| `doomdemo.pas` | 270 | demo files: recording and playing back what the world received |
 | `doomfinale.pas` | 520 | finale text, end pictures, bunny scroller, cast call |
 | `doommapinfo.pas` | 1000 | UMAPINFO and ZDoom (Z)MAPINFO: per-map names, music, sky, par, next maps, story texts, endings |
 | `doomstates.pas` | 230 | vanilla's state table and mobjinfo rows (`doomstates_table.inc`, generated from info.c): what DeHackEd edits and the things' sequences come from |
@@ -899,6 +900,33 @@ because it returns `null` for a missing key (the typed string call raises
 on `null`). If `localStorage` throws (blocked storage) the code falls back
 to the in-memory `castle-config:` and logs a warning. Six slots plus the
 quick save are under 1 MB, well inside the usual 5 MB per origin.
+
+### Demos (`DoomDemo`)
+
+Doom's demos store each tic's key presses, which works because its
+player physics runs in the tic. Here CGE's walk navigation moves the
+camera every frame, so a demo stores what `TDoomWorld` receives
+instead. `Update` writes one line per frame: the feet position, angle,
+camera position and direction, the walking speed (Boom ice) and the
+number of tics the frame runs (counted before running them, so the
+checksum lines of those tics follow it). The player's actions are the
+public input methods (`UseInFront`, `FireWeapon`, `SelectWeapon`,
+`NextWeapon`, `ReleaseFire`, `StopPush`), which record a line and call
+the `Do*` versions the simulation itself uses; a frame that ran no tics
+is written only when an action follows it. During playback those
+public methods ignore the live input, and `Update` takes its inputs and
+tic count from the demo, applying the actions in their recorded order
+before the next update; the view only shows the recorded camera.
+
+The world draws its random numbers from `TDoomWorld.Random`: System's
+`Random` normally (so the fixed-step autotests keep their sequences),
+a xorshift stream seeded from the demo while one records or plays,
+because the HUD's face and the screen melt draw System's numbers at
+frame times. A recording starts from `SaveJson` of the level, which the
+recording session also loads (`LoadState`), so both sides start from
+the same state; `SyncHash` (FNV of the tic, the player's health,
+armour, kills and weapon, and every actor's position, health and state)
+is written every 35 tics and compared during playback.
 
 ## 9. DoomSound: DMX sound effects
 

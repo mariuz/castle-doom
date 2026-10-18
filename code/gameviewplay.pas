@@ -10,7 +10,7 @@ uses Classes, SysUtils, FpJson,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages, CastleGLImages,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
   DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu, DoomWorldStatus, GameSettings,
-  GameTouch, GameDebugDraw;
+  GameTouch, GameDebugDraw, DoomDemo;
 
 type
   TViewPlay = class(TCastleView)
@@ -97,6 +97,9 @@ type
     FSlotTicAccum: Single;
     { The "Messages ON / OFF" message shows even with messages off. }
     FMessageAlways: Boolean;
+    FRecorder: TDemoRecorder;
+    FDemoPlayer: TDemoPlayer;
+    FDemoStarted: Boolean;
     procedure SlotScreenAction(const Action: TDoomMenuAction);
     { Description: shown on the load page ('' = the map, kills
       and time). }
@@ -104,7 +107,14 @@ type
     function AutoSaveName: String;
     procedure LoadGame(const Slot: Integer);
     function LoadGameUrl(const Url: String): Boolean;
+    function LoadGameJson(J: TJSONObject; const Url: String): Boolean;
+    function SaveJson(const Description: String): TJSONObject;
     procedure RestoreViewState(const State: TJSONObject);
+    { Demos (DoomDemo): start recording here (the level reloaded from its
+      saved state, so a playback starts alike), and end a recording or a
+      playback (a level's end, another map, leaving the view). }
+    procedure StartDemoRecording;
+    procedure StopDemos;
     procedure OpenSlotMenu(const Mode: Integer);
     procedure OpenSoundMenu;
     { Change the sound (Row 0) or music (Row 1) volume by Delta steps. }
@@ -186,6 +196,9 @@ type
 
 var
   ViewPlay: TViewPlay;
+  { --record FILE: record the next level started; --playdemo FILE: play
+    a demo (the menu loads its WADs first). Both are used once. }
+  DemoRecordFile, DemoPlayFile: String;
 
 { Saved game location: slot 0 is the quick save, 1..6 the F2/F3 slots.
   castle-config: is the user config directory on desktop (next to the log);
@@ -414,11 +427,26 @@ begin
     PendingSaveUrl := '';
     if LoadGameUrl(Url) then Exit;
   end;
+  if DemoPlayFile <> '' then
+  begin
+    try
+      FDemoPlayer := TDemoPlayer.Create(DemoPlayFile);
+    except
+      on E: Exception do
+        WritelnWarning('Demo', 'Cannot play %s: %s', [DemoPlayFile, E.Message]);
+    end;
+    DemoPlayFile := '';
+    if (FDemoPlayer <> nil) and LoadGameJson(FDemoPlayer.State.Clone as TJSONObject, FDemoPlayer.FileName) then
+      Exit;
+    FreeAndNil(FDemoPlayer);
+  end;
   StartMap(StartMapName, false);
 end;
 
 procedure TViewPlay.Stop;
 begin
+  StopDemos;
+  FreeAndNil(FDemoPlayer);
   { The page must stop keeping fingers from the engine (the menus). }
   PollTouches(nil);
   Container.PointerLock.RemoveUserCancelledListener({$ifdef FPC}@{$endif} PointerLockUserCancelled);
@@ -529,8 +557,7 @@ begin
       PlacePlayer(Arg, Arg2, FWorld.Map.Sectors[Sec].FloorHeight, DoomAngleFromCamera);
     { A scripted jump lands exactly: no momentum (knockback, a line
       teleport's kept speed) carries over. }
-    FWorld.PlayerPushVX := 0;
-    FWorld.PlayerPushVY := 0;
+    FWorld.StopPush;
     FWalkKnown := false;
   end
   else if Cmd = 'M' then
@@ -1329,6 +1356,7 @@ end;
 
 procedure TViewPlay.StartMap(const MapName: String; const KeepInventory: Boolean);
 begin
+  StopDemos;
   { The melt goes from what is on screen now (intermission, finale text) to
     the new level; not on the first map of the session (nothing to melt). }
   FreeAndNil(FPendingWipe);
@@ -1395,6 +1423,51 @@ begin
       intermission's), so the next level starts without synthesis. }
     Music.Prefetch(Music.LumpForMap(NextMapName(MapName, false, Wad.IsDoom2)));
   end;
+  if (FDemoPlayer <> nil) and not FDemoStarted and Restored then
+  begin
+    FDemoStarted := true;
+    FWorld.StartReplay(FDemoPlayer);
+  end else
+  if (DemoRecordFile <> '') and (FRecorder = nil) and (FDemoPlayer = nil) then
+    StartDemoRecording;
+end;
+
+procedure TViewPlay.StartDemoRecording;
+var
+  J: TJSONObject;
+begin
+  J := SaveJson('demo');
+  try
+    { The recording starts from this state loaded, like its playback. }
+    FWorld.LoadState(J);
+    RestoreViewState(J);
+    try
+      FRecorder := TDemoRecorder.Create(DemoRecordFile, 1, J);
+    except
+      on E: Exception do
+        WritelnWarning('Demo', 'Cannot record to %s: %s', [DemoRecordFile, E.Message]);
+    end;
+  finally
+    FreeAndNil(J);
+  end;
+  DemoRecordFile := '';
+  if FRecorder <> nil then
+    FWorld.StartRecording(FRecorder);
+end;
+
+procedure TViewPlay.StopDemos;
+begin
+  if FRecorder <> nil then
+  begin
+    if FWorld <> nil then FWorld.StopRecording;
+    FreeAndNil(FRecorder);
+  end;
+  if FDemoStarted then
+  begin
+    if FWorld <> nil then FWorld.FinishReplay;
+    FreeAndNil(FDemoPlayer);
+    FDemoStarted := false;
+  end;
 end;
 
 procedure TViewPlay.RestoreViewState(const State: TJSONObject);
@@ -1426,37 +1499,44 @@ begin
     Trunc(FLevelTime) div 60, Trunc(FLevelTime) mod 60]);
 end;
 
-procedure TViewPlay.SaveGame(const Slot: Integer; const Description: String);
+{ The world's state with the view's (camera, level time) and the WADs:
+  a save game, also a demo's start. }
+function TViewPlay.SaveJson(const Description: String): TJSONObject;
 var
-  J: TJSONObject;
   C, Wads: TJSONArray;
   Pos, Dir, Up: TVector3;
   I: Integer;
-  P: TPlayerState;
+begin
+  Result := FWorld.SaveState;
+  FViewport.Camera.GetView(Pos, Dir, Up);
+  C := TJSONArray.Create;
+  for I := 0 to 2 do C.Add(Double(Pos[I]));
+  for I := 0 to 2 do C.Add(Double(Dir[I]));
+  for I := 0 to 2 do C.Add(Double(Up[I]));
+  Result.Add('camera', C);
+  Result.Add('levelTime', Double(FLevelTime));
+  Wads := TJSONArray.Create;
+  for I := 0 to Wad.FileUrls.Count - 1 do
+    Wads.Add(Wad.FileUrls[I]);
+  Result.Add('wads', Wads);
+  if Description <> '' then
+    Result.Add('description', Description)
+  else
+    Result.Add('description', AutoSaveName);
+  Result.Add('saved', FormatDateTime('yyyy-mm-dd hh:nn', Now));
+end;
+
+procedure TViewPlay.SaveGame(const Slot: Integer; const Description: String);
+var
+  J: TJSONObject;
 begin
   if (FWorld = nil) or (not FWorld.MapLoaded) or FIntermission or FWorld.Player.Dead or (FPendingMap <> '') then
   begin
     if FWorld <> nil then FWorld.ShowMessage('You can''t save now.');
     Exit;
   end;
-  J := FWorld.SaveState;
+  J := SaveJson(Description);
   try
-    FViewport.Camera.GetView(Pos, Dir, Up);
-    C := TJSONArray.Create;
-    for I := 0 to 2 do C.Add(Double(Pos[I]));
-    for I := 0 to 2 do C.Add(Double(Dir[I]));
-    for I := 0 to 2 do C.Add(Double(Up[I]));
-    J.Add('camera', C);
-    J.Add('levelTime', Double(FLevelTime));
-    Wads := TJSONArray.Create;
-    for I := 0 to Wad.FileUrls.Count - 1 do
-      Wads.Add(Wad.FileUrls[I]);
-    J.Add('wads', Wads);
-    if Description <> '' then
-      J.Add('description', Description)
-    else
-      J.Add('description', AutoSaveName);
-    J.Add('saved', FormatDateTime('yyyy-mm-dd hh:nn', Now));
     try
       WriteSaveFile(SaveSlotUrl(Slot), J);
       WritelnLog('Save', 'Saved %s to %s (%s)', [FMapName, SaveSlotUrl(Slot), SaveStorageName]);
@@ -1484,13 +1564,19 @@ end;
 function TViewPlay.LoadGameUrl(const Url: String): Boolean;
 var
   J: TJSONObject;
+begin
+  J := ReadSaveFile(Url);
+  Result := (J <> nil) and LoadGameJson(J, Url);
+end;
+
+{ Load a save (taking J); False when it needs other WADs. }
+function TViewPlay.LoadGameJson(J: TJSONObject; const Url: String): Boolean;
+var
   D: TJSONData;
   Saved: TStringList;
   I: Integer;
 begin
   Result := false;
-  J := ReadSaveFile(Url);
-  if J = nil then Exit;
   { A save only makes sense with the same IWAD + PWADs. }
   Saved := TStringList.Create;
   try
@@ -1929,6 +2015,7 @@ var
   P: TPlayerState;
   Next: String;
 begin
+  StopDemos;
   BeginWipe;
   FIntermission := true;
   FIntermissionTime := 0;
@@ -2089,7 +2176,7 @@ begin
   if AutoTestDemo <> '' then
   begin
     RunDemo(SecondsPassed);
-    FWorld.Player.Refire := false;
+    if FWorld <> nil then FWorld.ReleaseFire;
     if FWorld = nil then Exit;
   end;
   { Touch controls while the game is played (the browser's fingers are
@@ -2236,6 +2323,9 @@ begin
   PerfT := Timer;
   FWorld.Update(SecondsPassed, Feet.X, Feet.Y, Feet.Z, DoomAngleFromCamera, CamPos, CamDir);
   FPerfWorld := FPerfWorld + TimerSeconds(Timer, PerfT);
+  { A demo plays: the view is its camera. }
+  if FWorld.Replaying then
+    FViewport.Camera.SetView(FWorld.ReplayCameraPos, FWorld.ReplayCameraDir, Vector3(0, 1, 0));
 
   if FWorld.PlayerTeleported then
   begin
@@ -2253,10 +2343,7 @@ begin
       FPushedX := FPushedX + FWorld.PlayerPushDX;
       FPushedY := FPushedY + FWorld.PlayerPushDY;
     end else
-    begin
-      FWorld.PlayerPushVX := 0;
-      FWorld.PlayerPushVY := 0;
-    end;
+      FWorld.StopPush;
     FWorld.PlayerPushDX := 0;
     FWorld.PlayerPushDY := 0;
   end;
@@ -2299,7 +2386,7 @@ begin
      GamepadFireHeld or (FTouch.Exists and FTouch.FireHeld) then
     FWorld.FireWeapon
   else
-    FWorld.Player.Refire := false;
+    FWorld.ReleaseFire;
 
   P := FWorld.Player;
   FPaletteFlash.Color := FPaletteTints[FWorld.PaletteIndex];

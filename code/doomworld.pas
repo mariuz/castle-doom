@@ -13,7 +13,7 @@ interface
 uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
   DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting, DoomStates,
-  DoomGeneralized;
+  DoomGeneralized, DoomDemo;
 
 const
   TicRate = 35;
@@ -197,6 +197,17 @@ type
     FWeaponSeqs, FFlashSeqs: array [TWeapon] of TFrameSeq;
     { A_ReFire reached with the trigger held: the attack starts over. }
     FRefirePending: Boolean;
+    { Demos (DoomDemo): the recorder or the player (the view owns them),
+      the world's own random numbers while one runs, and the last
+      checksum a replayed tic made. }
+    FDemoRec: TDemoRecorder;
+    FDemoPlay: TDemoPlayer;
+    FOwnRandom: Boolean;
+    FRandState: Cardinal;
+    FCheckTic: Int64;
+    FCheckHash: Cardinal;
+    FDemoDesync: Boolean;
+    FReplayCameraPos, FReplayCameraDir: TVector3;
     { Icon of Sin: next spawn spot, A_BrainSpit's "easy" toggle, tics left
       until the dead brain ends the level, and where it was. }
     FBrainTargetIndex: Integer;
@@ -342,6 +353,24 @@ type
     procedure WeaponAction(const Action: TStateAction);
     procedure BuildWeaponSeqs;
     function Random1(const N: Integer): Integer;
+    { System.Random, or the demo's own stream while a demo records or
+      plays (other code draws System.Random too, at frame times). }
+    function Random(const N: Integer): Integer;
+    procedure AddThrust(const TX, TY, TZ: Single; const Mass, Damage, Health: Integer;
+      const FX, FY, FZ: Single; var VX, VY: Single);
+    { The player's actions without the demo's recording and blocking. }
+    procedure DoUseInFront;
+    procedure DoFireWeapon;
+    procedure DoSelectWeapon(const W: TWeapon);
+    procedure DoNextWeapon(const Delta: Integer);
+    { True while a demo plays: the live inputs are ignored. }
+    function LiveInputBlocked: Boolean;
+    { Apply the demo's events up to its next update line, whose tics it
+      returns (-1 at the demo's end, which ends the replay). }
+    function ReplayEvents(out E: TDemoEvent): Integer;
+    procedure ReplayCheck(const E: TDemoEvent);
+    procedure ReplayEnd(const E: TDemoEvent);
+    procedure AfterDemoTic;
     function Dice(const Count, Faces: Integer): Integer;
     procedure NoiseAlert;
     { Specials }
@@ -455,6 +484,25 @@ type
     { Start lowering the current weapon to bring up W (P_SetPsprite S_LOWER). }
     procedure ChangeWeapon(const W: TWeapon);
     procedure NextWeapon(const Delta: Integer);
+    { The fire button was let go (A_ReFire stops repeating). }
+    procedure ReleaseFire;
+    { The view's walls stopped the knockback. }
+    procedure StopPush;
+    { Demos: record from now on (Rec stays the caller's), or play one
+      back (from its state, already loaded); FinishReplay reads the rest
+      of a demo when its level ended, StopRecording writes the end. }
+    procedure StartRecording(const Rec: TDemoRecorder);
+    procedure StopRecording;
+    procedure StartReplay(const Demo: TDemoPlayer);
+    procedure FinishReplay;
+    function Replaying: Boolean;
+    { A checksum of the player and the actors (demo sync). }
+    function SyncHash: Cardinal;
+    function DemoSummary: String;
+    { The camera of the replayed frame (the view shows it). }
+    property ReplayCameraPos: TVector3 read FReplayCameraPos;
+    property ReplayCameraDir: TVector3 read FReplayCameraDir;
+    property DemoDesync: Boolean read FDemoDesync;
     procedure ShowMessage(const Msg: String);
     { BEX string Key, or Default without one. }
     function Text(const Key, Default: String): String;
@@ -1511,7 +1559,7 @@ begin
   end;
 end;
 
-procedure TDoomWorld.SelectWeapon(const W: TWeapon);
+procedure TDoomWorld.DoSelectWeapon(const W: TWeapon);
 begin
   if not (W in Player.Weapons) then Exit;
   if (AmmoFor(W) <> amNoAmmo) and (Player.Ammo[AmmoFor(W)] <= 0) and (W <> Player.Weapon) then
@@ -1529,7 +1577,7 @@ begin
   Player.WeaponSwitch := 1;
 end;
 
-procedure TDoomWorld.NextWeapon(const Delta: Integer);
+procedure TDoomWorld.DoNextWeapon(const Delta: Integer);
 const
   Order: array [0..8] of TWeapon = (wpFist, wpChainsaw, wpPistol, wpShotgun, wpSuperShotgun, wpChaingun, wpMissile, wpPlasma, wpBfg);
 var
@@ -1545,40 +1593,287 @@ begin
     if (Order[Idx] in Player.Weapons) and
        ((AmmoFor(Order[Idx]) = amNoAmmo) or (Player.Ammo[AmmoFor(Order[Idx])] > 0)) then
     begin
-      SelectWeapon(Order[Idx]);
+      DoSelectWeapon(Order[Idx]);
       Exit;
     end;
   end;
 end;
 
+{ Demos ------------------------------------------------------------------------ }
+
+function TDoomWorld.Random(const N: Integer): Integer;
+begin
+  if not FOwnRandom then Exit(System.Random(N));
+  if N <= 0 then Exit(0);
+  FRandState := FRandState xor (FRandState shl 13);
+  FRandState := FRandState xor (FRandState shr 17);
+  FRandState := FRandState xor (FRandState shl 5);
+  Result := FRandState mod Cardinal(N);
+end;
+
+function TDoomWorld.LiveInputBlocked: Boolean;
+begin
+  Result := FDemoPlay <> nil;
+end;
+
+procedure TDoomWorld.UseInFront;
+begin
+  if LiveInputBlocked then Exit;
+  if FDemoRec <> nil then FDemoRec.Event(deUse);
+  DoUseInFront;
+end;
+
+procedure TDoomWorld.FireWeapon;
+begin
+  if LiveInputBlocked then Exit;
+  if FDemoRec <> nil then FDemoRec.Event(deFire);
+  DoFireWeapon;
+end;
+
+procedure TDoomWorld.SelectWeapon(const W: TWeapon);
+begin
+  if LiveInputBlocked then Exit;
+  if FDemoRec <> nil then FDemoRec.Event(deSelectWeapon, Ord(W));
+  DoSelectWeapon(W);
+end;
+
+procedure TDoomWorld.NextWeapon(const Delta: Integer);
+begin
+  if LiveInputBlocked then Exit;
+  if FDemoRec <> nil then FDemoRec.Event(deNextWeapon, Delta);
+  DoNextWeapon(Delta);
+end;
+
+procedure TDoomWorld.ReleaseFire;
+begin
+  if LiveInputBlocked then Exit;
+  { Only a change is worth a line (the view says it every frame). }
+  if (FDemoRec <> nil) and Player.Refire then FDemoRec.Event(deReleaseFire);
+  Player.Refire := false;
+end;
+
+procedure TDoomWorld.StopPush;
+begin
+  if LiveInputBlocked then Exit;
+  if (FDemoRec <> nil) and ((PlayerPushVX <> 0) or (PlayerPushVY <> 0)) then FDemoRec.Event(deStopPush);
+  PlayerPushVX := 0;
+  PlayerPushVY := 0;
+end;
+
+procedure TDoomWorld.StartRecording(const Rec: TDemoRecorder);
+begin
+  FDemoRec := Rec;
+  FOwnRandom := true;
+  FRandState := 1;
+  WritelnLog('Demo', 'Recording %s from tic %d of %s', [Rec.FileName, FTic, FMap.Name]);
+end;
+
+function TDoomWorld.DemoSummary: String;
+begin
+  Result := Format('kills %d/%d items %d/%d secrets %d/%d health %d armor %d at %d %d', [
+    Player.Kills, Player.TotalKills, Player.Items, Player.TotalItems, Player.Secrets, Player.TotalSecrets,
+    Player.Health, Player.Armor, Round(Player.X), Round(Player.Y)]);
+end;
+
+procedure TDoomWorld.StopRecording;
+begin
+  if FDemoRec = nil then Exit;
+  FDemoRec.Finish(FTic, SyncHash, DemoSummary);
+  WritelnLog('Demo', 'Recorded %s: tic %d, %s', [FDemoRec.FileName, FTic, DemoSummary]);
+  FDemoRec := nil;
+end;
+
+procedure TDoomWorld.StartReplay(const Demo: TDemoPlayer);
+begin
+  FDemoPlay := Demo;
+  FOwnRandom := true;
+  FRandState := Demo.Seed;
+  if FRandState = 0 then FRandState := 1;
+  FDemoDesync := false;
+  FCheckTic := -1;
+  WritelnLog('Demo', 'Playing %s from tic %d of %s', [Demo.FileName, FTic, FMap.Name]);
+end;
+
+function TDoomWorld.Replaying: Boolean;
+begin
+  Result := FDemoPlay <> nil;
+end;
+
+{$push}{$Q-}{$R-}
+function TDoomWorld.SyncHash: Cardinal;
+var
+  H: Cardinal;
+  A: TDoomActor;
+
+  procedure Mix(const V: Integer);
+  begin
+    H := (H xor Cardinal(V)) * 16777619;
+  end;
+
+begin
+  H := 2166136261;
+  Mix(FTic);
+  Mix(Player.Health);
+  Mix(Player.Armor);
+  Mix(Player.Kills);
+  Mix(Ord(Player.Weapon));
+  for A in FActors do
+    if not A.Removed then
+    begin
+      Mix(Round(A.DoomX * 8));
+      Mix(Round(A.DoomY * 8));
+      Mix(Round(A.DoomZ * 8));
+      Mix(A.Health);
+      Mix(Ord(A.State));
+    end;
+  Result := H;
+end;
+{$pop}
+
+{ After each tic of a demo: a checksum line every DemoCheckTics (the
+  replay keeps it to compare with the recorded one). }
+procedure TDoomWorld.AfterDemoTic;
+begin
+  if FTic mod DemoCheckTics <> 0 then Exit;
+  if FDemoRec <> nil then
+    FDemoRec.Check(FTic, SyncHash)
+  else if FDemoPlay <> nil then
+  begin
+    FCheckTic := FTic;
+    FCheckHash := SyncHash;
+  end;
+end;
+
+procedure TDoomWorld.ReplayCheck(const E: TDemoEvent);
+begin
+  if FDemoDesync then Exit;
+  if (E.Tics <> FCheckTic) or (E.Hash <> FCheckHash) then
+  begin
+    FDemoDesync := true;
+    WritelnWarning('Demo', 'Out of sync at tic %d: recorded %s, replayed %s at tic %d', [
+      E.Tics, IntToHex(E.Hash, 8), IntToHex(FCheckHash, 8), FCheckTic]);
+  end;
+end;
+
+procedure TDoomWorld.ReplayEnd(const E: TDemoEvent);
+begin
+  if (E.Tics = FTic) and (E.Hash = SyncHash) and not FDemoDesync then
+    WritelnLog('Demo', 'Finished %s at tic %d, in sync: %s', [FDemoPlay.FileName, FTic, DemoSummary])
+  else
+    WritelnWarning('Demo', 'Finished %s at tic %d (recorded tic %d), out of sync: %s (recorded %s)', [
+      FDemoPlay.FileName, FTic, E.Tics, DemoSummary, E.Text]);
+  FDemoPlay := nil;
+end;
+
+function TDoomWorld.ReplayEvents(out E: TDemoEvent): Integer;
+begin
+  while FDemoPlay.Next(E) do
+    case E.Kind of
+      deUpdate: Exit(E.Tics);
+      deUse: DoUseInFront;
+      deFire: DoFireWeapon;
+      deReleaseFire: Player.Refire := false;
+      deStopPush:
+        begin
+          PlayerPushVX := 0;
+          PlayerPushVY := 0;
+        end;
+      deNextWeapon: DoNextWeapon(E.Arg);
+      deSelectWeapon:
+        if (E.Arg >= Ord(Low(TWeapon))) and (E.Arg <= Ord(High(TWeapon))) then
+          DoSelectWeapon(TWeapon(E.Arg));
+      deCheck: ReplayCheck(E);
+      deEnd:
+        begin
+          ReplayEnd(E);
+          Exit(-1);
+        end;
+    end;
+  WritelnWarning('Demo', '%s ended without its last line', [FDemoPlay.FileName]);
+  FDemoPlay := nil;
+  Result := -1;
+end;
+
+procedure TDoomWorld.FinishReplay;
+var
+  E: TDemoEvent;
+begin
+  while (FDemoPlay <> nil) and FDemoPlay.Next(E) do
+    case E.Kind of
+      deCheck: ReplayCheck(E);
+      deEnd: ReplayEnd(E);
+    end;
+  FDemoPlay := nil;
+end;
+
 procedure TDoomWorld.Update(const SecondsPassed: Single; const PlayerFeetX, PlayerFeetY, PlayerFeetZ: Single;
   const PlayerAngleDeg: Single; const CameraPos, CameraDir: TVector3);
 var
-  Steps: Integer;
+  Steps, I: Integer;
   T: TTimerResult;
+  E: TDemoEvent;
+  FX, FY, FZ, Ang: Single;
+  CamPos, CamDir: TVector3;
 begin
   if FMap = nil then Exit;
-  Player.X := PlayerFeetX;
-  Player.Y := PlayerFeetY;
-  Player.Z := PlayerFeetZ;
-  Player.Angle := PlayerAngleDeg;
-  Player.Sector := FMap.SectorAt(Player.X, Player.Y);
-  FRayOrigin := CameraPos;
-  FRayDir := CameraDir;
-  FHaveRay := true;
-  FPlayerEmitter.Translation := CameraPos;
-
-  FTicAccum := FTicAccum + Min(SecondsPassed, 0.25);
-  Steps := 0;
-  while (FTicAccum >= TicSeconds) and (Steps < 10) do
+  FX := PlayerFeetX;
+  FY := PlayerFeetY;
+  FZ := PlayerFeetZ;
+  Ang := PlayerAngleDeg;
+  CamPos := CameraPos;
+  CamDir := CameraDir;
+  Steps := -1;
+  { A demo plays: its inputs instead of the view's, and its tic count. }
+  if FDemoPlay <> nil then
   begin
-    FTicAccum := FTicAccum - TicSeconds;
+    Steps := ReplayEvents(E);
+    if Steps >= 0 then
+    begin
+      FX := E.Values[0];
+      FY := E.Values[1];
+      FZ := E.Values[2];
+      Ang := E.Values[3];
+      CamPos := Vector3(E.Values[4], E.Values[5], E.Values[6]);
+      CamDir := Vector3(E.Values[7], E.Values[8], E.Values[9]);
+      PlayerWalkVX := E.Values[10];
+      PlayerWalkVY := E.Values[11];
+      FReplayCameraPos := CamPos;
+      FReplayCameraDir := CamDir;
+    end;
+  end;
+  Player.X := FX;
+  Player.Y := FY;
+  Player.Z := FZ;
+  Player.Angle := Ang;
+  Player.Sector := FMap.SectorAt(Player.X, Player.Y);
+  FRayOrigin := CamPos;
+  FRayDir := CamDir;
+  FHaveRay := true;
+  FPlayerEmitter.Translation := CamPos;
+
+  if Steps < 0 then
+  begin
+    { How many tics this frame runs (at most 10, after a long frame). }
+    FTicAccum := FTicAccum + Min(SecondsPassed, 0.25);
+    Steps := 0;
+    while (FTicAccum >= TicSeconds) and (Steps < 10) do
+    begin
+      FTicAccum := FTicAccum - TicSeconds;
+      Inc(Steps);
+    end;
+  end;
+  if FDemoRec <> nil then
+    FDemoRec.Update(Steps, [FX, FY, FZ, Ang, CamPos.X, CamPos.Y, CamPos.Z,
+      CamDir.X, CamDir.Y, CamDir.Z, PlayerWalkVX, PlayerWalkVY]);
+  for I := 1 to Steps do
+  begin
     RunTic;
-    Inc(Steps);
+    if (FDemoRec <> nil) or (FDemoPlay <> nil) then
+      AfterDemoTic;
   end;
   T := Timer;
-  UpdateWaterView(CgeToDoom(CameraPos).Z);
-  FGeometry.Update(SecondsPassed, CameraPos);
+  UpdateWaterView(CgeToDoom(CamPos).Z);
+  FGeometry.Update(SecondsPassed, CamPos);
   FGeometry.FlushDirty;
   FSpriteBatch.Flush;
   FPerf[7] := FPerf[7] + TimerSeconds(Timer, T);
@@ -2661,7 +2956,7 @@ end;
 { P_DamageMobj's thrust: away from the inflictor by damage * 12.5 / mass,
   and a small hit that kills a target standing over 64 units above the
   inflictor sometimes throws it forward instead (four times as hard). }
-procedure AddThrust(const TX, TY, TZ: Single; const Mass, Damage, Health: Integer;
+procedure TDoomWorld.AddThrust(const TX, TY, TZ: Single; const Mass, Damage, Health: Integer;
   const FX, FY, FZ: Single; var VX, VY: Single);
 var
   Ang, T: Single;
@@ -4873,7 +5168,7 @@ end;
   (weaponinfo's atkstate, from the state table) and run the first one's
   code pointer; UpdateWeaponAnimation runs the later ones as their frames
   come. }
-procedure TDoomWorld.FireWeapon;
+procedure TDoomWorld.DoFireWeapon;
 var
   Ammo: TAmmoType;
   Cost, I, Total: Integer;
@@ -4888,7 +5183,7 @@ begin
   if Player.Weapon = wpSuperShotgun then Cost := 2;
   if (Ammo <> amNoAmmo) and (Player.Ammo[Ammo] < Cost) then
   begin
-    NextWeapon(-1);
+    DoNextWeapon(-1);
     Exit;
   end;
   Total := 0;
@@ -5065,7 +5360,7 @@ begin
   end;
 end;
 
-procedure TDoomWorld.UseInFront;
+procedure TDoomWorld.DoUseInFront;
 var
   I, Best, Side, F, B: Integer;
   L: TDoomLinedef;

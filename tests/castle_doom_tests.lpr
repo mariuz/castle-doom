@@ -17,10 +17,10 @@ program castle_doom_tests;
 {$mode objfpc}{$H+}
 {$unitpath ../code}
 
-uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
+uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo;
 
 function DataPath(const Name: String): String;
 begin
@@ -48,6 +48,7 @@ type
     procedure TestZMapInfo;
     procedure TestLanguage;
     procedure TestWiScript;
+    procedure TestDemoFile;
   end;
 
   TTestMap = class(TTestCase)
@@ -961,6 +962,78 @@ begin
     end;
   finally
     FreeAndNil(W);
+  end;
+end;
+
+
+{ DoomDemo's file: the floats come back bit for bit, an update that ran
+  no tics is kept only when an action follows it, and the end line
+  carries the summary. }
+procedure TTestWad.TestDemoFile;
+var
+  FileName: String;
+  Rec: TDemoRecorder;
+  State: TJSONObject;
+  Demo: TDemoPlayer;
+  E: TDemoEvent;
+  Kinds: String;
+const
+  Letters: array [TDemoEventKind] of Char = ('T', 'U', 'F', 'R', 'P', 'N', 'W', 'C', 'E');
+begin
+  FileName := GetTempFileName('', 'castle-doom-demo');
+  State := TJSONObject.Create(['map', 'E1M1', 'skill', 3]);
+  try
+    Rec := TDemoRecorder.Create(FileName, 777, State);
+    try
+      Rec.Update(1, [-416.25, 256, 0, 90, -1.5e-7, 41.0, 3.4e38, 0, 0, -1, 0.125, -30]);
+      Rec.Update(0, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);  { dropped: no action follows }
+      Rec.Update(0, [9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]);      { kept: the use sees it }
+      Rec.Event(deUse);
+      Rec.Event(deSelectWeapon, 3);
+      Rec.Update(2, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      Rec.Check(35, $DEADBEEF);
+      Rec.Event(deNextWeapon, -1);
+      Rec.Update(0, [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5]);    { dropped at the end }
+      Rec.Finish(36, $12345678, 'kills 1/2 health 100');
+    finally
+      FreeAndNil(Rec);
+    end;
+  finally
+    FreeAndNil(State);
+  end;
+  Demo := TDemoPlayer.Create(FileName);
+  try
+    AssertEquals('seed', 777, Demo.Seed);
+    AssertEquals('state', 'E1M1', Demo.State.Get('map', ''));
+    Kinds := '';
+    while Demo.Next(E) do
+    begin
+      Kinds := Kinds + Letters[E.Kind];
+      if (E.Kind = deUpdate) and (Length(Kinds) = 1) then
+      begin
+        AssertEquals('tics', 1, E.Tics);
+        AssertTrue('x exact', E.Values[0] = Single(-416.25));
+        AssertTrue('tiny exact', E.Values[4] = Single(-1.5e-7));
+        AssertTrue('huge exact', E.Values[6] = Single(3.4e38));
+        AssertTrue('walk exact', E.Values[11] = Single(-30));
+      end;
+      if (E.Kind = deUpdate) and (Length(Kinds) = 2) then
+        AssertTrue('the kept frame', E.Values[0] = 9);
+      if E.Kind = deSelectWeapon then AssertEquals('weapon', 3, E.Arg);
+      if E.Kind = deNextWeapon then AssertEquals('delta', -1, E.Arg);
+      if E.Kind = deCheck then
+        AssertTrue('check', (E.Tics = 35) and (E.Hash = $DEADBEEF));
+      if E.Kind = deEnd then
+      begin
+        AssertTrue('end', (E.Tics = 36) and (E.Hash = $12345678));
+        AssertEquals('summary', 'kills 1/2 health 100', E.Text);
+      end;
+    end;
+    AssertEquals('events in order', 'TTUWTCNE', Kinds);
+    AssertTrue('at the end', Demo.AtEnd);
+  finally
+    FreeAndNil(Demo);
+    DeleteFile(FileName);
   end;
 end;
 

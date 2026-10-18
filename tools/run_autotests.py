@@ -756,6 +756,46 @@ def crash_test(exe, out):
     return problems, secs
 
 
+def demo_test(exe, out):
+    """Demos (DoomDemo): a run on E1M1 recorded at the real frame rate
+    (walking, shooting, a weapon change, the door; the zombies shoot back
+    with the world's own random numbers) plays back in sync under
+    --fixed-step, and a copy with one shot taken out is caught."""
+    problems = []
+    start = time.time()
+    demo = os.path.join(out, 'demo-record.cdemo')
+    if os.path.exists(demo):
+        os.remove(demo)
+    config = os.path.join(out, 'config-demo')
+    shutil.rmtree(config, ignore_errors=True)
+    os.makedirs(config)
+    log, code, _ = run_game(exe, out, 'demo-record', 'E1M1',
+                            'W:0.5,F:1.5,T:30,X,W:0.5,X,W:0.5,G:480:712,A:0,U,W:2,F:2,X,W:1,C:2,X,W:2,Q',
+                            ['--record', demo], config)
+    if code != 0:
+        problems.append('recording: exit code %d' % code)
+    m = re.search(r'Demo: Recorded .*: tic (\d+), (.*)', log)
+    if not m:
+        problems.append('recording: no "Demo: Recorded" line')
+        return problems, time.time() - start
+    log, code, _ = run_game(exe, out, 'demo-playback', 'E1M1', 'W:14,Q',
+                            ['--playdemo', demo, '--fixed-step'], config)
+    if code != 0:
+        problems.append('playback: exit code %d' % code)
+    if not re.search(r'Demo: Finished .* at tic %s, in sync: %s' % (m.group(1), re.escape(m.group(2))), log):
+        problems.append('playback: not "in sync" at tic %s (%s)' % (m.group(1), m.group(2)))
+    with open(demo) as f:
+        lines = f.read().split('\n')
+    del lines[lines.index('F')]
+    bad = os.path.join(out, 'demo-tampered.cdemo')
+    with open(bad, 'w') as f:
+        f.write('\n'.join(lines))
+    log, code, _ = run_game(exe, out, 'demo-tampered', 'E1M1', 'W:14,Q', ['--playdemo', bad], config)
+    if not re.search(r'Warning: Demo: Out of sync at tic \d+', log):
+        problems.append('tampered: no "Out of sync" warning')
+    return problems, time.time() - start
+
+
 def settings_test(exe, out):
     """Volumes set in one run are loaded by the next."""
     config = os.path.join(out, 'config-settings')
@@ -864,6 +904,11 @@ def main():
         problems, secs = crash_test(exe, out)
         results.append(('crash-report', problems, secs))
         print('%-16s %s (%.0f s)%s' % ('crash-report', 'FAIL' if problems else 'ok', secs,
+                                        ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'demo' in only:
+        problems, secs = demo_test(exe, out)
+        results.append(('demo', problems, secs))
+        print('%-16s %s (%.0f s)%s' % ('demo', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)

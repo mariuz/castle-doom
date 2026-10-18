@@ -157,6 +157,16 @@ begin
       end else
         UseRandomMaps('', RandomSeed);
     end else
+    if (Parameters[I] = '--record') and (I + 1 <= Parameters.High) then
+    begin
+      DemoRecordFile := Parameters[I + 1];
+      Inc(I);
+    end else
+    if (Parameters[I] = '--playdemo') and (I + 1 <= Parameters.High) then
+    begin
+      DemoPlayFile := Parameters[I + 1];
+      Inc(I);
+    end else
     if (Parameters[I] = '--random-wad') and (I + 1 <= Parameters.High) then
     begin
       RandomWadFile := Parameters[I + 1];

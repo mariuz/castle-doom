@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Demos: `--record FILE` records a level as you play it and
+  `--playdemo FILE` plays it back, the same at any frame rate, saying
+  whether it stayed in sync (handy for bug reports).
+
 ## v0.34.0 (2026-10-18)
 
 - Random maps have doors, and from the second map on a locked door
