@@ -87,9 +87,12 @@ sys; sys.argv=['x']; sys.path.insert(0,'tools'); import run_autotests as r;
 r.golden_compare('DIR', update=True)"` (or the harness with
 `--update-golden`), so the references stay CI's own rendering; a local
 xvfb run matches them too. Screenshots of moving scenes need
-`--fixed-step` in the test's extra arguments (each frame then advances
-exactly one tic and the random seed is fixed, so two runs agree; the
-waits take about 3x longer in real time under software GL).
+`--fixed-step` in the test's extra arguments (or the test's name in the
+harness's `FIXED_STEP` set; each frame then advances exactly one tic
+and the random seed is fixed, so two runs agree; the waits take about
+3x longer in real time under software GL). Every screenshot the suite
+takes is in `GOLDEN` now: a new test's screenshots belong there too,
+after two runs agree.
 
 Unit tests (FPCUnit, no window, about 20 s, 36 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:

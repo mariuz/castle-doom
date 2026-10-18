@@ -562,6 +562,12 @@ def check_log_filtered(config):
         assert not re.search(rx, log, re.M), 'filtered category still logged: %s' % rx
 
 
+# Tests whose screenshots move (monsters, scrollers, the inspector's
+# FPS) and whose entries do not say --fixed-step themselves: run one tic
+# a frame so the screenshots can be golden ones too.
+FIXED_STEP = {'inspector', 'gamepad-bindings', 'umapinfo-episode', 'mapinfo-episode',
+              'scrollers', 'icon-of-sin'}
+
 GOLDEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'golden')
 GOLDEN_SIZE = (320, 180)
 GOLDEN_PIXEL = 40
@@ -570,6 +576,8 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'inspector_1.png', 'gamepad-bindings_1.png', 'touch-controls_2.png', 'umapinfo-episode_1.png',
+    'mapinfo-episode_1.png', 'scrollers_1.png', 'icon-of-sin_1.png',
     'menu_menu.png', 'title-pages_menutitle.png', 'read-this_menureadthis.png',
     'controls-page_menucontrols.png', 'controls-hotkeys_menucontrolshotkeys.png',
     'controls-touch_menucontrolstouch.png', 'touch-layout_1.png', 'touch-edit_menutouchedit.png',
@@ -783,6 +791,8 @@ def main():
     for test in TESTS:
         if only and test[0] not in only:
             continue
+        if test[0] in FIXED_STEP and '--fixed-step' not in test[4]:
+            test = test[:4] + (list(test[4]) + ['--fixed-step'],) + test[5:]
         problems, secs = run_test(exe, out, test)
         results.append((test[0], problems, secs))
         print('%-16s %s (%.0f s)%s' % (test[0], 'FAIL' if problems else 'ok', secs,
