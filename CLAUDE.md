@@ -91,8 +91,10 @@ xvfb run matches them too. Screenshots of moving scenes need
 harness's `FIXED_STEP` set; each frame then advances exactly one tic
 and the random seed is fixed, so two runs agree; the waits take about
 3x longer in real time under software GL). Every screenshot the suite
-takes is in `GOLDEN` now: a new test's screenshots belong there too,
-after two runs agree.
+takes is in `GOLDEN` now except `icon-of-sin_1.png` (the brain's spawns
+draw random numbers other code shares, so CI saw other monsters than a
+local run): a new test's screenshots belong there too, after two runs
+agree, here and in CI.
 
 Unit tests (FPCUnit, no window, about 20 s, 37 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:

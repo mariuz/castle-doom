@@ -578,8 +578,11 @@ def check_log_filtered(config):
 # Tests whose screenshots move (monsters, scrollers, the inspector's
 # FPS) and whose entries do not say --fixed-step themselves: run one tic
 # a frame so the screenshots can be golden ones too.
+# icon-of-sin stays out: what the brain spawns depends on random numbers
+# that other code (sounds, music) also draws, so CI and a local run see
+# different monsters.
 FIXED_STEP = {'inspector', 'gamepad-bindings', 'umapinfo-episode', 'mapinfo-episode',
-              'scrollers', 'icon-of-sin'}
+              'scrollers'}
 
 GOLDEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'golden')
 GOLDEN_SIZE = (320, 180)
@@ -591,7 +594,7 @@ GOLDEN_MAX_CHANGED = 0.015
 GOLDEN = [
     'wiscript-vanilla_1.png', 'wiscript-vanilla_2.png', 'wiscript_1.png', 'wiscript_2.png',
     'inspector_1.png', 'gamepad-bindings_1.png', 'touch-controls_2.png', 'umapinfo-episode_1.png',
-    'mapinfo-episode_1.png', 'scrollers_1.png', 'icon-of-sin_1.png',
+    'mapinfo-episode_1.png', 'scrollers_1.png',
     'menu_menu.png', 'title-pages_menutitle.png', 'read-this_menureadthis.png',
     'controls-page_menucontrols.png', 'controls-hotkeys_menucontrolshotkeys.png',
     'controls-touch_menucontrolstouch.png', 'touch-layout_1.png', 'touch-edit_menutouchedit.png',

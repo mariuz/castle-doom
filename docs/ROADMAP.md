@@ -25,8 +25,8 @@ L = several days). Items inside a section are in suggested order.
 - Every screenshot a regression check: the autotests whose screenshots
   were not golden (moving monsters, scrollers, the inspector's FPS) run
   with `--fixed-step` (the harness's `FIXED_STEP` set adds it) and their
-  7 screenshots joined `GOLDEN`; two runs differ by at most 0.08% of
-  the pixels.
+  screenshots joined `GOLDEN`; two runs differ by at most 0.08% of the
+  pixels. Not `icon-of-sin`: its spawns vary between CI and local runs.
 
 - Touch layout editor: Controls -> Touch -> Edit... shows the controls
   over a dark backdrop and a finger (the mouse) drags each button to a
