@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.28.0 (2026-10-18)
 
 - Touch layout editor: drag each touch button where your thumbs want it
   (Options -> Controls... -> Touch -> Edit...), and an opacity setting.
