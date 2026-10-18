@@ -10,7 +10,7 @@ interface
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleImages,
   CastleDownload, CastleZip,
-  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked, DoomMapInfo, GameSettings, GameTouch;
+  DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomMenu, DoomDehacked, DoomMapInfo, DoomRandomMap, GameSettings, GameTouch;
 
 type
   TViewMenu = class(TCastleView)
@@ -89,6 +89,7 @@ type
     procedure SetupDoomMenu;
     procedure RefreshSlots;
     procedure DoomMenuAction(const Action: TDoomMenuAction);
+    procedure StartRandomGame;
     procedure ShowOptions(const Value: Boolean);
     procedure ClickOpenIwad(Sender: TObject);
     procedure ClickAddPwad(Sender: TObject);
@@ -349,8 +350,11 @@ begin
   end;
   if Copy(AutoTestMap, 1, 4) = 'MENU' then
   begin
-    { -file PWADs too (a UMAPINFO's episodes in MENUEPISODE / MENUKEYS). }
-    if AutoTestMap = 'MENUDOOM2' then
+    { -file PWADs too (a UMAPINFO's episodes in MENUEPISODE / MENUKEYS),
+      and -iwad. }
+    if CmdIwad <> '' then
+      LoadWads(CmdIwad, CmdPwads)
+    else if AutoTestMap = 'MENUDOOM2' then
       LoadWads(Freedoom2, CmdPwads)
     else
       LoadWads(Freedoom1, CmdPwads);
@@ -622,10 +626,41 @@ begin
   end;
 end;
 
+{ Pwads without random maps (random:/SEED); the caller frees the list. }
+function WithoutRandomPwads(const Pwads: TStrings): TStringList;
+var
+  I: Integer;
+  Seed: Cardinal;
+begin
+  Result := TStringList.Create;
+  for I := 0 to Pwads.Count - 1 do
+    if not IsRandomWadUrl(Pwads[I], Seed) then
+      Result.Add(Pwads[I]);
+end;
+
+{ New Game -> Random maps: the current WADs with a new seed's maps on top
+  (instead of earlier random maps), from their first map. }
+procedure TViewMenu.StartRandomGame;
+var
+  Pwads: TStringList;
+begin
+  Pwads := WithoutRandomPwads(FPwads);
+  try
+    Pwads.Add(RandomWadUrl(NewRandomSeed));
+    if not LoadWads(FIwadUrl, Pwads) then Exit;
+  finally
+    FreeAndNil(Pwads);
+  end;
+  if FWad = nil then Exit;
+  FMapIndex := Max(0, FWad.MapNames.IndexOf(RandomMapName(1, FWad.IsDoom2)));
+  StartGame;
+end;
+
 procedure TViewMenu.DoomMenuAction(const Action: TDoomMenuAction);
 var
   MapName: String;
   I: Integer;
+  Plain: TStringList;
 begin
   case Action of
     maNewGame:
@@ -635,6 +670,18 @@ begin
         { G_DeferedInitNew: the chosen episode's first map (ExM1, or a
           UMAPINFO episode's), else MAP01. }
         MapName := FDoomMenu.EpisodeMap;
+        if MapName = RandomEpisodeMap then
+        begin
+          StartRandomGame;
+          Exit;
+        end;
+        { Another episode: without random maps loaded before. }
+        Plain := WithoutRandomPwads(FPwads);
+        try
+          if (Plain.Count <> FPwads.Count) and not LoadWads(FIwadUrl, Plain) then Exit;
+        finally
+          FreeAndNil(Plain);
+        end;
         if MapName = '' then
           MapName := 'MAP01';
         I := FWad.MapNames.IndexOf(MapName);

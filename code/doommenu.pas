@@ -141,6 +141,8 @@ type
   end;
 
 const
+  { EpisodeMap of the episode page's last entry: new random maps. }
+  RandomEpisodeMap = 'RANDOM';
   SkillNames: array [0..4] of String = (
     'I''m too young to die', 'Hey, not too rough', 'Hurt me plenty', 'Ultra-Violence', 'Nightmare!');
 
@@ -207,6 +209,22 @@ begin
       FEpisodeItems[N] := 'T:' + UpperCase(E.EpisodeName);
     FEpisodeMaps[N] := E.MapName;
   end;
+  { Random maps last (DoomRandomMap; the menu view loads a new seed's
+    PWAD). Doom 2 goes from New Game to the skills; with this entry it
+    gets an episode page, the campaign first. }
+  N := Length(FEpisodeItems);
+  if N = 0 then
+  begin
+    SetLength(FEpisodeItems, 1);
+    SetLength(FEpisodeMaps, 1);
+    FEpisodeItems[0] := 'T:CAMPAIGN';
+    FEpisodeMaps[0] := 'MAP01';
+    N := 1;
+  end;
+  SetLength(FEpisodeItems, N + 1);
+  SetLength(FEpisodeMaps, N + 1);
+  FEpisodeItems[N] := 'T:RANDOM MAPS';
+  FEpisodeMaps[N] := RandomEpisodeMap;
   FEpisodes := Length(FEpisodeItems);
 end;
 

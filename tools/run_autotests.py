@@ -361,6 +361,20 @@ TESTS = [
       r'Geometry: E1M1: 1 sky sectors show their own sky'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'skies.wad'), '--fixed-step'],
      None),
+    # Random maps (DoomRandomMap): seed 42's first map, its exit switch
+    # (where the log line says to stand), the second map, a save of the
+    # first loaded back; then New Game -> RANDOM MAPS on both IWADs.
+    ('random-maps', 'E1M1',
+     'Y,W:0.5,S,SAVE:1,G:-576:-688,A:270,W:0.3,S,U,W:3,U,U,U,U,U,W:2,SAVE:2,LOAD:1,W:0.5,Q',
+     [r'Random: seed 42: E1M1 "Grim Halls": 1472 x 1472, 24 rooms .* switch line 1 at -576 -688 facing 270',
+      r'MapInfo: UMAPINFO: 8 maps', r'Message: R1: Grim Halls', r'Map: E1M1: VANILLA nodes, 24 subsector polygons, total area 2166784',
+      r'Intermission: E1M1: exit script', r'Load: E1M2: map parsed', r'Message: R2: Black Citadel',
+      r'Save: Loading .*save1\.json'],
+     ['-random', '42', '--fixed-step'], lambda config: check_random(config)),
+    ('random-menu', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: E1M1', r'Load: E1M1: map parsed', r'Message: R1: '],
+     ['--menukeys', 'E,D,D,D,D,E,E'], None),
+    ('random-menu-doom2', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: MAP01', r'Load: MAP01: map parsed', r'Message: R1: '],
+     ['-iwad', 'castle-data:/wads/freedoom2.wad', '--menukeys', 'E,D,E,E'], None),
     ('boom-elevators', 'E1M1',
      'Y,W:0.3,LINE:618:232,LINE:753:236,LINE:593:212,W:4,SAVE:1,LINE:593:212,W:0.2,SAVE:2,Q',
      [r'Line: line 618 special 232 tag 2: activated', r'Line: line 593 special 212 tag 1: activated'],
@@ -484,6 +498,14 @@ def check_elevators(config):
     assert (f[76], c[76]) == (160, 160), 'elevator to the front floor: %s %s' % (f[76], c[76])
     assert f[98] == c[98] == 128, 'toggle up: %s' % f[98]
     assert b['sectorFloor'][98] == 12, 'toggle down: %s' % b['sectorFloor'][98]
+
+
+def check_random(config):
+    """Random maps: the saves name the generated PWAD like any other, on
+    its first map and, after the exit switch, its second."""
+    s1, s2 = save_json(config, 1), save_json(config, 2)
+    assert s1['wads'][-1] == 'random:/42', 'wads: %s' % s1['wads']
+    assert s1['map'] == 'E1M1' and s2['map'] == 'E1M2', 'maps: %s %s' % (s1['map'], s2['map'])
 
 
 def check_floor_y(config, below):
@@ -616,6 +638,7 @@ GOLDEN = [
     'translucent-things_1.png', 'transfers_1.png', 'touch-controls_1.png',
     'controls-pad_menucontrolspad.png', 'deep-water_1.png', 'deep-water_2.png',
     'mapinfo_1.png', 'mapinfo_2.png', 'sector-skies_1.png', 'sector-skies_2.png',
+    'random-maps_1.png', 'random-maps_2.png',
 ]
 
 

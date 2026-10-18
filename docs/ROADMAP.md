@@ -6,6 +6,22 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Random maps (`DoomRandomMap`): `random:/SEED` is a PWAD the game makes
+  instead of reading it: eight maps (E1M1..E1M8 over Doom 1 IWADs,
+  MAP01..MAP08 over Doom 2's) cut from a rectangle by recursive
+  guillotine splits on a 32-unit grid, so every room is a rectangular
+  sector and the cuts are the BSP's nodes (no node builder needed). A
+  random spanning tree of openings plus some loops connects the rooms
+  (floor steps of at most 24), the exit switch is in the room farthest
+  from the start, and monsters, weapons, ammo, health, armour, nukage
+  and sky rooms scale with the map number; UMAPINFO names the maps and
+  ends the set. New Game's last episode "RANDOM MAPS" (a new seed each
+  time), `-random [SEED]`, the page URL's `random=SEED`, and
+  `--random-wad FILE` to write the PWAD (it plays in dsda-doom too: real
+  BLOCKMAP and segs). Saves name the URL, so loading one regenerates the
+  same maps. Autotests `random-maps` (goldens), `random-menu`,
+  `random-menu-doom2`, unit test `TestRandomMaps`.
+
 - Profiled the actors on a 300+ monster map (Phase 2 MAP11, everything
   awake): 2.2 ms a tic, of which the actor-vs-actor collision loop was
   0.2 ms (so no thing grid yet) and new sprite shapes most: each one
@@ -953,14 +969,27 @@ play.
 |---|---|---|---|
 | **MAPINFO, the rest**: UMAPINFO, the common ZDoom MAPINFO keys, LANGUAGE, `include` and the intermission scripts' backgrounds are done (see above); left are MAPINFO's `intermission` blocks (scripted finales), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
 
+## 8. New features (suggested)
+
+| Item | Why | Where | Size |
+|---|---|---|---|
+| **Random maps, the next steps**: doors (a thin door sector cut into a wall between two rooms, special 1), keys and locked doors gating the exit (a key in a side branch of the spanning tree), stairs and lifts for height changes over 24, windows (two-sided lines with a high lower wall), secret closets (sector special 9 behind a door), teleporters, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
+| **Recording demos**: write what the player does (moves, turns, fire, use, weapon changes, per tic) in the demo script's syntax, to replay a session under `--fixed-step` for bug reports, or as a ghost to race. | Reproducible bug reports from players; replays. | `GameViewPlay` (the demo runner), `GameSettings` | M |
+| **Level statistics overlay and best times**: kills / items / secrets / time on the HUD (a key toggles it), and each map's best time per skill kept in `settings.json`, shown on the intermission. | Speedrunning and 100% runs, often asked of ports. | `DoomHud`, `DoomIntermission` | S |
+| **Gamma / brightness setting** (Doom's `usegamma` 0-4, F11) applied in the palette lookup shader. | Dark monitors and bright rooms. | `DoomLighting`, Video options | S |
+| **Closed captions**: a line per sound ("Imp roars, left") under the messages, with the direction from the sound's position. | Accessibility for players who cannot hear. | `DoomSound`, `DoomHud` | S |
+| **Spectator / photo mode**: a free camera (no clipping, no gravity) with the world paused, and a key to hide the HUD. | Screenshots, map inspection. | `GameViewPlay` | S |
+| **Dynamic lights**: rockets, plasma, the BFG and muzzle flashes as CGE point lights (a few at a time), as an option next to the vanilla look. | A modern look many players like. | `DoomActors`, `DoomLighting` | M |
+| **Custom game page in the Doom menu**: IWAD, PWADs, map, skill and a random seed on one text page, instead of the Options panel's CGE buttons. | One place to start anything. | `DoomMenu`, `GameViewMenu` | M |
+
 ## Suggested next three
 
-1. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
+1. Random maps, the next steps (M, see New features): doors, then keys
+   and locked doors gating the exit.
+2. Recording demos (M, see New features): the player's input as a demo
+   script, replayed under `--fixed-step`.
+3. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-2. MAPINFO, the rest (M, see Other suggested improvements): the
-   `intermission` blocks (scripted finales).
-3. More unit tests (M, see Engine and tooling): the sector chunks, the
-   automap and the HUD without a window.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

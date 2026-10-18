@@ -96,8 +96,8 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 37 cases) cover the parsers,
-every node format, the line grid, Boom's generalized types, scrollers, friction, translucency and both music synthesizers:
+Unit tests (FPCUnit, no window, about 20 s, 38 cases) cover the parsers,
+every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
 code 1 on a failure; CI runs them before the autotests). The node-format
@@ -590,6 +590,23 @@ water (sector 141, control 140)` and the colormap's tint (autotest
 `deep-water` with golden screenshots, unit test `TestDeepWater`). A
 deep water sector's sides need lower textures for the pool's walls, or
 nothing is drawn there (Doom's HOM).
+Random maps (`DoomRandomMap`): `-random SEED` (or `-file random:/SEED`)
+generates eight maps over the IWAD's E1M1..E1M8 / MAP01..MAP08; the
+log prints one `Random: seed N: E1M1 "Name": ...` line per map with
+its rooms, monsters and where to stand for the exit switch (`switch
+line L at X Y facing A`: `G:X:Y,A:A,U` exits). Seed 42's E1M1 is
+"Grim Halls" (24 rooms, switch at -576 -688 facing 270; autotest
+`random-maps` with goldens). A generator change moves every seed's
+maps, so the autotest's expected line and goldens change with it
+(regenerate them, and check the maps in the unit test
+`TestRandomMaps`: full polygon area, all things reachable, one exit).
+`--random-wad FILE` writes the PWAD and quits (open a window: use
+`xvfb-run`); `apt-get install -y prboom-plus` gives
+`/usr/games/dsda-doom` to try it in another port (`-iwad ... -file
+FILE -warp 1 1` under `xvfb-run`). New Game's last episode is
+"RANDOM MAPS" (a clock seed; Doom 2 IWADs then get an episode page with
+"CAMPAIGN" first; autotests `random-menu`, `random-menu-doom2`, the
+`MENU*` autotests honour `-iwad`).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

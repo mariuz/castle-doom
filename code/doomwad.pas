@@ -37,8 +37,13 @@ type
     { Load the IWAD (castle-data:/..., file:///..., or a plain path). }
     constructor Create(const AUrl: String);
     destructor Destroy; override;
-    { Stack a PWAD on top; its lumps override earlier ones by name. }
+    { Stack a PWAD on top; its lumps override earlier ones by name.
+      random:/SEED is generated (DoomRandomMap), not read. }
     procedure AddFile(const AUrl: String);
+    { The bytes of a loaded file (0 = the IWAD). }
+    function FileData(const Index: Integer): TMemoryStream;
+    { The names of all textures (TEXTURE1 / TEXTURE2) and flats, sorted. }
+    function ResourceNames: TStringList;
 
     function LumpCount: Integer;
     function LumpName(const Index: Integer): String;
@@ -84,7 +89,8 @@ function DoomName(const P: PByte): String;
 
 implementation
 
-uses Math, CastleDownload, CastleLog, CastleUtils, CastleClassUtils, CastleUriUtils;
+uses Math, CastleDownload, CastleLog, CastleUtils, CastleClassUtils, CastleUriUtils,
+  DoomRandomMap;
 
 function DoomName(const P: PByte): String;
 var
@@ -124,18 +130,41 @@ var
   Source: TStream;
   Data: TMemoryStream;
   FileUrl: String;
+  Seed: Cardinal;
+  Names, Log: TStringList;
+  I: Integer;
 begin
   FileUrl := AUrl;
   { Plain file names (from the command line) become file:// URLs. }
   if (Pos(':', FileUrl) = 0) or ((Length(FileUrl) > 1) and (FileUrl[2] = ':')) then
     FileUrl := FilenameToUriSafe(FileUrl);
-  Data := TMemoryStream.Create;
+  Data := nil;
   try
-    Source := Download(FileUrl);
-    try
-      Data.CopyFrom(Source, 0);
-    finally
-      FreeAndNil(Source);
+    if IsRandomWadUrl(FileUrl, Seed) then
+    begin
+      { Generated maps, with the textures of the WADs loaded so far. }
+      if Length(FFiles) = 0 then
+        raise Exception.Create('Random maps need an IWAD first');
+      FileUrl := RandomWadUrl(Seed);
+      Names := ResourceNames;
+      Log := TStringList.Create;
+      try
+        Data := BuildRandomWad(Seed, FIsDoom2, Names, Log);
+        for I := 0 to Log.Count - 1 do
+          WritelnLog('Random', Log[I]);
+      finally
+        FreeAndNil(Log);
+        FreeAndNil(Names);
+      end;
+    end else
+    begin
+      Data := TMemoryStream.Create;
+      Source := Download(FileUrl);
+      try
+        Data.CopyFrom(Source, 0);
+      finally
+        FreeAndNil(Source);
+      end;
     end;
     Data.Position := 0;
     SetLength(FFiles, Length(FFiles) + 1);
@@ -229,6 +258,43 @@ begin
     end;
   end;
   FMapNames.Sort;
+end;
+
+function TDoomWad.FileData(const Index: Integer): TMemoryStream;
+begin
+  Result := FFiles[Index];
+end;
+
+function TDoomWad.ResourceNames: TStringList;
+var
+  I, J, N, Offset: Integer;
+  P: PByte;
+  InFlats: Boolean;
+begin
+  Result := TStringList.Create;
+  Result.Sorted := true;
+  Result.Duplicates := dupIgnore;
+  InFlats := false;
+  for I := 0 to High(FLumps) do
+  begin
+    if (FLumps[I].Name = 'TEXTURE1') or (FLumps[I].Name = 'TEXTURE2') then
+    begin
+      P := LumpPointer(I);
+      if FLumps[I].Size < 4 then Continue;
+      N := PInt32(P)^;
+      for J := 0 to N - 1 do
+      begin
+        if 4 + J * 4 + 4 > FLumps[I].Size then Break;
+        Offset := PInt32(P + 4 + J * 4)^;
+        if (Offset >= 0) and (Offset + 8 <= FLumps[I].Size) then
+          Result.Add(DoomName(P + Offset));
+      end;
+    end
+    else if (FLumps[I].Name = 'F_START') or (FLumps[I].Name = 'FF_START') then InFlats := true
+    else if (FLumps[I].Name = 'F_END') or (FLumps[I].Name = 'FF_END') then InFlats := false
+    else if InFlats and (FLumps[I].Size > 0) then
+      Result.Add(FLumps[I].Name);
+  end;
 end;
 
 function TDoomWad.LumpCount: Integer;
@@ -390,12 +456,16 @@ end;
 function TDoomWad.Description: String;
 var
   I: Integer;
+  Seed: Cardinal;
 begin
   Result := '';
   for I := 0 to FFileUrls.Count - 1 do
   begin
     if I > 0 then Result := Result + ' + ';
-    Result := Result + ExtractUriName(FFileUrls[I]);
+    if IsRandomWadUrl(FFileUrls[I], Seed) then
+      Result := Result + 'random maps ' + IntToStr(Seed)
+    else
+      Result := Result + ExtractUriName(FFileUrls[I]);
   end;
 end;
 

@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript;
+  DoomGeneralized, DoomWiScript, DoomRandomMap;
 
 function DataPath(const Name: String): String;
 begin
@@ -66,6 +66,7 @@ type
     procedure TestFriction;
     procedure TestTranslucency;
     procedure TestTransfers;
+    procedure TestRandomMaps;
   end;
 
   TTestMusic = class(TTestCase)
@@ -956,6 +957,140 @@ begin
     finally
       FreeAndNil(M);
     end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ DoomRandomMap: random:/SEED makes eight maps (E1M1..E1M8 over Phase 1,
+  MAP01..MAP08 over Phase 2) that load with their own BSP: the subsector
+  polygons cover the whole rectangle, every thing and the exit switch can
+  be walked to from the player start (floor steps of 24 at most, 56 units
+  of headroom), the same seed gives the same bytes and UMAPINFO names the
+  maps. }
+procedure TTestMap.TestRandomMaps;
+
+  procedure CheckMaps(const Iwad: String; const IsDoom2: Boolean);
+  var
+    W: TDoomWad;
+    M: TDoomMap;
+    I, J, K, Start, Sec, Other, Exits, Starts: Integer;
+    Reached: array of Boolean;
+    Changed: Boolean;
+    Area, A: Double;
+    L: TDoomLinedef;
+  begin
+    W := TDoomWad.Create(WadUrl(Iwad));
+    try
+      W.AddFile('random:/1234');
+      AssertTrue('described', Pos('random maps 1234', W.Description) > 0);
+      for I := 1 to RandomMapCount do
+      begin
+        AssertTrue('map listed', W.MapNames.IndexOf(RandomMapName(I, IsDoom2)) >= 0);
+        M := TDoomMap.Create(W, RandomMapName(I, IsDoom2));
+        try
+          Area := 0;
+          for J := 0 to High(M.Subsectors) do
+          begin
+            A := 0;
+            for K := 0 to High(M.Subsectors[J].Poly) do
+              A := A + M.Subsectors[J].Poly[K].X * M.Subsectors[J].Poly[(K + 1) mod Length(M.Subsectors[J].Poly)].Y -
+                M.Subsectors[J].Poly[(K + 1) mod Length(M.Subsectors[J].Poly)].X * M.Subsectors[J].Poly[K].Y;
+            Area := Area + A / 2;
+          end;
+          AssertEquals('polygons cover the map', (M.MaxX - M.MinX) * (M.MaxY - M.MinY), Area, 1);
+          AssertEquals('one subsector per sector', Length(M.Sectors), Length(M.Subsectors));
+          CheckLineGrid(M);
+          Start := -1;
+          Starts := 0;
+          for J := 0 to High(M.Things) do
+            if M.Things[J].TypeNum = 1 then
+            begin
+              Start := M.SectorAt(M.Things[J].X, M.Things[J].Y);
+              Inc(Starts);
+            end;
+          AssertEquals('one player start', 1, Starts);
+          SetLength(Reached, Length(M.Sectors));
+          for J := 0 to High(Reached) do Reached[J] := J = Start;
+          repeat
+            Changed := false;
+            for J := 0 to High(M.Linedefs) do
+            begin
+              L := M.Linedefs[J];
+              if (L.BackSector < 0) or (Reached[L.FrontSector] = Reached[L.BackSector]) then Continue;
+              if Reached[L.FrontSector] then
+              begin
+                Sec := L.FrontSector;
+                Other := L.BackSector;
+              end else
+              begin
+                Sec := L.BackSector;
+                Other := L.FrontSector;
+              end;
+              if (M.Sectors[Other].FloorHeight - M.Sectors[Sec].FloorHeight <= 24) and
+                 (Min(M.Sectors[Sec].CeilingHeight, M.Sectors[Other].CeilingHeight) -
+                  Max(M.Sectors[Sec].FloorHeight, M.Sectors[Other].FloorHeight) >= 56) then
+              begin
+                Reached[Other] := true;
+                Changed := true;
+              end;
+            end;
+          until not Changed;
+          for J := 0 to High(M.Things) do
+            AssertTrue(Format('%s: thing %d (type %d) reachable', [M.Name, J, M.Things[J].TypeNum]),
+              Reached[M.SectorAt(M.Things[J].X, M.Things[J].Y)]);
+          Exits := 0;
+          for J := 0 to High(M.Linedefs) do
+            if M.Linedefs[J].Special = 11 then
+            begin
+              Inc(Exits);
+              AssertTrue('exit reachable', Reached[M.Linedefs[J].FrontSector]);
+            end;
+          AssertEquals('one exit switch', 1, Exits);
+        finally
+          FreeAndNil(M);
+        end;
+      end;
+      LoadMapInfo(W);
+      AssertTrue('UMAPINFO names the maps', (MapInfoFor(RandomMapName(1, IsDoom2)) <> nil) and
+        (MapInfoFor(RandomMapName(1, IsDoom2)).LevelName <> ''));
+    finally
+      FreeAndNil(W);
+    end;
+  end;
+
+  function WadBytes(const Seed: String): TBytes;
+  var
+    W: TDoomWad;
+    D: TMemoryStream;
+  begin
+    W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+    try
+      W.AddFile('random:/' + Seed);
+      D := W.FileData(1);
+      SetLength(Result, D.Size);
+      Move(D.Memory^, Result[0], D.Size);
+    finally
+      FreeAndNil(W);
+    end;
+  end;
+
+var
+  A, B, C: TBytes;
+  W: TDoomWad;
+begin
+  CheckMaps('freedoom1.wad', false);
+  CheckMaps('freedoom2.wad', true);
+  A := WadBytes('77');
+  B := WadBytes('77');
+  C := WadBytes('78');
+  AssertEquals('same size for the same seed', Length(A), Length(B));
+  AssertTrue('same bytes for the same seed', CompareMem(@A[0], @B[0], Length(A)));
+  AssertTrue('another seed, other maps', (Length(A) <> Length(C)) or not CompareMem(@A[0], @C[0], Length(A)));
+  { The map entries are global: back to plain Freedoom. }
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    LoadMapInfo(W);
   finally
     FreeAndNil(W);
   end;

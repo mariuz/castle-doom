@@ -1,9 +1,20 @@
 # Changelog
 
-## v0.31.0 (2026-10-18)
+## Unreleased
+
+- Random maps: New Game -> RANDOM MAPS (or `-random [SEED]`, or
+  `?random=SEED` in the browser) generates eight levels from a seed,
+  growing in size and danger, with their own names; the same seed gives
+  the same maps (saves keep it), and `--random-wad FILE` writes them as
+  a PWAD that other Doom ports play too.
+
+## v0.32.0 (2026-10-18)
 
 - Smoother frames when many monsters first appear: new sprite shapes
   join their scene once a frame instead of one at a time.
+
+## v0.31.0 (2026-10-18)
+
 - Debug drawing: subsectors, blocking lines, actor boxes and the
   player's shots as wireframes, switched in the engine inspector (F8).
 

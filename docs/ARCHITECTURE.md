@@ -88,6 +88,7 @@ Sizes, for orientation (lines of Pascal):
 | `doommenu.pas` | 420 | Doom's menu from `M_*` graphics |
 | `doomintermission.pas` | 500 | intermission screen |
 | `doomwiscript.pas` | 300 | intermission scripts (episode maps: animations, splats, pointer) |
+| `doomrandommap.pas` | 1280 | random maps: a PWAD of eight generated levels from a seed (`random:/SEED`) |
 | `doomfinale.pas` | 520 | finale text, end pictures, bunny scroller, cast call |
 | `doommapinfo.pas` | 1000 | UMAPINFO and ZDoom (Z)MAPINFO: per-map names, music, sky, par, next maps, story texts, endings |
 | `doomstates.pas` | 230 | vanilla's state table and mobjinfo rows (`doomstates_table.inc`, generated from info.c): what DeHackEd edits and the things' sequences come from |
@@ -246,6 +247,35 @@ from `p_spec.c` (`LowestFloorSurrounding`, `NextHighestFloor`,
 
 `SubsectorAt`/`SectorAt` walk the BSP (`R_PointInSubsector`) and are used for
 the player's sector, monster positions and teleport destinations.
+
+### Random maps (`DoomRandomMap`)
+
+`TDoomWad.AddFile('random:/SEED')` does not download anything: it calls
+`BuildRandomWad`, which returns the bytes of an ordinary PWAD (eight maps
+in vanilla format and a UMAPINFO), and the WAD reads its directory like
+any file's. Everything else (map loading, saves naming the WADs, the
+remembered WAD list, `-file`) therefore works unchanged, and
+`--random-wad FILE` just writes those bytes out.
+
+The generator avoids needing a node builder by making the BSP first. A
+map is a rectangle on a 32-unit grid; `TMapGen.Split` cuts it
+recursively with axis-aligned lines (guillotine cuts) until the pieces
+are room sized. Each cut becomes a node (a vertical cut at x = c is the
+partition (c, y0) + (0, h), so its right child, Doom's child 0, is the
+east part; a horizontal one runs east and has the south part on the
+right), each final piece is one rectangular sector and one subsector,
+and nodes are written children first, so the root is last. Rooms that
+share part of a wall (`FindLinks`) are joined by a random spanning tree
+of openings from the start room, plus some loops; an opening is a
+two-sided line in the middle of the shared interval, and every other
+piece of wall is two one-sided lines back to back (one per room), so
+each room's segs run clockwise around exactly its rectangle and
+`BuildSubsectorPolygons` clips the root's box down to it. `TestRandomMaps`
+checks that the polygons cover the whole map. Vertices are shared
+between all lines through them; REJECT is all zeros and BLOCKMAP is
+built from the lines' boxes (128-unit blocks), so other ports play the
+PWAD too. The random stream is a xorshift32 seeded from the seed and the
+map number, independent of `System.Random`.
 
 ---
 

@@ -15,6 +15,8 @@ vanilla-format Doom 1 / Doom 2 IWADs and PWADs can be loaded from the menu
 
 ```bash
 castle-doom -iwad DOOM2.WAD -file mymap.wad -deh mymap.deh -warp MAP01
+castle-doom -random 42                       # eight generated maps from seed 42
+castle-doom -random 42 --random-wad r42.wad  # ...written as a PWAD for other ports
 ```
 
 This project is deliberately written as a *tour of the engine*: every Doom subsystem
@@ -52,6 +54,11 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 ## What works
 
 - Freedoom Phase 1 (36 ExMy maps) and Phase 2 (32 MAPxx maps), map selection in the menu.
+- Random maps: New Game -> "Random maps" (or `-random [SEED]`, `?random=SEED` in the browser)
+  generates eight levels from a seed: rooms split from a rectangle (the splits are the BSP),
+  connected by openings, with lights, nukage and sky rooms, monsters and supplies that grow
+  with the map number, an exit switch in the farthest room and names in a UMAPINFO. The same
+  seed gives the same maps, saves keep it, and `--random-wad FILE` writes the PWAD.
 - Textured walls with Doom's pegging rules and offsets, masked middle textures (grates),
   floors and ceilings from BSP subsectors, sky, sector light levels with "fake contrast".
 - Doors (manual, switch, walk-over, locked, blazing), lifts (perpetual ones stop and

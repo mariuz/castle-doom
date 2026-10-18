@@ -5,12 +5,12 @@ interface
 
 implementation
 
-uses SysUtils,
+uses SysUtils, Classes,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleKeysMouse,
   CastleUtils, CastleTimeUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
-  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameSettings, GameSaveBundle, GameLogFilter, GameCrash, GameTouch;
+  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, DoomRandomMap, DoomWad, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameSettings, GameSaveBundle, GameLogFilter, GameCrash, GameTouch;
 
 var
   Window: TCastleWindow;
@@ -36,13 +36,50 @@ begin
   end;
 end;
 
+{ --random-wad FILE: write the random maps' PWAD (the seed of -random, the
+  IWAD of -iwad or Freedoom) for other Doom ports. }
+procedure WriteRandomWad(const FileName, Iwad: String; const Seed: Cardinal);
+var
+  Wad: TDoomWad;
+  F: TFileStream;
+begin
+  if Iwad <> '' then
+    Wad := TDoomWad.Create(Iwad)
+  else
+    Wad := TDoomWad.Create('castle-data:/wads/freedoom1.wad');
+  try
+    Wad.AddFile(RandomWadUrl(Seed));
+    F := TFileStream.Create(FileName, fmCreate);
+    try
+      F.CopyFrom(Wad.FileData(Wad.FileUrls.Count - 1), 0);
+    finally
+      FreeAndNil(F);
+    end;
+    WritelnLog('Random', 'Wrote seed %d to %s', [Seed, FileName]);
+  finally
+    FreeAndNil(Wad);
+  end;
+end;
+
+{ -random [SEED]: the random maps' PWAD on top (a new seed when none is
+  given), starting at its first map unless -warp says otherwise. }
+procedure UseRandomMaps(const SeedText: String; out Seed: Cardinal);
+begin
+  Seed := Cardinal(StrToInt64Def(SeedText, 0));
+  if Seed = 0 then Seed := NewRandomSeed;
+  CmdPwads.Add(RandomWadUrl(Seed));
+end;
+
 procedure ApplicationInitialize;
 var
   I: Integer;
-  ExportSaves, ImportSaves: String;
+  ExportSaves, ImportSaves, RandomWadFile: String;
+  RandomSeed: Cardinal;
 begin
   ExportSaves := '';
   ImportSaves := '';
+  RandomWadFile := '';
+  RandomSeed := 0;
   { --autotest MAPNAME OUTPUT_PREFIX : load the map, save screenshots, quit. }
   { Doom-style options: -iwad FILE, -file PWAD [PWAD...], -deh PATCH [PATCH...],
     -warp MAP. }
@@ -111,6 +148,20 @@ begin
       ImportSaves := Parameters[I + 1];
       Inc(I);
     end else
+    if (Parameters[I] = '-random') or (Parameters[I] = '--random') then
+    begin
+      if (I + 1 <= Parameters.High) and (StrToInt64Def(Parameters[I + 1], -1) > 0) then
+      begin
+        UseRandomMaps(Parameters[I + 1], RandomSeed);
+        Inc(I);
+      end else
+        UseRandomMaps('', RandomSeed);
+    end else
+    if (Parameters[I] = '--random-wad') and (I + 1 <= Parameters.High) then
+    begin
+      RandomWadFile := Parameters[I + 1];
+      Inc(I);
+    end else
     if (Parameters[I] = '--menukeys') and (I + 1 <= Parameters.High) then
     begin
       AutoTestMenuKeys := Parameters[I + 1];
@@ -169,11 +220,22 @@ begin
   end;
   if Application.PageUrlParameters.ContainsKey('warp') then
     CmdWarp := UpperCase(Application.PageUrlParameters['warp']);
+  if Application.PageUrlParameters.ContainsKey('random') then
+    UseRandomMaps(Application.PageUrlParameters['random'], RandomSeed);
   if Application.PageUrlParameters.ContainsKey('skill') then
     CmdSkill := Clamped(StrToIntDef(Application.PageUrlParameters['skill'], 3), 1, 5) - 1;
   if (AutoTestMap <> '') or (CmdWarp <> '') then
     WritelnLog('Web', 'Page URL options: map "%s", demo "%s", warp "%s"', [AutoTestMap, AutoTestDemo, CmdWarp]);
   {$endif}
+  { -random alone starts the game on the first random map. }
+  if (RandomSeed <> 0) and (CmdWarp = '') and (AutoTestMap = '') then
+    CmdWarp := 'E1M1';
+  if RandomWadFile <> '' then
+  begin
+    if RandomSeed = 0 then RandomSeed := NewRandomSeed;
+    WriteRandomWad(RandomWadFile, CmdIwad, RandomSeed);
+    Halt;
+  end;
   Window.Container.LoadSettings('castle-data:/CastleSettings.xml');
   { --fixed-step: no frame advances more than a tic (TViewPlay.Update
     also keeps frames from being shorter), so the world, the walk
