@@ -274,7 +274,23 @@ each room's segs run clockwise around exactly its rectangle and
 checks that the polygons cover the whole map. Vertices are shared
 between all lines through them; REJECT is all zeros and BLOCKMAP is
 built from the lines' boxes (128-unit blocks), so other ports play the
-PWAD too. The random stream is a xorshift32 seeded from the seed and the
+PWAD too.
+
+Rooms are sectors and the BSP leaves are kept apart (`TLeaf`: a
+rectangle of one sector, with its parent node), because doors are
+carved out of rooms after the split: `CarveDoor` cuts a 16-unit slab off
+one room's leaf along the shared wall and cuts that slab at the
+opening's ends (`CarveLeaf` puts a new node in the leaf's place), and
+the middle piece becomes a closed door sector (ceiling at its floor).
+Every leaf stays a convex rectangle, so the tree is still a valid BSP;
+the slab's other pieces stay part of the room, joined to it by
+invisible two-sided lines. Lines are then made per pair of touching
+leaves: invisible inside one sector, two-sided where an opening record
+(`TOpening`: room to room, or room to door with the door special,
+facing the room so it can be used) says so, back-to-back walls
+elsewhere (the door's jambs). The locked door goes on the first opening
+back from the exit that no loop gets around (`ReachesExit`), with its
+key in the deepest room still reachable without it. The random stream is a xorshift32 seeded from the seed and the
 map number, independent of `System.Random`.
 
 ---

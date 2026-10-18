@@ -12,7 +12,10 @@
   share a wall are linked; a random spanning tree of links from the start
   room, plus a few loops, become openings (two-sided lines) with floor
   steps of at most 24 units, everything else stays wall (two one-sided
-  lines back to back). Floors, ceilings, lights, textures, nukage and sky
+  lines back to back). About a third of the openings get a door, a thin
+  sector carved out of one room's leaf (CarveDoor), and from the second
+  map on a locked door no loop gets around guards the exit, its key in
+  the deepest room before it. Floors, ceilings, lights, textures, nukage and sky
   rooms, monsters (more and tougher on later maps, thinned on easy
   skills), weapons, ammo, health and armour come from the same random
   stream; the exit switch (special 11) is in the room farthest from the
@@ -58,6 +61,7 @@ const
 
   ML_BLOCKING = 1;
   ML_TWOSIDED = 4;
+  ML_DONTPEGBOTTOM = 16;
 
 function IsRandomWadUrl(const Url: String; out Seed: Cardinal): Boolean;
 var
@@ -141,13 +145,26 @@ end;
 { One map --------------------------------------------------------------------- }
 
 type
+  TBooleanArray = array of Boolean;
+
   TRoom = record
     X0, Y0, X1, Y1: Integer;
     Floor, Ceiling, Light, Special: Integer;
     FloorTex, CeilTex, WallTex: String;
-    Sky, Nukage: Boolean;
+    Sky, Nukage, IsDoor: Boolean;
     { Openings from the start room, -1 when it cannot be reached. }
     Depth: Integer;
+  end;
+
+  { A BSP leaf: a rectangle of one sector (a room has one at first; doors
+    are carved out of them, CarveLeaf). }
+  TLeaf = record
+    X0, Y0, X1, Y1: Integer;
+    Sector: Integer;
+    { The node holding this leaf (-1: the root is this leaf), and whether
+      it is that node's Hi child. }
+    Parent: Integer;
+    ParentHi: Boolean;
     Segs: array of Integer;
   end;
 
@@ -155,7 +172,7 @@ type
     X0, Y0, X1, Y1: Integer;
     Vertical: Boolean;
     Pos: Integer;
-    { Children: a node index, or -(room + 1). Lo is west / south. }
+    { Children: a node index, or -(leaf + 1). Lo is west / south. }
     Lo, Hi: Integer;
   end;
 
@@ -165,6 +182,17 @@ type
     Pos, S, E: Integer; { the shared interval along the line }
     Open: Boolean;
     O1, O2: Integer;    { the opening, when Open }
+    { A door in the opening: its line special (1, or 26 / 27 / 28 locked),
+      0 for none. }
+    DoorSpecial: Integer;
+  end;
+
+  { Where two sectors meet without a wall: a two-sided line along x = Pos
+    (Vertical) or y = Pos from S to E, Front's side in front. }
+  TOpening = record
+    Front, Back: Integer;
+    Vertical: Boolean;
+    Pos, S, E, Special: Integer;
   end;
 
   TLine = record
@@ -202,8 +230,15 @@ type
     Available: TStrings;
     RootX0, RootY0, RootX1, RootY1: Integer;
     Rooms: array of TRoom;
+    Leaves: array of TLeaf;
     Nodes: array of TBspNode;
+    RootCode: Integer;
     Links: array of TLink;
+    Openings: array of TOpening;
+    Doors, LockedLink, KeyRoom, KeyType: Integer;
+    { Where to stand to open the locked door (on the key's side). }
+    LockX, LockY, LockAngle: Integer;
+    DoorTex: String;
     VX, VY: array of Integer;
     Lines: array of TLine;
     Sides: array of TSide;
@@ -221,13 +256,21 @@ type
     procedure FindLinks;
     procedure ConnectRooms;
     procedure DecorateRooms;
+    function CarveLeaf(const Leaf: Integer; const Vertical: Boolean; const Pos: Integer): Integer;
+    function FindLeaf(const Sector: Integer; const Vertical: Boolean; const Pos, A, B: Integer): Integer;
+    function CarveDoor(const Li, Room: Integer): Boolean;
+    function ReachesExit(const Without: Integer; out Reached: TBooleanArray): Boolean;
+    procedure MakeDoors;
+    procedure AddOpeningRec(const Front, Back: Integer; const Vertical: Boolean; const Pos, S, E, Special: Integer);
     function Vertex(const X, Y: Integer): Integer;
     function AddSide(const Upper, Lower, Middle: String; const Sector: Integer): Integer;
-    procedure AddSeg(const Room, V1, V2, Line, Side: Integer);
-    function RightOf(const Room, AX, AY, BX, BY: Integer): Boolean;
-    procedure AddWall(const Room, AX, AY, BX, BY, Special: Integer; const Tex: String);
-    procedure AddWallPiece(const Room: Integer; const Vertical: Boolean; const Pos, A, B: Integer);
-    procedure AddOpening(const L: TLink);
+    procedure AddSeg(const Leaf, V1, V2, Line, Side: Integer);
+    function RightOf(const Leaf, AX, AY, BX, BY: Integer): Boolean;
+    procedure AddWall(const Leaf, AX, AY, BX, BY, Special: Integer; const Tex: String);
+    procedure AddWallPiece(const Leaf: Integer; const Vertical: Boolean; const Pos, A, B: Integer);
+    procedure AddTwoSided(const LeafA, LeafB, Front: Integer; const Vertical: Boolean;
+      const Pos, A, B, Special: Integer);
+    procedure AddLeafEdge(const LA, LB: Integer; const Vertical: Boolean; const Pos, S, E: Integer);
     procedure BuildLines;
     procedure AddThing(const X, Y, Angle, TypeNum, Flags: Integer);
     procedure MakeSpots;
@@ -311,7 +354,14 @@ begin
     Rooms[High(Rooms)].X1 := X1;
     Rooms[High(Rooms)].Y1 := Y1;
     Rooms[High(Rooms)].Depth := -1;
-    Exit(-Length(Rooms));
+    SetLength(Leaves, Length(Leaves) + 1);
+    Leaves[High(Leaves)].X0 := X0;
+    Leaves[High(Leaves)].Y0 := Y0;
+    Leaves[High(Leaves)].X1 := X1;
+    Leaves[High(Leaves)].Y1 := Y1;
+    Leaves[High(Leaves)].Sector := High(Rooms);
+    Leaves[High(Leaves)].Parent := -1;
+    Exit(-Length(Leaves));
   end;
   if (W >= 2 * MinCells) and (H >= 2 * MinCells) then
   begin
@@ -339,10 +389,82 @@ begin
     Node.Lo := Split(X0, Y0, X1, Cut);
     Node.Hi := Split(X0, Cut, X1, Y1);
   end;
-  { Children first: the root ends up last, as Doom expects. }
   SetLength(Nodes, Length(Nodes) + 1);
   Nodes[High(Nodes)] := Node;
   Result := High(Nodes);
+  if Node.Lo < 0 then
+  begin
+    Leaves[-Node.Lo - 1].Parent := Result;
+    Leaves[-Node.Lo - 1].ParentHi := false;
+  end;
+  if Node.Hi < 0 then
+  begin
+    Leaves[-Node.Hi - 1].Parent := Result;
+    Leaves[-Node.Hi - 1].ParentHi := true;
+  end;
+end;
+
+{ Cut a leaf in two along x = Pos (Vertical) or y = Pos: Leaf keeps the
+  west / south part, the result is the new leaf with the rest. The new
+  node takes the leaf's place in the tree. }
+function TMapGen.CarveLeaf(const Leaf: Integer; const Vertical: Boolean; const Pos: Integer): Integer;
+var
+  Node: TBspNode;
+  N: Integer;
+begin
+  SetLength(Leaves, Length(Leaves) + 1);
+  Result := High(Leaves);
+  Leaves[Result] := Leaves[Leaf];
+  Leaves[Result].Segs := nil;
+  Node.X0 := Leaves[Leaf].X0;
+  Node.Y0 := Leaves[Leaf].Y0;
+  Node.X1 := Leaves[Leaf].X1;
+  Node.Y1 := Leaves[Leaf].Y1;
+  Node.Vertical := Vertical;
+  Node.Pos := Pos;
+  Node.Lo := -(Leaf + 1);
+  Node.Hi := -(Result + 1);
+  SetLength(Nodes, Length(Nodes) + 1);
+  N := High(Nodes);
+  Nodes[N] := Node;
+  if Leaves[Leaf].Parent < 0 then
+    RootCode := N
+  else if Leaves[Leaf].ParentHi then
+    Nodes[Leaves[Leaf].Parent].Hi := N
+  else
+    Nodes[Leaves[Leaf].Parent].Lo := N;
+  if Vertical then
+  begin
+    Leaves[Leaf].X1 := Pos;
+    Leaves[Result].X0 := Pos;
+  end else
+  begin
+    Leaves[Leaf].Y1 := Pos;
+    Leaves[Result].Y0 := Pos;
+  end;
+  Leaves[Leaf].Parent := N;
+  Leaves[Leaf].ParentHi := false;
+  Leaves[Result].Parent := N;
+  Leaves[Result].ParentHi := true;
+end;
+
+{ The leaf of Sector with a side on the line x = Pos (Vertical) or
+  y = Pos covering A..B; -1 when none does. }
+function TMapGen.FindLeaf(const Sector: Integer; const Vertical: Boolean; const Pos, A, B: Integer): Integer;
+var
+  I: Integer;
+begin
+  for I := 0 to High(Leaves) do
+    if Leaves[I].Sector = Sector then
+    begin
+      if Vertical and ((Leaves[I].X0 = Pos) or (Leaves[I].X1 = Pos)) and
+         (Leaves[I].Y0 <= A) and (Leaves[I].Y1 >= B) then
+        Exit(I);
+      if (not Vertical) and ((Leaves[I].Y0 = Pos) or (Leaves[I].Y1 = Pos)) and
+         (Leaves[I].X0 <= A) and (Leaves[I].X1 >= B) then
+        Exit(I);
+    end;
+  Result := -1;
 end;
 
 procedure TMapGen.AddLink(const A, B: Integer; const Vertical: Boolean; const Pos, S, E: Integer);
@@ -558,6 +680,202 @@ begin
   end;
 end;
 
+const
+  DoorDepth = 16;
+  { Locked doors by colour: blue, yellow, red. }
+  LockedSpecials: array [0..2] of Integer = (26, 27, 28);
+  KeyTypes: array [0..2] of Integer = (5, 6, 13);
+  JambTextures: array [0..2] of String = ('DOORBLU', 'DOORYEL', 'DOORRED');
+
+procedure TMapGen.AddOpeningRec(const Front, Back: Integer; const Vertical: Boolean; const Pos, S, E, Special: Integer);
+begin
+  SetLength(Openings, Length(Openings) + 1);
+  Openings[High(Openings)].Front := Front;
+  Openings[High(Openings)].Back := Back;
+  Openings[High(Openings)].Vertical := Vertical;
+  Openings[High(Openings)].Pos := Pos;
+  Openings[High(Openings)].S := S;
+  Openings[High(Openings)].E := E;
+  Openings[High(Openings)].Special := Special;
+end;
+
+{ A door in link Li's opening, carved out of Room (one of the link's
+  rooms): a DoorDepth-thick slab of Room's leaf along the shared line,
+  cut at the opening's ends; the middle piece becomes a closed door
+  sector (ceiling at its floor) with the door special on both of its
+  long lines, each facing a room, and jambs at its short ends. False when
+  Room's leaf there cannot take it (another door's slab in the way). }
+function TMapGen.CarveDoor(const Li, Room: Integer): Boolean;
+var
+  L: TLink;
+  F, Slab, Thick, Inner, D, Other, S0, S1, Color: Integer;
+  RoomIsLow: Boolean;
+begin
+  Result := false;
+  L := Links[Li];
+  RoomIsLow := Room = L.A;
+  if RoomIsLow then Other := L.B else Other := L.A;
+  F := FindLeaf(Room, L.Vertical, L.Pos, L.O1, L.O2);
+  if F < 0 then Exit;
+  if L.Vertical then
+    Thick := Leaves[F].X1 - Leaves[F].X0
+  else
+    Thick := Leaves[F].Y1 - Leaves[F].Y0;
+  if RoomIsLow then Inner := L.Pos - DoorDepth else Inner := L.Pos + DoorDepth;
+  if Thick = DoorDepth then
+    Slab := F
+  else if Thick >= DoorDepth + 64 then
+  begin
+    Slab := CarveLeaf(F, L.Vertical, Inner);
+    { CarveLeaf leaves the west / south part in F. }
+    if not RoomIsLow then Slab := F;
+  end else
+    Exit;
+  if L.Vertical then
+  begin
+    S0 := Leaves[Slab].Y0;
+    S1 := Leaves[Slab].Y1;
+  end else
+  begin
+    S0 := Leaves[Slab].X0;
+    S1 := Leaves[Slab].X1;
+  end;
+  if L.O1 > S0 then Slab := CarveLeaf(Slab, not L.Vertical, L.O1);
+  if L.O2 < S1 then CarveLeaf(Slab, not L.Vertical, L.O2);
+  SetLength(Rooms, Length(Rooms) + 1);
+  D := High(Rooms);
+  Rooms[D] := Rooms[Room];
+  Rooms[D].IsDoor := true;
+  Rooms[D].Sky := false;
+  Rooms[D].Nukage := false;
+  Rooms[D].Special := 0;
+  Rooms[D].Ceiling := Rooms[D].Floor;
+  Rooms[D].FloorTex := Pick(['FLAT20', 'FLOOR4_8']);
+  Rooms[D].CeilTex := Pick(['FLAT20', 'CEIL5_1']);
+  Rooms[D].Depth := -1;
+  Rooms[D].X0 := Leaves[Slab].X0;
+  Rooms[D].Y0 := Leaves[Slab].Y0;
+  Rooms[D].X1 := Leaves[Slab].X1;
+  Rooms[D].Y1 := Leaves[Slab].Y1;
+  Rooms[D].WallTex := Pick(['DOORTRAK']);
+  for Color := 0 to 2 do
+    if L.DoorSpecial = LockedSpecials[Color] then
+      Rooms[D].WallTex := Pick([JambTextures[Color], 'DOORTRAK']);
+  Leaves[Slab].Sector := D;
+  AddOpeningRec(Other, D, L.Vertical, L.Pos, L.O1, L.O2, L.DoorSpecial);
+  AddOpeningRec(Room, D, L.Vertical, Inner, L.O1, L.O2, L.DoorSpecial);
+  Inc(Doors);
+  Result := true;
+end;
+
+{ Whether the exit room can be reached from the start through open links
+  other than Without; Reached says which rooms can. }
+function TMapGen.ReachesExit(const Without: Integer; out Reached: TBooleanArray): Boolean;
+var
+  I: Integer;
+  Changed: Boolean;
+begin
+  SetLength(Reached, Length(Rooms));
+  for I := 0 to High(Reached) do
+    Reached[I] := I = StartRoom;
+  repeat
+    Changed := false;
+    for I := 0 to High(Links) do
+      if Links[I].Open and (I <> Without) and (Reached[Links[I].A] <> Reached[Links[I].B]) then
+      begin
+        Reached[Links[I].A] := true;
+        Reached[Links[I].B] := true;
+        Changed := true;
+      end;
+  until not Changed;
+  Result := Reached[ExitRoom];
+end;
+
+{ From the second map on, a locked door on the way to the exit that no
+  loop goes around, its key in the deepest room before it; then plain
+  doors in about a third of the other openings. The other openings
+  become two-sided lines between their rooms. }
+procedure TMapGen.MakeDoors;
+var
+  Room, Prev, Li, I, K, Color, Side: Integer;
+  Reached: TBooleanArray;
+  First: Boolean;
+begin
+  Doors := 0;
+  LockedLink := -1;
+  KeyRoom := -1;
+  KeyType := 0;
+  DoorTex := Pick(['BIGDOOR2', 'BIGDOOR1', 'BIGDOOR4']);
+  if (Index >= 2) and (ExitRoom <> StartRoom) then
+  begin
+    { Back along a shortest way from the exit: the first opening there
+      that cuts the exit off. }
+    Room := ExitRoom;
+    while (Rooms[Room].Depth > 0) and (LockedLink < 0) do
+    begin
+      Li := -1;
+      Prev := -1;
+      for I := 0 to High(Links) do
+        if Links[I].Open and (Li < 0) then
+        begin
+          if (Links[I].A = Room) and (Rooms[Links[I].B].Depth = Rooms[Room].Depth - 1) then
+          begin
+            Li := I;
+            Prev := Links[I].B;
+          end else
+          if (Links[I].B = Room) and (Rooms[Links[I].A].Depth = Rooms[Room].Depth - 1) then
+          begin
+            Li := I;
+            Prev := Links[I].A;
+          end;
+        end;
+      if Li < 0 then Break;
+      if not ReachesExit(Li, Reached) then
+      begin
+        K := StartRoom;
+        for I := 0 to High(Rooms) do
+          if Reached[I] and (I <> StartRoom) and ((K = StartRoom) or (Rooms[I].Depth > Rooms[K].Depth)) then
+            K := I;
+        Color := (Index - 2) mod 3;
+        Links[Li].DoorSpecial := LockedSpecials[Color];
+        First := RngChance(R, 50);
+        if (First and CarveDoor(Li, Links[Li].A)) or CarveDoor(Li, Links[Li].B) or
+           ((not First) and CarveDoor(Li, Links[Li].A)) then
+        begin
+          LockedLink := Li;
+          KeyRoom := K;
+          KeyType := KeyTypes[Color];
+          { 56 units from the shared line on the reached side. }
+          if Reached[Links[Li].A] then Side := -1 else Side := 1;
+          if Links[Li].Vertical then
+          begin
+            LockX := Links[Li].Pos + 56 * Side;
+            LockY := (Links[Li].O1 + Links[Li].O2) div 2;
+            if Side < 0 then LockAngle := 0 else LockAngle := 180;
+          end else
+          begin
+            LockX := (Links[Li].O1 + Links[Li].O2) div 2;
+            LockY := Links[Li].Pos + 56 * Side;
+            if Side < 0 then LockAngle := 90 else LockAngle := 270;
+          end;
+        end else
+          Links[Li].DoorSpecial := 0;
+      end;
+      Room := Prev;
+    end;
+  end;
+  for I := 0 to High(Links) do
+    if Links[I].Open and (Links[I].DoorSpecial = 0) and RngChance(R, 35) then
+    begin
+      Links[I].DoorSpecial := 1;
+      if not (CarveDoor(I, Links[I].A) or CarveDoor(I, Links[I].B)) then
+        Links[I].DoorSpecial := 0;
+    end;
+  for I := 0 to High(Links) do
+    if Links[I].Open and (Links[I].DoorSpecial = 0) then
+      AddOpeningRec(Links[I].A, Links[I].B, Links[I].Vertical, Links[I].Pos, Links[I].O1, Links[I].O2, 0);
+end;
+
 function TMapGen.Vertex(const X, Y: Integer): Integer;
 var
   I: Integer;
@@ -581,33 +899,33 @@ begin
   Result := High(Sides);
 end;
 
-procedure TMapGen.AddSeg(const Room, V1, V2, Line, Side: Integer);
+procedure TMapGen.AddSeg(const Leaf, V1, V2, Line, Side: Integer);
 begin
   SetLength(Segs, Length(Segs) + 1);
   Segs[High(Segs)].V1 := V1;
   Segs[High(Segs)].V2 := V2;
   Segs[High(Segs)].Line := Line;
   Segs[High(Segs)].Side := Side;
-  SetLength(Rooms[Room].Segs, Length(Rooms[Room].Segs) + 1);
-  Rooms[Room].Segs[High(Rooms[Room].Segs)] := High(Segs);
+  SetLength(Leaves[Leaf].Segs, Length(Leaves[Leaf].Segs) + 1);
+  Leaves[Leaf].Segs[High(Leaves[Leaf].Segs)] := High(Segs);
 end;
 
 { Doom's front side is on the right going from V1 to V2 (r_main.c's
-  R_PointOnSide): the room's centre must be there. }
-function TMapGen.RightOf(const Room, AX, AY, BX, BY: Integer): Boolean;
+  R_PointOnSide): the leaf's centre must be there. }
+function TMapGen.RightOf(const Leaf, AX, AY, BX, BY: Integer): Boolean;
 var
   CX, CY: Double;
 begin
-  CX := (Rooms[Room].X0 + Rooms[Room].X1) / 2;
-  CY := (Rooms[Room].Y0 + Rooms[Room].Y1) / 2;
+  CX := (Leaves[Leaf].X0 + Leaves[Leaf].X1) / 2;
+  CY := (Leaves[Leaf].Y0 + Leaves[Leaf].Y1) / 2;
   Result := (CX - AX) * (BY - AY) - (CY - AY) * (BX - AX) >= 0;
 end;
 
-procedure TMapGen.AddWall(const Room, AX, AY, BX, BY, Special: Integer; const Tex: String);
+procedure TMapGen.AddWall(const Leaf, AX, AY, BX, BY, Special: Integer; const Tex: String);
 var
   V1, V2: Integer;
 begin
-  if RightOf(Room, AX, AY, BX, BY) then
+  if RightOf(Leaf, AX, AY, BX, BY) then
   begin
     V1 := Vertex(AX, AY);
     V2 := Vertex(BX, BY);
@@ -620,51 +938,71 @@ begin
   Lines[High(Lines)].V1 := V1;
   Lines[High(Lines)].V2 := V2;
   Lines[High(Lines)].Flags := ML_BLOCKING;
+  { Door jambs stay put while the door moves (lower unpegged). }
+  if Rooms[Leaves[Leaf].Sector].IsDoor then
+    Lines[High(Lines)].Flags := ML_BLOCKING or ML_DONTPEGBOTTOM;
   Lines[High(Lines)].Special := Special;
-  Lines[High(Lines)].Front := AddSide('-', '-', Tex, Room);
+  Lines[High(Lines)].Front := AddSide('-', '-', Tex, Leaves[Leaf].Sector);
   Lines[High(Lines)].Back := -1;
-  AddSeg(Room, V1, V2, High(Lines), 0);
+  AddSeg(Leaf, V1, V2, High(Lines), 0);
 end;
 
-{ A wall of Room along the line x = Pos (Vertical) or y = Pos, from A to
+{ A wall of Leaf along the line x = Pos (Vertical) or y = Pos, from A to
   B; the exit switch goes into the exit room's first wall long enough. }
-procedure TMapGen.AddWallPiece(const Room: Integer; const Vertical: Boolean; const Pos, A, B: Integer);
-
-  procedure Wall(const P, Q, Special: Integer; const Tex: String);
-  begin
-    if Q <= P then Exit;
-    if Vertical then
-      AddWall(Room, Pos, P, Pos, Q, Special, Tex)
-    else
-      AddWall(Room, P, Pos, Q, Pos, Special, Tex);
-  end;
-
+procedure TMapGen.AddWallPiece(const Leaf: Integer; const Vertical: Boolean; const Pos, A, B: Integer);
 var
-  M: Integer;
+  M, Room: Integer;
 begin
+  if B <= A then Exit;
+  Room := Leaves[Leaf].Sector;
   if (Room = ExitRoom) and (ExitLine < 0) and (B - A >= 128) then
   begin
     M := A + (B - A - 64) div 2;
-    Wall(A, M, 0, Rooms[Room].WallTex);
-    Wall(M, M + 64, 11, SwitchTex);
-    ExitLine := High(Lines);
-    Wall(M + 64, B, 0, Rooms[Room].WallTex);
+    if Vertical then
+    begin
+      AddWall(Leaf, Pos, A, Pos, M, 0, Rooms[Room].WallTex);
+      AddWall(Leaf, Pos, M, Pos, M + 64, 11, SwitchTex);
+      ExitLine := High(Lines);
+      AddWall(Leaf, Pos, M + 64, Pos, B, 0, Rooms[Room].WallTex);
+    end else
+    begin
+      AddWall(Leaf, A, Pos, M, Pos, 0, Rooms[Room].WallTex);
+      AddWall(Leaf, M, Pos, M + 64, Pos, 11, SwitchTex);
+      ExitLine := High(Lines);
+      AddWall(Leaf, M + 64, Pos, B, Pos, 0, Rooms[Room].WallTex);
+    end;
   end else
-    Wall(A, B, 0, Rooms[Room].WallTex);
+  if Vertical then
+    AddWall(Leaf, Pos, A, Pos, B, 0, Rooms[Room].WallTex)
+  else
+    AddWall(Leaf, A, Pos, B, Pos, 0, Rooms[Room].WallTex);
 end;
 
-procedure TMapGen.AddOpening(const L: TLink);
+{ A two-sided line between two leaves, Front's sector in front (an
+  invisible one inside a sector when both leaves are of the same). }
+procedure TMapGen.AddTwoSided(const LeafA, LeafB, Front: Integer; const Vertical: Boolean;
+  const Pos, A, B, Special: Integer);
 var
-  AX, AY, BX, BY, V1, V2, Front, Back: Integer;
+  AX, AY, BX, BY, V1, V2, FrontLeaf, BackLeaf, FS, BS: Integer;
 begin
-  if L.Vertical then
+  if B <= A then Exit;
+  if Vertical then
   begin
-    AX := L.Pos; AY := L.O1; BX := L.Pos; BY := L.O2;
+    AX := Pos; AY := A; BX := Pos; BY := B;
   end else
   begin
-    AX := L.O1; AY := L.Pos; BX := L.O2; BY := L.Pos;
+    AX := A; AY := Pos; BX := B; BY := Pos;
   end;
-  if RightOf(L.A, AX, AY, BX, BY) then
+  if Leaves[LeafA].Sector = Front then
+  begin
+    FrontLeaf := LeafA;
+    BackLeaf := LeafB;
+  end else
+  begin
+    FrontLeaf := LeafB;
+    BackLeaf := LeafA;
+  end;
+  if RightOf(FrontLeaf, AX, AY, BX, BY) then
   begin
     V1 := Vertex(AX, AY);
     V2 := Vertex(BX, BY);
@@ -673,58 +1011,110 @@ begin
     V1 := Vertex(BX, BY);
     V2 := Vertex(AX, AY);
   end;
-  Front := AddSide(Rooms[L.A].WallTex, Rooms[L.A].WallTex, '-', L.A);
-  Back := AddSide(Rooms[L.B].WallTex, Rooms[L.B].WallTex, '-', L.B);
+  FS := Leaves[FrontLeaf].Sector;
+  BS := Leaves[BackLeaf].Sector;
   SetLength(Lines, Length(Lines) + 1);
   Lines[High(Lines)].V1 := V1;
   Lines[High(Lines)].V2 := V2;
   Lines[High(Lines)].Flags := ML_TWOSIDED;
-  Lines[High(Lines)].Special := 0;
-  Lines[High(Lines)].Front := Front;
-  Lines[High(Lines)].Back := Back;
-  AddSeg(L.A, V1, V2, High(Lines), 0);
-  AddSeg(L.B, V2, V1, High(Lines), 1);
+  Lines[High(Lines)].Special := Special;
+  if FS = BS then
+  begin
+    Lines[High(Lines)].Front := AddSide('-', '-', '-', FS);
+    Lines[High(Lines)].Back := AddSide('-', '-', '-', BS);
+  end else
+  if Rooms[BS].IsDoor then
+  begin
+    { The door's face is the room side's upper wall. }
+    Lines[High(Lines)].Front := AddSide(DoorTex, Rooms[FS].WallTex, '-', FS);
+    Lines[High(Lines)].Back := AddSide(Rooms[BS].WallTex, Rooms[BS].WallTex, '-', BS);
+  end else
+  begin
+    Lines[High(Lines)].Front := AddSide(Rooms[FS].WallTex, Rooms[FS].WallTex, '-', FS);
+    Lines[High(Lines)].Back := AddSide(Rooms[BS].WallTex, Rooms[BS].WallTex, '-', BS);
+  end;
+  AddSeg(FrontLeaf, V1, V2, High(Lines), 0);
+  AddSeg(BackLeaf, V2, V1, High(Lines), 1);
+end;
+
+{ Where leaf LA (west / south) meets leaf LB along the line from S to E:
+  invisible inside one sector, else two-sided where an opening between
+  their sectors is and walls (one per leaf, back to back) elsewhere. }
+procedure TMapGen.AddLeafEdge(const LA, LB: Integer; const Vertical: Boolean; const Pos, S, E: Integer);
+var
+  SA, SB, P, K, Best, A, B: Integer;
+begin
+  SA := Leaves[LA].Sector;
+  SB := Leaves[LB].Sector;
+  if SA = SB then
+  begin
+    AddTwoSided(LA, LB, SA, Vertical, Pos, S, E, 0);
+    Exit;
+  end;
+  P := S;
+  while P < E do
+  begin
+    Best := -1;
+    for K := 0 to High(Openings) do
+      if (Openings[K].Vertical = Vertical) and (Openings[K].Pos = Pos) and
+         (((Openings[K].Front = SA) and (Openings[K].Back = SB)) or
+          ((Openings[K].Front = SB) and (Openings[K].Back = SA))) and
+         (Openings[K].E > P) and (Openings[K].S < E) and
+         ((Best < 0) or (Openings[K].S < Openings[Best].S)) then
+        Best := K;
+    if Best < 0 then
+    begin
+      AddWallPiece(LA, Vertical, Pos, P, E);
+      AddWallPiece(LB, Vertical, Pos, P, E);
+      Break;
+    end;
+    A := Max(P, Openings[Best].S);
+    B := Min(E, Openings[Best].E);
+    AddWallPiece(LA, Vertical, Pos, P, A);
+    AddWallPiece(LB, Vertical, Pos, P, A);
+    AddTwoSided(LA, LB, Openings[Best].Front, Vertical, Pos, A, B, Openings[Best].Special);
+    P := B;
+  end;
 end;
 
 procedure TMapGen.BuildLines;
 var
-  I, Best, BestLen, Len, J, NX, NY: Integer;
-  L: TLink;
+  I, J, S, E, Best, BestLen, Len, NX, NY: Integer;
 begin
   ExitLine := -1;
   { The outer walls first (the exit switch prefers them). }
-  for I := 0 to High(Rooms) do
+  for I := 0 to High(Leaves) do
   begin
-    if Rooms[I].Y1 = RootY1 then AddWallPiece(I, false, RootY1, Rooms[I].X0, Rooms[I].X1);
-    if Rooms[I].X1 = RootX1 then AddWallPiece(I, true, RootX1, Rooms[I].Y0, Rooms[I].Y1);
-    if Rooms[I].Y0 = RootY0 then AddWallPiece(I, false, RootY0, Rooms[I].X0, Rooms[I].X1);
-    if Rooms[I].X0 = RootX0 then AddWallPiece(I, true, RootX0, Rooms[I].Y0, Rooms[I].Y1);
+    if Leaves[I].Y1 = RootY1 then AddWallPiece(I, false, RootY1, Leaves[I].X0, Leaves[I].X1);
+    if Leaves[I].X1 = RootX1 then AddWallPiece(I, true, RootX1, Leaves[I].Y0, Leaves[I].Y1);
+    if Leaves[I].Y0 = RootY0 then AddWallPiece(I, false, RootY0, Leaves[I].X0, Leaves[I].X1);
+    if Leaves[I].X0 = RootX0 then AddWallPiece(I, true, RootX0, Leaves[I].Y0, Leaves[I].Y1);
   end;
-  for I := 0 to High(Links) do
-  begin
-    L := Links[I];
-    if L.Open then
+  for I := 0 to High(Leaves) do
+    for J := 0 to High(Leaves) do
     begin
-      AddWallPiece(L.A, L.Vertical, L.Pos, L.S, L.O1);
-      AddWallPiece(L.B, L.Vertical, L.Pos, L.S, L.O1);
-      AddOpening(L);
-      AddWallPiece(L.A, L.Vertical, L.Pos, L.O2, L.E);
-      AddWallPiece(L.B, L.Vertical, L.Pos, L.O2, L.E);
-    end else
-    begin
-      AddWallPiece(L.A, L.Vertical, L.Pos, L.S, L.E);
-      AddWallPiece(L.B, L.Vertical, L.Pos, L.S, L.E);
+      if I = J then Continue;
+      if Leaves[I].X1 = Leaves[J].X0 then
+      begin
+        S := Max(Leaves[I].Y0, Leaves[J].Y0);
+        E := Min(Leaves[I].Y1, Leaves[J].Y1);
+        if E > S then AddLeafEdge(I, J, true, Leaves[I].X1, S, E);
+      end;
+      if Leaves[I].Y1 = Leaves[J].Y0 then
+      begin
+        S := Max(Leaves[I].X0, Leaves[J].X0);
+        E := Min(Leaves[I].X1, Leaves[J].X1);
+        if E > S then AddLeafEdge(I, J, false, Leaves[I].Y1, S, E);
+      end;
     end;
-  end;
   { No wall was long enough: the exit room's longest wall is the switch. }
   if ExitLine < 0 then
   begin
     Best := -1;
     BestLen := -1;
-    for J := 0 to High(Rooms[ExitRoom].Segs) do
+    for I := 0 to High(Lines) do
     begin
-      I := Segs[Rooms[ExitRoom].Segs[J]].Line;
-      if Lines[I].Back >= 0 then Continue;
+      if (Lines[I].Back >= 0) or (Sides[Lines[I].Front].Sector <> ExitRoom) then Continue;
       Len := Abs(VX[Lines[I].V2] - VX[Lines[I].V1]) + Abs(VY[Lines[I].V2] - VY[Lines[I].V1]);
       if Len > BestLen then
       begin
@@ -743,7 +1133,6 @@ begin
     is to the right of V1 -> V2). }
   if ExitLine >= 0 then
   begin
-    Len := Abs(VX[Lines[ExitLine].V2] - VX[Lines[ExitLine].V1]) + Abs(VY[Lines[ExitLine].V2] - VY[Lines[ExitLine].V1]);
     NX := Sign(VY[Lines[ExitLine].V2] - VY[Lines[ExitLine].V1]);
     NY := -Sign(VX[Lines[ExitLine].V2] - VX[Lines[ExitLine].V1]);
     ExitX := (VX[Lines[ExitLine].V1] + VX[Lines[ExitLine].V2]) div 2 + 48 * NX;
@@ -940,6 +1329,8 @@ begin
   if HasRockets then AddItem(RoomAtDepth((Deepest * 2) div 3), 2003);
   if HasCells then AddItem(RoomAtDepth(Deepest div 2), 2004);
   if Index >= 7 then AddItem(RoomAtDepth(Deepest - 1), 2006);
+  { The locked door's key. }
+  if KeyRoom >= 0 then AddItem(KeyRoom, KeyType);
   { The last map's exit is guarded. }
   if Index = RandomMapCount then
   begin
@@ -984,7 +1375,8 @@ end;
 
 procedure TMapGen.Generate;
 var
-  W, H, I, Sky, Nukage: Integer;
+  W, H, I, Sky, Nukage, RoomCount: Integer;
+  Lock: String;
 begin
   { 1408 to 2560 units a side, larger on later maps (even cell counts:
     the map is centred on 0, 0). }
@@ -994,10 +1386,12 @@ begin
   RootX1 := (W div 2) * Grid;
   RootY0 := -(H div 2) * Grid;
   RootY1 := (H div 2) * Grid;
-  Split(RootX0, RootY0, RootX1, RootY1);
+  RootCode := Split(RootX0, RootY0, RootX1, RootY1);
   FindLinks;
   ConnectRooms;
   DecorateRooms;
+  RoomCount := Length(Rooms);
+  MakeDoors;
   BuildLines;
   PlaceThings;
   Name := Adjectives[RngBelow(R, Length(Adjectives))] + ' ' + Nouns[RngBelow(R, Length(Nouns))];
@@ -1008,9 +1402,13 @@ begin
     if Rooms[I].Sky then Inc(Sky);
     if Rooms[I].Nukage then Inc(Nukage);
   end;
-  Summary := Format('"%s": %d x %d, %d rooms (%d sky, %d nukage, %d unreached), %d openings, ' +
+  Lock := 'no locked door';
+  if LockedLink >= 0 then
+    Lock := Format('locked door %d at %d %d facing %d with its key (type %d) in room %d', [
+      Links[LockedLink].DoorSpecial, LockX, LockY, LockAngle, KeyType, KeyRoom]);
+  Summary := Format('"%s": %d x %d, %d rooms (%d sky, %d nukage, %d unreached), %d openings, %d doors, %s, ' +
     '%d monsters, %d items, start room %d, exit room %d (%d rooms away), switch line %d at %d %d facing %d', [
-    Name, RootX1 - RootX0, RootY1 - RootY0, Length(Rooms), Sky, Nukage, Unreached, OpenLinks,
+    Name, RootX1 - RootX0, RootY1 - RootY0, RoomCount, Sky, Nukage, Unreached, OpenLinks, Doors, Lock,
     Monsters, Items, StartRoom, ExitRoom, Rooms[ExitRoom].Depth, ExitLine, ExitX, ExitY, ExitAngle]);
 end;
 
@@ -1046,8 +1444,9 @@ end;
 procedure TMapGen.WriteLumps(const Names: TStrings; const Data: TList);
 var
   S: TMemoryStream;
-  I, J, K, First, Code, BX, BY, BW, BH, OX, OY, X0, X1, Y0, Y1, Offset: Integer;
+  I, J, K, N, First, Code, Count, BX, BY, BW, BH, OX, OY, X0, X1, Y0, Y1, Offset: Integer;
   Blocks: array of array of Integer;
+  NewIndex, Ordered: array of Integer;
   Dx, Dy: Integer;
   Bam: Integer;
 
@@ -1060,7 +1459,7 @@ var
 
   function Child(const C: Integer): Integer;
   begin
-    if C >= 0 then Result := C else Result := $8000 or (-C - 1);
+    if C >= 0 then Result := NewIndex[C] else Result := $8000 or (-C - 1);
   end;
 
   procedure Box(const C: Integer);
@@ -1071,8 +1470,19 @@ var
     end else
     begin
       Code := -C - 1;
-      W16(S, Rooms[Code].Y1); W16(S, Rooms[Code].Y0); W16(S, Rooms[Code].X0); W16(S, Rooms[Code].X1);
+      W16(S, Leaves[Code].Y1); W16(S, Leaves[Code].Y0); W16(S, Leaves[Code].X0); W16(S, Leaves[Code].X1);
     end;
+  end;
+
+  { Children before their node, so the root is last (Doom starts there). }
+  procedure Order(const C: Integer);
+  begin
+    if C < 0 then Exit;
+    Order(Nodes[C].Lo);
+    Order(Nodes[C].Hi);
+    NewIndex[C] := Count;
+    Ordered[Count] := C;
+    Inc(Count);
   end;
 
 begin
@@ -1102,10 +1512,10 @@ begin
     W16(S, VX[I]); W16(S, VY[I]);
   end;
   Lump('SEGS');
-  for I := 0 to High(Rooms) do
-    for J := 0 to High(Rooms[I].Segs) do
+  for I := 0 to High(Leaves) do
+    for J := 0 to High(Leaves[I].Segs) do
     begin
-      K := Rooms[I].Segs[J];
+      K := Leaves[I].Segs[J];
       Dx := VX[Segs[K].V2] - VX[Segs[K].V1];
       Dy := VY[Segs[K].V2] - VY[Segs[K].V1];
       Bam := Round(ArcTan2(Dy, Dx) * 32768 / Pi);
@@ -1114,14 +1524,19 @@ begin
     end;
   Lump('SSECTORS');
   First := 0;
-  for I := 0 to High(Rooms) do
+  for I := 0 to High(Leaves) do
   begin
-    W16(S, Length(Rooms[I].Segs)); W16(S, First);
-    Inc(First, Length(Rooms[I].Segs));
+    W16(S, Length(Leaves[I].Segs)); W16(S, First);
+    Inc(First, Length(Leaves[I].Segs));
   end;
   Lump('NODES');
-  for I := 0 to High(Nodes) do
+  SetLength(NewIndex, Length(Nodes));
+  SetLength(Ordered, Length(Nodes));
+  Count := 0;
+  Order(RootCode);
+  for N := 0 to Count - 1 do
   begin
+    I := Ordered[N];
     { Children[0] is the right (front) side of the partition: east of a
       northward vertical cut, south of an eastward horizontal one. }
     if Nodes[I].Vertical then

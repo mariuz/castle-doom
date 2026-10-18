@@ -36,6 +36,8 @@ begin
 end;
 
 type
+  TBooleanArray = array of Boolean;
+
   TTestWad = class(TTestCase)
   published
     procedure TestPhase1;
@@ -966,20 +968,61 @@ end;
   MAP01..MAP08 over Phase 2) that load with their own BSP: the subsector
   polygons cover the whole rectangle, every thing and the exit switch can
   be walked to from the player start (floor steps of 24 at most, 56 units
-  of headroom), the same seed gives the same bytes and UMAPINFO names the
-  maps. }
+  of headroom, doors opened), the locked door cuts the exit off while its
+  key stays reachable, the same seed gives the same bytes and UMAPINFO
+  names the maps. }
 procedure TTestMap.TestRandomMaps;
 
   procedure CheckMaps(const Iwad: String; const IsDoom2: Boolean);
   var
     W: TDoomWad;
     M: TDoomMap;
-    I, J, K, Start, Sec, Other, Exits, Starts: Integer;
-    Reached: array of Boolean;
-    Changed: Boolean;
+    I, J, K, Start, Exits, Starts, ExitSector, Locked, DoorLines: Integer;
     Area, A: Double;
-    L: TDoomLinedef;
+    All, Unlocked: TBooleanArray;
+    Ceil: array of Single;
+    IsLocked: array of Boolean;
+
+    { Sectors reachable from Start walking (steps of 24 at most, 56 of
+      headroom), through doors as opened (their lowest neighbouring
+      ceiling - 4), locked ones only when WithKeys. }
+    function Reach(const WithKeys: Boolean): TBooleanArray;
+    var
+      L, Sec, Other: Integer;
+      Changed: Boolean;
+      Line: TDoomLinedef;
+    begin
+      SetLength(Result, Length(M.Sectors));
+      for L := 0 to High(Result) do Result[L] := L = Start;
+      repeat
+        Changed := false;
+        for L := 0 to High(M.Linedefs) do
+        begin
+          Line := M.Linedefs[L];
+          if (Line.BackSector < 0) or (Result[Line.FrontSector] = Result[Line.BackSector]) then Continue;
+          if Result[Line.FrontSector] then
+          begin
+            Sec := Line.FrontSector;
+            Other := Line.BackSector;
+          end else
+          begin
+            Sec := Line.BackSector;
+            Other := Line.FrontSector;
+          end;
+          if IsLocked[Other] and not WithKeys then Continue;
+          if (M.Sectors[Other].FloorHeight - M.Sectors[Sec].FloorHeight <= 24) and
+             (Min(Ceil[Sec], Ceil[Other]) - Max(M.Sectors[Sec].FloorHeight, M.Sectors[Other].FloorHeight) >= 56) then
+          begin
+            Result[Other] := true;
+            Changed := true;
+          end;
+        end;
+      until not Changed;
+    end;
+
   begin
+    Locked := 0;
+    DoorLines := 0;
     W := TDoomWad.Create(WadUrl(Iwad));
     try
       W.AddFile('random:/1234');
@@ -999,8 +1042,23 @@ procedure TTestMap.TestRandomMaps;
             Area := Area + A / 2;
           end;
           AssertEquals('polygons cover the map', (M.MaxX - M.MinX) * (M.MaxY - M.MinY), Area, 1);
-          AssertEquals('one subsector per sector', Length(M.Sectors), Length(M.Subsectors));
           CheckLineGrid(M);
+          { Doors: sectors behind door lines, opened like Doom does. }
+          SetLength(Ceil, Length(M.Sectors));
+          SetLength(IsLocked, Length(M.Sectors));
+          for J := 0 to High(M.Sectors) do
+          begin
+            Ceil[J] := M.Sectors[J].CeilingHeight;
+            IsLocked[J] := false;
+          end;
+          for J := 0 to High(M.Linedefs) do
+            if (M.Linedefs[J].Special in [1, 26, 27, 28]) and (M.Linedefs[J].BackSector >= 0) then
+            begin
+              Inc(DoorLines);
+              K := M.Linedefs[J].BackSector;
+              Ceil[K] := M.LowestCeilingSurrounding(K) - 4;
+              if M.Linedefs[J].Special <> 1 then IsLocked[K] := true;
+            end;
           Start := -1;
           Starts := 0;
           for J := 0 to High(M.Things) do
@@ -1010,47 +1068,39 @@ procedure TTestMap.TestRandomMaps;
               Inc(Starts);
             end;
           AssertEquals('one player start', 1, Starts);
-          SetLength(Reached, Length(M.Sectors));
-          for J := 0 to High(Reached) do Reached[J] := J = Start;
-          repeat
-            Changed := false;
-            for J := 0 to High(M.Linedefs) do
-            begin
-              L := M.Linedefs[J];
-              if (L.BackSector < 0) or (Reached[L.FrontSector] = Reached[L.BackSector]) then Continue;
-              if Reached[L.FrontSector] then
-              begin
-                Sec := L.FrontSector;
-                Other := L.BackSector;
-              end else
-              begin
-                Sec := L.BackSector;
-                Other := L.FrontSector;
-              end;
-              if (M.Sectors[Other].FloorHeight - M.Sectors[Sec].FloorHeight <= 24) and
-                 (Min(M.Sectors[Sec].CeilingHeight, M.Sectors[Other].CeilingHeight) -
-                  Max(M.Sectors[Sec].FloorHeight, M.Sectors[Other].FloorHeight) >= 56) then
-              begin
-                Reached[Other] := true;
-                Changed := true;
-              end;
-            end;
-          until not Changed;
+          All := Reach(true);
+          Unlocked := Reach(false);
           for J := 0 to High(M.Things) do
             AssertTrue(Format('%s: thing %d (type %d) reachable', [M.Name, J, M.Things[J].TypeNum]),
-              Reached[M.SectorAt(M.Things[J].X, M.Things[J].Y)]);
+              All[M.SectorAt(M.Things[J].X, M.Things[J].Y)]);
           Exits := 0;
+          ExitSector := -1;
           for J := 0 to High(M.Linedefs) do
             if M.Linedefs[J].Special = 11 then
             begin
               Inc(Exits);
-              AssertTrue('exit reachable', Reached[M.Linedefs[J].FrontSector]);
+              ExitSector := M.Linedefs[J].FrontSector;
             end;
           AssertEquals('one exit switch', 1, Exits);
+          AssertTrue('exit reachable', All[ExitSector]);
+          for J := 0 to High(IsLocked) do
+            if IsLocked[J] then
+            begin
+              Inc(Locked);
+              AssertFalse(M.Name + ': the locked door guards the exit', Unlocked[ExitSector]);
+              for K := 0 to High(M.Things) do
+                if M.Things[K].TypeNum in [5, 6, 13] then
+                  AssertTrue(M.Name + ': the key is before the door', Unlocked[M.SectorAt(M.Things[K].X, M.Things[K].Y)]);
+              Break;
+            end;
         finally
           FreeAndNil(M);
         end;
       end;
+      { Locked doors from map 2 on (when no loop goes around every
+        opening on the way), plain doors everywhere. }
+      AssertTrue('locked doors on most maps', Locked >= RandomMapCount div 2);
+      AssertTrue('doors', DoorLines >= 2 * RandomMapCount);
       LoadMapInfo(W);
       AssertTrue('UMAPINFO names the maps', (MapInfoFor(RandomMapName(1, IsDoom2)) <> nil) and
         (MapInfoFor(RandomMapName(1, IsDoom2)).LevelName <> ''));

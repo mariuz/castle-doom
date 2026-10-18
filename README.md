@@ -56,7 +56,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Freedoom Phase 1 (36 ExMy maps) and Phase 2 (32 MAPxx maps), map selection in the menu.
 - Random maps: New Game -> "Random maps" (or `-random [SEED]`, `?random=SEED` in the browser)
   generates eight levels from a seed: rooms split from a rectangle (the splits are the BSP),
-  connected by openings, with lights, nukage and sky rooms, monsters and supplies that grow
+  connected by openings and doors (a locked one guards the exit from the second map on, its
+  key before it), with lights, nukage and sky rooms, monsters and supplies that grow
   with the map number, an exit switch in the farthest room and names in a UMAPINFO. The same
   seed gives the same maps, saves keep it, and `--random-wad FILE` writes the PWAD.
 - Textured walls with Doom's pegging rules and offsets, masked middle textures (grates),

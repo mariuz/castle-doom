@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Random maps, doors and keys: about a third of the openings get a door
+  (a 16-unit door sector carved out of one room's leaf, which stays a
+  valid BSP because every leaf is still a rectangle), and from the
+  second map on the exit sits behind a locked door (blue, yellow, red in
+  turn) on an opening no loop gets around, its key in the deepest room
+  before it. The unit test opens doors like Doom (lowest neighbouring
+  ceiling - 4) and checks that the exit is cut off without the key and
+  the key is not; the `random-maps` autotest tries the door without and
+  with the key.
+
 - Random maps (`DoomRandomMap`): `random:/SEED` is a PWAD the game makes
   instead of reading it: eight maps (E1M1..E1M8 over Doom 1 IWADs,
   MAP01..MAP08 over Doom 2's) cut from a rectangle by recursive
@@ -973,7 +983,7 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Random maps, the next steps**: doors (a thin door sector cut into a wall between two rooms, special 1), keys and locked doors gating the exit (a key in a side branch of the spanning tree), stairs and lifts for height changes over 24, windows (two-sided lines with a high lower wall), secret closets (sector special 9 behind a door), teleporters, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
+| **Random maps, the next steps**: doors and a locked exit door are done (see above); left are more keys (a second lock on later maps, keys in side branches), stairs and lifts for height changes over 24, windows (two-sided lines with a high lower wall), secret closets (sector special 9 behind a door), teleporters, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Recording demos**: write what the player does (moves, turns, fire, use, weapon changes, per tic) in the demo script's syntax, to replay a session under `--fixed-step` for bug reports, or as a ghost to race. | Reproducible bug reports from players; replays. | `GameViewPlay` (the demo runner), `GameSettings` | M |
 | **Level statistics overlay and best times**: kills / items / secrets / time on the HUD (a key toggles it), and each map's best time per skill kept in `settings.json`, shown on the intermission. | Speedrunning and 100% runs, often asked of ports. | `DoomHud`, `DoomIntermission` | S |
 | **Gamma / brightness setting** (Doom's `usegamma` 0-4, F11) applied in the palette lookup shader. | Dark monitors and bright rooms. | `DoomLighting`, Video options | S |
@@ -984,10 +994,10 @@ play.
 
 ## Suggested next three
 
-1. Random maps, the next steps (M, see New features): doors, then keys
-   and locked doors gating the exit.
-2. Recording demos (M, see New features): the player's input as a demo
+1. Recording demos (M, see New features): the player's input as a demo
    script, replayed under `--fixed-step`.
+2. Random maps, the next steps (M, see New features): stairs and lifts,
+   windows and secret closets.
 3. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
 

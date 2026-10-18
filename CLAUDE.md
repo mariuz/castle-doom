@@ -593,13 +593,17 @@ nothing is drawn there (Doom's HOM).
 Random maps (`DoomRandomMap`): `-random SEED` (or `-file random:/SEED`)
 generates eight maps over the IWAD's E1M1..E1M8 / MAP01..MAP08; the
 log prints one `Random: seed N: E1M1 "Name": ...` line per map with
-its rooms, monsters and where to stand for the exit switch (`switch
-line L at X Y facing A`: `G:X:Y,A:A,U` exits). Seed 42's E1M1 is
-"Grim Halls" (24 rooms, switch at -576 -688 facing 270; autotest
-`random-maps` with goldens). A generator change moves every seed's
+its rooms, doors, monsters and where to stand for the exit switch
+(`switch line L at X Y facing A`: `G:X:Y,A:A,U` exits) and, from the
+second map on, for the locked door (`locked door 26 at X Y facing A`;
+`K` gives the keys). Seed 42's E1M1 is "Broken Depot" (24 rooms, 12
+doors, switch at -576 -688 facing 270), its E1M2 has a blue door at 480
+104 facing 90 (autotest `random-maps` with goldens). A generator change moves every seed's
 maps, so the autotest's expected line and goldens change with it
 (regenerate them, and check the maps in the unit test
-`TestRandomMaps`: full polygon area, all things reachable, one exit).
+`TestRandomMaps`: full polygon area, all things reachable through
+opened doors, one exit, the exit cut off by the locked door and its key
+before it).
 `--random-wad FILE` writes the PWAD and quits (open a window: use
 `xvfb-run`); `apt-get install -y prboom-plus` gives
 `/usr/games/dsda-doom` to try it in another port (`-iwad ... -file

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Random maps have doors, and from the second map on a locked door
+  (blue, yellow or red) stands between you and the exit, with its key
+  somewhere before it.
+
 ## v0.33.0 (2026-10-18)
 
 - Random maps: New Game -> RANDOM MAPS (or `-random [SEED]`, or
