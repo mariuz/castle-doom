@@ -379,7 +379,12 @@ referencing a `TCastleCamera` child of `Items`), else `Viewport.Camera`
 is nil.
 
 The engine's inspector: `INSPECTOR` in a demo sends F8 (`W:1,INSPECTOR,
-W:1.5,S` screenshots it; autotest `inspector`). F8 works in release builds
+W:1.5,S` screenshots it; autotest `inspector`; the log says `Inspector:
+Opened` / `Closed`, mouse look is off while it is open). In the
+browser, Playwright's `page.keyboard.press('F8')` after
+`canvas.focus()` opens it (`page.screenshot` captures the page; the
+game's own `S` cannot). A page URL with `map=` and no `demo=` is a
+plain game on that map (like `warp=`). F8 works in release builds
 only because `GameInitialize` sets `TCastleContainer.InputInspector.Key`
 (CGE registers it in `InitializeDebug`, debug builds only). Keep the tree
 readable: new scenes and transforms get a `Name` (owner-less components

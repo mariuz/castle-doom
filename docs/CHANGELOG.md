@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The browser version no longer stops when opened with only a `map=` in
+  its address (it starts that map).
+- The engine inspector (F8) frees the mouse while it is open, also in
+  the browser.
+
 ## v0.29.0 (2026-10-18)
 
 - The intermission's episode maps animate, mark the levels you have

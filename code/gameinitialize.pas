@@ -158,6 +158,15 @@ begin
   end;
   if Application.PageUrlParameters.ContainsKey('demo') then
     AutoTestDemo := Application.PageUrlParameters['demo'];
+  { A map without a demo is just a game on that map: the desktop's
+    demo-less autotest saves screenshots, which the browser cannot write
+    (an exception stops the WebAssembly program). }
+  if (AutoTestMap <> '') and (AutoTestDemo = '') then
+  begin
+    CmdWarp := AutoTestMap;
+    AutoTestMap := '';
+    AutoTestPrefix := '';
+  end;
   if Application.PageUrlParameters.ContainsKey('warp') then
     CmdWarp := UpperCase(Application.PageUrlParameters['warp']);
   if Application.PageUrlParameters.ContainsKey('skill') then

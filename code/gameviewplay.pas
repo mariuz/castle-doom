@@ -87,6 +87,9 @@ type
     FSlotMenu: Integer;
     { The click that resumed or re-locked the mouse must not fire. }
     FSuppressFire: Boolean;
+    { The engine's inspector (F8) is shown; mouse look was on when it
+      opened (it is off while the inspector's panels take the mouse). }
+    FInspectorShown, FInspectorFreedMouse: Boolean;
     FSlotMenuBack: TCastleRectangleControl;
     FSlotScreen: TDoomMenuScreen;
     FSlotTicAccum: Single;
@@ -139,6 +142,7 @@ type
     procedure DemoMouse(const Cmd, Spec: String);
     procedure DemoTouchPlace(const Spec: String);
     procedure ApplyTouchSettings;
+    procedure CheckInspector;
     { Select a thing in the engine's inspector (opening it): by name, or
       the one under the crosshair when Name is ''. }
     procedure SelectInInspector(const ThingName: String);
@@ -1104,6 +1108,37 @@ end;
   column (None clears the action's). }
 { The touch layout from the settings (they change on the Controls page and
   through the demo commands). }
+{ The inspector's panels need the pointer: mouse look (the browser's
+  pointer lock) is off while it is open. Closing it gives the mouse back
+  on the desktop; the browser may lock the pointer again only in a user
+  gesture, so there the next click does it (Press). }
+procedure TViewPlay.CheckInspector;
+var
+  I: Integer;
+  Shown: Boolean;
+begin
+  Shown := false;
+  for I := 0 to Container.Controls.Count - 1 do
+    if Container.Controls[I].ClassName = 'TCastleInspector' then
+      Shown := true;
+  if Shown = FInspectorShown then Exit;
+  FInspectorShown := Shown;
+  if Shown then
+  begin
+    FInspectorFreedMouse := FNavigation.MouseLook;
+    FNavigation.MouseLook := false;
+    WritelnLog('Inspector', 'Opened (mouse look %s)', [BoolToStr(FInspectorFreedMouse, 'paused', 'was off')]);
+  end else
+  begin
+    {$ifndef WASI}
+    if FInspectorFreedMouse then
+      FNavigation.MouseLook := Settings.MouseLook;
+    {$endif}
+    FInspectorFreedMouse := false;
+    WritelnLog('Inspector', 'Closed');
+  end;
+end;
+
 procedure TViewPlay.ApplyTouchSettings;
 var
   I: Integer;
@@ -2116,6 +2151,7 @@ begin
   FStatusBar.Exists := true;
   FNavigation.Exists := not FWorld.Player.Dead;
   FLevelTime := FLevelTime + SecondsPassed;
+  CheckInspector;
   FHelpLabel.Exists := FHelpVisible and not TouchMode;
   CheckPadTriggers;
   if FTouch.Exists then
@@ -2125,7 +2161,9 @@ begin
   begin
     { handled above }
   end else
-  if AutoTestPrefix <> '' then
+  { The browser cannot write the screenshots (and has no demo-less
+    autotests: a page URL's map without a demo is a plain game). }
+  if (AutoTestPrefix <> '') {$ifdef WASI} and false {$endif} then
   begin
     FNavigation.MouseLook := false;
     FAutoTestTime := FAutoTestTime + SecondsPassed;
