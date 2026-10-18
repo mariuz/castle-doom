@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.35.0 (2026-10-18)
 
 - Demos: `--record FILE` records a level as you play it and
   `--playdemo FILE` plays it back, the same at any frame rate, saying
