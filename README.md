@@ -106,8 +106,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   (Doom's 90 by default), UI scale for the text and panels, fullscreen, v-sync and a frame
   rate cap on the desktop and,
   in the browser, the render resolution (25-100% of the canvas' pixels, for slow machines).
-- Demos: `--record FILE` records a level (from its start or a loaded game) as the world
-  received it and `--playdemo FILE` plays it back on its own random numbers, so it plays the
+- Demos: `--record FILE` (or Options -> Record demo...) records a game level after level (from
+  its start or a loaded game) as the world received it and `--playdemo FILE` (Play demo...)
+  plays it back on its own random numbers, so it plays the
   same at any frame rate; a checksum every second says where a playback went out of sync.
 - Save and load: F2 / F3 slot menus, F6 / F9 quick save / load, "Continue (quick save)" on
   the title screen, `-loadgame N`. Everything is saved: open doors, moving lifts, used

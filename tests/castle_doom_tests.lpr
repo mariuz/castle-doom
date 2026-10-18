@@ -967,8 +967,8 @@ end;
 
 
 { DoomDemo's file: the floats come back bit for bit, an update that ran
-  no tics is kept only when an action follows it, and the end line
-  carries the summary. }
+  no tics is kept only when an action follows it, the end line carries
+  the summary, and a second level starts from its own state. }
 procedure TTestWad.TestDemoFile;
 var
   FileName: String;
@@ -977,6 +977,7 @@ var
   Demo: TDemoPlayer;
   E: TDemoEvent;
   Kinds: String;
+  NextState: TJSONObject;
 const
   Letters: array [TDemoEventKind] of Char = ('T', 'U', 'F', 'R', 'P', 'N', 'W', 'C', 'E');
 begin
@@ -994,7 +995,12 @@ begin
       Rec.Check(35, $DEADBEEF);
       Rec.Event(deNextWeapon, -1);
       Rec.Update(0, [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5]);    { dropped at the end }
-      Rec.Finish(36, $12345678, 'kills 1/2 health 100');
+      Rec.EndLevel(36, $12345678, 'kills 1/2 health 100');
+      State.Strings['map'] := 'E1M2';
+      Rec.NextLevel(State);
+      Rec.Update(3, [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]);
+      Rec.Event(deFire);
+      Rec.EndLevel(40, $87654321, 'kills 2/3 health 90');
     finally
       FreeAndNil(Rec);
     end;
@@ -1030,6 +1036,17 @@ begin
       end;
     end;
     AssertEquals('events in order', 'TTUWTCNE', Kinds);
+    NextState := Demo.NextLevelState;
+    try
+      AssertTrue('the next level', (NextState <> nil) and (NextState.Get('map', '') = 'E1M2'));
+    finally
+      FreeAndNil(NextState);
+    end;
+    Kinds := '';
+    while Demo.Next(E) do
+      Kinds := Kinds + Letters[E.Kind];
+    AssertEquals('the next level''s events', 'TFE', Kinds);
+    AssertTrue('no third level', Demo.NextLevelState = nil);
     AssertTrue('at the end', Demo.AtEnd);
   finally
     FreeAndNil(Demo);

@@ -100,6 +100,10 @@ type
     FRecorder: TDemoRecorder;
     FDemoPlayer: TDemoPlayer;
     FDemoStarted: Boolean;
+    { Between two levels of a demo; FDemoAdvance moves a played demo's
+      intermission on by itself. }
+    FDemoNextLevel: Boolean;
+    FDemoAdvance: Single;
     procedure SlotScreenAction(const Action: TDoomMenuAction);
     { Description: shown on the load page ('' = the map, kills
       and time). }
@@ -114,7 +118,11 @@ type
       saved state, so a playback starts alike), and end a recording or a
       playback (a level's end, another map, leaving the view). }
     procedure StartDemoRecording;
-    procedure StopDemos;
+    { ToNextLevel: the level ended (intermission), the demo goes on in the
+      next one; otherwise it ends. }
+    procedure StopDemos(const ToNextLevel: Boolean);
+    { The next level after an intermission: record on, or play its part. }
+    procedure ContinueDemo;
     procedure OpenSlotMenu(const Mode: Integer);
     procedure OpenSoundMenu;
     { Change the sound (Row 0) or music (Row 1) volume by Delta steps. }
@@ -445,7 +453,7 @@ end;
 
 procedure TViewPlay.Stop;
 begin
-  StopDemos;
+  StopDemos(false);
   FreeAndNil(FDemoPlayer);
   { The page must stop keeping fingers from the engine (the menus). }
   PollTouches(nil);
@@ -1356,7 +1364,10 @@ end;
 
 procedure TViewPlay.StartMap(const MapName: String; const KeepInventory: Boolean);
 begin
-  StopDemos;
+  { The next level after an intermission keeps a demo going; any other
+    map change (a load, a restart after death, a warp) ends it. }
+  if not FDemoNextLevel then
+    StopDemos(false);
   { The melt goes from what is on screen now (intermission, finale text) to
     the new level; not on the first map of the session (nothing to melt). }
   FreeAndNil(FPendingWipe);
@@ -1423,6 +1434,9 @@ begin
       intermission's), so the next level starts without synthesis. }
     Music.Prefetch(Music.LumpForMap(NextMapName(MapName, false, Wad.IsDoom2)));
   end;
+  if FDemoNextLevel then
+    ContinueDemo
+  else
   if (FDemoPlayer <> nil) and not FDemoStarted and Restored then
   begin
     FDemoStarted := true;
@@ -1455,18 +1469,57 @@ begin
     FWorld.StartRecording(FRecorder);
 end;
 
-procedure TViewPlay.StopDemos;
+procedure TViewPlay.StopDemos(const ToNextLevel: Boolean);
 begin
   if FRecorder <> nil then
   begin
-    if FWorld <> nil then FWorld.StopRecording;
-    FreeAndNil(FRecorder);
+    if (FWorld <> nil) and not FRecorder.Finished then FWorld.StopRecording;
+    if not ToNextLevel then FreeAndNil(FRecorder);
   end;
   if FDemoStarted then
   begin
     if FWorld <> nil then FWorld.FinishReplay;
-    FreeAndNil(FDemoPlayer);
     FDemoStarted := false;
+    if not ToNextLevel then FreeAndNil(FDemoPlayer);
+  end;
+  FDemoNextLevel := ToNextLevel and ((FRecorder <> nil) or (FDemoPlayer <> nil));
+  FDemoAdvance := 0;
+end;
+
+procedure TViewPlay.ContinueDemo;
+var
+  J: TJSONObject;
+begin
+  FDemoNextLevel := false;
+  if FRecorder <> nil then
+  begin
+    J := SaveJson('demo');
+    try
+      FWorld.LoadState(J);
+      RestoreViewState(J);
+      FRecorder.NextLevel(J);
+    finally
+      FreeAndNil(J);
+    end;
+    FWorld.StartRecording(FRecorder);
+  end else
+  if FDemoPlayer <> nil then
+  begin
+    J := FDemoPlayer.NextLevelState;
+    if J = nil then
+    begin
+      WritelnLog('Demo', 'Played every level of %s', [FDemoPlayer.FileName]);
+      FreeAndNil(FDemoPlayer);
+      Exit;
+    end;
+    try
+      FWorld.LoadState(J);
+      RestoreViewState(J);
+    finally
+      FreeAndNil(J);
+    end;
+    FDemoStarted := true;
+    FWorld.StartReplay(FDemoPlayer);
   end;
 end;
 
@@ -2015,7 +2068,7 @@ var
   P: TPlayerState;
   Next: String;
 begin
-  StopDemos;
+  StopDemos(true);
   BeginWipe;
   FIntermission := true;
   FIntermissionTime := 0;
@@ -2193,6 +2246,17 @@ begin
   if FIntermission then
   begin
     FIntermissionTime := FIntermissionTime + SecondsPassed;
+    { A played demo goes through the intermission by itself. }
+    if FDemoNextLevel and (FDemoPlayer <> nil) and not FWipe.Active then
+    begin
+      FDemoAdvance := FDemoAdvance + SecondsPassed;
+      if FDemoAdvance > 1.5 then
+      begin
+        FDemoAdvance := 0;
+        AccelerateScreen;
+        if FWorld = nil then Exit;
+      end;
+    end;
     FNavigation.Exists := false;
     FStatusBar.Exists := false;
     FWeaponImage.Exists := false;

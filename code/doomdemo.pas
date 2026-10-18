@@ -21,11 +21,14 @@
     U | F | R | P                    use, fire, fire released, push stopped
     N -1 | W 3                       next / previous weapon, select weapon
     C 35 1a2b3c4d                    checksum at a tic
-    E 812 1a2b3c4d kills 3/17 ...    the end: tic, checksum, summary
+    E 812 1a2b3c4d kills 3/17 ...    the level's end: tic, checksum, summary
+    L {...save game JSON...}         the next level's start (then its lines)
 
-  Command line: --record FILE (from the first level started) and
-  --playdemo FILE; GameViewPlay drives both, TDoomWorld records and
-  replays. }
+  A recording goes on through the levels that follow (after the
+  intermission), each from its own saved state. Command line: --record
+  FILE (from the first level started) and --playdemo FILE, or the title
+  screen's Options panel; GameViewPlay drives both, TDoomWorld records
+  and replays. }
 unit DoomDemo;
 
 interface
@@ -64,8 +67,13 @@ type
     procedure Update(const Tics: Integer; const Values: array of Single);
     procedure Event(const Kind: TDemoEventKind; const Arg: Integer = 0);
     procedure Check(const Tic: Integer; const Hash: Cardinal);
-    procedure Finish(const Tic: Integer; const Hash: Cardinal; const Summary: String);
+    { The level's end line; the file stays open for the next level
+      (NextLevel) until the recorder is freed. }
+    procedure EndLevel(const Tic: Integer; const Hash: Cardinal; const Summary: String);
+    { The next level's start: its saved state. }
+    procedure NextLevel(const State: TJSONObject);
     property FileName: String read FFileName;
+    { Between two levels: the last one ended, no next one yet. }
     property Finished: Boolean read FFinished;
   end;
 
@@ -80,8 +88,12 @@ type
     { Raises an exception when the file is not a demo. }
     constructor Create(const AFileName: String);
     destructor Destroy; override;
-    { The next event; False after the last line. }
+    { The next event of this level; False after the last line or at the
+      next level's start. }
     function Next(out E: TDemoEvent): Boolean;
+    { The next level's saved state (the caller owns it), nil when the
+      demo has no more levels. }
+    function NextLevelState: TJSONObject;
     function AtEnd: Boolean;
     property Seed: Cardinal read FSeed;
     { The save game the demo starts from (owned). }
@@ -178,12 +190,18 @@ begin
   Line(Format('C %d %s', [Tic, IntToHex(Hash, 8)]));
 end;
 
-procedure TDemoRecorder.Finish(const Tic: Integer; const Hash: Cardinal; const Summary: String);
+procedure TDemoRecorder.EndLevel(const Tic: Integer; const Hash: Cardinal; const Summary: String);
 begin
   FPending := '';
   Line(Format('E %d %s %s', [Tic, IntToHex(Hash, 8), Summary]));
   FFinished := true;
-  FreeAndNil(FStream);
+end;
+
+procedure TDemoRecorder.NextLevel(const State: TJSONObject);
+begin
+  FFinished := false;
+  FPending := '';
+  Line('L ' + State.AsJSON);
 end;
 
 { TDemoPlayer ---------------------------------------------------------------- }
@@ -217,6 +235,22 @@ begin
   inherited;
 end;
 
+function TDemoPlayer.NextLevelState: TJSONObject;
+var
+  Data: TJSONData;
+begin
+  Result := nil;
+  while (FPos < FLines.Count) and (Copy(FLines[FPos], 1, 2) <> 'L ') do
+    Inc(FPos);
+  if FPos >= FLines.Count then Exit;
+  Data := GetJSON(Copy(FLines[FPos], 3, MaxInt));
+  Inc(FPos);
+  if Data is TJSONObject then
+    Result := TJSONObject(Data)
+  else
+    FreeAndNil(Data);
+end;
+
 function TDemoPlayer.AtEnd: Boolean;
 begin
   Result := FPos >= FLines.Count;
@@ -236,6 +270,8 @@ begin
     Words.StrictDelimiter := true;
     while FPos < FLines.Count do
     begin
+      { The next level starts: this one has no more events. }
+      if Copy(FLines[FPos], 1, 2) = 'L ' then Exit;
       Words.DelimitedText := FLines[FPos];
       Inc(FPos);
       if Words.Count = 0 then Continue;

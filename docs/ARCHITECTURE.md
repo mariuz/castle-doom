@@ -940,6 +940,16 @@ the same state; `SyncHash` (FNV of the tic, the player's health,
 armour, kills and weapon, and every actor's position, health and state)
 is written every 35 tics and compared during playback.
 
+A recording goes on through the levels that follow an intermission: the
+level's end line (`E`) is written when the intermission starts, and the
+next level starts with an `L` line holding its saved state (reloaded in
+the recording session like the first one). Playback reads a level's
+events up to the next `L` (`TDemoPlayer.Next` stops there), moves
+through the intermission by itself and loads the next `L` state when the
+view starts the next map (`TViewPlay.ContinueDemo`). Any other map
+change (loading a game, restarting after death, a warp key) ends the
+demo.
+
 ## 9. DoomSound: DMX sound effects
 
 Doom sound lumps (`DS*`) are DMX format: a small header (format 3, sample rate,

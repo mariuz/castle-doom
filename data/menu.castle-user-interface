@@ -422,6 +422,18 @@
                   "Name": "ButtonImportSaves",
                   "Caption": "Import saves...",
                   "FontSize": 18.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonRecordDemo",
+                  "Caption": "Record demo...",
+                  "FontSize": 18.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
+                  "Name": "ButtonPlayDemo",
+                  "Caption": "Play demo...",
+                  "FontSize": 18.0
                 }
               ]
             },

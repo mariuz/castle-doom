@@ -91,6 +91,8 @@ type
     procedure DoomMenuAction(const Action: TDoomMenuAction);
     procedure StartRandomGame;
     procedure AutoPlayDemo(Sender: TObject);
+    procedure ClickRecordDemo(Sender: TObject);
+    procedure ClickPlayDemo(Sender: TObject);
     procedure ShowOptions(const Value: Boolean);
     procedure ClickOpenIwad(Sender: TObject);
     procedure ClickAddPwad(Sender: TObject);
@@ -321,6 +323,8 @@ begin
   { Moving saves between computers / the web build (GameSaveBundle). }
   Click('ButtonExportSaves', {$ifdef FPC}@{$endif} ClickExportSaves);
   Click('ButtonImportSaves', {$ifdef FPC}@{$endif} ClickImportSaves);
+  Click('ButtonRecordDemo', {$ifdef FPC}@{$endif} ClickRecordDemo);
+  Click('ButtonPlayDemo', {$ifdef FPC}@{$endif} ClickPlayDemo);
   FWadsLabel := DesignedComponent('WadsLabel') as TCastleLabel;
   FStatus := DesignedComponent('StatusLabel') as TCastleLabel;
   UpdateSkillLabel;
@@ -744,6 +748,7 @@ const
   {$else}
   NoDialogInBrowser = 'In the browser, export and import saves on the Castle DOOM home page ("Your saves")';
   {$endif}
+  NoDemoDialog = 'Demos need the desktop version (file dialogs)';
 
 procedure TViewMenu.ClickExportSaves(Sender: TObject);
 var
@@ -758,6 +763,36 @@ begin
     FWadsLabel.Caption := Format('Exported %d files to %s', [Count, UriDisplay(Url)]);
   end else
     FWadsLabel.Caption := NoDialogInBrowser;
+end;
+
+{ Record demo...: the next game started (New Game, a loaded game) is
+  recorded to the chosen file, level after level. }
+procedure TViewMenu.ClickRecordDemo(Sender: TObject);
+var
+  Url: String;
+begin
+  Url := 'castle-doom.cdemo';
+  if Application.MainWindow.FileDialog('Record a demo of the next game', Url, false,
+      'Castle DOOM demos (*.cdemo)|*.cdemo|All files (*)|*') then
+  begin
+    DemoRecordFile := UriToFilenameSafe(Url);
+    FWadsLabel.Caption := 'The next game is recorded to ' + UriDisplay(Url);
+  end else
+    FWadsLabel.Caption := NoDemoDialog;
+end;
+
+procedure TViewMenu.ClickPlayDemo(Sender: TObject);
+var
+  Url: String;
+begin
+  Url := '';
+  if Application.MainWindow.FileDialog('Play a demo', Url, true,
+      'Castle DOOM demos (*.cdemo)|*.cdemo|All files (*)|*') then
+  begin
+    DemoPlayFile := UriToFilenameSafe(Url);
+    AutoPlayDemo(nil);
+  end else
+    FWadsLabel.Caption := NoDemoDialog;
 end;
 
 procedure TViewMenu.ClickImportSaves(Sender: TObject);

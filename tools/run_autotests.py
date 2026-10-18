@@ -795,6 +795,23 @@ def demo_test(exe, out):
     log, code, _ = run_game(exe, out, 'demo-tampered', 'E1M1', 'W:14,Q', ['--playdemo', bad], config)
     if not re.search(r'Warning: Demo: Out of sync at tic \d+', log):
         problems.append('tampered: no "Out of sync" warning')
+    # Two levels of random maps: E1M1's exit switch, the intermission
+    # (played back by itself), some of E1M2.
+    demo2 = os.path.join(out, 'demo-levels.cdemo')
+    if os.path.exists(demo2):
+        os.remove(demo2)
+    log, code, _ = run_game(exe, out, 'demo-levels-record', 'E1M1',
+                            'W:0.5,X,W:0.5,G:-576:-688,A:270,W:0.3,U,W:3,U,U,U,U,U,W:2,F:1,X,W:0.5,T:90,X,W:1.5,Q',
+                            ['-random', '42', '--record', demo2], config)
+    ends = re.findall(r'Demo: Recorded (E1M\d) of .*: tic (\d+), (.*)', log)
+    if [e[0] for e in ends] != ['E1M1', 'E1M2']:
+        problems.append('levels: recorded %s, expected E1M1 and E1M2' % [e[0] for e in ends])
+    else:
+        log, code, _ = run_game(exe, out, 'demo-levels-playback', 'E1M1', 'W:40,Q',
+                                ['--playdemo', demo2, '--fixed-step'], config)
+        for name, tic, summary in ends:
+            if not re.search(r'Demo: Finished %s of .* at tic %s, in sync: %s' % (name, tic, re.escape(summary)), log):
+                problems.append('levels: %s not in sync at tic %s' % (name, tic))
     return problems, time.time() - start
 
 

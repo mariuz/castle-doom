@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Demos go on through the following levels (the playback skips through
+  the intermissions), and the title screen's Options panel has "Record
+  demo..." and "Play demo..." buttons.
+
 ## v0.36.0 (2026-10-18)
 
 - Random maps get stairs between rooms at different heights, windows

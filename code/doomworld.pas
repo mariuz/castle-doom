@@ -1678,8 +1678,8 @@ end;
 procedure TDoomWorld.StopRecording;
 begin
   if FDemoRec = nil then Exit;
-  FDemoRec.Finish(FTic, SyncHash, DemoSummary);
-  WritelnLog('Demo', 'Recorded %s: tic %d, %s', [FDemoRec.FileName, FTic, DemoSummary]);
+  FDemoRec.EndLevel(FTic, SyncHash, DemoSummary);
+  WritelnLog('Demo', 'Recorded %s of %s: tic %d, %s', [FMap.Name, FDemoRec.FileName, FTic, DemoSummary]);
   FDemoRec := nil;
 end;
 
@@ -1758,10 +1758,10 @@ end;
 procedure TDoomWorld.ReplayEnd(const E: TDemoEvent);
 begin
   if (E.Tics = FTic) and (E.Hash = SyncHash) and not FDemoDesync then
-    WritelnLog('Demo', 'Finished %s at tic %d, in sync: %s', [FDemoPlay.FileName, FTic, DemoSummary])
+    WritelnLog('Demo', 'Finished %s of %s at tic %d, in sync: %s', [FMap.Name, FDemoPlay.FileName, FTic, DemoSummary])
   else
-    WritelnWarning('Demo', 'Finished %s at tic %d (recorded tic %d), out of sync: %s (recorded %s)', [
-      FDemoPlay.FileName, FTic, E.Tics, DemoSummary, E.Text]);
+    WritelnWarning('Demo', 'Finished %s of %s at tic %d (recorded tic %d), out of sync: %s (recorded %s)', [
+      FMap.Name, FDemoPlay.FileName, FTic, E.Tics, DemoSummary, E.Text]);
   FDemoPlay := nil;
 end;
 

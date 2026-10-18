@@ -617,12 +617,15 @@ FILE -warp 1 1` under `xvfb-run`). New Game's last episode is
 "CAMPAIGN" first; autotests `random-menu`, `random-menu-doom2`, the
 `MENU*` autotests honour `-iwad`).
 Demos (`DoomDemo`, the world records and replays itself): `--record
-FILE` records the next level started (from its saved state, reloaded
-so the playback starts alike; log `Demo: Recording ...` and, at the
-level's end or when the view stops, `Demo: Recorded FILE: tic N,
-kills ...`), `--playdemo FILE` loads the demo's WADs and plays it (log
-`Demo: Finished FILE at tic N, in sync: ...`, or `Warning: Demo: Out of
-sync at tic T` from the first wrong checksum: one a second). A demo
+FILE` (or Options -> Record demo...) records the next game started,
+level after level (each from its saved state, reloaded so the playback
+starts alike; log `Demo: Recording ...` and, at each level's end, `Demo:
+Recorded E1M1 of FILE: tic N, kills ...`; a load, a restart after death
+or leaving the game ends it), `--playdemo FILE` (Options -> Play
+demo...) loads the demo's WADs and plays it, going through the
+intermissions by itself (log `Demo: Finished E1M1 of FILE at tic N, in
+sync: ...` per level, or `Warning: Demo: Out of sync at tic T` from the
+first wrong checksum: one a second). A demo
 holds what the world receives (each frame's update with its tic count,
 the player's position, angle and camera, then use, fire, weapon
 changes) and runs on the world's own random numbers, so it plays back
@@ -632,8 +635,9 @@ new input from the view into the world must go through a `TDoomWorld`
 method that records it (like `ReleaseFire`, `StopPush`), and a new
 random draw in the simulation through `TDoomWorld.Random`. The harness
 test `demo` records E1M1 at the real frame rate, replays it under
-`--fixed-step` and checks that a copy with one shot removed is caught;
-unit test `TestDemoFile`.
+`--fixed-step`, checks that a copy with one shot removed is caught, and
+records and replays two levels of random seed 42; unit test
+`TestDemoFile`.
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies
