@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Random maps, stairs, windows and secrets: height changes of 48 to 96
+  between rooms are climbed by stairs (one sector per step, carved like
+  the doors), some closed walls get windows (seen and shot through, not
+  walked through), and every map hides a secret closet or two behind a
+  wall-textured door with a prize. The unit test climbs the stairs and
+  enters the closets; the `random-maps` autotest opens one.
+
 - Recording demos (`DoomDemo`): `--record FILE` / `--playdemo FILE`. The
   player moves through CGE's walk navigation, so a demo stores what the
   world receives rather than key presses: each frame's update (position,
@@ -996,7 +1003,7 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **Random maps, the next steps**: doors and a locked exit door are done (see above); left are more keys (a second lock on later maps, keys in side branches), stairs and lifts for height changes over 24, windows (two-sided lines with a high lower wall), secret closets (sector special 9 behind a door), teleporters, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
+| **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording and playback are done (see above); left are recording across levels (the intermission and the next map), a record / play entry in the menu and the browser (files through the save storage), the demo-script cheats as recorded events, and a ghost of a recording to race. | Easier bug reports; replays. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | M |
 | **Level statistics overlay and best times**: kills / items / secrets / time on the HUD (a key toggles it), and each map's best time per skill kept in `settings.json`, shown on the intermission. | Speedrunning and 100% runs, often asked of ports. | `DoomHud`, `DoomIntermission` | S |
 | **Gamma / brightness setting** (Doom's `usegamma` 0-4, F11) applied in the palette lookup shader. | Dark monitors and bright rooms. | `DoomLighting`, Video options | S |
@@ -1007,10 +1014,9 @@ play.
 
 ## Suggested next three
 
-1. Random maps, the next steps (M, see New features): stairs and lifts,
-   windows and secret closets.
-2. Demos, the rest (M, see New features): recording across levels and a
+1. Demos, the rest (M, see New features): recording across levels and a
    menu entry (also in the browser).
+2. Level statistics overlay and best times (S, see New features).
 3. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
 

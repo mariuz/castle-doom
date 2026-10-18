@@ -15,7 +15,9 @@
   lines back to back). About a third of the openings get a door, a thin
   sector carved out of one room's leaf (CarveDoor), and from the second
   map on a locked door no loop gets around guards the exit, its key in
-  the deepest room before it. Floors, ceilings, lights, textures, nukage and sky
+  the deepest room before it. Bigger height changes get stairs, some
+  closed walls windows, and every map a secret closet or two (all carved
+  the same way, CarveSlab). Floors, ceilings, lights, textures, nukage and sky
   rooms, monsters (more and tougher on later maps, thinned on easy
   skills), weapons, ammo, health and armour come from the same random
   stream; the exit switch (special 11) is in the room farthest from the
@@ -151,7 +153,10 @@ type
     X0, Y0, X1, Y1: Integer;
     Floor, Ceiling, Light, Special: Integer;
     FloorTex, CeilTex, WallTex: String;
-    Sky, Nukage, IsDoor: Boolean;
+    Sky, Nukage, IsDoor, HasStairs: Boolean;
+    { A door's face (its room side's upper wall; the room's wall for a
+      secret door), a step's riser (the lower walls of its sides). }
+    FaceTex, RiserTex: String;
     { Openings from the start room, -1 when it cannot be reached. }
     Depth: Integer;
   end;
@@ -185,6 +190,8 @@ type
     { A door in the opening: its line special (1, or 26 / 27 / 28 locked),
       0 for none. }
     DoorSpecial: Integer;
+    { The floors differ by more than a step: stairs carved into a room. }
+    Stairs: Boolean;
   end;
 
   { Where two sectors meet without a wall: a two-sided line along x = Pos
@@ -192,7 +199,7 @@ type
   TOpening = record
     Front, Back: Integer;
     Vertical: Boolean;
-    Pos, S, E, Special: Integer;
+    Pos, S, E, Special, Flags: Integer;
   end;
 
   TLine = record
@@ -235,7 +242,7 @@ type
     RootCode: Integer;
     Links: array of TLink;
     Openings: array of TOpening;
-    Doors, LockedLink, KeyRoom, KeyType: Integer;
+    Doors, LockedLink, KeyRoom, KeyType, StairCount, Windows, Secrets: Integer;
     { Where to stand to open the locked door (on the key's side). }
     LockX, LockY, LockAngle: Integer;
     DoorTex: String;
@@ -258,10 +265,19 @@ type
     procedure DecorateRooms;
     function CarveLeaf(const Leaf: Integer; const Vertical: Boolean; const Pos: Integer): Integer;
     function FindLeaf(const Sector: Integer; const Vertical: Boolean; const Pos, A, B: Integer): Integer;
+    function CarveSlab(const Room: Integer; const Vertical: Boolean; const Pos, A, B, Depth: Integer;
+      const ExactOk: Boolean; out Inward: Integer): Integer;
+    function AddSector(const From, Leaf: Integer): Integer;
     function CarveDoor(const Li, Room: Integer): Boolean;
+    function CarveStairs(const Li: Integer): Boolean;
+    function CarveStairsInto(const Li, Room: Integer): Boolean;
+    procedure MakeWindows;
+    procedure MakeSecrets;
+    function WallFree(const Room: Integer; const Vertical: Boolean; const Pos, A, B: Integer): Boolean;
     function ReachesExit(const Without: Integer; out Reached: TBooleanArray): Boolean;
     procedure MakeDoors;
-    procedure AddOpeningRec(const Front, Back: Integer; const Vertical: Boolean; const Pos, S, E, Special: Integer);
+    procedure AddOpeningRec(const Front, Back: Integer; const Vertical: Boolean; const Pos, S, E, Special: Integer;
+      const Flags: Integer = 0);
     function Vertex(const X, Y: Integer): Integer;
     function AddSide(const Upper, Lower, Middle: String; const Sector: Integer): Integer;
     procedure AddSeg(const Leaf, V1, V2, Line, Side: Integer);
@@ -269,11 +285,12 @@ type
     procedure AddWall(const Leaf, AX, AY, BX, BY, Special: Integer; const Tex: String);
     procedure AddWallPiece(const Leaf: Integer; const Vertical: Boolean; const Pos, A, B: Integer);
     procedure AddTwoSided(const LeafA, LeafB, Front: Integer; const Vertical: Boolean;
-      const Pos, A, B, Special: Integer);
+      const Pos, A, B, Special, Flags: Integer);
     procedure AddLeafEdge(const LA, LB: Integer; const Vertical: Boolean; const Pos, S, E: Integer);
     procedure BuildLines;
     procedure AddThing(const X, Y, Angle, TypeNum, Flags: Integer);
     procedure MakeSpots;
+    function SpotClear(const Room, X, Y, Margin: Integer): Boolean;
     function TakeSpot(const Room, Radius: Integer; out X, Y: Integer): Boolean;
     procedure AddItem(const Room, TypeNum: Integer);
     function PickMonster: Integer;
@@ -562,7 +579,16 @@ begin
     end;
     OpenLink(L);
     InTree[Into] := true;
-    Rooms[Into].Floor := EnsureRange(Rooms[From].Floor + Steps[RngBelow(R, Length(Steps))], -256, 256);
+    { From the second map on, now and then a bigger height change, taken
+      by stairs (one flight per room, so their slabs never meet). }
+    if (Index >= 2) and not Rooms[From].HasStairs and RngChance(R, 18) then
+    begin
+      Rooms[Into].Floor := EnsureRange(Rooms[From].Floor + (1 - 2 * RngBelow(R, 2)) * 24 * RngRange(R, 2, 4), -256, 256);
+      Links[L].Stairs := true;
+      Rooms[From].HasStairs := true;
+      Rooms[Into].HasStairs := true;
+    end else
+      Rooms[Into].Floor := EnsureRange(Rooms[From].Floor + Steps[RngBelow(R, Length(Steps))], -256, 256);
     Rooms[Into].Depth := Rooms[From].Depth + 1;
     AddFrontier(Into);
   end;
@@ -687,7 +713,8 @@ const
   KeyTypes: array [0..2] of Integer = (5, 6, 13);
   JambTextures: array [0..2] of String = ('DOORBLU', 'DOORYEL', 'DOORRED');
 
-procedure TMapGen.AddOpeningRec(const Front, Back: Integer; const Vertical: Boolean; const Pos, S, E, Special: Integer);
+procedure TMapGen.AddOpeningRec(const Front, Back: Integer; const Vertical: Boolean; const Pos, S, E, Special: Integer;
+  const Flags: Integer);
 begin
   SetLength(Openings, Length(Openings) + 1);
   Openings[High(Openings)].Front := Front;
@@ -697,41 +724,44 @@ begin
   Openings[High(Openings)].S := S;
   Openings[High(Openings)].E := E;
   Openings[High(Openings)].Special := Special;
+  Openings[High(Openings)].Flags := Flags;
 end;
 
-{ A door in link Li's opening, carved out of Room (one of the link's
-  rooms): a DoorDepth-thick slab of Room's leaf along the shared line,
-  cut at the opening's ends; the middle piece becomes a closed door
-  sector (ceiling at its floor) with the door special on both of its
-  long lines, each facing a room, and jambs at its short ends. False when
-  Room's leaf there cannot take it (another door's slab in the way). }
-function TMapGen.CarveDoor(const Li, Room: Integer): Boolean;
+{ A Depth-thick slab of Room's leaf along the line x = Pos (Vertical) or
+  y = Pos, cut at A and B, on Room's side of the line (Inward: +1 when the
+  room lies at greater coordinates). ExactOk: a leaf exactly Depth thick
+  there (an earlier slab of the same wall) is used as it is. -1 when the
+  leaf there cannot take it. }
+function TMapGen.CarveSlab(const Room: Integer; const Vertical: Boolean; const Pos, A, B, Depth: Integer;
+  const ExactOk: Boolean; out Inward: Integer): Integer;
 var
-  L: TLink;
-  F, Slab, Thick, Inner, D, Other, S0, S1, Color: Integer;
+  F, Slab, Thick, S0, S1: Integer;
   RoomIsLow: Boolean;
 begin
-  Result := false;
-  L := Links[Li];
-  RoomIsLow := Room = L.A;
-  if RoomIsLow then Other := L.B else Other := L.A;
-  F := FindLeaf(Room, L.Vertical, L.Pos, L.O1, L.O2);
+  Result := -1;
+  Inward := 0;
+  F := FindLeaf(Room, Vertical, Pos, A, B);
   if F < 0 then Exit;
-  if L.Vertical then
-    Thick := Leaves[F].X1 - Leaves[F].X0
-  else
-    Thick := Leaves[F].Y1 - Leaves[F].Y0;
-  if RoomIsLow then Inner := L.Pos - DoorDepth else Inner := L.Pos + DoorDepth;
-  if Thick = DoorDepth then
-    Slab := F
-  else if Thick >= DoorDepth + 64 then
+  if Vertical then
   begin
-    Slab := CarveLeaf(F, L.Vertical, Inner);
+    Thick := Leaves[F].X1 - Leaves[F].X0;
+    RoomIsLow := Leaves[F].X1 = Pos;
+  end else
+  begin
+    Thick := Leaves[F].Y1 - Leaves[F].Y0;
+    RoomIsLow := Leaves[F].Y1 = Pos;
+  end;
+  if RoomIsLow then Inward := -1 else Inward := 1;
+  if ExactOk and (Thick = Depth) then
+    Slab := F
+  else if Thick >= Depth + 64 then
+  begin
+    Slab := CarveLeaf(F, Vertical, Pos + Inward * Depth);
     { CarveLeaf leaves the west / south part in F. }
     if not RoomIsLow then Slab := F;
   end else
     Exit;
-  if L.Vertical then
+  if Vertical then
   begin
     S0 := Leaves[Slab].Y0;
     S1 := Leaves[Slab].Y1;
@@ -740,32 +770,243 @@ begin
     S0 := Leaves[Slab].X0;
     S1 := Leaves[Slab].X1;
   end;
-  if L.O1 > S0 then Slab := CarveLeaf(Slab, not L.Vertical, L.O1);
-  if L.O2 < S1 then CarveLeaf(Slab, not L.Vertical, L.O2);
+  if A > S0 then Slab := CarveLeaf(Slab, not Vertical, A);
+  if B < S1 then CarveLeaf(Slab, not Vertical, B);
+  Result := Slab;
+end;
+
+{ A new sector like room From (no sky, nukage or light effect), for Leaf. }
+function TMapGen.AddSector(const From, Leaf: Integer): Integer;
+begin
   SetLength(Rooms, Length(Rooms) + 1);
-  D := High(Rooms);
-  Rooms[D] := Rooms[Room];
+  Result := High(Rooms);
+  Rooms[Result] := Rooms[From];
+  Rooms[Result].IsDoor := false;
+  Rooms[Result].HasStairs := false;
+  Rooms[Result].Sky := false;
+  Rooms[Result].Nukage := false;
+  Rooms[Result].Special := 0;
+  Rooms[Result].Depth := -1;
+  Rooms[Result].FaceTex := '';
+  Rooms[Result].RiserTex := '';
+  if Rooms[From].Sky or Rooms[From].Nukage then
+  begin
+    Rooms[Result].CeilTex := Pick(['FLAT20', 'CEIL5_1']);
+    Rooms[Result].FloorTex := Pick(['FLAT20', 'FLOOR4_8']);
+  end;
+  Rooms[Result].X0 := Leaves[Leaf].X0;
+  Rooms[Result].Y0 := Leaves[Leaf].Y0;
+  Rooms[Result].X1 := Leaves[Leaf].X1;
+  Rooms[Result].Y1 := Leaves[Leaf].Y1;
+  Leaves[Leaf].Sector := Result;
+end;
+
+{ A door in link Li's opening, carved out of Room (one of the link's
+  rooms): a DoorDepth-thick slab along the shared line, its middle piece
+  a closed door sector (ceiling at its floor) with the door special on
+  both of its long lines, each facing a room, and jambs at its short
+  ends. False when Room's leaf there cannot take it. }
+function TMapGen.CarveDoor(const Li, Room: Integer): Boolean;
+var
+  L: TLink;
+  Slab, Inward, D, Other, Color: Integer;
+begin
+  Result := false;
+  L := Links[Li];
+  if Room = L.A then Other := L.B else Other := L.A;
+  Slab := CarveSlab(Room, L.Vertical, L.Pos, L.O1, L.O2, DoorDepth, true, Inward);
+  if Slab < 0 then Exit;
+  D := AddSector(Room, Slab);
   Rooms[D].IsDoor := true;
-  Rooms[D].Sky := false;
-  Rooms[D].Nukage := false;
-  Rooms[D].Special := 0;
   Rooms[D].Ceiling := Rooms[D].Floor;
   Rooms[D].FloorTex := Pick(['FLAT20', 'FLOOR4_8']);
   Rooms[D].CeilTex := Pick(['FLAT20', 'CEIL5_1']);
-  Rooms[D].Depth := -1;
-  Rooms[D].X0 := Leaves[Slab].X0;
-  Rooms[D].Y0 := Leaves[Slab].Y0;
-  Rooms[D].X1 := Leaves[Slab].X1;
-  Rooms[D].Y1 := Leaves[Slab].Y1;
+  Rooms[D].FaceTex := DoorTex;
   Rooms[D].WallTex := Pick(['DOORTRAK']);
   for Color := 0 to 2 do
     if L.DoorSpecial = LockedSpecials[Color] then
       Rooms[D].WallTex := Pick([JambTextures[Color], 'DOORTRAK']);
-  Leaves[Slab].Sector := D;
   AddOpeningRec(Other, D, L.Vertical, L.Pos, L.O1, L.O2, L.DoorSpecial);
-  AddOpeningRec(Room, D, L.Vertical, Inner, L.O1, L.O2, L.DoorSpecial);
+  AddOpeningRec(Room, D, L.Vertical, L.Pos + Inward * DoorDepth, L.O1, L.O2, L.DoorSpecial);
   Inc(Doors);
   Result := true;
+end;
+
+{ Stairs for link Li (floors more than a step apart), carved into one of
+  its rooms (not the start room: the player stands in its middle):
+  24-unit deep steps from the other room's floor (at the shared line) to
+  this room's, each at most 20 high, walled at their sides. }
+function TMapGen.CarveStairsInto(const Li, Room: Integer): Boolean;
+const
+  StepDepth = 24;
+var
+  L: TLink;
+  Other, Diff, N, K, Slab, Inward, Cur, NewLeaf, S: Integer;
+  Strips, Sectors: array of Integer;
+  Riser: String;
+begin
+  Result := false;
+  if Room = StartRoom then Exit;
+  L := Links[Li];
+  if Room = L.A then Other := L.B else Other := L.A;
+  Diff := Rooms[Room].Floor - Rooms[Other].Floor;
+  N := Max(1, (Abs(Diff) + 19) div 20);
+  Slab := CarveSlab(Room, L.Vertical, L.Pos, L.O1, L.O2, N * StepDepth, false, Inward);
+  if Slab < 0 then Exit;
+  { The steps from the shared line inwards. }
+  SetLength(Strips, N);
+  Cur := Slab;
+  for K := 1 to N - 1 do
+  begin
+    NewLeaf := CarveLeaf(Cur, L.Vertical, L.Pos + Inward * StepDepth * K);
+    if Inward > 0 then
+    begin
+      Strips[K - 1] := Cur;
+      Cur := NewLeaf;
+    end else
+      Strips[K - 1] := NewLeaf;
+  end;
+  Strips[N - 1] := Cur;
+  Riser := Pick(['STEP1', 'STEP2']);
+  SetLength(Sectors, N);
+  for K := 0 to N - 1 do
+  begin
+    S := AddSector(Room, Strips[K]);
+    Rooms[S].Floor := Rooms[Other].Floor + (Diff * (K + 1)) div (N + 1);
+    Rooms[S].Ceiling := Max(Rooms[Room].Ceiling, Rooms[S].Floor + 96);
+    Rooms[S].RiserTex := Riser;
+    Sectors[K] := S;
+  end;
+  AddOpeningRec(Other, Sectors[0], L.Vertical, L.Pos, L.O1, L.O2, 0);
+  for K := 0 to N - 2 do
+    AddOpeningRec(Sectors[K], Sectors[K + 1], L.Vertical, L.Pos + Inward * StepDepth * (K + 1), L.O1, L.O2, 0);
+  AddOpeningRec(Room, Sectors[N - 1], L.Vertical, L.Pos + Inward * StepDepth * N, L.O1, L.O2, 0);
+  Inc(StairCount);
+  Result := true;
+end;
+
+function TMapGen.CarveStairs(const Li: Integer): Boolean;
+begin
+  if RngChance(R, 50) then
+    Result := CarveStairsInto(Li, Links[Li].A) or CarveStairsInto(Li, Links[Li].B)
+  else
+    Result := CarveStairsInto(Li, Links[Li].B) or CarveStairsInto(Li, Links[Li].A);
+end;
+
+{ No opening of Room on the line touches A..B (16 units around). }
+function TMapGen.WallFree(const Room: Integer; const Vertical: Boolean; const Pos, A, B: Integer): Boolean;
+var
+  I: Integer;
+begin
+  for I := 0 to High(Openings) do
+    if (Openings[I].Vertical = Vertical) and (Openings[I].Pos = Pos) and
+       ((Openings[I].Front = Room) or (Openings[I].Back = Room)) and
+       (Openings[I].S < B + 16) and (Openings[I].E > A - 16) then
+      Exit(false);
+  Result := true;
+end;
+
+{ Windows in some walls between reached rooms: a 16-unit sector with its
+  floor 40 above both rooms' and its ceiling below theirs, seen and shot
+  through, not walked through. }
+procedure TMapGen.MakeWindows;
+var
+  I, Width, O1, O2, Floor, Ceil, Room, Slab, Inward, W, Other: Integer;
+  L: TLink;
+begin
+  Windows := 0;
+  for I := 0 to High(Links) do
+  begin
+    L := Links[I];
+    if L.Open or (L.E - L.S < 128) or (Rooms[L.A].Depth < 0) or (Rooms[L.B].Depth < 0) or
+       not RngChance(R, 15) then
+      Continue;
+    Floor := Max(Rooms[L.A].Floor, Rooms[L.B].Floor) + 40;
+    Ceil := Min(Rooms[L.A].Ceiling, Rooms[L.B].Ceiling) - 16;
+    if Ceil - Floor < 32 then Continue;
+    Width := Min(RngRange(R, 2, 4) * Grid, L.E - L.S - 32);
+    O1 := L.S + (L.E - L.S - Width) div 2;
+    O2 := O1 + Width;
+    if RngChance(R, 50) then Room := L.A else Room := L.B;
+    if Room = L.A then Other := L.B else Other := L.A;
+    Slab := CarveSlab(Room, L.Vertical, L.Pos, O1, O2, DoorDepth, true, Inward);
+    if Slab < 0 then Continue;
+    W := AddSector(Room, Slab);
+    Rooms[W].Floor := Floor;
+    Rooms[W].Ceiling := Ceil;
+    AddOpeningRec(Other, W, L.Vertical, L.Pos, O1, O2, 0);
+    AddOpeningRec(Room, W, L.Vertical, L.Pos + Inward * DoorDepth, O1, O2, 0);
+    Inc(Windows);
+  end;
+end;
+
+{ Secret closets: in a reached room's plain wall, a hidden door (the
+  wall's own texture, secret on the automap) to a 64-unit closet (sector
+  special 9) with a prize. One on the first maps, two later. }
+procedure TMapGen.MakeSecrets;
+const
+  ML_SECRET = 32;
+var
+  Wanted, Tries, Room, Side, Pos, Mid, A, B, Slab, Inward, Closet, DoorLeaf, D, C, X, Y, Prize: Integer;
+  Vertical: Boolean;
+begin
+  Secrets := 0;
+  Wanted := 1 + Ord(Index >= 4);
+  Tries := 0;
+  while (Secrets < Wanted) and (Tries < 40) do
+  begin
+    Inc(Tries);
+    Room := RngBelow(R, Length(Rooms));
+    if (Rooms[Room].Depth <= 0) or (Room = ExitRoom) or Rooms[Room].IsDoor then Continue;
+    Side := RngBelow(R, 4);
+    Vertical := Side < 2;
+    case Side of
+      0: Pos := Rooms[Room].X0;
+      1: Pos := Rooms[Room].X1;
+      2: Pos := Rooms[Room].Y0;
+      else Pos := Rooms[Room].Y1;
+    end;
+    if Vertical then
+      Mid := (Rooms[Room].Y0 + Rooms[Room].Y1) div 2
+    else
+      Mid := (Rooms[Room].X0 + Rooms[Room].X1) div 2;
+    A := (Mid div Grid) * Grid - 32;
+    B := A + 64;
+    if not WallFree(Room, Vertical, Pos, A, B) then Continue;
+    Slab := CarveSlab(Room, Vertical, Pos, A, B, 80, false, Inward);
+    if Slab < 0 then Continue;
+    { The wall's side of the slab is the closet, the room's side its door. }
+    DoorLeaf := CarveLeaf(Slab, Vertical, Pos + Inward * 64);
+    if Inward > 0 then
+      Closet := Slab
+    else
+    begin
+      Closet := DoorLeaf;
+      DoorLeaf := Slab;
+    end;
+    C := AddSector(Room, Closet);
+    Rooms[C].Ceiling := Rooms[C].Floor + 96;
+    Rooms[C].Light := Max(96, Rooms[Room].Light - 48);
+    Rooms[C].Special := 9;
+    D := AddSector(Room, DoorLeaf);
+    Rooms[D].IsDoor := true;
+    Rooms[D].Ceiling := Rooms[D].Floor;
+    Rooms[D].FaceTex := Rooms[Room].WallTex;
+    Rooms[D].WallTex := Pick(['DOORTRAK']);
+    AddOpeningRec(Room, D, Vertical, Pos + Inward * 80, A, B, 1, ML_SECRET);
+    AddOpeningRec(C, D, Vertical, Pos + Inward * 64, A, B, 1);
+    X := (Leaves[Closet].X0 + Leaves[Closet].X1) div 2;
+    Y := (Leaves[Closet].Y0 + Leaves[Closet].Y1) div 2;
+    case RngBelow(R, 4) of
+      0: Prize := 2013; { soulsphere }
+      1: Prize := 2019; { blue armour }
+      2: Prize := 8;    { backpack }
+      else if Index >= 3 then Prize := 2046 else Prize := 2049; { rockets / shells }
+    end;
+    AddThing(X, Y, 0, Prize, 7);
+    Inc(Items);
+    Inc(Secrets);
+  end;
 end;
 
 { Whether the exit room can be reached from the start through open links
@@ -806,6 +1047,10 @@ begin
   KeyRoom := -1;
   KeyType := 0;
   DoorTex := Pick(['BIGDOOR2', 'BIGDOOR1', 'BIGDOOR4']);
+  StairCount := 0;
+  for I := 0 to High(Links) do
+    if Links[I].Stairs and not CarveStairs(I) then
+      Links[I].Stairs := false;
   if (Index >= 2) and (ExitRoom <> StartRoom) then
   begin
     { Back along a shortest way from the exit: the first opening there
@@ -830,7 +1075,7 @@ begin
           end;
         end;
       if Li < 0 then Break;
-      if not ReachesExit(Li, Reached) then
+      if (not Links[Li].Stairs) and not ReachesExit(Li, Reached) then
       begin
         K := StartRoom;
         for I := 0 to High(Rooms) do
@@ -865,14 +1110,14 @@ begin
     end;
   end;
   for I := 0 to High(Links) do
-    if Links[I].Open and (Links[I].DoorSpecial = 0) and RngChance(R, 35) then
+    if Links[I].Open and (Links[I].DoorSpecial = 0) and not Links[I].Stairs and RngChance(R, 35) then
     begin
       Links[I].DoorSpecial := 1;
       if not (CarveDoor(I, Links[I].A) or CarveDoor(I, Links[I].B)) then
         Links[I].DoorSpecial := 0;
     end;
   for I := 0 to High(Links) do
-    if Links[I].Open and (Links[I].DoorSpecial = 0) then
+    if Links[I].Open and (Links[I].DoorSpecial = 0) and not Links[I].Stairs then
       AddOpeningRec(Links[I].A, Links[I].B, Links[I].Vertical, Links[I].Pos, Links[I].O1, Links[I].O2, 0);
 end;
 
@@ -981,7 +1226,17 @@ end;
 { A two-sided line between two leaves, Front's sector in front (an
   invisible one inside a sector when both leaves are of the same). }
 procedure TMapGen.AddTwoSided(const LeafA, LeafB, Front: Integer; const Vertical: Boolean;
-  const Pos, A, B, Special: Integer);
+  const Pos, A, B, Special, Flags: Integer);
+
+  { The lower walls of a sector's sides: a step's riser, else its wall. }
+  function LowerTex(const Sec: Integer): String;
+  begin
+    if Rooms[Sec].RiserTex <> '' then
+      Result := Rooms[Sec].RiserTex
+    else
+      Result := Rooms[Sec].WallTex;
+  end;
+
 var
   AX, AY, BX, BY, V1, V2, FrontLeaf, BackLeaf, FS, BS: Integer;
 begin
@@ -1016,7 +1271,7 @@ begin
   SetLength(Lines, Length(Lines) + 1);
   Lines[High(Lines)].V1 := V1;
   Lines[High(Lines)].V2 := V2;
-  Lines[High(Lines)].Flags := ML_TWOSIDED;
+  Lines[High(Lines)].Flags := ML_TWOSIDED or Flags;
   Lines[High(Lines)].Special := Special;
   if FS = BS then
   begin
@@ -1026,12 +1281,12 @@ begin
   if Rooms[BS].IsDoor then
   begin
     { The door's face is the room side's upper wall. }
-    Lines[High(Lines)].Front := AddSide(DoorTex, Rooms[FS].WallTex, '-', FS);
-    Lines[High(Lines)].Back := AddSide(Rooms[BS].WallTex, Rooms[BS].WallTex, '-', BS);
+    Lines[High(Lines)].Front := AddSide(Rooms[BS].FaceTex, LowerTex(FS), '-', FS);
+    Lines[High(Lines)].Back := AddSide(Rooms[BS].WallTex, LowerTex(BS), '-', BS);
   end else
   begin
-    Lines[High(Lines)].Front := AddSide(Rooms[FS].WallTex, Rooms[FS].WallTex, '-', FS);
-    Lines[High(Lines)].Back := AddSide(Rooms[BS].WallTex, Rooms[BS].WallTex, '-', BS);
+    Lines[High(Lines)].Front := AddSide(Rooms[FS].WallTex, LowerTex(FS), '-', FS);
+    Lines[High(Lines)].Back := AddSide(Rooms[BS].WallTex, LowerTex(BS), '-', BS);
   end;
   AddSeg(FrontLeaf, V1, V2, High(Lines), 0);
   AddSeg(BackLeaf, V2, V1, High(Lines), 1);
@@ -1048,7 +1303,7 @@ begin
   SB := Leaves[LB].Sector;
   if SA = SB then
   begin
-    AddTwoSided(LA, LB, SA, Vertical, Pos, S, E, 0);
+    AddTwoSided(LA, LB, SA, Vertical, Pos, S, E, 0, 0);
     Exit;
   end;
   P := S;
@@ -1072,7 +1327,8 @@ begin
     B := Min(E, Openings[Best].E);
     AddWallPiece(LA, Vertical, Pos, P, A);
     AddWallPiece(LB, Vertical, Pos, P, A);
-    AddTwoSided(LA, LB, Openings[Best].Front, Vertical, Pos, A, B, Openings[Best].Special);
+    AddTwoSided(LA, LB, Openings[Best].Front, Vertical, Pos, A, B, Openings[Best].Special,
+      Openings[Best].Flags);
     P := B;
   end;
 end;
@@ -1206,6 +1462,20 @@ begin
   end;
 end;
 
+{ No leaf of another sector (stairs, a closet, a door) within Margin of
+  X, Y. }
+function TMapGen.SpotClear(const Room, X, Y, Margin: Integer): Boolean;
+var
+  I: Integer;
+begin
+  for I := 0 to High(Leaves) do
+    if (Leaves[I].Sector <> Room) and
+       (Leaves[I].X0 < X + Margin) and (Leaves[I].X1 > X - Margin) and
+       (Leaves[I].Y0 < Y + Margin) and (Leaves[I].Y1 > Y - Margin) then
+      Exit(false);
+  Result := true;
+end;
+
 { A free spot of Room at least Radius + 8 from its walls; the spots
   within Radius + 24 of it are taken with it. False when none is left. }
 function TMapGen.TakeSpot(const Room, Radius: Integer; out X, Y: Integer): Boolean;
@@ -1219,7 +1489,8 @@ begin
   for I := 0 to High(Spots) do
     if (Spots[I].Room = Room) and not Spots[I].Used and
        (Spots[I].X - Rooms[Room].X0 >= Radius + 8) and (Rooms[Room].X1 - Spots[I].X >= Radius + 8) and
-       (Spots[I].Y - Rooms[Room].Y0 >= Radius + 8) and (Rooms[Room].Y1 - Spots[I].Y >= Radius + 8) then
+       (Spots[I].Y - Rooms[Room].Y0 >= Radius + 8) and (Rooms[Room].Y1 - Spots[I].Y >= Radius + 8) and
+       SpotClear(Room, Spots[I].X, Spots[I].Y, Radius + 8) then
     begin
       SetLength(FreeSpots, Length(FreeSpots) + 1);
       FreeSpots[High(FreeSpots)] := I;
@@ -1392,6 +1663,8 @@ begin
   DecorateRooms;
   RoomCount := Length(Rooms);
   MakeDoors;
+  MakeWindows;
+  MakeSecrets;
   BuildLines;
   PlaceThings;
   Name := Adjectives[RngBelow(R, Length(Adjectives))] + ' ' + Nouns[RngBelow(R, Length(Nouns))];
@@ -1406,9 +1679,11 @@ begin
   if LockedLink >= 0 then
     Lock := Format('locked door %d at %d %d facing %d with its key (type %d) in room %d', [
       Links[LockedLink].DoorSpecial, LockX, LockY, LockAngle, KeyType, KeyRoom]);
-  Summary := Format('"%s": %d x %d, %d rooms (%d sky, %d nukage, %d unreached), %d openings, %d doors, %s, ' +
+  Summary := Format('"%s": %d x %d, %d rooms (%d sky, %d nukage, %d unreached), %d openings, %d doors, ' +
+    '%d stairs, %d windows, %d secrets, %s, ' +
     '%d monsters, %d items, start room %d, exit room %d (%d rooms away), switch line %d at %d %d facing %d', [
-    Name, RootX1 - RootX0, RootY1 - RootY0, RoomCount, Sky, Nukage, Unreached, OpenLinks, Doors, Lock,
+    Name, RootX1 - RootX0, RootY1 - RootY0, RoomCount, Sky, Nukage, Unreached, OpenLinks, Doors,
+    StairCount, Windows, Secrets, Lock,
     Monsters, Items, StartRoom, ExitRoom, Rooms[ExitRoom].Depth, ExitLine, ExitX, ExitY, ExitAngle]);
 end;
 

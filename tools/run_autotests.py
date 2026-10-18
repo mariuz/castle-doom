@@ -367,13 +367,15 @@ TESTS = [
     # New Game -> RANDOM MAPS on both IWADs.
     ('random-maps', 'E1M1',
      'Y,W:0.5,S,SAVE:1,G:-576:-688,A:270,W:0.3,S,U,W:3,U,U,U,U,U,W:2,'
-     'G:480:104,A:90,W:0.3,U,W:0.5,K,U,W:1.5,S,SAVE:2,LOAD:1,W:0.5,Q',
-     [r'Random: seed 42: E1M1 "Broken Depot": 1472 x 1472, 24 rooms .* 12 doors, no locked door, .*'
-      r'switch line 1 at -576 -688 facing 270',
-      r'Random: seed 42: E1M2 "Twisted Citadel": .* locked door 26 at 480 104 facing 90 with its key \(type 5\)',
-      r'MapInfo: UMAPINFO: 8 maps', r'Message: R1: Broken Depot', r'Map: E1M1: VANILLA nodes, \d+ subsector polygons, total area 2166784',
-      r'Intermission: E1M1: exit script', r'Load: E1M2: map parsed', r'Message: R2: Twisted Citadel',
-      r'Message: Blue key needed for this door', r'Save: Loading .*save1\.json'],
+     'G:592:392,A:90,W:0.3,U,W:0.5,K,U,W:1.5,S,G:64:-624,A:270,W:0.3,U,W:1.5,F:0.8,W:0.3,S,'
+     'SAVE:2,LOAD:1,W:0.5,Q',
+     [r'Random: seed 42: E1M1 "Iron Refinery": 1472 x 1472, 24 rooms .* 11 doors, 0 stairs, 0 windows, 1 secrets, '
+      r'no locked door, .*switch line 1 at -576 -688 facing 270',
+      r'Random: seed 42: E1M2 "Black Refinery": .* 5 stairs, 4 windows, 1 secrets, '
+      r'locked door 26 at 592 392 facing 90 with its key \(type 5\)',
+      r'MapInfo: UMAPINFO: 8 maps', r'Message: R1: Iron Refinery', r'Map: E1M1: VANILLA nodes, \d+ subsector polygons, total area 2166784',
+      r'Intermission: E1M1: exit script', r'Load: E1M2: map parsed', r'Message: R2: Black Refinery',
+      r'Message: Blue key needed for this door', r'Message: A secret is revealed!', r'Save: Loading .*save1\.json'],
      ['-random', '42', '--fixed-step'], lambda config: check_random(config)),
     ('random-menu', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: E1M1', r'Load: E1M1: map parsed', r'Message: R1: '],
      ['--menukeys', 'E,D,D,D,D,E,E'], None),
@@ -642,7 +644,7 @@ GOLDEN = [
     'translucent-things_1.png', 'transfers_1.png', 'touch-controls_1.png',
     'controls-pad_menucontrolspad.png', 'deep-water_1.png', 'deep-water_2.png',
     'mapinfo_1.png', 'mapinfo_2.png', 'sector-skies_1.png', 'sector-skies_2.png',
-    'random-maps_1.png', 'random-maps_2.png', 'random-maps_3.png',
+    'random-maps_1.png', 'random-maps_2.png', 'random-maps_3.png', 'random-maps_4.png',
 ]
 
 

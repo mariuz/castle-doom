@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Random maps get stairs between rooms at different heights, windows
+  you can see and shoot through, and a secret closet or two behind a
+  wall that opens (with a prize inside).
+
 ## v0.35.0 (2026-10-18)
 
 - Demos: `--record FILE` records a level as you play it and

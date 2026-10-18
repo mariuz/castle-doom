@@ -291,7 +291,19 @@ leaves: invisible inside one sector, two-sided where an opening record
 facing the room so it can be used) says so, back-to-back walls
 elsewhere (the door's jambs). The locked door goes on the first opening
 back from the exit that no loop gets around (`ReachesExit`), with its
-key in the deepest room still reachable without it. The random stream is a xorshift32 seeded from the seed and the
+key in the deepest room still reachable without it.
+
+Stairs, windows and secret closets reuse the same carving (`CarveSlab`:
+a slab of a room's leaf along a wall, cut at the interval's ends). A
+tree link with a height change of 48 to 96 gets stairs: the slab is
+24 units per step deep and cut into one sector per step, at most 20
+units apart, carved into the room that is not the start (one flight per
+room, so two slabs never meet). A window is a 16-unit sector in a
+closed wall with its floor 40 above both rooms. A secret closet is an
+80-unit slab in a plain wall split into a 64-unit closet (sector
+special 9, a prize in it) and a door whose face is the wall's own
+texture, its room-side line flagged secret (32). Thing spots skip any
+leaf of another sector inside their room (`SpotClear`). The random stream is a xorshift32 seeded from the seed and the
 map number, independent of `System.Random`.
 
 ---

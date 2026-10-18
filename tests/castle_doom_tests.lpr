@@ -1041,7 +1041,8 @@ end;
   MAP01..MAP08 over Phase 2) that load with their own BSP: the subsector
   polygons cover the whole rectangle, every thing and the exit switch can
   be walked to from the player start (floor steps of 24 at most, 56 units
-  of headroom, doors opened), the locked door cuts the exit off while its
+  of headroom, doors opened, stairs climbed, secret closets entered), the
+  locked door cuts the exit off while its
   key stays reachable, the same seed gives the same bytes and UMAPINFO
   names the maps. }
 procedure TTestMap.TestRandomMaps;
@@ -1050,7 +1051,7 @@ procedure TTestMap.TestRandomMaps;
   var
     W: TDoomWad;
     M: TDoomMap;
-    I, J, K, Start, Exits, Starts, ExitSector, Locked, DoorLines: Integer;
+    I, J, K, Start, Exits, Starts, ExitSector, Locked, DoorLines, SecretSectors, Risers: Integer;
     Area, A: Double;
     All, Unlocked: TBooleanArray;
     Ceil: array of Single;
@@ -1096,6 +1097,8 @@ procedure TTestMap.TestRandomMaps;
   begin
     Locked := 0;
     DoorLines := 0;
+    SecretSectors := 0;
+    Risers := 0;
     W := TDoomWad.Create(WadUrl(Iwad));
     try
       W.AddFile('random:/1234');
@@ -1141,6 +1144,10 @@ procedure TTestMap.TestRandomMaps;
               Inc(Starts);
             end;
           AssertEquals('one player start', 1, Starts);
+          for J := 0 to High(M.Sectors) do
+            if M.Sectors[J].Special = 9 then Inc(SecretSectors);
+          for J := 0 to High(M.Sidedefs) do
+            if Copy(M.Sidedefs[J].LowerTex, 1, 4) = 'STEP' then Inc(Risers);
           All := Reach(true);
           Unlocked := Reach(false);
           for J := 0 to High(M.Things) do
@@ -1174,6 +1181,9 @@ procedure TTestMap.TestRandomMaps;
         opening on the way), plain doors everywhere. }
       AssertTrue('locked doors on most maps', Locked >= RandomMapCount div 2);
       AssertTrue('doors', DoorLines >= 2 * RandomMapCount);
+      { A secret closet on every map, stairs on some. }
+      AssertTrue('secrets', SecretSectors >= RandomMapCount);
+      AssertTrue('stairs', Risers > 0);
       LoadMapInfo(W);
       AssertTrue('UMAPINFO names the maps', (MapInfoFor(RandomMapName(1, IsDoom2)) <> nil) and
         (MapInfoFor(RandomMapName(1, IsDoom2)).LevelName <> ''));

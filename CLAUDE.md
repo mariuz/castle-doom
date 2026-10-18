@@ -594,11 +594,16 @@ Random maps (`DoomRandomMap`): `-random SEED` (or `-file random:/SEED`)
 generates eight maps over the IWAD's E1M1..E1M8 / MAP01..MAP08; the
 log prints one `Random: seed N: E1M1 "Name": ...` line per map with
 its rooms, doors, monsters and where to stand for the exit switch
-(`switch line L at X Y facing A`: `G:X:Y,A:A,U` exits) and, from the
-second map on, for the locked door (`locked door 26 at X Y facing A`;
-`K` gives the keys). Seed 42's E1M1 is "Broken Depot" (24 rooms, 12
-doors, switch at -576 -688 facing 270), its E1M2 has a blue door at 480
-104 facing 90 (autotest `random-maps` with goldens). A generator change moves every seed's
+(`switch line L at X Y facing A`: `G:X:Y,A:A,U` exits), its stairs,
+windows and secret closets and, from the second map on, where to stand
+for the locked door (`locked door 26 at X Y facing A`; `K` gives the
+keys). Seed 42's E1M1 is "Iron Refinery" (24 rooms, 11 doors, switch at
+-576 -688 facing 270), its E1M2 "Black Refinery" has a blue door at 592
+392 facing 90, stairs at `G:-768:-192,A:0` and a secret closet behind
+the wall at `G:64:-624,A:270` (`U` opens it; autotest `random-maps` with
+goldens). To find such spots on another seed, write the PWAD with
+`--random-wad` and read its LINEDEFS / SIDEDEFS (Python `struct`): the
+secret door's line has flag 32, stairs have `STEP` lower textures. A generator change moves every seed's
 maps, so the autotest's expected line and goldens change with it
 (regenerate them, and check the maps in the unit test
 `TestRandomMaps`: full polygon area, all things reachable through
