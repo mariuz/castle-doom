@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.39.0 (2026-10-18)
 
 - Gamma correction: `F11` steps through Doom's five brightness levels
   (also Options -> Brightness in the menu); the choice is remembered.
