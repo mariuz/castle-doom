@@ -151,6 +151,11 @@ TESTS = [
      check_dehacked),
     # The thing under the crosshair selected in the inspector, and CGE's
     # profiler with the map load stages (--profile).
+    # Debug drawing (GameDebugDraw): every wireframe over E1M1, then
+    # without the subsectors.
+    ('debug-draw', 'E1M1', 'Y,W:0.3,P:3001:250,X,T:20,X,T:-40,DEBUG:all,W:0.2,S,DEBUG:subsectors,W:0.1,S,Q',
+     [r'Debug: subsectors shown \(2817 segments\), blocking shown \(1094 segments\), actors shown, shots shown',
+      r'Debug: subsectors hidden'], ['--fixed-step'], None),
     ('select-thing', 'E1M1', 'Y,P:3001:300,W:0.5,SELECT,W:0.5,S,PROFILE,Q',
      [r'Select: TROO_\d+: TROO, state \w+, 60 health, action \w*, \d+ tics left, target player',
       r'- Load E1M1 \(DoomWorld\)', r'- Build geometry', r'- Spawn things'],
@@ -592,6 +597,7 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'debug-draw_1.png', 'debug-draw_2.png',
     'wiscript-vanilla_1.png', 'wiscript-vanilla_2.png', 'wiscript_1.png', 'wiscript_2.png',
     'inspector_1.png', 'gamepad-bindings_1.png', 'touch-controls_2.png', 'umapinfo-episode_1.png',
     'mapinfo-episode_1.png', 'scrollers_1.png',

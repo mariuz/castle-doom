@@ -10,7 +10,7 @@ uses Classes, SysUtils, FpJson,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages, CastleGLImages,
   DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
   DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu, DoomWorldStatus, GameSettings,
-  GameTouch;
+  GameTouch, GameDebugDraw;
 
 type
   TViewPlay = class(TCastleView)
@@ -90,6 +90,8 @@ type
     { The engine's inspector (F8) is shown; mouse look was on when it
       opened (it is off while the inspector's panels take the mouse). }
     FInspectorShown, FInspectorFreedMouse: Boolean;
+    { Wireframes of the simulation (GameDebugDraw), under Items. }
+    FDebugDraw: TDebugDraw;
     FSlotMenuBack: TCastleRectangleControl;
     FSlotScreen: TDoomMenuScreen;
     FSlotTicAccum: Single;
@@ -393,6 +395,8 @@ begin
   { A PWAD's UMAPINFO: level names, music, sky, par times, progression. }
   LoadMapInfo(Wad);
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
+  FDebugDraw := TDebugDraw.Create(FreeAtStop);
+  FViewport.Items.Add(FDebugDraw);
   FWorld.Skill := Skill;
   FWorldStatus.World := FWorld;
   FreeAndNil(FStrings);
@@ -731,6 +735,14 @@ begin
     end;
     if K <> keyNone then
       Press(InputKey(TVector2.Zero, K, '', []));
+  end
+  else if Cmd = 'DEBUG' then
+  begin
+    { DEBUG:subsectors|blocking|actors|shots|all|off: the wireframes. }
+    if FWorld.Map <> nil then
+      FDebugDraw.BuildMap(FWorld.Map);
+    FDebugDraw.Toggle(Rest);
+    FDebugDraw.UpdateWorld(FWorld);
   end
   else if (Cmd = 'MOUSE') or (Cmd = 'MBIND') then
     DemoMouse(Cmd, Rest)
@@ -2152,6 +2164,9 @@ begin
   FNavigation.Exists := not FWorld.Player.Dead;
   FLevelTime := FLevelTime + SecondsPassed;
   CheckInspector;
+  if FWorld.Map <> nil then
+    FDebugDraw.BuildMap(FWorld.Map);
+  FDebugDraw.UpdateWorld(FWorld);
   FHelpLabel.Exists := FHelpVisible and not TouchMode;
   CheckPadTriggers;
   if FTouch.Exists then

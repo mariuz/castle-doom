@@ -20,6 +20,8 @@ const
   TicSeconds = 1 / TicRate;
   PlayerRadius = 16;
   PlayerHeight = 56;
+  { Player hitscans kept for the debug drawing. }
+  MaxShotTrail = 16;
   PlayerViewHeight = 41;
 
 type
@@ -72,6 +74,12 @@ type
     { Status bar face: tics left for the "ouch" / "evil grin" expressions. }
     FaceTics: Integer;
     FaceState: Integer;
+  end;
+
+  { A player hitscan for the debug drawing (TDoomWorld.ShotTrail). }
+  TShotTrailItem = record
+    X1, Y1, Z1, X2, Y2, Z2: Single;
+    Hit: Boolean;
   end;
 
   TDoomWorld = class;
@@ -385,9 +393,13 @@ type
     procedure StopPlats(const Tag: Integer);
     function CheckKey(const Line: Integer; const Key: TDoomKey; const Skull: TDoomKey; const IsDoor: Boolean): Boolean;
     procedure ChangeLineButton(const Line: Integer; const Repeatable: Boolean);
+    procedure AddShotTrail(const X1, Y1, Z1, X2, Y2, Z2: Single; const Hit: Boolean);
   public
     { Log every player shot (aim, slope, what it hit): "Shot:" lines. }
     DebugShots: Boolean;
+    { The player's last hitscans, oldest first (GameDebugDraw draws them):
+      from the gun to where each stopped, and whether it hit an actor. }
+    ShotTrail: array of TShotTrailItem;
     Player: TPlayerState;
     { Set when the player should be moved by the view (teleport / spawn). }
     PlayerTeleported: Boolean;
@@ -4649,6 +4661,27 @@ begin
       Shot := 'nothing';
     WritelnLog('Shot', Format('angle %.1f slope %.3f range %.0f: %s', [Angle, Slope, Range, Shot]));
   end;
+  AddShotTrail(Player.X, Player.Y, ShootZ, HX, HY, HZ, Result <> nil);
+end;
+
+procedure TDoomWorld.AddShotTrail(const X1, Y1, Z1, X2, Y2, Z2: Single; const Hit: Boolean);
+var
+  I: Integer;
+begin
+  if Length(ShotTrail) >= MaxShotTrail then
+  begin
+    for I := 1 to High(ShotTrail) do
+      ShotTrail[I - 1] := ShotTrail[I];
+    SetLength(ShotTrail, Length(ShotTrail) - 1);
+  end;
+  SetLength(ShotTrail, Length(ShotTrail) + 1);
+  ShotTrail[High(ShotTrail)].X1 := X1;
+  ShotTrail[High(ShotTrail)].Y1 := Y1;
+  ShotTrail[High(ShotTrail)].Z1 := Z1;
+  ShotTrail[High(ShotTrail)].X2 := X2;
+  ShotTrail[High(ShotTrail)].Y2 := Y2;
+  ShotTrail[High(ShotTrail)].Z2 := Z2;
+  ShotTrail[High(ShotTrail)].Hit := Hit;
 end;
 
 { Signed difference A - B in degrees, in -180..180. }

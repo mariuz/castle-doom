@@ -394,6 +394,14 @@ need no unique names; owned ones must be unique per owner), new actor or
 world state worth seeing goes into the `published` properties of
 `TDoomActor` or `TDoomWorldStatus` (read-only getters are fine), and
 things belong under the `Things` group, map scenes under `Map`.
+Debug drawing (`GameDebugDraw`, the `Debug` group under Items):
+`DEBUG:subsectors|blocking|actors|shots|all|off` toggles wireframes of
+the subsector polygons (cyan), the blocking lines at floor and ceiling
+(red), the actors' boxes (yellow) and the player's last 16 hitscans
+(`TDoomWorld.ShotTrail`), drawn in front of the map (`rlFront`); the
+inspector's Exists checkboxes on `DebugSubsectors`... do the same (log
+`Debug: subsectors shown (2817 segments), ...` on E1M1; autotest
+`debug-draw` with goldens).
 `SELECT` in a demo selects the thing under the crosshair in the
 inspector (what its F9 "Transform" auto-select does), `SELECT:name` one
 by name (log `Select: TROO_12: TROO, state chase, 60 health, action

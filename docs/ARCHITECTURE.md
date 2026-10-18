@@ -1611,3 +1611,15 @@ Where each engine feature is used, as a map for learning the engine:
 | `TCastleContainer.InputInspector.Key`, `Container.EventPress(InputKey(...))`, component `Name`s, `published` properties on `TCastleTransform` / `TCastleUserInterface` descendants | GameInitialize, DoomWorld, DoomActors, GameViewPlay | the F8 inspector in every build and what it shows |
 | `TGLRenderToTexture` (`tbNone`), `Container.RenderControl`, `SaveScreen_NoFlush`, `TDrawableImage.Draw(ScreenRect, ImageRect)`, `TCastleUserInterface.Render` / `RenderRect` | GameViewPlay, DoomWipe | the screen melt (off-screen capture works under WebGL) |
 | `castle-engine compile/package/generate-program`, `--target=web` | CI | builds |
+
+
+Debug drawing (`gamedebugdraw.pas`): a `Debug` transform under the
+viewport's Items holds four line scenes (`TLineSetNode` in `lmPair`
+mode, unlit, `RenderLayer := rlFront` so the map never hides them, not
+pickable, no collisions): `DebugSubsectors` (each subsector's polygon
+at its floor, built once per map), `DebugBlocking` (one-sided and
+`ML_BLOCKING` lines at floor and ceiling), `DebugActors` (every live
+actor's radius x height box, rebuilt each frame while shown) and
+`DebugShots` (`TDoomWorld.ShotTrail`, the player's last 16 hitscans).
+They start hidden; the inspector's Exists checkboxes or the `DEBUG:...`
+demo command show them.
