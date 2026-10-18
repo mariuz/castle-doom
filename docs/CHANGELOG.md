@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Closed captions (Options -> Sound Volume -> Captions, or F4): a line for each sound you hear,
+  like "Door opens, ahead" or "Serpentipede sees you, left".
+
 ## v0.39.0 (2026-10-18)
 
 - Gamma correction: `F11` steps through Doom's five brightness levels

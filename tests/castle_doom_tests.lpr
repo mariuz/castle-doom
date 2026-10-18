@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions;
 
 function DataPath(const Name: String): String;
 begin
@@ -99,6 +99,7 @@ type
     procedure TestKeyBindings;
     procedure TestBestTimes;
     procedure TestGamma;
+    procedure TestCaptions;
     procedure TestTouchControls;
   end;
 
@@ -1830,6 +1831,47 @@ begin
     FreeAndNil(L);
   end;
   AssertEquals('the gamma key', 'F11', KeyToStr(DefaultKeys[gaGamma, 0]));
+end;
+
+{ Closed captions: lump and monster captions, directions and the list. }
+procedure TTestGamepad.TestCaptions;
+var
+  L: TCaptionList;
+  Key, Name: String;
+begin
+  AssertEquals('door', 'Door opens', CaptionForLump('dsdoropn', false));
+  AssertEquals('door without a position', '', CaptionForLump('DSDOROPN', true));
+  AssertEquals('boss everywhere', 'Icon of Sin roars', CaptionForLump('DSBOSSIT', true));
+  AssertEquals('player pain', '', CaptionForLump('DSPLPAIN', true));
+  AssertTrue('imp', MonsterNameKey(3001, Key, Name));
+  AssertEquals('imp key', 'CC_IMP', Key);
+  AssertFalse('no monster', MonsterNameKey(2001, Key, Name));
+  AssertTrue('pain slot', CaptionSlot('DSPOPAIN', 'DSPOSIT1', 'DSPISTOL', 'DSPOPAIN', 'DSPODTH1') = csPain);
+  AssertTrue('other slot', CaptionSlot('DSPOSACT', 'DSPOSIT1', 'DSPISTOL', 'DSPOPAIN', 'DSPODTH1') = csOther);
+  AssertEquals('death', 'Serpentipede dies', MonsterCaption('serpentipede', csDeath));
+  AssertEquals('vanilla name', 'Imp sees you', MonsterCaption('IMP', csSee));
+  AssertEquals('no caption', '', MonsterCaption('Imp', csOther));
+  { The player at the origin facing north (90). }
+  AssertEquals('ahead', 'ahead', CaptionDirection(0, 0, 90, 10, 500));
+  AssertEquals('left', 'left', CaptionDirection(0, 0, 90, -500, 0));
+  AssertEquals('right', 'right', CaptionDirection(0, 0, 90, 500, 30));
+  AssertEquals('behind', 'behind', CaptionDirection(0, 0, 90, 0, -500));
+  AssertEquals('wrapped angle', 'left', CaptionDirection(0, 0, 350, 0, 500));
+  AssertEquals('nearby', '', CaptionDirection(0, 0, 90, 20, 20));
+  L := TCaptionList.Create;
+  try
+    L.Add('Door opens', 'ahead', 10);
+    L.Add('Imp sees you', 'left', 12);
+    L.Add('Door opens', 'right', 20);
+    AssertEquals('moved down', 'Imp sees you, left'#10'Door opens, right', L.Text(20));
+    L.Add('A', '', 21);
+    L.Add('B', '', 22);
+    AssertEquals('three kept', 'Door opens, right'#10'A'#10'B', L.Text(22));
+    AssertEquals('expired', 'A'#10'B', L.Text(20 + CaptionTics));
+    AssertEquals('all expired', '', L.Text(22 + CaptionTics));
+  finally
+    FreeAndNil(L);
+  end;
 end;
 
 { TTestGamepad }

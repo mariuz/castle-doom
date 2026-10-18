@@ -74,6 +74,18 @@
     },
     {
       "$$ClassName": "TDoomFontText",
+      "Name": "CaptionText",
+      "Exists": false,
+      "VerticalAnchorParent": "vpTop",
+      "VerticalAnchorSelf": "vpTop",
+      "TranslationPersistent": {
+        "$$ClassName": "TCastleVector2Persistent",
+        "X": 8.0,
+        "Y": -32.0
+      }
+    },
+    {
+      "$$ClassName": "TDoomFontText",
       "Name": "ClickPrompt",
       "Exists": false,
       "HorizontalAnchorParent": "hpMiddle",

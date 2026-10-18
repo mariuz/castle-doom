@@ -100,6 +100,7 @@ Sizes, for orientation (lines of Pascal):
 | `doomwad.pas` | 225 | WAD directory and palette |
 | `doomhud.pas` | 193 | status bar composition |
 | `doomsound.pas` | 173 | DMX to WAV, positional sound |
+| `doomcaptions.pas` | 260 | closed captions for sounds |
 | `gameinitialize.pas` | 47 | window, views, command line |
 
 ---
@@ -972,6 +973,22 @@ weapon, pickups, UI). `PlayAt(Lump, Transform)` attaches a `TCastleSoundSource`
 behavior to the given transform (an actor, a mover's emitter) and plays
 through it, so monsters and doors are heard where they are. The sounds'
 `ReferenceDistance`/`MaxDistance` are set to Doom-like 200/1800 units.
+
+Closed captions: both calls report the sound through `OnPlay` (lump,
+emitter or nil). `TViewPlay.SoundPlayed` turns it into a line with
+`DoomCaptions`: a caption per lump for doors, lifts, switches,
+explosions, teleports (`CaptionForLump`; without a position only the
+Icon of Sin's sounds), else, for a `TDoomActor` emitter, the monster's
+cast name (`CC_*` strings, so Freedoom's names) and which of its
+`SeeSound` / `AttackSound` / `PainSound` / `DeathSound` slots the lump
+is (so DeHackEd changes stay right). `CaptionDirection` gives ahead /
+left / right / behind from the player's facing (none within 64 units),
+sounds past 1200 units are not captioned, and `TCaptionList` keeps three
+lines for three seconds of game time (a repeated caption moves down).
+The view draws them in the HU font under the message line
+(`CaptionText` in the play design) while `Settings.Captions` is on
+(Options -> Sound Volume -> Captions, or F4); the log says `Caption: Door opens, ahead
+(DSDOROPN)`.
 
 On Windows the engine needs `OpenAL32.dll` next to the executable;
 `castle-engine package` adds it, for a local run copy it from the engine's

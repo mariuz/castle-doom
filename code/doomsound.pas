@@ -14,11 +14,15 @@ uses SysUtils, Classes, Generics.Collections,
   DoomWad;
 
 type
+  { A sound starts: Emitter is nil for a sound without a position. }
+  TSoundPlayEvent = procedure (const LumpName: String; const Emitter: TCastleTransform) of object;
+
   TDoomSounds = class
   strict private
     FWad: TDoomWad;
     FSounds: {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TCastleSound>;
     FVolume: Single;
+    FOnPlay: TSoundPlayEvent;
     function ReadSfx(const Url: String; out MimeType: String): TStream;
     procedure SetVolume(const Value: Single);
   public
@@ -33,6 +37,8 @@ type
     property Wad: TDoomWad read FWad;
     { Gain of every sound effect (0..1, the options' sound volume). }
     property Volume: Single read FVolume write SetVolume;
+    { Every sound that starts (closed captions, GameViewPlay). }
+    property OnPlay: TSoundPlayEvent read FOnPlay write FOnPlay;
   end;
 
 { Convert a DMX sound lump into a WAV file in memory. nil when not a sound lump. }
@@ -165,8 +171,9 @@ var
   S: TCastleSound;
 begin
   S := Sound(LumpName);
-  if S <> nil then
-    SoundEngine.Play(S);
+  if S = nil then Exit;
+  SoundEngine.Play(S);
+  if Assigned(FOnPlay) then FOnPlay(LumpName, nil);
 end;
 
 procedure TDoomSounds.PlayAt(const LumpName: String; const Emitter: TCastleTransform);
@@ -184,6 +191,7 @@ begin
     Emitter.AddBehavior(Source);
   end;
   Source.Play(S);
+  if Assigned(FOnPlay) then FOnPlay(LumpName, Emitter);
 end;
 
 end.

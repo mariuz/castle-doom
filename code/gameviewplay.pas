@@ -8,7 +8,7 @@ interface
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleTimeUtils,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages, CastleGLImages,
-  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont,
+  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont, DoomCaptions,
   DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu, DoomWorldStatus, GameSettings,
   GameTouch, GameDebugDraw, DoomDemo;
 
@@ -31,6 +31,9 @@ type
     FMessageText, FLoadingText, FAutomapTitle: TDoomFontText;
     { The level statistics overlay (gaStats, Settings.ShowStats). }
     FStatsText: TDoomFontText;
+    { Closed captions under the messages (Settings.Captions, DoomCaptions). }
+    FCaptionText: TDoomFontText;
+    FCaptions: TCaptionList;
     { "Click to look around" while mouse look is wanted but the browser
       released the pointer (Esc, another window). }
     FClickPrompt: TDoomFontText;
@@ -144,6 +147,9 @@ type
     { Sets, applies and saves the gamma level (0..MaxGamma) and shows
       Doom's message for it. }
     procedure SetGamma(const Level: Integer);
+    { TDoomSounds.OnPlay: a closed caption for the sound. }
+    procedure SoundPlayed(const LumpName: String; const Emitter: TCastleTransform);
+    procedure SetCaptions(const On: Boolean);
     { The navigation's keys from Settings.Keys, and the help panel's
       lines for them. }
     procedure ApplyKeyBindings;
@@ -349,6 +355,8 @@ begin
   FAutomapTitle.Graphics := Graphics;
   FStatsText := DesignedComponent('StatsText') as TDoomFontText;
   FStatsText.Graphics := Graphics;
+  FCaptionText := DesignedComponent('CaptionText') as TDoomFontText;
+  FCaptionText.Graphics := Graphics;
   FInfoLabel := DesignedComponent('InfoLabel') as TCastleLabel;
   FWorldStatus := DesignedComponent('DoomWorldStatus') as TDoomWorldStatus;
   FHelpLabel := DesignedComponent('HelpLabel') as TCastleLabel;
@@ -423,6 +431,9 @@ begin
   { A PWAD's UMAPINFO: level names, music, sky, par times, progression. }
   LoadMapInfo(Wad);
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
+  FCaptions := TCaptionList.Create;
+  if Sounds <> nil then
+    Sounds.OnPlay := {$ifdef FPC}@{$endif} SoundPlayed;
   FDebugDraw := TDebugDraw.Create(FreeAtStop);
   FViewport.Items.Add(FDebugDraw);
   FWorld.Skill := Skill;
@@ -469,6 +480,9 @@ begin
   FSlotMenu := SlotMenuNone;
   FreeAndNil(FDemoSteps);
   FWorldStatus.World := nil;
+  if Sounds <> nil then
+    Sounds.OnPlay := nil;
+  FreeAndNil(FCaptions);
   FreeAndNil(FWorld);
   FreeAndNil(FStrings);
   FreeAndNil(FPendingWipe);
@@ -648,6 +662,8 @@ begin
     FWorld.Player.InvulnerableTics := Iff(Arg > 0, Round(Arg), 30 * 35)
   else if Cmd = 'AMP' then
     FWorld.Player.LightAmpTics := Iff(Arg > 0, Round(Arg), 120 * 35)
+  else if Cmd = 'CAPTIONS' then
+    SetCaptions(not Settings.Captions)
   else if Cmd = 'DIM' then
     DoomLightingInstance.Diminish := not DoomLightingInstance.Diminish
   else if Cmd = 'CLICKPROMPT' then
@@ -1321,6 +1337,60 @@ begin
   WritelnLog('Settings', 'Gamma %d (exponent %.3f)', [L, DoomLightingInstance.GammaExponent]);
 end;
 
+procedure TViewPlay.SetCaptions(const On: Boolean);
+begin
+  Settings.Captions := On;
+  SaveSettings;
+  if FCaptions <> nil then FCaptions.Clear;
+  WritelnLog('Settings', 'Captions %s', [Iff(On, 'on', 'off')]);
+end;
+
+procedure TViewPlay.SoundPlayed(const LumpName: String; const Emitter: TCastleTransform);
+var
+  Text, Dir, Key, MonsterName: String;
+  A: TDoomActor;
+  P: TVector3;
+  SX, SY: Single;
+begin
+  if (not Settings.Captions) or (FWorld = nil) or (FCaptions = nil) or
+     (not FWorld.MapLoaded) or FIntermission then
+    Exit;
+  Dir := '';
+  if Emitter = nil then
+    Text := CaptionForLump(LumpName, true)
+  else
+  begin
+    Text := CaptionForLump(LumpName, false);
+    if Emitter is TDoomActor then
+    begin
+      A := TDoomActor(Emitter);
+      SX := A.DoomX;
+      SY := A.DoomY;
+      if (Text = '') and (A.Info <> nil) and MonsterNameKey(A.Info^.Num, Key, MonsterName) then
+      begin
+        if Key <> '' then
+          MonsterName := FWorld.Text(Key, MonsterName);
+        Text := MonsterCaption(MonsterName, CaptionSlot(LumpName, A.Info^.SeeSound,
+          A.Info^.AttackSound, A.Info^.PainSound, A.Info^.DeathSound));
+      end;
+    end else
+    begin
+      P := CgeToDoom(Emitter.WorldTranslation);
+      SX := P.X;
+      SY := P.Y;
+    end;
+    if Text = '' then Exit;
+    if Sqr(SX - FWorld.Player.X) + Sqr(SY - FWorld.Player.Y) > Sqr(CaptionMaxDistance) then Exit;
+    Dir := CaptionDirection(FWorld.Player.X, FWorld.Player.Y, FWorld.Player.Angle, SX, SY);
+  end;
+  if Text = '' then Exit;
+  FCaptions.Add(Text, Dir, FWorld.Tic);
+  if Dir <> '' then
+    WritelnLog('Caption', '%s, %s (%s)', [Text, Dir, LumpName])
+  else
+    WritelnLog('Caption', '%s (%s)', [Text, LumpName]);
+end;
+
 procedure TViewPlay.SelectInInspector(const ThingName: String);
 var
   Found: TDoomActor;
@@ -1394,6 +1464,7 @@ begin
     map change (a load, a restart after death, a warp) ends it. }
   if not FDemoNextLevel then
     StopDemos(false);
+  if FCaptions <> nil then FCaptions.Clear;
   { The melt goes from what is on screen now (intermission, finale text) to
     the new level; not on the first map of the session (nothing to melt). }
   FreeAndNil(FPendingWipe);
@@ -1703,6 +1774,7 @@ begin
   FSlotScreen.MouseSensitivity := Settings.MouseSensitivity;
   FSlotScreen.Gamma := Settings.Gamma;
   FSlotScreen.MessagesOn := Settings.ShowMessages;
+  FSlotScreen.CaptionsOn := Settings.Captions;
   FSlotScreen.VideoFieldOfView := Settings.FieldOfView;
   FSlotScreen.VideoUiScale := Settings.UiScale;
   FSlotScreen.VideoRenderScale := Settings.RenderScale;
@@ -1769,6 +1841,8 @@ begin
         FNavigation.MouseLookHorizontalSensitivity := MouseLookSensitivity;
         FNavigation.MouseLookVerticalSensitivity := MouseLookSensitivity;
         Settings.ShowMessages := FSlotScreen.MessagesOn;
+        if FSlotScreen.CaptionsOn <> Settings.Captions then
+          SetCaptions(FSlotScreen.CaptionsOn);
         if FSlotScreen.Gamma <> Settings.Gamma then
           SetGamma(FSlotScreen.Gamma);
         { The Video page (field of view, UI scale, fullscreen / resolution). }
@@ -2317,6 +2391,7 @@ begin
     FCrosshair.Exists := false;
     FMessageText.Exists := false;
     FStatsText.Exists := false;
+    FCaptionText.SetText('');
     FColormapTint.Exists := false;
     if FIntermissionScreen.Exists then
     begin
@@ -2544,6 +2619,14 @@ begin
     else
       FStatsText.Anchor(vpBottom, FStatusBar.Height + 4);
   end;
+  { Closed captions, a line below the message's place. }
+  if Settings.Captions then
+  begin
+    FCaptionText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
+    FCaptionText.SetText(UpperCase(FCaptions.Text(FWorld.Tic)));
+    FCaptionText.Anchor(vpTop, -8 - 10 * Max(1, Round(FViewport.EffectiveHeight / 200)));
+  end else
+    FCaptionText.SetText('');
   if P.MessageTics = 0 then FMessageAlways := false;
   { Options -> Messages OFF hides the player messages (not this one). }
   if (P.MessageTics > 0) and (Settings.ShowMessages or FMessageAlways) then

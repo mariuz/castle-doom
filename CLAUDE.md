@@ -96,7 +96,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 41 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 42 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -226,6 +226,12 @@ Gamma: `KEY:F11` steps `Settings.Gamma` 0..4 (`settings.json`'s
 log `Settings: Gamma 2 (exponent 0.625)` and `Message: Gamma correction
 level 2`. The shader's `doom_gamma` is `TDoomLighting.GammaExponent`
 (autotests `gamma` with goldens and `gamma-menu`, unit test `TestGamma`).
+Closed captions: `CAPTIONS` in a demo toggles `Settings.Captions`
+(`settings.json`'s `captions`; Doom menu Options -> Sound Volume ->
+CAPTIONS, also on F4's page); the log says `Caption: Door opens, ahead (DSDOROPN)` per line
+shown (only while on). Monster names come from the `CC_*` strings
+(Freedoom: `Serpentipede sees you, left`). Autotests `captions` (goldens)
+and `captions-menu`, unit test `TestCaptions`.
 Settings (`GameSettings`, `settings.json` next to the saves; the log
 prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
 like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a

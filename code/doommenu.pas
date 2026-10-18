@@ -100,6 +100,8 @@ type
     SfxVolume, MusicVolume: Integer; { 0..15 }
     MouseSensitivity: Integer;       { 0..9 }
     MessagesOn: Boolean;
+    { Closed captions on / off (the sound page, in the HU font). }
+    CaptionsOn: Boolean;
     { Brightness: Doom's gamma correction level 0..4 (Options page). }
     Gamma: Integer;
     { The Video page (not in Doom: drawn in the HU font): field of view
@@ -325,6 +327,8 @@ begin
     MouseSensitivity := Max(0, Min(9, MouseSensitivity + Delta))
   else if Item = 'M_MESSG' then
     MessagesOn := not MessagesOn
+  else if Item = 'T:CAPTIONS' then
+    CaptionsOn := not CaptionsOn
   else if Item = 'T:BRIGHTNESS' then
     Gamma := Max(0, Min(4, Gamma + Delta))
   else if Item = 'T:FIELD OF VIEW' then
@@ -402,7 +406,7 @@ begin
     mpMain: Result := Length(FMainItems);
     mpReadThis1, mpReadThis2: Result := 1;
     mpOptions: Result := 8;
-    mpSound: Result := 4;
+    mpSound: Result := 5;
     mpVideo: Result := {$ifdef WASI} 6 {$else} 7 {$endif};
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
@@ -418,7 +422,7 @@ const
     thermometers' (not selectable). }
   OptionItems: array [0..7] of String = ('M_ENDGAM', 'M_MESSG', 'M_MSENS', '', 'M_SVOL', 'T:VIDEO',
     'T:BRIGHTNESS', '');
-  SoundItems: array [0..3] of String = ('M_SFXVOL', '', 'M_MUSVOL', '');
+  SoundItems: array [0..4] of String = ('M_SFXVOL', '', 'M_MUSVOL', '', 'T:CAPTIONS');
   { Items named 'T:...' are drawn as text (no patch for them in Doom). }
   {$ifdef WASI}
   VideoItems: array [0..5] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:RESOLUTION', '');
@@ -596,7 +600,9 @@ begin
         OpenPage(mpSound)
       else if ItemName = 'T:VIDEO' then
         OpenPage(mpVideo);
-    mpSound: ;
+    mpSound:
+      if ItemName = 'T:CAPTIONS' then
+        ChangeSlider(1);
     mpVideo:
       if (ItemName = 'T:FULLSCREEN') or (ItemName = 'T:V-SYNC') or (ItemName = 'T:FRAME RATE') then
         ChangeSlider(1);
@@ -960,6 +966,7 @@ begin
         DrawPatch('M_SVOL', 60, 38);
         DrawThermo(Img, X, Y + LineHeight * 1, 16, SfxVolume);
         DrawThermo(Img, X, Y + LineHeight * 3, 16, MusicVolume);
+        DrawDoomText(FGraphics, Img, X + 100, Y + LineHeight * 4 + 4, Iff(CaptionsOn, 'ON', 'OFF'));
       end;
     mpVideo:
       begin

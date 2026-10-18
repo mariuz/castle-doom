@@ -392,6 +392,14 @@ TESTS = [
     ('gamma-menu', 'E1M1',
      'W:0.5,KEY:ESCAPE,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:RIGHT,KEY:RIGHT,W:0.3,KEY:ESCAPE,KEY:ESCAPE,W:0.3,Q',
      [r'Settings: Gamma 2 \(exponent 0\.625\)'], [], lambda config: check_gamma(config, 2)),
+    ('captions', 'E1M1',
+     'Y,CAPTIONS,G:480:712,A:0,U,W:0.3,S,A:90,P:3001:200,A:0,W:0.3,X,W:0.5,S,Q',
+     [r'Settings: Captions on', r'Caption: Door opens, ahead \(DSDOROPN\)',
+      r'Caption: Serpentipede sees you, left \(DSBGSIT1\)'],
+     ['--fixed-step'], lambda config: check_captions(config)),
+    ('captions-menu', 'E1M1',
+     'W:0.5,KEY:ESCAPE,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:ENTER,W:0.3,S,KEY:ESCAPE,KEY:ESCAPE,KEY:ESCAPE,W:0.3,G:480:712,A:0,U,W:0.3,Q',
+     [r'Settings: Captions on', r'Caption: Door opens, ahead'], [], lambda config: check_captions(config)),
     ('random-menu', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: E1M1', r'Load: E1M1: map parsed', r'Message: R1: '],
      ['--menukeys', 'E,D,D,D,D,E,E'], None),
     ('random-menu-doom2', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: MAP01', r'Load: MAP01: map parsed', r'Message: R1: '],
@@ -539,6 +547,12 @@ def check_stats(config):
     assert best is not None and best <= 3, 'bestTimes: %s' % s['bestTimes']
 
 
+def check_captions(config):
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        s = json.load(f)
+    assert s['captions'] is True, 'captions: %s' % s['captions']
+
+
 def check_gamma(config, level):
     """The gamma level saved: five F11 presses go around to 0, two steps
     of the Options page's slider give 2."""
@@ -679,7 +693,7 @@ GOLDEN = [
     'mapinfo_1.png', 'mapinfo_2.png', 'sector-skies_1.png', 'sector-skies_2.png',
     'random-maps_1.png', 'random-maps_2.png', 'random-maps_3.png', 'random-maps_4.png',
     'level-stats_1.png', 'level-stats_2.png', 'level-stats_3.png', 'level-stats_4.png',
-    'gamma_1.png', 'gamma_2.png', 'gamma_3.png',
+    'gamma_1.png', 'gamma_2.png', 'gamma_3.png', 'captions_1.png', 'captions_2.png', 'captions-menu_1.png',
 ]
 
 
