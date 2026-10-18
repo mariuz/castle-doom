@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields;
 
 function DataPath(const Name: String): String;
 begin
@@ -98,6 +98,7 @@ type
     procedure TestPadBindings;
     procedure TestKeyBindings;
     procedure TestBestTimes;
+    procedure TestGamma;
     procedure TestTouchControls;
   end;
 
@@ -1802,6 +1803,33 @@ begin
   AssertEquals('other WADs', 40, BestTime(K2));
   AssertEquals('two entries', 2, Length(Settings.BestTimeKeys));
   AssertEquals('the statistics key', 'L', KeyToStr(DefaultKeys[gaStats, 0]));
+end;
+
+{ Gamma correction: the exponent per level, sent to the effects made
+  before and after a change, and the F11 default. }
+procedure TTestGamepad.TestGamma;
+var
+  L: TDoomLighting;
+  E1, E2: TEffectNode;
+begin
+  L := TDoomLighting.Create;
+  try
+    AssertEquals('off', 1.0, L.GammaExponent, 1e-6);
+    E1 := L.GeometryEffect;
+    AssertEquals('field off', 1.0, (E1.Field('doom_gamma') as TSFFloat).Value, 1e-6);
+    L.Gamma := 2;
+    AssertEquals('level 2', 0.625, L.GammaExponent, 1e-6);
+    AssertEquals('sent', 0.625, (E1.Field('doom_gamma') as TSFFloat).Value, 1e-6);
+    E2 := L.GeometryEffect;
+    AssertEquals('new effect', 0.625, (E2.Field('doom_gamma') as TSFFloat).Value, 1e-6);
+    L.Gamma := MaxGamma;
+    AssertEquals('level 4', 1 / 2.2, L.GammaExponent, 1e-6);
+    FreeAndNil(E1);
+    FreeAndNil(E2);
+  finally
+    FreeAndNil(L);
+  end;
+  AssertEquals('the gamma key', 'F11', KeyToStr(DefaultKeys[gaGamma, 0]));
 end;
 
 { TTestGamepad }

@@ -21,7 +21,7 @@ type
     gaWeapon1, gaWeapon2, gaWeapon3, gaWeapon4, gaWeapon5, gaWeapon6, gaWeapon7,
     gaNextWeapon, gaPrevWeapon,
     gaLightDiminish, gaMouseLook, gaMusic, gaHelp, gaGrid, gaRevealMap,
-    gaNextMap, gaPrevMap, gaScreenshot, gaQuickSave, gaQuickLoad, gaStats);
+    gaNextMap, gaPrevMap, gaScreenshot, gaQuickSave, gaQuickLoad, gaStats, gaGamma);
 
   { The gamepad's bindable actions (the sticks move and look, Start opens
     the menu, and the menus use the D-pad, A and B whatever is bound). }
@@ -47,6 +47,8 @@ type
     ShowMessages: Boolean;
     { The level statistics overlay (kills, items, secrets, time). }
     ShowStats: Boolean;
+    { Doom's gamma correction level, 0 (off) .. MaxGamma (F11). }
+    Gamma: Integer;
     { Best times in seconds, by BestTimeKey (WADs, map, skill). }
     BestTimeKeys: array of String;
     BestTimes: array of Integer;
@@ -93,6 +95,8 @@ const
   { settings.json's names of the touch buttons (TouchPlaces' order). }
   TouchButtonIds: array [0..5] of String = ('fire', 'use', 'prevWeapon',
     'nextWeapon', 'automap', 'menu');
+  { Gamma correction levels (Doom's usegamma): 0 = off. }
+  MaxGamma = 4;
   { The frame rate cap's choices (0 = no cap); 120 is CGE's default. }
   FrameCaps: array [0..4] of Integer = (35, 60, 120, 144, 0);
 
@@ -104,7 +108,7 @@ const
     'Plasma rifle', 'BFG 9000', 'Next weapon', 'Previous weapon',
     'Light diminishing', 'Mouse look', 'Music on / off', 'Help', 'Automap grid',
     'Reveal map', 'Next map', 'Previous map', 'Screenshot', 'Quick save',
-    'Quick load', 'Level statistics');
+    'Quick load', 'Level statistics', 'Brightness (gamma)');
   { The JSON keys of settings.json's "keys" object. }
   ActionIds: array [TGameAction] of String = (
     'forward', 'backward', 'strafeLeft', 'strafeRight',
@@ -112,7 +116,7 @@ const
     'weapon1', 'weapon2', 'weapon3', 'weapon4', 'weapon5', 'weapon6', 'weapon7',
     'nextWeapon', 'prevWeapon',
     'lightDiminish', 'mouseLook', 'music', 'help', 'grid', 'revealMap',
-    'nextMap', 'prevMap', 'screenshot', 'quickSave', 'quickLoad', 'stats');
+    'nextMap', 'prevMap', 'screenshot', 'quickSave', 'quickLoad', 'stats', 'gamma');
   DefaultKeys: array [TGameAction, 0..1] of TKey = (
     (keyW, keyArrowUp), (keyS, keyArrowDown), (keyA, keyNone), (keyD, keyNone),
     (keyArrowLeft, keyNone), (keyArrowRight, keyNone), (keyShift, keyNone),
@@ -122,7 +126,7 @@ const
     (keyNone, keyNone), (keyNone, keyNone),
     (keyF, keyNone), (keyM, keyNone), (keyJ, keyNone), (keyH, keyNone),
     (keyG, keyNone), (keyI, keyNone), (keyN, keyNone), (keyP, keyNone),
-    (keyF5, keyNone), (keyF6, keyNone), (keyF9, keyNone), (keyL, keyNone));
+    (keyF5, keyNone), (keyF6, keyNone), (keyF9, keyNone), (keyL, keyNone), (keyF11, keyNone));
 
   { settings.json's mouse names and the Controls page's. }
   MouseBindIds: array [TMouseBind] of String = ('None', 'Left', 'Middle',
@@ -133,7 +137,7 @@ const
   DefaultMouse: array [TGameAction] of TMouseBind = (
     mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbLeft, mbNone, mbNone,
     mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbWheelUp, mbWheelDown,
-    mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone);
+    mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone);
 
   { The Controls page's pages: their titles and first / last actions. }
   ControlsPageCount = 3;
@@ -142,7 +146,7 @@ const
   ControlsPageFirst: array [0..ControlsPageCount - 1] of TGameAction = (
     gaForward, gaWeapon1, gaLightDiminish);
   ControlsPageLast: array [0..ControlsPageCount - 1] of TGameAction = (
-    gaAutomap, gaPrevWeapon, gaStats);
+    gaAutomap, gaPrevWeapon, gaGamma);
 
   PadActionNames: array [TPadAction] of String = (
     'Fire', 'Use / open', 'Automap', 'Next weapon', 'Previous weapon');
@@ -733,6 +737,7 @@ begin
     Settings.MouseSensitivity := Clamped(J.Get('mouseSensitivity', Settings.MouseSensitivity), 0, 9);
     Settings.ShowMessages := J.Get('showMessages', Settings.ShowMessages);
     Settings.ShowStats := J.Get('showStats', Settings.ShowStats);
+    Settings.Gamma := Clamped(J.Get('gamma', Settings.Gamma), 0, MaxGamma);
     if J.Find('bestTimes', BestJ) then
       for BestI := 0 to BestJ.Count - 1 do
         SetBestTime(BestJ.Names[BestI], BestJ.Items[BestI].AsInteger);
@@ -781,6 +786,7 @@ begin
     J.Add('mouseSensitivity', Settings.MouseSensitivity);
     J.Add('showMessages', Settings.ShowMessages);
     J.Add('showStats', Settings.ShowStats);
+    J.Add('gamma', Settings.Gamma);
     Best := TJSONObject.Create;
     for BestI := 0 to High(Settings.BestTimeKeys) do
       Best.Add(Settings.BestTimeKeys[BestI], Settings.BestTimes[BestI]);

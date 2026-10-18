@@ -141,6 +141,9 @@ type
     procedure PerfLog;
     { The camera's horizontal field of view from the settings. }
     procedure ApplyFieldOfView;
+    { Sets, applies and saves the gamma level (0..MaxGamma) and shows
+      Doom's message for it. }
+    procedure SetGamma(const Level: Integer);
     { The navigation's keys from Settings.Keys, and the help panel's
       lines for them. }
     procedure ApplyKeyBindings;
@@ -956,7 +959,8 @@ begin
       FHelpLabel.Text[3] := WeaponKeysText + ': weapons';
     FHelpLabel.Text[4] := Trim(Hot(gaAutomap, 'automap   ') + '+ / -: zoom   ' + Hot(gaGrid, 'grid   ') +
       Hot(gaRevealMap, 'reveal map'));
-    FHelpLabel.Text[5] := Trim(Hot(gaLightDiminish, 'light diminishing on/off   ') + Hot(gaMouseLook, 'mouse look'));
+    FHelpLabel.Text[5] := Trim(Hot(gaLightDiminish, 'light diminishing on/off   ') + Hot(gaMouseLook, 'mouse look   ') +
+      Hot(gaGamma, 'gamma'));
     FHelpLabel.Text[6] := Trim(Hot(gaNextMap, 'next map   ') + Hot(gaPrevMap, 'previous map   ') +
       Hot(gaMusic, 'music on/off   ') + 'F4: volume');
     FHelpLabel.Text[7] := Trim('F2 / F3: save / load   ' + Hot(gaQuickSave, 'quick save   ') + Hot(gaQuickLoad, 'quick load   ') +
@@ -1298,6 +1302,23 @@ end;
 procedure TViewPlay.ApplyFieldOfView;
 begin
   FViewport.Camera.Perspective.FieldOfView := DegToRad(Settings.FieldOfView);
+end;
+
+procedure TViewPlay.SetGamma(const Level: Integer);
+const
+  Defaults: array [0..MaxGamma] of String = ('Gamma correction OFF',
+    'Gamma correction level 1', 'Gamma correction level 2',
+    'Gamma correction level 3', 'Gamma correction level 4');
+var
+  L: Integer;
+begin
+  L := Max(0, Min(MaxGamma, Level));
+  Settings.Gamma := L;
+  DoomLightingInstance.Gamma := L;
+  SaveSettings;
+  if FWorld <> nil then
+    FWorld.ShowMessage(FWorld.Text('GAMMALVL' + IntToStr(L), Defaults[L]));
+  WritelnLog('Settings', 'Gamma %d (exponent %.3f)', [L, DoomLightingInstance.GammaExponent]);
 end;
 
 procedure TViewPlay.SelectInInspector(const ThingName: String);
@@ -1680,6 +1701,7 @@ begin
   FSlotScreen.SfxVolume := Settings.SfxVolume;
   FSlotScreen.MusicVolume := Settings.MusicVolume;
   FSlotScreen.MouseSensitivity := Settings.MouseSensitivity;
+  FSlotScreen.Gamma := Settings.Gamma;
   FSlotScreen.MessagesOn := Settings.ShowMessages;
   FSlotScreen.VideoFieldOfView := Settings.FieldOfView;
   FSlotScreen.VideoUiScale := Settings.UiScale;
@@ -1747,6 +1769,8 @@ begin
         FNavigation.MouseLookHorizontalSensitivity := MouseLookSensitivity;
         FNavigation.MouseLookVerticalSensitivity := MouseLookSensitivity;
         Settings.ShowMessages := FSlotScreen.MessagesOn;
+        if FSlotScreen.Gamma <> Settings.Gamma then
+          SetGamma(FSlotScreen.Gamma);
         { The Video page (field of view, UI scale, fullscreen / resolution). }
         if (FSlotScreen.VideoFieldOfView <> Settings.FieldOfView) or (FSlotScreen.VideoUiScale <> Settings.UiScale) or
            (FSlotScreen.VideoRenderScale <> Settings.RenderScale) or (FSlotScreen.VideoFullscreen <> Settings.Fullscreen) or
@@ -1984,6 +2008,13 @@ begin
     else
       Bright := TDoomLighting.ColormapBrightness(FlashLevel);
     FFlashImage.Color := Vector4(Bright, Bright, Bright, 1);
+  end;
+  { Gamma correction: the 2D weapon gets the world's curve at mid grey. }
+  if DoomLightingInstance.Gamma > 0 then
+  begin
+    Bright := Power(0.4, DoomLightingInstance.GammaExponent) / 0.4;
+    FWeaponImage.Color := Vector4(FWeaponImage.Color.XYZ * Bright, 1);
+    FFlashImage.Color := Vector4(FFlashImage.Color.XYZ * Bright, 1);
   end;
   Inverted := (FWorld.FixedColormap = InverseColormap) and not Fuzzy and not Mapped;
   if Fuzzy then
@@ -2596,6 +2627,11 @@ begin
   if EventIs(Event, gaUse) then
   begin
     FWorld.UseInFront;
+    Exit(true);
+  end;
+  if EventIs(Event, gaGamma) then
+  begin
+    SetGamma((Settings.Gamma + 1) mod (MaxGamma + 1));
     Exit(true);
   end;
   if EventIs(Event, gaStats) then

@@ -52,7 +52,7 @@ type
   TDoomLighting = class
   strict private
     FEffects: TEffectNodeList;
-    FExtraLight, FFixedColormap: Integer;
+    FExtraLight, FFixedColormap, FGamma: Integer;
     FDiminish: Boolean;
     FIndexLutUrl, FColormapLutUrl: String;
     FPaletteMapped: Boolean;
@@ -66,6 +66,7 @@ type
     procedure SetExtraLight(const Value: Integer);
     procedure SetFixedColormap(const Value: Integer);
     procedure SetDiminish(const Value: Boolean);
+    procedure SetGamma(const Value: Integer);
     procedure SendAll(const FieldName: String; const Value: Single);
   public
     constructor Create;
@@ -105,6 +106,11 @@ type
     property FixedColormap: Integer read FFixedColormap write SetFixedColormap;
     { Light diminishing with distance; off gives each sector a flat light. }
     property Diminish: Boolean read FDiminish write SetDiminish;
+    { Gamma correction level 0..4 (Doom's usegamma): the colours raised to
+      GammaExponent (1, 0.77, 0.63, 0.53, 0.45), so dark parts brighten
+      most, roughly like Doom's gamma tables. }
+    property Gamma: Integer read FGamma write SetGamma;
+    function GammaExponent: Single;
     { The lookup images (TDoomGraphics serves them) for palette-mapped
       colours; effects made after this use them. }
     procedure SetLookupUrls(const IndexUrl, ColormapUrl: String);
@@ -146,6 +152,7 @@ const
     'uniform sampler2D doom_colormap_lut;' + NL +
     'uniform float doom_fuzz_scale;' + NL +
     'uniform float doom_fuzz_phase;' + NL +
+    'uniform float doom_gamma;' + NL +
     '' + NL +
     { FuzzOffsets as bits (1 = +1), 10 a number so that mediump floats keep
       them exact. }
@@ -186,6 +193,7 @@ const
     '      fragment_color.rgb = doom_colormapped(fragment_color.rgb, 32.0);' + NL +
     '    else' + NL +
     '      fragment_color.rgb = vec3(1.0 - dot(fragment_color.rgb, vec3(0.299, 0.587, 0.114)));' + NL +
+    '    if (doom_gamma < 0.999) fragment_color.rgb = pow(max(fragment_color.rgb, vec3(0.0)), vec3(doom_gamma));' + NL +
     '    return;' + NL +
     '  }' + NL +
     '  if (doom_fixed_colormap > -0.5)' + NL +
@@ -211,6 +219,8 @@ const
     '    fragment_color.rgb = doom_colormapped(fragment_color.rgb, level);' + NL +
     '  else' + NL +
     '    fragment_color.rgb *= 1.0 - level / 32.0;' + NL +
+    { Gamma correction (Doom's usegamma, F11): an exponent below 1. }
+    '  if (doom_gamma < 0.999) fragment_color.rgb = pow(max(fragment_color.rgb, vec3(0.0)), vec3(doom_gamma));' + NL +
     '}';
 
   GeometryVertex =
@@ -378,6 +388,7 @@ begin
     Ord(FPaletteMapped and (FIndexLutUrl <> ''))));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_scale', FFuzzScale));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_phase', FFuzzPhase));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_gamma', GammaExponent));
   if FIndexLutUrl <> '' then
   begin
     Result.AddCustomField(TSFNode.Create(Result, true, 'doom_index_lut', [TImageTextureNode],
@@ -497,6 +508,18 @@ begin
   if FFixedColormap = Value then Exit;
   FFixedColormap := Value;
   SendAll('doom_fixed_colormap', Value);
+end;
+
+function TDoomLighting.GammaExponent: Single;
+begin
+  Result := 1 / (1 + 0.3 * FGamma);
+end;
+
+procedure TDoomLighting.SetGamma(const Value: Integer);
+begin
+  if FGamma = Value then Exit;
+  FGamma := Value;
+  SendAll('doom_gamma', GammaExponent);
 end;
 
 procedure TDoomLighting.SetDiminish(const Value: Boolean);

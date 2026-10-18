@@ -588,6 +588,15 @@ player's weapon (and flash) the same way during partial invisibility:
 `FuzzCopy` makes a black copy of the image with the same pattern, column by
 column from the top, every tic (normal again in the blinking last seconds).
 
+Gamma correction (Doom's `usegamma`, `F11` / the `gamma` action, Options ->
+Brightness, `Settings.Gamma` 0..4): the same fragment code ends with
+`pow(color, doom_gamma)`, the exponent `TDoomLighting.GammaExponent` =
+1 / (1 + 0.3 level) (1, 0.77, 0.63, 0.53, 0.45), so dark colours brighten
+most like Doom's gamma tables. Every lit shape uses that effect, so one
+uniform covers walls, flats, sprites and the sky; the 2D weapon is scaled
+by the curve's gain at mid grey, and the status bar and menus stay as
+drawn.
+
 Animation is a frame sequence (`PlaySequence('ABCD', tics, loop)`) advanced by
 `AnimateTic`; `SequenceDone` tells the world when a one-shot sequence (pain,
 death, explosion, bullet puff) finished.
@@ -1220,7 +1229,7 @@ Key bindings: `GameSettings.Keys` holds two keys per `TGameAction`
 (forward, backward, strafes, turns, run, fire, use, automap; the seven
 weapon slots, next / previous weapon; the hotkeys: light diminishing,
 mouse look, music, help, automap grid and reveal, next / previous map,
-screenshot, quick save / load; JSON `keys` with `KeyToStr` names; a
+screenshot, quick save / load, level statistics, gamma; JSON `keys` with `KeyToStr` names; a
 stored file without the newer actions keeps its keys, and the new
 actions' defaults that clash with them are dropped in `ReadKeys`).
 `TViewPlay.ApplyKeyBindings` assigns the walk navigation's

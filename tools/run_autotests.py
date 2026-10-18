@@ -385,6 +385,13 @@ TESTS = [
      [r'Stats: Overlay shown', r'Stats: freedoom1\.wad E1M1 skill 3: time 0:0\d, a new best',
       r'Stats: freedoom1\.wad E1M1 skill 3: time 0:0\d, best 0:0\d'],
      ['--fixed-step'], lambda config: check_stats(config)),
+    ('gamma', 'E1M1',
+     'Y,G:480:712,A:0,W:0.5,S,KEY:F11,KEY:F11,W:0.3,S,KEY:F11,KEY:F11,W:0.3,S,KEY:F11,W:0.3,SAVE:1,Q',
+     [r'Settings: Gamma 2 \(exponent 0\.625\)', r'Settings: Gamma 4', r'Message: Gamma correction OFF'],
+     ['--fixed-step'], lambda config: check_gamma(config, 0)),
+    ('gamma-menu', 'E1M1',
+     'W:0.5,KEY:ESCAPE,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:RIGHT,KEY:RIGHT,W:0.3,KEY:ESCAPE,KEY:ESCAPE,W:0.3,Q',
+     [r'Settings: Gamma 2 \(exponent 0\.625\)'], [], lambda config: check_gamma(config, 2)),
     ('random-menu', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: E1M1', r'Load: E1M1: map parsed', r'Message: R1: '],
      ['--menukeys', 'E,D,D,D,D,E,E'], None),
     ('random-menu-doom2', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: MAP01', r'Load: MAP01: map parsed', r'Message: R1: '],
@@ -532,6 +539,14 @@ def check_stats(config):
     assert best is not None and best <= 3, 'bestTimes: %s' % s['bestTimes']
 
 
+def check_gamma(config, level):
+    """The gamma level saved: five F11 presses go around to 0, two steps
+    of the Options page's slider give 2."""
+    with open(os.path.join(config, 'castle-doom', 'settings.json')) as f:
+        s = json.load(f)
+    assert s['gamma'] == level, 'gamma: %s' % s['gamma']
+
+
 def check_floor_y(config, below):
     """The player ended south of y = below (a line teleport moved them there)."""
     p = save_json(config, 1)['player']
@@ -664,6 +679,7 @@ GOLDEN = [
     'mapinfo_1.png', 'mapinfo_2.png', 'sector-skies_1.png', 'sector-skies_2.png',
     'random-maps_1.png', 'random-maps_2.png', 'random-maps_3.png', 'random-maps_4.png',
     'level-stats_1.png', 'level-stats_2.png', 'level-stats_3.png', 'level-stats_4.png',
+    'gamma_1.png', 'gamma_2.png', 'gamma_3.png',
 ]
 
 

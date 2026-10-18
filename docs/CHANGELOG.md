@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Gamma correction: `F11` steps through Doom's five brightness levels
+  (also Options -> Brightness in the menu); the choice is remembered.
+
 ## v0.38.0 (2026-10-18)
 
 - Level statistics: `L` shows kills, items, secrets and the time on

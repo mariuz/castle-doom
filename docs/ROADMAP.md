@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Gamma correction: Doom's five `usegamma` levels on `F11` (the
+  `gamma` action) and as Options -> Brightness in Doom's menu, kept in
+  `settings.json`; the lighting shader raises the final colour to
+  1 / (1 + 0.3 level), the 2D weapon follows at mid grey (the status
+  bar and menus stay as they are). Autotest `gamma` (goldens), unit
+  test `TestGamma`.
+
 - Level statistics and best times: the `stats` action (`L`) shows kills,
   items, secrets and the level time above the status bar (above the
   automap's title too); each level's best time per WADs, map and skill
@@ -1019,7 +1026,6 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels and the desktop menu are done (see above); left are demos in the browser (files through the save storage and the home page, like the save bundle), the demo-script cheats as recorded events, and a ghost of a recording to race. | Easier bug reports; replays. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | M |
-| **Gamma / brightness setting** (Doom's `usegamma` 0-4, F11) applied in the palette lookup shader. | Dark monitors and bright rooms. | `DoomLighting`, Video options | S |
 | **Closed captions**: a line per sound ("Imp roars, left") under the messages, with the direction from the sound's position. | Accessibility for players who cannot hear. | `DoomSound`, `DoomHud` | S |
 | **Spectator / photo mode**: a free camera (no clipping, no gravity) with the world paused, and a key to hide the HUD. | Screenshots, map inspection. | `GameViewPlay` | S |
 | **Dynamic lights**: rockets, plasma, the BFG and muzzle flashes as CGE point lights (a few at a time), as an option next to the vanilla look. | A modern look many players like. | `DoomActors`, `DoomLighting` | M |
@@ -1027,10 +1033,10 @@ play.
 
 ## Suggested next three
 
-1. Gamma / brightness setting (S, see New features).
-2. Closed captions (S, see New features).
-3. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
+1. Closed captions (S, see New features).
+2. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
+3. Spectator / photo mode (S, see New features).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

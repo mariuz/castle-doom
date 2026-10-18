@@ -96,7 +96,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 40 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 41 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -206,7 +206,7 @@ page after binding Q to Use (autotests `controls-page`, `key-bindings`),
 after binding K to light diminishing. The weapon keys and hotkeys are
 actions too (`weapon1`..`weapon7`, `nextWeapon`, `prevWeapon`,
 `lightDiminish`, `mouseLook`, `music`, `help`, `grid`, `revealMap`,
-`nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`, `stats`):
+`nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`, `stats`, `gamma`):
 `BIND:weapon5:Q,KEY:Q` selects the rocket launcher (autotest
 `hotkey-bindings`, unit test `TestKeyBindings`). Each action also has
 one mouse binding (`GameSettings.Mouse`, `settings.json`'s `mouse`:
@@ -221,6 +221,11 @@ end stores its best time per WADs, map and skill (`bestTimes`, keys
 like `freedoom1.wad E1M1 skill 3`; log `Stats: ... time 0:02, a new
 best` or `best 0:02`), shown on the intermission under TIME / PAR
 (autotest `level-stats` with goldens, unit test `TestBestTimes`).
+Gamma: `KEY:F11` steps `Settings.Gamma` 0..4 (`settings.json`'s
+`gamma`, the `gamma` action; Doom menu Options -> BRIGHTNESS slider);
+log `Settings: Gamma 2 (exponent 0.625)` and `Message: Gamma correction
+level 2`. The shader's `doom_gamma` is `TDoomLighting.GammaExponent`
+(autotests `gamma` with goldens and `gamma-menu`, unit test `TestGamma`).
 Settings (`GameSettings`, `settings.json` next to the saves; the log
 prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
 like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a

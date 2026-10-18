@@ -151,7 +151,7 @@
         "E / Space: use (doors, switches)",
         "1-7, wheel: weapons",
         "Tab: automap   + / -: zoom   G: grid   I: reveal map",
-        "F: light diminishing on/off   M: mouse look",
+        "F: light diminishing on/off   M: mouse look   F11: gamma",
         "N / P: next / previous map   J: music on/off   F4: volume",
         "F2 / F3: save / load   F6 / F9: quick save / load   L: stats",
         "F5: screenshot   F1: Read This! (title menu)",

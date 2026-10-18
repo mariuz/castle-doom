@@ -100,6 +100,8 @@ type
     SfxVolume, MusicVolume: Integer; { 0..15 }
     MouseSensitivity: Integer;       { 0..9 }
     MessagesOn: Boolean;
+    { Brightness: Doom's gamma correction level 0..4 (Options page). }
+    Gamma: Integer;
     { The Video page (not in Doom: drawn in the HU font): field of view
       60..120 in steps of 5, UI scale 50..200 % in steps of 10, and
       fullscreen (desktop) or the render resolution 25..100 % (web). }
@@ -323,6 +325,8 @@ begin
     MouseSensitivity := Max(0, Min(9, MouseSensitivity + Delta))
   else if Item = 'M_MESSG' then
     MessagesOn := not MessagesOn
+  else if Item = 'T:BRIGHTNESS' then
+    Gamma := Max(0, Min(4, Gamma + Delta))
   else if Item = 'T:FIELD OF VIEW' then
     VideoFieldOfView := Max(60, Min(120, VideoFieldOfView + 5 * Delta))
   else if Item = 'T:UI SCALE' then
@@ -397,7 +401,7 @@ begin
   case Page of
     mpMain: Result := Length(FMainItems);
     mpReadThis1, mpReadThis2: Result := 1;
-    mpOptions: Result := 6;
+    mpOptions: Result := 8;
     mpSound: Result := 4;
     mpVideo: Result := {$ifdef WASI} 6 {$else} 7 {$endif};
     mpEpisode: Result := Max(1, FEpisodes);
@@ -412,7 +416,8 @@ const
   SkillItems: array [0..4] of String = ('M_JKILL', 'M_ROUGH', 'M_HURT', 'M_ULTRA', 'M_NMARE');
   { m_menu.c's OptionsDef without detail and screen size; '' rows are the
     thermometers' (not selectable). }
-  OptionItems: array [0..5] of String = ('M_ENDGAM', 'M_MESSG', 'M_MSENS', '', 'M_SVOL', 'T:VIDEO');
+  OptionItems: array [0..7] of String = ('M_ENDGAM', 'M_MESSG', 'M_MSENS', '', 'M_SVOL', 'T:VIDEO',
+    'T:BRIGHTNESS', '');
   SoundItems: array [0..3] of String = ('M_SFXVOL', '', 'M_MUSVOL', '');
   { Items named 'T:...' are drawn as text (no patch for them in Doom). }
   {$ifdef WASI}
@@ -947,6 +952,7 @@ begin
         if MessagesOn then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 1)
         else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 1);
         DrawThermo(Img, X, Y + LineHeight * 3, 10, MouseSensitivity);
+        DrawThermo(Img, X, Y + LineHeight * 7, 5, Gamma);
       end;
     mpSound:
       begin
