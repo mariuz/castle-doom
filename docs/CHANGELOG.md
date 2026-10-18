@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.34.0 (2026-10-18)
 
 - Random maps have doors, and from the second map on a locked door
   (blue, yellow or red) stands between you and the exit, with its key
