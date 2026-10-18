@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.30.0 (2026-10-18)
 
 - The browser version no longer stops when opened with only a `map=` in
   its address (it starts that map).
