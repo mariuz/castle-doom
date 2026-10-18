@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.29.0 (2026-10-18)
 
 - The intermission's episode maps animate, mark the levels you have
   finished and point at the next one, as in Doom (with PWAD art: Freedoom

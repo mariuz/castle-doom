@@ -11,7 +11,7 @@
   screen_orientation="landscape"
   editor_units="DoomHud;DoomFont;DoomMenu;DoomAutomap;DoomIntermission;DoomFinale;DoomWipe;DoomWorldStatus;DoomMapTransform;GameTouch"
 >
-  <version value="0.28.0" code="32" />
+  <version value="0.29.0" code="33" />
   <!-- The sounds come from the WAD, so the build tool cannot see from the
        data that sound is used (Android's "sound" service, OpenAL). -->
   <!-- The launcher icon (Android, the Linux desktop file, macOS). -->
