@@ -46,7 +46,14 @@ jobs:
           cd /tmp/
           git clone https://github.com/castle-engine/castle-build-ci.git \
             --depth=1 --single-branch --branch=master
-          castle-build-ci/install_dependencies
+          # The package feeds (Chocolatey's wget on Windows) sometimes time
+          # out (504): try three times before failing the job.
+          for attempt in 1 2 3; do
+            if castle-build-ci/install_dependencies; then break; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            echo "install_dependencies failed (attempt $attempt), retrying in 30 s"
+            sleep 30
+          done
           castle-build-ci/setup_castle_engine
 
       - name: Build Nuked OPL3 (shared library in data/lib)
@@ -78,7 +85,14 @@ jobs:
           cd /tmp/
           git clone https://github.com/castle-engine/castle-build-ci.git \
             --depth=1 --single-branch --branch=master
-          castle-build-ci/install_dependencies
+          # The package feeds (Chocolatey's wget on Windows) sometimes time
+          # out (504): try three times before failing the job.
+          for attempt in 1 2 3; do
+            if castle-build-ci/install_dependencies; then break; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            echo "install_dependencies failed (attempt $attempt), retrying in 30 s"
+            sleep 30
+          done
           castle-build-ci/setup_castle_engine
 
       - name: Build Nuked OPL3 (shared library in data/lib)
@@ -115,7 +129,14 @@ jobs:
           cd /tmp/
           git clone https://github.com/castle-engine/castle-build-ci.git \
             --depth=1 --single-branch --branch=master
-          castle-build-ci/install_dependencies
+          # The package feeds (Chocolatey's wget on Windows) sometimes time
+          # out (504): try three times before failing the job.
+          for attempt in 1 2 3; do
+            if castle-build-ci/install_dependencies; then break; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            echo "install_dependencies failed (attempt $attempt), retrying in 30 s"
+            sleep 30
+          done
           castle-build-ci/setup_castle_engine
 
       - name: Build Nuked OPL3 (shared library in data/lib)
