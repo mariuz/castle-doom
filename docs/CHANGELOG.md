@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.41.0 (2026-10-19)
 
 - Photo mode: `O` pauses the game, hides the HUD and lets the camera fly
   freely (through walls) for screenshots; `O` or Esc returns.
