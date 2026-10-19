@@ -400,6 +400,11 @@ TESTS = [
     ('captions-menu', 'E1M1',
      'W:0.5,KEY:ESCAPE,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:ENTER,W:0.3,S,KEY:ESCAPE,KEY:ESCAPE,KEY:ESCAPE,W:0.3,G:480:712,A:0,U,W:0.3,Q',
      [r'Settings: Captions on', r'Caption: Door opens, ahead'], [], lambda config: check_captions(config)),
+    ('photo-mode', 'E1M1',
+     'Y,W:0.5,S,SAVE:1,PHOTO,W:0.5,S,LOOK:20,F:2,W:3.5,S,KEY:O,W:0.3,S,SAVE:2,Q',
+     [r'Photo: Photo mode on at \(-416, 256, 40\), the game is paused',
+      r'Photo: Photo mode off, back at the player'],
+     ['--fixed-step'], lambda config: check_photo(config)),
     ('random-menu', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: E1M1', r'Load: E1M1: map parsed', r'Message: R1: '],
      ['--menukeys', 'E,D,D,D,D,E,E'], None),
     ('random-menu-doom2', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: MAP01', r'Load: MAP01: map parsed', r'Message: R1: '],
@@ -545,6 +550,16 @@ def check_stats(config):
     assert s['showStats'] is True, 'showStats: %s' % s['showStats']
     best = s['bestTimes'].get('freedoom1.wad E1M1 skill 3')
     assert best is not None and best <= 3, 'bestTimes: %s' % s['bestTimes']
+
+
+def check_photo(config):
+    """The player is back where photo mode started and the world stood
+    still meanwhile (about 6 s of photo mode, 0.3 s of play after it)."""
+    before, after = save_json(config, 1), save_json(config, 2)
+    for k in ('x', 'y'):
+        assert abs(before['player'][k] - after['player'][k]) < 1, \
+            'player moved: %s -> %s' % (before['player'], after['player'])
+    assert after['tic'] - before['tic'] < 40, 'tics %s -> %s' % (before['tic'], after['tic'])
 
 
 def check_captions(config):
@@ -694,6 +709,7 @@ GOLDEN = [
     'random-maps_1.png', 'random-maps_2.png', 'random-maps_3.png', 'random-maps_4.png',
     'level-stats_1.png', 'level-stats_2.png', 'level-stats_3.png', 'level-stats_4.png',
     'gamma_1.png', 'gamma_2.png', 'gamma_3.png', 'captions_1.png', 'captions_2.png', 'captions-menu_1.png',
+    'photo-mode_1.png', 'photo-mode_2.png', 'photo-mode_3.png', 'photo-mode_4.png',
 ]
 
 

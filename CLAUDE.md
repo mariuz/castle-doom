@@ -206,7 +206,7 @@ page after binding Q to Use (autotests `controls-page`, `key-bindings`),
 after binding K to light diminishing. The weapon keys and hotkeys are
 actions too (`weapon1`..`weapon7`, `nextWeapon`, `prevWeapon`,
 `lightDiminish`, `mouseLook`, `music`, `help`, `grid`, `revealMap`,
-`nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`, `stats`, `gamma`):
+`nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`, `stats`, `gamma`, `photo`):
 `BIND:weapon5:Q,KEY:Q` selects the rocket launcher (autotest
 `hotkey-bindings`, unit test `TestKeyBindings`). Each action also has
 one mouse binding (`GameSettings.Mouse`, `settings.json`'s `mouse`:
@@ -232,6 +232,11 @@ CAPTIONS, also on F4's page); the log says `Caption: Door opens, ahead (DSDOROPN
 shown (only while on). Monster names come from the `CC_*` strings
 (Freedoom: `Serpentipede sees you, left`). Autotests `captions` (goldens)
 and `captions-menu`, unit test `TestCaptions`.
+Photo mode: `PHOTO` in a demo (or `KEY:O`, the `photo` action) pauses
+the world and frees the camera (`F:sec` flies where it looks, `LOOK:deg`
+tilts); the log says `Photo: Photo mode on at (-416, 256, 40), the game
+is paused` and `Photo mode off, back at the player`. Autotest
+`photo-mode` (goldens; its saves check the player's place and the tics).
 Settings (`GameSettings`, `settings.json` next to the saves; the log
 prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
 like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a

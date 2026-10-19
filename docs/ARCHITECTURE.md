@@ -1378,6 +1378,20 @@ The player is not a `TCastleTransform`; it is the viewport's camera moved by
   cleared,
 - `FallingEffect = false`: CGE turns the view during long falls (it once
   made the player face elsewhere after walking off E1M1's start ledge).
+
+Photo mode (`gaPhoto`, `O`; `TViewPlay.SetPhotoMode`) keeps the camera's
+pose, then turns `Gravity`, `CheckCollisions` (honoured by
+`TCastleNavigation.MoveAllowed`), `PreferGravityUpForMoving` and head
+bobbing off, so the same navigation flies where it looks through walls.
+`Update` returns before the camera is read into the world
+(`UpdatePhoto`): no `TDoomWorld.Update`, so nothing moves and a demo
+being recorded sees no frames, and the HUD controls are hidden each
+frame. `Press` lets only the photo key / Esc, the screenshot (with the
+hint hidden), gamma, light diminishing and mouse look through. Leaving
+puts the camera back (`SetView`, `CancelFalling`) and forgets the last
+walk (`FWalkKnown`), so the flight is no momentum of the player's; a map
+change, the view's `Stop` and the browser's pointer-lock cancel leave
+photo mode first.
 - `UseGameController` for the sticks. In the game a button press runs
   the actions bound to it (`TViewPlay.PadPressed` through
   `PadButtonOfEvent`), the triggers have no events and are edge-detected

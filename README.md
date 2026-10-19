@@ -110,6 +110,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   its start or a loaded game) as the world received it and `--playdemo FILE` (Play demo...)
   plays it back on its own random numbers, so it plays the
   same at any frame rate; a checksum every second says where a playback went out of sync.
+- Photo mode: `O` pauses the game, hides the HUD and lets the camera fly through the level (`F5`
+  saves a screenshot without the HUD; `O` or Esc returns to the player).
 - Closed captions: Options -> Sound Volume -> Captions (or F4) shows a line for each sound heard ("Door opens, ahead",
   "Serpentipede sees you, left") under the messages.
 - Gamma correction: `F11` (or Options -> Brightness) brightens the dark parts in Doom's five
@@ -165,7 +167,7 @@ or open `CastleEngineManifest.xml` in the Castle Game Engine editor.
 Keys: `WASD`/arrows move, `Shift` run, mouse look, left mouse / `Ctrl` fire,
 `E`/`Space` use, `1`-`7` and mouse wheel weapons, `F` light diminishing, `M` mouse look on/off,
 `J` music on/off, `F4` sound / music volume, `Tab` automap (`+`/`-`/wheel zoom, `G` grid, `I` reveal all),
-`F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `L` level statistics, `F11` gamma correction (5 levels, also Options -> Brightness), `N`/`P` next/previous map,
+`F2`/`F3` save/load menu, `F6`/`F9` quick save/load, `L` level statistics, `F11` gamma correction (5 levels, also Options -> Brightness), `O` photo mode, `N`/`P` next/previous map,
 `F5` screenshot, `F8` the engine's inspector (the map, every thing and the game state by name; its `F9` selects the monster under the crosshair), `H` help, `Esc` Doom's menu over the paused game
 (Options: end game, messages, mouse sensitivity, sound volume and captions, video, brightness; `Esc` again or a click beside
 the items resumes; in the browser, Esc releasing the mouse opens it the same way, and a

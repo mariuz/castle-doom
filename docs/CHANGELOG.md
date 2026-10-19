@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Photo mode: `O` pauses the game, hides the HUD and lets the camera fly
+  freely (through walls) for screenshots; `O` or Esc returns.
+
 ## v0.40.0 (2026-10-19)
 
 - Closed captions (Options -> Sound Volume -> Captions, or F4): a line for each sound you hear,

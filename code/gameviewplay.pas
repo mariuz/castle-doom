@@ -34,6 +34,12 @@ type
     { Closed captions under the messages (Settings.Captions, DoomCaptions). }
     FCaptionText: TDoomFontText;
     FCaptions: TCaptionList;
+    { Photo mode (gaPhoto): a free camera over the paused world, no HUD;
+      the camera's place and what the HUD showed, to go back to. }
+    FPhoto: Boolean;
+    FPhotoPos, FPhotoDir, FPhotoUp: TVector3;
+    FPhotoAutomap, FPhotoInfo: Boolean;
+    FPhotoHintTime: Single;
     { "Click to look around" while mouse look is wanted but the browser
       released the pointer (Esc, another window). }
     FClickPrompt: TDoomFontText;
@@ -150,6 +156,9 @@ type
     { TDoomSounds.OnPlay: a closed caption for the sound. }
     procedure SoundPlayed(const LumpName: String; const Emitter: TCastleTransform);
     procedure SetCaptions(const On: Boolean);
+    { Photo mode on / off (gaPhoto, demo command PHOTO). }
+    procedure SetPhotoMode(const On: Boolean);
+    procedure UpdatePhoto(const SecondsPassed: Single);
     { The navigation's keys from Settings.Keys, and the help panel's
       lines for them. }
     procedure ApplyKeyBindings;
@@ -471,6 +480,7 @@ end;
 
 procedure TViewPlay.Stop;
 begin
+  SetPhotoMode(false);
   StopDemos(false);
   FreeAndNil(FDemoPlayer);
   { The page must stop keeping fingers from the engine (the menus). }
@@ -662,6 +672,8 @@ begin
     FWorld.Player.InvulnerableTics := Iff(Arg > 0, Round(Arg), 30 * 35)
   else if Cmd = 'AMP' then
     FWorld.Player.LightAmpTics := Iff(Arg > 0, Round(Arg), 120 * 35)
+  else if Cmd = 'PHOTO' then
+    SetPhotoMode(not FPhoto)
   else if Cmd = 'CAPTIONS' then
     SetCaptions(not Settings.Captions)
   else if Cmd = 'DIM' then
@@ -983,7 +995,8 @@ begin
       Hot(gaStats, 'stats'));
     if FHelpLabel.Text.Count >= 11 then
     begin
-      FHelpLabel.Text[8] := Trim(Hot(gaScreenshot, 'screenshot   ') + 'F1: Read This! (title menu)');
+      FHelpLabel.Text[8] := Trim(Hot(gaScreenshot, 'screenshot   ') + Hot(gaPhoto, 'photo mode   ') +
+        'F1: Read This! (title menu)');
       FHelpLabel.Text[10] := Hot(gaHelp, 'hide this help   ') + 'Esc: menu (pauses; Esc again resumes)';
     end;
   end;
@@ -1337,6 +1350,74 @@ begin
   WritelnLog('Settings', 'Gamma %d (exponent %.3f)', [L, DoomLightingInstance.GammaExponent]);
 end;
 
+procedure TViewPlay.SetPhotoMode(const On: Boolean);
+var
+  Feet: TVector3;
+begin
+  if FPhoto = On then Exit;
+  if On and ((FWorld = nil) or (not FWorld.MapLoaded) or FWorld.Player.Dead or
+     FIntermission or (FSlotMenu <> SlotMenuNone) or FWorld.Replaying) then
+    Exit;
+  FPhoto := On;
+  if On then
+  begin
+    FViewport.Camera.GetView(FPhotoPos, FPhotoDir, FPhotoUp);
+    FPhotoAutomap := FAutomap.Exists;
+    FPhotoInfo := FInfoLabel.Exists;
+    FAutomap.Exists := false;
+    { Fly where the camera looks, through walls, nothing falls. }
+    FNavigation.Gravity := false;
+    FNavigation.CheckCollisions := false;
+    FNavigation.PreferGravityUpForMoving := false;
+    FNavigation.HeadBobbing := 0;
+    FNavigation.MoveSpeed := 290;
+    FPhotoHintTime := 3;
+    Feet := CgeToDoom(FPhotoPos);
+    WritelnLog('Photo', 'Photo mode on at (%.0f, %.0f, %.0f), the game is paused', [Feet.X, Feet.Y, Feet.Z]);
+  end else
+  begin
+    FViewport.Camera.SetView(FPhotoPos, FPhotoDir, FPhotoUp);
+    FNavigation.Gravity := true;
+    FNavigation.CheckCollisions := true;
+    FNavigation.PreferGravityUpForMoving := true;
+    FNavigation.HeadBobbing := 0.03;
+    FNavigation.CancelFalling;
+    FAutomap.Exists := FPhotoAutomap;
+    FInfoLabel.Exists := FPhotoInfo;
+    FPaletteFlash.Exists := true;
+    FMessageText.SetText('');
+    { The flight is no walk of the player's. }
+    FWalkKnown := false;
+    WritelnLog('Photo', 'Photo mode off, back at the player');
+  end;
+end;
+
+{ Photo mode's frame: the world stands still, the HUD is hidden and only
+  a hint shows for the first seconds. }
+procedure TViewPlay.UpdatePhoto(const SecondsPassed: Single);
+begin
+  FNavigation.Exists := true;
+  FStatusBar.Exists := false;
+  FWeaponImage.Exists := false;
+  FFlashImage.Exists := false;
+  FCrosshair.Exists := false;
+  FStatsText.Exists := false;
+  FCaptionText.SetText('');
+  FInfoLabel.Exists := false;
+  FHelpLabel.Exists := false;
+  FPaletteFlash.Exists := false;
+  FClickPrompt.Exists := false;
+  FAutomapTitle.Exists := false;
+  if FPhotoHintTime > 0 then
+  begin
+    FPhotoHintTime := FPhotoHintTime - SecondsPassed;
+    FMessageText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
+    FMessageText.SetText(UpperCase(Format('Photo mode: %s or Esc returns, %s saves a screenshot', [
+      ActionInputText(gaPhoto), ActionInputText(gaScreenshot)])));
+  end else
+    FMessageText.SetText('');
+end;
+
 procedure TViewPlay.SetCaptions(const On: Boolean);
 begin
   Settings.Captions := On;
@@ -1462,6 +1543,7 @@ procedure TViewPlay.StartMap(const MapName: String; const KeepInventory: Boolean
 begin
   { The next level after an intermission keeps a demo going; any other
     map change (a load, a restart after death, a warp) ends it. }
+  SetPhotoMode(false);
   if not FDemoNextLevel then
     StopDemos(false);
   if FCaptions <> nil then FCaptions.Clear;
@@ -1930,6 +2012,7 @@ end;
 procedure TViewPlay.PointerLockUserCancelled(Sender: TObject);
 begin
   WritelnLog('PointerLock', 'Cancelled by the user, pausing');
+  SetPhotoMode(false);
   if (Container.View = Self) and (FSlotMenu = SlotMenuNone) then
     OpenPauseMenu;
 end;
@@ -2440,6 +2523,11 @@ begin
     end;
     Exit;
   end;
+  if FPhoto then
+  begin
+    UpdatePhoto(SecondsPassed);
+    Exit;
+  end;
   FStatusBar.Exists := true;
   FNavigation.Exists := not FWorld.Player.Dead;
   FLevelTime := FLevelTime + SecondsPassed;
@@ -2707,6 +2795,30 @@ begin
     Exit;
   end;
 
+  { Photo mode: only leaving it, screenshots and the view's look. }
+  if FPhoto then
+  begin
+    if EventIs(Event, gaPhoto) or Event.IsKey(keyEscape) then
+    begin
+      SetPhotoMode(false);
+      Exit(true);
+    end;
+    if EventIs(Event, gaScreenshot) then
+    begin
+      { Without the hint in the picture. }
+      FMessageText.SetText('');
+      FPhotoHintTime := 0;
+      WritelnLog('Photo', 'Screenshot saved: %s', [Container.SaveScreenToDefaultFile]);
+      Exit(true);
+    end;
+    if not (EventIs(Event, gaGamma) or EventIs(Event, gaLightDiminish) or EventIs(Event, gaMouseLook)) then
+      Exit(true);
+  end else
+  if EventIs(Event, gaPhoto) then
+  begin
+    SetPhotoMode(true);
+    Exit(true);
+  end;
   if EventIs(Event, gaUse) then
   begin
     FWorld.UseInFront;

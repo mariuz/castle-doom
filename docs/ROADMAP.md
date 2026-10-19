@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Photo mode: the `photo` action (`O`) pauses the world, hides the HUD,
+  weapon, messages and help, and lets the camera fly where it looks
+  through walls (no gravity, no collisions; Shift is faster); `O` or
+  Esc puts it back at the player, and the screenshot key saves the
+  view without the hint. Autotest `photo-mode` (goldens; the player's
+  place and the tic count in its saves), unit test `TestKeyBindings`.
+
 - Closed captions: Options -> Sound Volume -> Captions in Doom's menu (also F4) (`settings.json`'s
   `captions`) shows a line per sound heard under the messages, "Door
   opens, ahead" or "Serpentipede sees you, left": doors, lifts,
@@ -1036,16 +1043,16 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels and the desktop menu are done (see above); left are demos in the browser (files through the save storage and the home page, like the save bundle), the demo-script cheats as recorded events, and a ghost of a recording to race. | Easier bug reports; replays. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | M |
-| **Spectator / photo mode**: a free camera (no clipping, no gravity) with the world paused, and a key to hide the HUD. | Screenshots, map inspection. | `GameViewPlay` | S |
+| **Photo mode, the rest**: the paused free camera is done (see above); left are a gamepad button and a touch button for it, a spectator camera while the world keeps running, and a field-of-view / tilt control for shots. | Photo mode on every device; watching fights. | `GameViewPlay`, `GameTouch`, `GameSettings.Pad` | S |
 | **Dynamic lights**: rockets, plasma, the BFG and muzzle flashes as CGE point lights (a few at a time), as an option next to the vanilla look. | A modern look many players like. | `DoomActors`, `DoomLighting` | M |
 | **Custom game page in the Doom menu**: IWAD, PWADs, map, skill and a random seed on one text page, instead of the Options panel's CGE buttons. | One place to start anything. | `DoomMenu`, `GameViewMenu` | M |
 
 ## Suggested next three
 
-1. Spectator / photo mode (S, see New features).
+1. Dynamic lights (M, see New features).
 2. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-3. Dynamic lights (M, see New features).
+3. Custom game page in the Doom menu (M, see New features).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

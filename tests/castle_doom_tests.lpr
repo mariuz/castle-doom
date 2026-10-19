@@ -1915,6 +1915,7 @@ begin
   ResetKeys;
   AssertTrue('1: fist', KeyIs(key1, gaWeapon1));
   AssertTrue('F: light diminishing', KeyIs(keyF, gaLightDiminish));
+  AssertTrue('O: photo mode', KeyIs(keyO, gaPhoto));
   AssertTrue('F6: quick save', KeyIs(keyF6, gaQuickSave));
   AssertEquals('next weapon unbound', '-', ActionKeysText(gaNextWeapon));
   { A key moves from the action that had it. }
