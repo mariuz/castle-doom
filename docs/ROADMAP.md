@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Custom game page: New Game -> Custom game (title screen) is a text
+  page of Doom's menu with the game (Freedoom Phase 1, Phase 2 or the
+  last IWAD opened), PWADs (right adds one through the file dialog, left
+  clears), map, skill, a random seed typed in (random maps on top of the
+  chosen game) and Start. Autotests `custom-game` and `custom-game-doom2`
+  (goldens), unit test `TestCustomGamePage`.
+
 - Dynamic lights: Options -> Video -> Dynamic lights (`settings.json`'s
   `dynamicLights`, off by default) lets rockets, fireballs, plasma, BFG
   balls, barrel explosions and the player's and monsters' muzzle
@@ -1054,14 +1061,14 @@ play.
 | **Demos, the rest**: recording, playback, several levels and the desktop menu are done (see above); left are demos in the browser (files through the save storage and the home page, like the save bundle), the demo-script cheats as recorded events, and a ghost of a recording to race. | Easier bug reports; replays. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | M |
 | **Photo mode, the rest**: the paused free camera is done (see above); left are a gamepad button and a touch button for it, a spectator camera while the world keeps running, and a field-of-view / tilt control for shots. | Photo mode on every device; watching fights. | `GameViewPlay`, `GameTouch`, `GameSettings.Pad` | S |
 | **Dynamic lights, the rest**: missiles, explosions and muzzle flashes are done (see above); left are lights for lamps, torches and candles (things with full-bright frames), a fade over an explosion's frames, a switch on the title screen's Options panel, and more slots on fast GPUs (a uniform array). | Lit rooms around light sources. | `DoomLighting`, `GameViewPlay` | S |
-| **Custom game page in the Doom menu**: IWAD, PWADs, map, skill and a random seed on one text page, instead of the Options panel's CGE buttons. | One place to start anything. | `DoomMenu`, `GameViewMenu` | M |
+| **Custom game page, the rest**: the page is done (see above); left are "Open IWAD..." on it (a file dialog row, like PWADs), the PWADs' order and removing one, a list of recent WAD sets, and the browser's own files (an `<input type=file>` the page script hands to the WAD loader). | The Options panel's WAD buttons could go. | `DoomMenu`, `GameViewMenu`, `tools/patch_web_page.py` | M |
 
 ## Suggested next three
 
-1. Custom game page in the Doom menu (M, see New features).
+1. Dynamic lights, the rest (S, see New features).
 2. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-3. Dynamic lights, the rest (S, see New features).
+3. Photo mode, the rest (S, see New features).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

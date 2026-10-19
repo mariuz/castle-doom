@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu;
 
 function DataPath(const Name: String): String;
 begin
@@ -93,6 +93,10 @@ type
   end;
 
   TTestGamepad = class(TTestCase)
+  strict private
+    FMenu: TDoomMenuScreen;
+    FMenuRequests: String;
+    procedure MenuAction(const Action: TDoomMenuAction);
   published
     procedure TestWebPadMapping;
     procedure TestPadBindings;
@@ -101,6 +105,7 @@ type
     procedure TestGamma;
     procedure TestCaptions;
     procedure TestDynamicLights;
+    procedure TestCustomGamePage;
     procedure TestTouchControls;
   end;
 
@@ -1916,6 +1921,57 @@ begin
     FreeAndNil(E);
   finally
     FreeAndNil(L);
+  end;
+end;
+
+procedure TTestGamepad.MenuAction(const Action: TDoomMenuAction);
+begin
+  if Action = maCustom then
+    FMenuRequests := FMenuRequests + Format('%s %d;', [FMenu.CustomItem, FMenu.CustomDelta]);
+end;
+
+{ The custom game page without a WAD: its rows ask the view (OnAction),
+  the skill and the random seed are its own. }
+procedure TTestGamepad.TestCustomGamePage;
+
+  procedure Key(const K: TKey; const S: String = '');
+  begin
+    FMenu.HandleKey(InputKey(TVector2.Zero, K, S, []));
+  end;
+
+begin
+  FMenu := TDoomMenuScreen.Create(nil);
+  try
+    FMenu.OnAction := {$ifdef FPC}@{$endif} MenuAction;
+    FMenuRequests := '';
+    FMenu.SetMenuActive(true);
+    FMenu.OpenPage(mpCustom);
+    Key(keyArrowRight);                       { GAME: the next IWAD }
+    Key(keyArrowDown);
+    Key(keyArrowLeft);                        { PWADS: clear }
+    Key(keyEnter);                            { PWADS: add one }
+    Key(keyArrowDown);
+    Key(keyArrowLeft);                        { MAP: the previous one }
+    Key(keyArrowDown);
+    Key(keyArrowLeft);                        { SKILL 3 -> 2 }
+    AssertEquals('skill', 1, FMenu.Skill);
+    Key(keyArrowDown);
+    Key(keyEnter);                            { RANDOM SEED: type }
+    Key(keyNone, '4');
+    Key(keyNone, 'x');                        { not a digit }
+    Key(keyNone, '2');
+    Key(keyEnter);
+    AssertEquals('seed', '42', FMenu.CustomSeed);
+    Key(keyArrowLeft);
+    AssertEquals('seed cleared', '', FMenu.CustomSeed);
+    Key(keyArrowDown);                        { over the blank row to START }
+    Key(keyEnter);
+    AssertEquals('requests', 'GAME 1;CLEAR 0;PWADS 0;MAP -1;START 0;', FMenuRequests);
+    Key(keyEscape);
+    { Back to the episodes, or (no WAD set up) the main page. }
+    AssertTrue('back', FMenu.Page = mpMain);
+  finally
+    FreeAndNil(FMenu);
   end;
 end;
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- New Game -> Custom game: pick the game, PWADs, map, skill and a random
+  seed on one page of Doom's menu, then Start.
+
 ## v0.42.0 (2026-10-19)
 
 - Dynamic lights (Options -> Video): rockets, fireballs, plasma, explosions

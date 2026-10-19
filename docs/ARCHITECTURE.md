@@ -1326,9 +1326,26 @@ itself by mapping the pointer through its `RenderRect` into Doom pixels.
 Chosen actions come back through `OnAction` (new game with episode and
 skill, load slot, options, quit).
 
+New Game's episode list ends with "Random maps" and, on the title screen
+(not in the in-game menu), "Custom game": a text page (`mpCustom`, the
+HU font under `M_NEWG`) with the game (IWAD), PWADs, map, skill, random
+seed and Start. The page keeps the skill and the seed itself (the seed's
+digits are typed like a save name); the rest it asks of the view with
+`maCustom` and `CustomItem` / `CustomDelta` (`GAME` cycles Freedoom
+Phase 1, Phase 2 and the last IWAD opened, `PWADS` adds one through the
+file dialog, `CLEAR` drops them, `MAP` steps through the WAD's maps,
+`START`). `TViewMenu.CustomGameAction` does them with the Options
+panel's own code (`LoadWads`, `ClickAddPwad`, `ClickPrevMap`...) and
+`ShowCustomPage` writes the rows back (`CustomGame`, `CustomPwads`,
+`CustomMap`) and reopens the page, since loading WADs sets the menu up
+anew (after a Phase 2 download too). Start adds `random:/SEED` to the
+PWADs when a seed is set and starts the chosen map (log `Menu: Custom
+game: freedoom1.wad, PWADs none, map E1M3, skill 2, random seed 42`).
+
 "Options" shows the CGE part: buttons (`TCastleButton` in
 `TCastleHorizontalGroup`/`TCastleVerticalGroup` on a `TCastleRectangleControl`)
-to pick Freedoom Phase 1 or 2, the map and the skill, "Open IWAD..." and "Add
+to pick Freedoom Phase 1 or 2, the map and the skill (also on the custom game
+page above), "Open IWAD..." and "Add
 PWAD..." using the window's native `FileDialog` (desktop only), a "Last WADs"
 shortcut backed by `UserConfig` (`castle-config:`) and "Continue (quick
 save)". The command line accepts Doom's `-iwad FILE`, `-file PWAD...`,

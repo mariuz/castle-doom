@@ -17,14 +17,16 @@ uses Classes,
 
 type
   TDoomMenuPage = (mpMain, mpEpisode, mpSkill, mpLoad, mpReadThis1, mpReadThis2, mpSave,
-    mpOptions, mpSound, mpVideo);
+    mpOptions, mpSound, mpVideo, mpCustom);
   { maClose: an overlay's page was left with Esc (the game takes over).
     maEndGame: Options -> End Game, confirmed. maSettings: a slider or
     toggle changed (SfxVolume, MusicVolume, MouseSensitivity, MessagesOn,
     the Video page's VideoFieldOfView, VideoUiScale, VideoFullscreen,
     VideoRenderScale). }
+  { maCustom: the custom game page wants CustomItem done (OPEN, GAME,
+    PWADS, CLEAR, MAP, START; CustomDelta -1 / 1 for the arrows). }
   TDoomMenuAction = (maNone, maNewGame, maLoadSlot, maOptions, maQuit, maSaveSlot, maClose,
-    maEndGame, maSettings);
+    maEndGame, maSettings, maCustom);
 
   TDoomMenuEvent = procedure (const Action: TDoomMenuAction) of object;
 
@@ -65,6 +67,9 @@ type
     FHelp1, FHelp2: String;
     procedure DrawThermo(const Img: TRGBAlphaImage; const X, Y, Steps, Value: Integer);
     procedure ChangeSlider(const Delta: Integer);
+    { The custom game page's rows: the view does what needs the WADs. }
+    procedure CustomChange(const Item: String; const Delta: Integer);
+    procedure CustomRequest(const Item: String; const Delta: Integer);
     function ItemName: String;
     function Selectable(const Item: Integer): Boolean;
     procedure Compose;
@@ -114,11 +119,19 @@ type
     { Dynamic lights on / off (the Video page's last item). }
     VideoDynamicLights: Boolean;
     VideoFrameCap: Integer;
+    { The custom game page (New Game -> Custom game): what its rows show
+      (the owning view fills them on maCustom), the random seed typed
+      ('' = none), and the last request. }
+    CustomGame, CustomPwads, CustomMap, CustomSeed: String;
+    CustomItem: String;
+    CustomDelta: Integer;
     { The save page: the name a new save starts with, and the one typed
       (read it on maSaveSlot). }
     DefaultSaveName: String;
     SaveName: String;
     constructor Create(AOwner: TComponent); override;
+    { Show changed Custom* values. }
+    procedure Refresh;
     { Set up for a WAD: graphics, sounds, how many episodes (0 = Doom 2). }
     { The map the chosen Episode starts ('' for none: Doom 2's MAP01). }
     function EpisodeMap: String;
@@ -149,6 +162,10 @@ type
 const
   { EpisodeMap of the episode page's last entry: new random maps. }
   RandomEpisodeMap = 'RANDOM';
+  { ... and of the custom game page's entry (not in the in-game menu). }
+  CustomEpisodeMap = 'CUSTOM';
+  { Random seeds typed on the custom game page: up to 9 digits. }
+  CustomSeedLength = 9;
   SkillNames: array [0..4] of String = (
     'I''m too young to die', 'Hey, not too rough', 'Hurt me plenty', 'Ultra-Violence', 'Nightmare!');
 
@@ -231,6 +248,13 @@ begin
   SetLength(FEpisodeMaps, N + 1);
   FEpisodeItems[N] := 'T:RANDOM MAPS';
   FEpisodeMaps[N] := RandomEpisodeMap;
+  if not InGame then
+  begin
+    SetLength(FEpisodeItems, N + 2);
+    SetLength(FEpisodeMaps, N + 2);
+    FEpisodeItems[N + 1] := 'T:CUSTOM GAME';
+    FEpisodeMaps[N + 1] := CustomEpisodeMap;
+  end;
   FEpisodes := Length(FEpisodeItems);
 end;
 
@@ -290,6 +314,44 @@ begin
   Compose;
 end;
 
+procedure TDoomMenuScreen.CustomRequest(const Item: String; const Delta: Integer);
+begin
+  CustomItem := Item;
+  CustomDelta := Delta;
+  if Assigned(OnAction) then OnAction(maCustom);
+end;
+
+procedure TDoomMenuScreen.CustomChange(const Item: String; const Delta: Integer);
+begin
+  if Item = 'T:GAME' then
+    CustomRequest('GAME', Delta)
+  else if Item = 'T:PWADS' then
+  begin
+    { Right adds one (a file dialog), left takes them all off. }
+    if Delta < 0 then CustomRequest('CLEAR', 0) else CustomRequest('PWADS', 0);
+  end else
+  if Item = 'T:MAP' then
+    CustomRequest('MAP', Delta)
+  else if Item = 'T:SKILL' then
+  begin
+    Skill := (Skill + Delta + 5) mod 5;
+    if FSounds <> nil then FSounds.Play('DSSTNMOV');
+  end else
+  if Item = 'T:RANDOM SEED' then
+  begin
+    { Left clears it; typing is Enter's. }
+    if Delta < 0 then CustomSeed := '';
+  end;
+  FDirty := true;
+  Compose;
+end;
+
+procedure TDoomMenuScreen.Refresh;
+begin
+  FDirty := true;
+  Compose;
+end;
+
 function TDoomMenuScreen.ItemName: String;
 begin
   Result := ItemPatch(FPage, FItemOn[FPage]);
@@ -321,6 +383,11 @@ var
   Item: String;
 begin
   Item := ItemName;
+  if FPage = mpCustom then
+  begin
+    CustomChange(Item, Delta);
+    Exit;
+  end;
   if Item = 'M_SFXVOL' then
     SfxVolume := Max(0, Min(15, SfxVolume + Delta))
   else if Item = 'M_MUSVOL' then
@@ -412,6 +479,7 @@ begin
     mpOptions: Result := 8;
     mpSound: Result := 5;
     mpVideo: Result := {$ifdef WASI} 7 {$else} 8 {$endif};
+    mpCustom: Result := 7;
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
     mpLoad, mpSave: Result := 6;
@@ -435,6 +503,8 @@ const
   VideoItems: array [0..7] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN',
     'T:V-SYNC', 'T:FRAME RATE', 'T:DYNAMIC LIGHTS');
   {$endif}
+  CustomItems: array [0..6] of String = ('T:GAME', 'T:PWADS', 'T:MAP', 'T:SKILL', 'T:RANDOM SEED', '',
+    'T:START');
 begin
   case Page of
     mpMain: Result := FMainItems[Index];
@@ -443,6 +513,7 @@ begin
     mpOptions: Result := OptionItems[Index];
     mpSound: Result := SoundItems[Index];
     mpVideo: Result := VideoItems[Index];
+    mpCustom: Result := CustomItems[Index];
     else Result := '';
   end;
 end;
@@ -457,6 +528,7 @@ begin
     mpOptions: begin X := 60; Y := 37; end;
     mpSound: begin X := 80; Y := 64; end;
     mpVideo: begin X := 60; Y := 40; end;
+    mpCustom: begin X := 40; Y := 40; end;
     { m_menu.c puts the Read This! skull off the 320x200 screen. }
     mpReadThis1, mpReadThis2: begin X := 330; Y := 165; end;
   end;
@@ -504,7 +576,7 @@ begin
         if Assigned(OnAction) then OnAction(maClose);
       end else
         OpenPage(mpOptions);
-    mpSkill:
+    mpSkill, mpCustom:
       if FEpisodes > 0 then OpenPage(mpEpisode) else OpenPage(mpMain);
     { M_ClearMenus: Esc on the main menu shows the title pages again, or
       gives the game back. }
@@ -559,8 +631,25 @@ begin
     mpEpisode:
       begin
         Episode := Item + 1;
-        OpenPage(mpSkill);
+        if FEpisodeMaps[Item] = CustomEpisodeMap then
+        begin
+          OpenPage(mpCustom);
+          CustomRequest('OPEN', 0);
+        end else
+          OpenPage(mpSkill);
       end;
+    mpCustom:
+      if ItemName = 'T:START' then
+        CustomRequest('START', 0)
+      else if ItemName = 'T:RANDOM SEED' then
+      begin
+        { Type the seed's digits, Enter keeps them (none: no seed). }
+        FEditing := true;
+        FEditText := CustomSeed;
+        FDirty := true;
+        Compose;
+      end else
+        ChangeSlider(1);
     mpSkill:
       begin
         Skill := Item;
@@ -654,6 +743,27 @@ var
   C: Char;
 begin
   Result := true;
+  if FEditing and (FPage = mpCustom) then
+  begin
+    { The custom game page's random seed: digits only. }
+    if Event.IsKey(keyEnter) then
+    begin
+      FEditing := false;
+      CustomSeed := FEditText;
+    end else
+    if Event.IsKey(keyEscape) then
+      FEditing := false
+    else if Event.IsKey(keyBackSpace) then
+    begin
+      if FEditText <> '' then SetLength(FEditText, Length(FEditText) - 1);
+    end else
+    if (Length(Event.KeyString) = 1) and (Event.KeyString[1] in ['0'..'9']) and
+       (Length(FEditText) < CustomSeedLength) then
+      FEditText := FEditText + Event.KeyString[1];
+    FDirty := true;
+    Compose;
+    Exit;
+  end;
   if FEditing then
   begin
     { M_Responder with saveStringEnter: type, Backspace, Enter, Esc. }
@@ -999,6 +1109,24 @@ begin
         else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 7);
         {$endif}
       end;
+  end;
+
+  if FPage = mpCustom then
+  begin
+    { Not in Doom: New Game's title and the values in the HU font. }
+    DrawPatch('M_NEWG', 96, 14);
+    DrawDoomText(FGraphics, Img, X + 110, Y + 4, UpperCase(CustomGame));
+    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight + 4, UpperCase(CustomPwads));
+    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 2 + 4, UpperCase(CustomMap));
+    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 3 + 4,
+      UpperCase(Format('%d: %s', [Skill + 1, SkillNames[Skill]])));
+    if FEditing then
+      Text := FEditText + '_'
+    else if CustomSeed <> '' then
+      Text := CustomSeed
+    else
+      Text := 'NONE';
+    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 4 + 4, Text);
   end;
 
   if FPage in [mpLoad, mpSave] then

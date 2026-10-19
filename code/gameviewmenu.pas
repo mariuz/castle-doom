@@ -75,6 +75,9 @@ type
     FFetchCommandLine: Boolean;
     FFetchLabel: TCastleLabel;
     FNewGameRequested: Boolean;
+    { The Doom menu's custom game page is open (reopened after the WADs
+      reload, which sets the menu up anew). }
+    FCustomOpen: Boolean;
     FNewGameEpisode, FNewGameSkill: Integer;
     { Load the IWAD and PWADs (title music, menus follow). False when they
       did not load, or when Freedoom Phase 2 is being downloaded first. }
@@ -90,6 +93,9 @@ type
     procedure RefreshSlots;
     procedure DoomMenuAction(const Action: TDoomMenuAction);
     procedure StartRandomGame;
+    { The custom game page (DoomMenu mpCustom): its requests, its values. }
+    procedure CustomGameAction;
+    procedure ShowCustomPage;
     procedure AutoPlayDemo(Sender: TObject);
     procedure ClickRecordDemo(Sender: TObject);
     procedure ClickPlayDemo(Sender: TObject);
@@ -510,6 +516,8 @@ begin
   FFetchZip.Open(Sender.Contents, true);
   FFetchZip.RegisterUrlProtocol('freedoom2-zip');
   LoadWads(Freedoom2, FFetchPwads);
+  if FCustomOpen then
+    ShowCustomPage;
   if FFetchSlot >= 0 then
   begin
     Slot := FFetchSlot;
@@ -666,12 +674,129 @@ begin
   StartGame;
 end;
 
+{ The IWADs the custom game page goes through: both Freedoom phases and
+  the last IWAD opened from a file. }
+function CustomIwads: TStringList;
+var
+  Last: String;
+begin
+  Result := TStringList.Create;
+  Result.Add(Freedoom1);
+  Result.Add(Freedoom2);
+  Last := UserConfig.GetValue('wads/iwad', '');
+  if (Last <> '') and (Result.IndexOf(Last) < 0) then
+    Result.Add(Last);
+end;
+
+procedure TViewMenu.ShowCustomPage;
+var
+  Pwads: TStringList;
+  I: Integer;
+  S: String;
+begin
+  if (FDoomMenu = nil) or (FWad = nil) then Exit;
+  FCustomOpen := true;
+  if FDoomMenu.Page <> mpCustom then
+  begin
+    FDoomMenu.SetMenuActive(true);
+    FDoomMenu.OpenPage(mpCustom);
+  end;
+  if FIwadUrl = Freedoom1 then
+    FDoomMenu.CustomGame := 'Freedoom: Phase 1'
+  else if FIwadUrl = Freedoom2 then
+    FDoomMenu.CustomGame := 'Freedoom: Phase 2'
+  else
+    FDoomMenu.CustomGame := ExtractUriName(FIwadUrl);
+  Pwads := WithoutRandomPwads(FPwads);
+  try
+    S := '';
+    for I := 0 to Pwads.Count - 1 do
+    begin
+      if S <> '' then S := S + ' ';
+      S := S + ExtractUriName(Pwads[I]);
+    end;
+  finally
+    FreeAndNil(Pwads);
+  end;
+  if S = '' then S := 'none';
+  if Length(S) > 22 then S := Copy(S, 1, 19) + '...';
+  FDoomMenu.CustomPwads := S;
+  if FWad.MapNames.Count > 0 then
+  begin
+    FMapIndex := Clamped(FMapIndex, 0, FWad.MapNames.Count - 1);
+    FDoomMenu.CustomMap := Format('%s (%d/%d)', [FWad.MapNames[FMapIndex], FMapIndex + 1, FWad.MapNames.Count]);
+  end else
+    FDoomMenu.CustomMap := 'no maps';
+  FDoomMenu.Refresh;
+end;
+
+procedure TViewMenu.CustomGameAction;
+var
+  Item, MapName: String;
+  Iwads, Pwads: TStringList;
+  I: Integer;
+  Seed: Int64;
+begin
+  if FWad = nil then Exit;
+  Item := FDoomMenu.CustomItem;
+  { Reloading WADs sets the menu up again with FSkill. }
+  FSkill := FDoomMenu.Skill;
+  UpdateSkillLabel;
+  if Item = 'GAME' then
+  begin
+    Iwads := CustomIwads;
+    try
+      I := Iwads.IndexOf(FIwadUrl);
+      I := (I + FDoomMenu.CustomDelta + Iwads.Count) mod Iwads.Count;
+      FMapIndex := 0;
+      { Another game: its PWADs would not fit. }
+      LoadWads(Iwads[I], nil);
+    finally
+      FreeAndNil(Iwads);
+    end;
+  end else
+  if Item = 'PWADS' then
+    ClickAddPwad(nil)
+  else if Item = 'CLEAR' then
+    LoadWads(FIwadUrl, nil)
+  else if Item = 'MAP' then
+  begin
+    if FDoomMenu.CustomDelta < 0 then ClickPrevMap(nil) else ClickNextMap(nil);
+  end else
+  if Item = 'START' then
+  begin
+    MapName := '';
+    if FWad.MapNames.Count > 0 then
+      MapName := FWad.MapNames[Clamped(FMapIndex, 0, FWad.MapNames.Count - 1)];
+    Seed := StrToInt64Def(FDoomMenu.CustomSeed, -1);
+    WritelnLog('Menu', 'Custom game: %s, PWADs %s, map %s, skill %d, random seed %s', [
+      ExtractUriName(FIwadUrl), FDoomMenu.CustomPwads, MapName, FDoomMenu.Skill + 1,
+      Iff(Seed >= 0, IntToStr(Seed), 'none')]);
+    Pwads := WithoutRandomPwads(FPwads);
+    try
+      if Seed >= 0 then
+        Pwads.Add(RandomWadUrl(Cardinal(Seed)));
+      if not LoadWads(FIwadUrl, Pwads) then Exit;
+    finally
+      FreeAndNil(Pwads);
+    end;
+    if FWad = nil then Exit;
+    FMapIndex := Max(0, FWad.MapNames.IndexOf(MapName));
+    FCustomOpen := false;
+    StartGame;
+    Exit;
+  end;
+  ShowCustomPage;
+end;
+
 procedure TViewMenu.DoomMenuAction(const Action: TDoomMenuAction);
 var
   MapName: String;
   I: Integer;
   Plain: TStringList;
 begin
+  if Action <> maCustom then
+    FCustomOpen := false;
   case Action of
     maNewGame:
       begin
@@ -700,6 +825,7 @@ begin
         StartGame;
       end;
     maLoadSlot: ContinueFromSlot(FDoomMenu.Slot);
+    maCustom: CustomGameAction;
     maOptions: ShowOptions(true);
     maQuit: Application.Terminate;
   end;
@@ -1749,7 +1875,16 @@ begin
   else if K = 'X' then Key := keyEscape
   else if K = 'Y' then Key := keyY
   else if K = 'N' then Key := keyN
-  else Exit;
+  else if K = 'L' then Key := keyArrowLeft
+  else if K = 'R' then Key := keyArrowRight
+  else if K = 'B' then Key := keyBackSpace
+  else if (Length(K) = 1) and (K[1] in ['0'..'9']) then
+  begin
+    { A digit typed (the custom game page's random seed). }
+    Press(InputKey(TVector2.Zero, keyNone, K, []));
+    Exit;
+  end else
+    Exit;
   Press(InputKey(TVector2.Zero, Key, '', []));
 end;
 

@@ -413,6 +413,14 @@ TESTS = [
     ('dynamic-lights-menu', 'E1M1',
      'W:0.5,KEY:ESCAPE,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:ENTER,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:DOWN,KEY:ENTER,W:0.3,S,KEY:ESCAPE,KEY:ESCAPE,KEY:ESCAPE,W:0.3,Q',
      [r'Settings: Dynamic lights on'], [], lambda config: check_setting(config, 'dynamicLights', True)),
+    ('custom-game', 'MENUKEYS', 'W:1,Q',
+     [r'Menu: Custom game: freedoom1\.wad, PWADs none, map E1M3, skill 2, random seed 42',
+      r'Random: seed 42: E1M3', r'Skill: Skill 2', r'Load: E1M3: map parsed'],
+     ['--menukeys', 'E,D,D,D,D,D,E,S,D,D,R,R,D,L,D,E,4,2,E,S,D,E'], None),
+    ('custom-game-doom2', 'MENUKEYS', 'W:1,Q',
+     [r'Menu: Custom game: freedoom2\.wad, PWADs none, map MAP02, skill 3, random seed none',
+      r'Load: MAP02: map parsed'],
+     ['--menukeys', 'E,D,D,D,D,D,E,R,S,D,D,R,D,D,D,E'], None),
     ('random-menu', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: E1M1', r'Load: E1M1: map parsed', r'Message: R1: '],
      ['--menukeys', 'E,D,D,D,D,E,E'], None),
     ('random-menu-doom2', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: MAP01', r'Load: MAP01: map parsed', r'Message: R1: '],
@@ -725,6 +733,7 @@ GOLDEN = [
     'gamma_1.png', 'gamma_2.png', 'gamma_3.png', 'captions_1.png', 'captions_2.png', 'captions-menu_1.png',
     'photo-mode_1.png', 'photo-mode_2.png', 'photo-mode_3.png', 'photo-mode_4.png',
     'dynamic-lights_1.png', 'dynamic-lights_2.png', 'dynamic-lights_3.png', 'dynamic-lights-menu_1.png',
+    'custom-game_menu1.png', 'custom-game_menu2.png', 'custom-game-doom2_menu1.png',
 ]
 
 

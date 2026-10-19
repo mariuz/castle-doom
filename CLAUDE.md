@@ -96,7 +96,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 43 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 44 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -645,7 +645,13 @@ before it).
 FILE -warp 1 1` under `xvfb-run`). New Game's last episode is
 "RANDOM MAPS" (a clock seed; Doom 2 IWADs then get an episode page with
 "CAMPAIGN" first; autotests `random-menu`, `random-menu-doom2`, the
-`MENU*` autotests honour `-iwad`).
+`MENU*` autotests honour `-iwad`). After "Random maps" comes "Custom
+game" (title screen only): `--menukeys` also takes `L` / `R` (arrows),
+`B` (Backspace) and digits; `E,D,D,D,D,D,E` opens the page on Phase 1,
+then `D,D,R,R` picks E1M3, `D,L` skill 2, `D,E,4,2,E` the seed 42 and
+`D,E` starts (log `Menu: Custom game: freedoom1.wad, PWADs none, map
+E1M3, skill 2, random seed 42`; autotests `custom-game`,
+`custom-game-doom2` with goldens, unit test `TestCustomGamePage`).
 Demos (`DoomDemo`, the world records and replays itself): `--record
 FILE` (or Options -> Record demo...) records the next game started,
 level after level (each from its saved state, reloaded so the playback

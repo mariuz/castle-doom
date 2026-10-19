@@ -56,6 +56,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 ## What works
 
 - Freedoom Phase 1 (36 ExMy maps) and Phase 2 (32 MAPxx maps), map selection in the menu.
+- Custom game: New Game -> "Custom game" picks the game (Freedoom Phase 1 / 2 or your IWAD),
+  PWADs, map, skill and a random seed on one page of Doom's menu.
 - Random maps: New Game -> "Random maps" (or `-random [SEED]`, `?random=SEED` in the browser)
   generates eight levels from a seed: rooms split from a rectangle (the splits are the BSP),
   connected by openings, doors and stairs (a locked door guards the exit from the second map
