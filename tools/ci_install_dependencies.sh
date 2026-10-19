@@ -16,6 +16,9 @@ ci_install_dependencies() {
     if [ "$attempt" != 3 ]; then sleep 30; fi
   done
   shim="${RUNNER_TEMP:-/tmp}/wget-shim"
+  # On Windows RUNNER_TEMP is D:\a\_temp: Git Bash's PATH needs /d/a/_temp
+  # (a colon separates its entries), GITHUB_PATH the Windows form.
+  if command -v cygpath > /dev/null; then shim="$(cygpath -u "$shim")"; fi
   mkdir -p "$shim"
   cat > "$shim/wget" << 'EOF'
 #!/bin/bash
@@ -34,7 +37,13 @@ exec curl -fL --retry 5 --retry-delay 5 -o "${out:-$(basename "$url")}" "$url"
 EOF
   chmod +x "$shim/wget"
   export PATH="$shim:$PATH"
-  if [ -n "${GITHUB_PATH:-}" ]; then echo "$shim" >> "$GITHUB_PATH"; fi
+  if [ -n "${GITHUB_PATH:-}" ]; then
+    if command -v cygpath > /dev/null; then
+      cygpath -w "$shim" >> "$GITHUB_PATH"
+    else
+      echo "$shim" >> "$GITHUB_PATH"
+    fi
+  fi
   echo "Using a curl-based wget from $shim"
 }
 
