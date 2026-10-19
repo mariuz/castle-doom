@@ -100,6 +100,7 @@ type
     procedure TestBestTimes;
     procedure TestGamma;
     procedure TestCaptions;
+    procedure TestDynamicLights;
     procedure TestTouchControls;
   end;
 
@@ -1869,6 +1870,50 @@ begin
     AssertEquals('three kept', 'Door opens, right'#10'A'#10'B', L.Text(22));
     AssertEquals('expired', 'A'#10'B', L.Text(20 + CaptionTics));
     AssertEquals('all expired', '', L.Text(22 + CaptionTics));
+  finally
+    FreeAndNil(L);
+  end;
+end;
+
+{ Dynamic lights: the sprite table and the slots sent to the effects. }
+procedure TTestGamepad.TestDynamicLights;
+var
+  L: TDoomLighting;
+  E: TEffectNode;
+  Radius: Single;
+  Color: TVector3;
+  Lights: array [0..4] of TDynamicLight;
+  I: Integer;
+begin
+  AssertTrue('rocket', SpriteDynamicLight('MISL', Radius, Color));
+  AssertEquals('rocket radius', 256, Radius, 0.01);
+  AssertTrue('plasma', SpriteDynamicLight('PLSS', Radius, Color));
+  AssertTrue('plasma is blue', Color.Z > Color.X);
+  AssertFalse('a puff has none', SpriteDynamicLight('PUFF', Radius, Color));
+  L := TDoomLighting.Create;
+  try
+    E := L.GeometryEffect;
+    AssertEquals('off at first', 0, (E.Field('doom_dlight0') as TSFVec4f).Value.W, 1e-6);
+    for I := 0 to High(Lights) do
+    begin
+      Lights[I].Position := Vector3(I, 0, -100 * I);
+      Lights[I].Radius := 100 + I;
+      Lights[I].Color := Vector3(1, 0.5, 0);
+    end;
+    { Five given, four kept. }
+    L.SetDynamicLights(Lights);
+    AssertEquals('four slots', MaxDynamicLights, L.DynamicLightCount);
+    AssertEquals('slot 2 position', -200, (E.Field('doom_dlight2') as TSFVec4f).Value.Z, 1e-6);
+    AssertEquals('slot 3 radius', 103, (E.Field('doom_dlight3') as TSFVec4f).Value.W, 1e-6);
+    AssertEquals('slot 1 colour', 0.5, (E.Field('doom_dlight_color1') as TSFVec3f).Value.Y, 1e-6);
+    L.SetDynamicLights(Slice(Lights, 1));
+    AssertEquals('one left', 1, L.DynamicLightCount);
+    AssertEquals('slot 1 off', 0, (E.Field('doom_dlight1') as TSFVec4f).Value.W, 1e-6);
+    FreeAndNil(E);
+    { A new effect starts with the lights on now. }
+    E := L.GeometryEffect;
+    AssertEquals('new effect', 100, (E.Field('doom_dlight0') as TSFVec4f).Value.W, 1e-6);
+    FreeAndNil(E);
   finally
     FreeAndNil(L);
   end;

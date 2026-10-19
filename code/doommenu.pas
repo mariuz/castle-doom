@@ -111,6 +111,8 @@ type
     VideoFullscreen: Boolean;
     { Desktop: v-sync and the frame rate cap (GameSettings.FrameCaps). }
     VideoVSync: Boolean;
+    { Dynamic lights on / off (the Video page's last item). }
+    VideoDynamicLights: Boolean;
     VideoFrameCap: Integer;
     { The save page: the name a new save starts with, and the one typed
       (read it on maSaveSlot). }
@@ -341,6 +343,8 @@ begin
     VideoFullscreen := not VideoFullscreen
   else if Item = 'T:V-SYNC' then
     VideoVSync := not VideoVSync
+  else if Item = 'T:DYNAMIC LIGHTS' then
+    VideoDynamicLights := not VideoDynamicLights
   else if Item = 'T:FRAME RATE' then
     VideoFrameCap := NextCap(VideoFrameCap, Delta)
   else
@@ -407,7 +411,7 @@ begin
     mpReadThis1, mpReadThis2: Result := 1;
     mpOptions: Result := 8;
     mpSound: Result := 5;
-    mpVideo: Result := {$ifdef WASI} 6 {$else} 7 {$endif};
+    mpVideo: Result := {$ifdef WASI} 7 {$else} 8 {$endif};
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
     mpLoad, mpSave: Result := 6;
@@ -425,10 +429,11 @@ const
   SoundItems: array [0..4] of String = ('M_SFXVOL', '', 'M_MUSVOL', '', 'T:CAPTIONS');
   { Items named 'T:...' are drawn as text (no patch for them in Doom). }
   {$ifdef WASI}
-  VideoItems: array [0..5] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:RESOLUTION', '');
+  VideoItems: array [0..6] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:RESOLUTION', '',
+    'T:DYNAMIC LIGHTS');
   {$else}
-  VideoItems: array [0..6] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN',
-    'T:V-SYNC', 'T:FRAME RATE');
+  VideoItems: array [0..7] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN',
+    'T:V-SYNC', 'T:FRAME RATE', 'T:DYNAMIC LIGHTS');
   {$endif}
 begin
   case Page of
@@ -604,7 +609,8 @@ begin
       if ItemName = 'T:CAPTIONS' then
         ChangeSlider(1);
     mpVideo:
-      if (ItemName = 'T:FULLSCREEN') or (ItemName = 'T:V-SYNC') or (ItemName = 'T:FRAME RATE') then
+      if (ItemName = 'T:FULLSCREEN') or (ItemName = 'T:V-SYNC') or (ItemName = 'T:FRAME RATE') or
+         (ItemName = 'T:DYNAMIC LIGHTS') then
         ChangeSlider(1);
   end;
 end;
@@ -980,6 +986,8 @@ begin
         {$ifdef WASI}
         DrawDoomText(FGraphics, Img, X + 175, Y + LineHeight * 4 + 4, Format('%d%%', [VideoRenderScale]));
         DrawThermo(Img, X, Y + LineHeight * 5, 4, (VideoRenderScale - 25) div 25);
+        if VideoDynamicLights then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 6)
+        else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 6);
         {$else}
         if VideoFullscreen then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 4)
         else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 4);
@@ -987,6 +995,8 @@ begin
         else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 5);
         if VideoFrameCap > 0 then Text := IntToStr(VideoFrameCap) else Text := 'NONE';
         DrawDoomText(FGraphics, Img, X + 175, Y + LineHeight * 6 + 4, Text);
+        if VideoDynamicLights then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 7)
+        else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 7);
         {$endif}
       end;
   end;

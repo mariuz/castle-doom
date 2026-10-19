@@ -96,7 +96,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 42 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 43 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -232,6 +232,14 @@ CAPTIONS, also on F4's page); the log says `Caption: Door opens, ahead (DSDOROPN
 shown (only while on). Monster names come from the `CC_*` strings
 (Freedoom: `Serpentipede sees you, left`). Autotests `captions` (goldens)
 and `captions-menu`, unit test `TestCaptions`.
+Dynamic lights: `DLIGHTS` in a demo toggles `Settings.DynamicLights`
+(`settings.json`'s `dynamicLights`, Options -> Video -> DYNAMIC LIGHTS);
+the log says `Lights: N dynamic lights, the nearest D units away`
+whenever the count changes. A rocket from the E1M1 start:
+`DLIGHTS,Y,K,C:5,W:1,A:0,W:0.3,X,W:0.3,S` (the shot leaves a few frames
+after `X`; autotests `dynamic-lights`, `dynamic-lights-menu` with
+goldens, unit test `TestDynamicLights`). A test that toggles a saved
+setting needs a fresh config directory (the harness gives one).
 Photo mode: `PHOTO` in a demo (or `KEY:O`, the `photo` action) pauses
 the world and frees the camera (`F:sec` flies where it looks, `LOOK:deg`
 tilts); the log says `Photo: Photo mode on at (-416, 256, 40), the game

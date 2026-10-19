@@ -49,6 +49,9 @@ type
     ShowStats: Boolean;
     { Closed captions: a line per sound heard, with its direction. }
     Captions: Boolean;
+    { Missiles, explosions and muzzle flashes light their surroundings
+      (an option next to the vanilla look). }
+    DynamicLights: Boolean;
     { Doom's gamma correction level, 0 (off) .. MaxGamma (F11). }
     Gamma: Integer;
     { Best times in seconds, by BestTimeKey (WADs, map, skill). }
@@ -741,6 +744,7 @@ begin
     Settings.ShowMessages := J.Get('showMessages', Settings.ShowMessages);
     Settings.ShowStats := J.Get('showStats', Settings.ShowStats);
     Settings.Captions := J.Get('captions', Settings.Captions);
+    Settings.DynamicLights := J.Get('dynamicLights', Settings.DynamicLights);
     Settings.Gamma := Clamped(J.Get('gamma', Settings.Gamma), 0, MaxGamma);
     if J.Find('bestTimes', BestJ) then
       for BestI := 0 to BestJ.Count - 1 do
@@ -791,6 +795,7 @@ begin
     J.Add('showMessages', Settings.ShowMessages);
     J.Add('showStats', Settings.ShowStats);
     J.Add('captions', Settings.Captions);
+    J.Add('dynamicLights', Settings.DynamicLights);
     J.Add('gamma', Settings.Gamma);
     Best := TJSONObject.Create;
     for BestI := 0 to High(Settings.BestTimeKeys) do

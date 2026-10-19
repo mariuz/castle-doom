@@ -598,6 +598,22 @@ uniform covers walls, flats, sprites and the sky; the 2D weapon is scaled
 by the curve's gain at mid grey, and the status bar and menus stay as
 drawn.
 
+Dynamic lights (`Settings.DynamicLights`, Options -> Video): the same
+fragment code has four point lights, `doom_dlight0..3` (eye-space
+position, radius; radius 0 = off) and `doom_dlight_color0..3`; the
+vertex plugs pass the eye-space position (`doom_eye`). Each light adds
+a smoothstep falloff to its radius; the sum lowers the colormap level
+by up to 24 rows (brighter in Doom's own steps) and adds texel * colour.
+`TViewPlay.UpdateDynamicLights` picks, every frame, the four nearest
+of: missiles and bright effects or dying actors with a sprite in
+`SpriteDynamicLight`'s table (MISL, BAL1, PLSS, BFS1, BEXP...), monsters
+in a full-bright attack frame (`TDoomActor.FrameBright`) and the
+player's gun flash; it turns their Doom positions into eye space with
+the camera's `WorldInverseTransform`, and
+`TDoomLighting.SetDynamicLights` sends only the slots that changed. The
+log says `Lights: 2 dynamic lights, the nearest 21 units away` when the
+count changes.
+
 Animation is a frame sequence (`PlaySequence('ABCD', tics, loop)`) advanced by
 `AnimateTic`; `SequenceDone` tells the world when a one-shot sequence (pain,
 death, explosion, bullet puff) finished.

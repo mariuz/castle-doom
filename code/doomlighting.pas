@@ -46,8 +46,19 @@ const
   { Invulnerability: inverted greys (Doom's INVERSECOLORMAP). }
   InverseColormap = 32;
 
+  { Point lights the shader adds (dynamic lights, an option). }
+  MaxDynamicLights = 4;
+
 type
   TEffectNodeList = {$ifdef FPC}specialize{$endif} TList<TEffectNode>;
+
+  { A dynamic light: the position in eye space (the camera's, CGE units
+    = Doom units), the radius it reaches (0 = off) and its colour. }
+  TDynamicLight = record
+    Position: TVector3;
+    Radius: Single;
+    Color: TVector3;
+  end;
 
   TDoomLighting = class
   strict private
@@ -58,6 +69,7 @@ type
     FPaletteMapped: Boolean;
     FFuzzScale: Single;
     FFuzzPhase: Integer;
+    FLights: array [0..MaxDynamicLights - 1] of TDynamicLight;
     procedure SetFuzzScale(const Value: Single);
     procedure SetFuzzPhase(const Value: Integer);
     procedure SetPaletteMapped(const Value: Boolean);
@@ -68,6 +80,7 @@ type
     procedure SetDiminish(const Value: Boolean);
     procedure SetGamma(const Value: Integer);
     procedure SendAll(const FieldName: String; const Value: Single);
+    function LightVector(const I: Integer): TVector4;
   public
     constructor Create;
     destructor Destroy; override;
@@ -123,9 +136,18 @@ type
     { Where the fuzz pattern starts (0..49), changed every tic like Doom's
       ever-advancing fuzzpos. }
     property FuzzPhase: Integer read FFuzzPhase write SetFuzzPhase;
+    { The dynamic lights shown (the first MaxDynamicLights; fewer turn
+      the rest off). Only changed slots are sent to the shaders. }
+    procedure SetDynamicLights(const Lights: array of TDynamicLight);
+    { How many slots are on now. }
+    function DynamicLightCount: Integer;
   end;
 
 function DoomLightingInstance: TDoomLighting;
+
+{ The dynamic light of a sprite (missiles and explosions by their sprite
+  prefix): its radius in Doom units and colour; False for none. }
+function SpriteDynamicLight(const Sprite: String; out Radius: Single; out Color: TVector3): Boolean;
 
 implementation
 
@@ -153,6 +175,24 @@ const
     'uniform float doom_fuzz_scale;' + NL +
     'uniform float doom_fuzz_phase;' + NL +
     'uniform float doom_gamma;' + NL +
+    'uniform vec4 doom_dlight0;' + NL +
+    'uniform vec4 doom_dlight1;' + NL +
+    'uniform vec4 doom_dlight2;' + NL +
+    'uniform vec4 doom_dlight3;' + NL +
+    'uniform vec3 doom_dlight_color0;' + NL +
+    'uniform vec3 doom_dlight_color1;' + NL +
+    'uniform vec3 doom_dlight_color2;' + NL +
+    'uniform vec3 doom_dlight_color3;' + NL +
+    '' + NL +
+    { A dynamic light: a smooth falloff to its radius (w, 0 = off). }
+    'void doom_dlight(vec4 l, vec3 c, inout float boost, inout vec3 tint)' + NL +
+    '{' + NL +
+    '  if (l.w <= 0.0) return;' + NL +
+    '  float f = clamp(1.0 - length(doom_eye - l.xyz) / l.w, 0.0, 1.0);' + NL +
+    '  f = f * f * (3.0 - 2.0 * f);' + NL +
+    '  boost += f;' + NL +
+    '  tint += c * f;' + NL +
+    '}' + NL +
     '' + NL +
     { FuzzOffsets as bits (1 = +1), 10 a number so that mediump floats keep
       them exact. }
@@ -214,11 +254,22 @@ const
     '      level = start - floor(index / 2.0);' + NL +
     '    }' + NL +
     '  }' + NL +
+    { Dynamic lights: brighter colormap rows near them, and their colour
+      on top of the texel. }
+    '  float doom_boost = 0.0;' + NL +
+    '  vec3 doom_tint = vec3(0.0);' + NL +
+    '  doom_dlight(doom_dlight0, doom_dlight_color0, doom_boost, doom_tint);' + NL +
+    '  doom_dlight(doom_dlight1, doom_dlight_color1, doom_boost, doom_tint);' + NL +
+    '  doom_dlight(doom_dlight2, doom_dlight_color2, doom_boost, doom_tint);' + NL +
+    '  doom_dlight(doom_dlight3, doom_dlight_color3, doom_boost, doom_tint);' + NL +
+    '  level -= floor(min(doom_boost, 1.5) * 16.0);' + NL +
+    '  vec3 doom_base = fragment_color.rgb;' + NL +
     '  level = clamp(level, 0.0, 31.0);' + NL +
     '  if (doom_palette_mapped > 0.5)' + NL +
     '    fragment_color.rgb = doom_colormapped(fragment_color.rgb, level);' + NL +
     '  else' + NL +
     '    fragment_color.rgb *= 1.0 - level / 32.0;' + NL +
+    '  fragment_color.rgb = min(fragment_color.rgb + doom_base * doom_tint * 0.6, vec3(1.0));' + NL +
     { Gamma correction (Doom's usegamma, F11): an exponent below 1. }
     '  if (doom_gamma < 0.999) fragment_color.rgb = pow(max(fragment_color.rgb, vec3(0.0)), vec3(doom_gamma));' + NL +
     '}';
@@ -228,9 +279,11 @@ const
     'attribute vec4 doom_tile;' + NL +
     'varying vec3 doom_light_info;' + NL +
     'varying vec4 doom_tile_v;' + NL +
+    'varying vec3 doom_eye;' + NL +
     'void PLUG_vertex_eye_space(const in vec4 vertex_eye, const in vec3 normal_eye)' + NL +
     '{' + NL +
     '  doom_light_info = vec3(doom_light, -vertex_eye.z);' + NL +
+    '  doom_eye = vertex_eye.xyz;' + NL +
     '  doom_tile_v = doom_tile;' + NL +
     '}';
 
@@ -278,21 +331,68 @@ const
     '  texture_color = texture2D(sky, vec2(u, v));' + NL +
     '}';
   GeometryFragmentInput =
-    'varying vec3 doom_light_info;' + NL;
+    'varying vec3 doom_light_info;' + NL +
+    'varying vec3 doom_eye;' + NL;
 
   SpriteVertex =
     'varying float doom_depth;' + NL +
+    'varying vec3 doom_eye;' + NL +
     'void PLUG_vertex_eye_space(const in vec4 vertex_eye, const in vec3 normal_eye)' + NL +
     '{' + NL +
     '  doom_depth = -vertex_eye.z;' + NL +
+    '  doom_eye = vertex_eye.xyz;' + NL +
     '}';
   SpriteFragmentInput =
     'uniform vec2 doom_sprite;' + NL +
     'varying float doom_depth;' + NL +
+    'varying vec3 doom_eye;' + NL +
     '#define doom_light_info vec3(doom_sprite, doom_depth)' + NL;
 
 var
   FInstance: TDoomLighting;
+
+type
+  TSpriteLight = record
+    Sprite: String;
+    Radius: Single;
+    R, G, B: Single;
+  end;
+
+const
+  SpriteLights: array [0..15] of TSpriteLight = (
+    (Sprite: 'MISL'; Radius: 256; R: 1.0; G: 0.6; B: 0.25),  { rocket }
+    (Sprite: 'BAL1'; Radius: 192; R: 1.0; G: 0.5; B: 0.2),   { imp fireball }
+    (Sprite: 'BAL2'; Radius: 192; R: 1.0; G: 0.3; B: 0.6),   { cacodemon }
+    (Sprite: 'BAL7'; Radius: 192; R: 0.4; G: 1.0; B: 0.3),   { baron, hell knight }
+    (Sprite: 'PLSS'; Radius: 192; R: 0.4; G: 0.6; B: 1.0),   { plasma }
+    (Sprite: 'PLSE'; Radius: 192; R: 0.4; G: 0.6; B: 1.0),
+    (Sprite: 'BFS1'; Radius: 384; R: 0.4; G: 1.0; B: 0.4),   { BFG ball }
+    (Sprite: 'BFE1'; Radius: 384; R: 0.4; G: 1.0; B: 0.4),
+    (Sprite: 'APLS'; Radius: 160; R: 0.5; G: 1.0; B: 0.3),   { arachnotron }
+    (Sprite: 'APBX'; Radius: 160; R: 0.5; G: 1.0; B: 0.3),
+    (Sprite: 'MANF'; Radius: 192; R: 1.0; G: 0.6; B: 0.25),  { mancubus }
+    (Sprite: 'FATB'; Radius: 160; R: 1.0; G: 0.5; B: 0.3),   { revenant }
+    (Sprite: 'BEXP'; Radius: 320; R: 1.0; G: 0.6; B: 0.3),   { barrel }
+    (Sprite: 'FIRE'; Radius: 192; R: 1.0; G: 0.6; B: 0.2),   { arch-vile }
+    (Sprite: 'BOSF'; Radius: 160; R: 1.0; G: 0.7; B: 0.3),   { spawn cube }
+    (Sprite: 'MISF'; Radius: 256; R: 1.0; G: 0.6; B: 0.25)
+  );
+
+function SpriteDynamicLight(const Sprite: String; out Radius: Single; out Color: TVector3): Boolean;
+var
+  I: Integer;
+begin
+  for I := Low(SpriteLights) to High(SpriteLights) do
+    if SpriteLights[I].Sprite = Sprite then
+    begin
+      Radius := SpriteLights[I].Radius;
+      Color := Vector3(SpriteLights[I].R, SpriteLights[I].G, SpriteLights[I].B);
+      Exit(true);
+    end;
+  Radius := 0;
+  Color := TVector3.Zero;
+  Result := false;
+end;
 
 function DoomLightingInstance: TDoomLighting;
 begin
@@ -378,6 +478,7 @@ end;
 function TDoomLighting.NewEffect(const VertexCode, FragmentInput: String): TEffectNode;
 var
   VertexPart, FragmentPart: TEffectPartNode;
+  I: Integer;
 begin
   Result := TEffectNode.Create;
   Result.Language := slGLSL;
@@ -389,6 +490,11 @@ begin
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_scale', FFuzzScale));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_phase', FFuzzPhase));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_gamma', GammaExponent));
+  for I := 0 to MaxDynamicLights - 1 do
+  begin
+    Result.AddCustomField(TSFVec4f.Create(Result, true, 'doom_dlight' + IntToStr(I), LightVector(I)));
+    Result.AddCustomField(TSFVec3f.Create(Result, true, 'doom_dlight_color' + IntToStr(I), FLights[I].Color));
+  end;
   if FIndexLutUrl <> '' then
   begin
     Result.AddCustomField(TSFNode.Create(Result, true, 'doom_index_lut', [TImageTextureNode],
@@ -508,6 +614,56 @@ begin
   if FFixedColormap = Value then Exit;
   FFixedColormap := Value;
   SendAll('doom_fixed_colormap', Value);
+end;
+
+function TDoomLighting.LightVector(const I: Integer): TVector4;
+begin
+  Result := Vector4(FLights[I].Position, FLights[I].Radius);
+end;
+
+function TDoomLighting.DynamicLightCount: Integer;
+var
+  I: Integer;
+begin
+  Result := 0;
+  for I := 0 to MaxDynamicLights - 1 do
+    if FLights[I].Radius > 0 then Inc(Result);
+end;
+
+procedure TDoomLighting.SetDynamicLights(const Lights: array of TDynamicLight);
+var
+  I: Integer;
+  L: TDynamicLight;
+  E: TEffectNode;
+  F: TX3DField;
+begin
+  for I := 0 to MaxDynamicLights - 1 do
+  begin
+    if I < Length(Lights) then
+      L := Lights[I]
+    else
+      L := Default(TDynamicLight);
+    if L.Radius <= 0 then
+    begin
+      { An unused slot: only its radius matters. }
+      if FLights[I].Radius <= 0 then Continue;
+      L := FLights[I];
+      L.Radius := 0;
+    end else
+    if (FLights[I].Radius = L.Radius) and TVector3.PerfectlyEquals(FLights[I].Position, L.Position) and
+       TVector3.PerfectlyEquals(FLights[I].Color, L.Color) then
+      Continue;
+    FLights[I] := L;
+    for E in FEffects do
+    begin
+      F := E.Field('doom_dlight' + IntToStr(I));
+      if F is TSFVec4f then
+        TSFVec4f(F).Send(LightVector(I));
+      F := E.Field('doom_dlight_color' + IntToStr(I));
+      if F is TSFVec3f then
+        TSFVec3f(F).Send(L.Color);
+    end;
+  end;
 end;
 
 function TDoomLighting.GammaExponent: Single;

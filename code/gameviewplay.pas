@@ -8,7 +8,7 @@ interface
 uses Classes, SysUtils, FpJson,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleTimeUtils,
   CastleViewport, CastleScene, CastleCameras, CastleTransform, CastleColors, CastleImages, CastleGLImages,
-  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont, DoomCaptions,
+  DoomWad, DoomGraphics, DoomSound, DoomWorld, DoomHud, DoomMusic, DoomAutomap, DoomFont, DoomCaptions, DoomLighting,
   DoomIntermission, DoomFinale, DoomDehacked, DoomWipe, DoomMenu, DoomWorldStatus, GameSettings,
   GameTouch, GameDebugDraw, DoomDemo;
 
@@ -40,6 +40,12 @@ type
     FPhotoPos, FPhotoDir, FPhotoUp: TVector3;
     FPhotoAutomap, FPhotoInfo: Boolean;
     FPhotoHintTime: Single;
+    { Dynamic lights picked this frame (nearest first) and their distances
+      to the camera; FDynLogTime throttles the log line. }
+    FDynLights: array [0..MaxDynamicLights - 1] of TDynamicLight;
+    FDynDist: array [0..MaxDynamicLights - 1] of Single;
+    FDynCount: Integer;
+    FDynLogged: Integer;
     { "Click to look around" while mouse look is wanted but the browser
       released the pointer (Esc, another window). }
     FClickPrompt: TDoomFontText;
@@ -156,6 +162,11 @@ type
     { TDoomSounds.OnPlay: a closed caption for the sound. }
     procedure SoundPlayed(const LumpName: String; const Emitter: TCastleTransform);
     procedure SetCaptions(const On: Boolean);
+    { Dynamic lights: the nearest missiles, explosions and muzzle flashes
+      to the shader (Settings.DynamicLights), or none. }
+    procedure UpdateDynamicLights;
+    procedure ConsiderLight(const Eye: TVector3; const X, Y, Z, Radius: Single; const Color: TVector3);
+    procedure SetDynamicLightsOn(const On: Boolean);
     { Photo mode on / off (gaPhoto, demo command PHOTO). }
     procedure SetPhotoMode(const On: Boolean);
     procedure UpdatePhoto(const SecondsPassed: Single);
@@ -241,7 +252,7 @@ uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
   CastleDownload, DoomActors, CastleInternalInspector,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleRenderContext,
-  DoomGeometry, DoomMap, DoomLighting,
+  DoomGeometry, DoomMap,
   GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs, DoomMapInfo;
 
 type
@@ -481,6 +492,8 @@ end;
 procedure TViewPlay.Stop;
 begin
   SetPhotoMode(false);
+  DoomLightingInstance.SetDynamicLights([]);
+  FDynLogged := 0;
   StopDemos(false);
   FreeAndNil(FDemoPlayer);
   { The page must stop keeping fingers from the engine (the menus). }
@@ -672,6 +685,8 @@ begin
     FWorld.Player.InvulnerableTics := Iff(Arg > 0, Round(Arg), 30 * 35)
   else if Cmd = 'AMP' then
     FWorld.Player.LightAmpTics := Iff(Arg > 0, Round(Arg), 120 * 35)
+  else if Cmd = 'DLIGHTS' then
+    SetDynamicLightsOn(not Settings.DynamicLights)
   else if Cmd = 'PHOTO' then
     SetPhotoMode(not FPhoto)
   else if Cmd = 'CAPTIONS' then
@@ -1418,6 +1433,86 @@ begin
     FMessageText.SetText('');
 end;
 
+procedure TViewPlay.ConsiderLight(const Eye: TVector3; const X, Y, Z, Radius: Single; const Color: TVector3);
+var
+  D: Single;
+  I, Slot: Integer;
+begin
+  D := Sqrt(Sqr(X - Eye.X) + Sqr(Y - Eye.Y) + Sqr(Z - Eye.Z));
+  if D > 1500 + Radius then Exit;
+  if FDynCount < MaxDynamicLights then
+  begin
+    Slot := FDynCount;
+    Inc(FDynCount);
+  end else
+  begin
+    { Replace the farthest one if this is nearer. }
+    Slot := 0;
+    for I := 1 to MaxDynamicLights - 1 do
+      if FDynDist[I] > FDynDist[Slot] then Slot := I;
+    if D >= FDynDist[Slot] then Exit;
+  end;
+  FDynDist[Slot] := D;
+  { Doom coordinates for now; UpdateDynamicLights turns them to eye space. }
+  FDynLights[Slot].Position := Vector3(X, Y, Z);
+  FDynLights[Slot].Radius := Radius;
+  FDynLights[Slot].Color := Color;
+end;
+
+procedure TViewPlay.UpdateDynamicLights;
+var
+  A: TDoomActor;
+  Eye, Color, Fwd: TVector3;
+  Radius: Single;
+  M: TMatrix4;
+  I: Integer;
+begin
+  FDynCount := 0;
+  if Settings.DynamicLights and (FWorld <> nil) and FWorld.MapLoaded then
+  begin
+    Eye := CgeToDoom(FViewport.Camera.Translation);
+    for A in FWorld.Actors do
+    begin
+      if A.Removed then Continue;
+      if (A.State = asMissile) or ((A.State in [asEffect, asDying]) and A.Bright and not A.SequenceDone) then
+      begin
+        if SpriteDynamicLight(A.SpritePrefix, Radius, Color) then
+          ConsiderLight(Eye, A.DoomX, A.DoomY, A.DoomZ + 16, Radius, Color);
+      end else
+      { A monster's muzzle flash: its attack frame is full bright. }
+      if (A.State = asAttack) and A.FrameBright then
+        ConsiderLight(Eye, A.DoomX, A.DoomY, A.DoomZ + 40, 192, Vector3(1.0, 0.75, 0.4));
+    end;
+    { The player's gun flash, a little in front of the eye. }
+    if (FWorld.Player.FlashFrame <> #0) and not FWorld.Player.Dead then
+    begin
+      Fwd := Vector3(Cos(DegToRad(FWorld.Player.Angle)), Sin(DegToRad(FWorld.Player.Angle)), 0);
+      ConsiderLight(Eye, FWorld.Player.X + Fwd.X * 24, FWorld.Player.Y + Fwd.Y * 24,
+        FWorld.Player.Z + PlayerViewHeight, 320, Vector3(1.0, 0.85, 0.6));
+    end;
+    M := FViewport.Camera.WorldInverseTransform;
+    for I := 0 to FDynCount - 1 do
+      FDynLights[I].Position := M.MultPoint(DoomToCge(FDynLights[I].Position.X,
+        FDynLights[I].Position.Y, FDynLights[I].Position.Z));
+  end;
+  DoomLightingInstance.SetDynamicLights(Slice(FDynLights, FDynCount));
+  if FDynCount <> FDynLogged then
+  begin
+    if FDynCount > 0 then
+      WritelnLog('Lights', '%d dynamic lights, the nearest %.0f units away', [FDynCount, FDynDist[0]])
+    else
+      WritelnLog('Lights', 'No dynamic lights');
+    FDynLogged := FDynCount;
+  end;
+end;
+
+procedure TViewPlay.SetDynamicLightsOn(const On: Boolean);
+begin
+  Settings.DynamicLights := On;
+  SaveSettings;
+  WritelnLog('Settings', 'Dynamic lights %s', [Iff(On, 'on', 'off')]);
+end;
+
 procedure TViewPlay.SetCaptions(const On: Boolean);
 begin
   Settings.Captions := On;
@@ -1857,6 +1952,7 @@ begin
   FSlotScreen.Gamma := Settings.Gamma;
   FSlotScreen.MessagesOn := Settings.ShowMessages;
   FSlotScreen.CaptionsOn := Settings.Captions;
+  FSlotScreen.VideoDynamicLights := Settings.DynamicLights;
   FSlotScreen.VideoFieldOfView := Settings.FieldOfView;
   FSlotScreen.VideoUiScale := Settings.UiScale;
   FSlotScreen.VideoRenderScale := Settings.RenderScale;
@@ -1925,6 +2021,8 @@ begin
         Settings.ShowMessages := FSlotScreen.MessagesOn;
         if FSlotScreen.CaptionsOn <> Settings.Captions then
           SetCaptions(FSlotScreen.CaptionsOn);
+        if FSlotScreen.VideoDynamicLights <> Settings.DynamicLights then
+          SetDynamicLightsOn(FSlotScreen.VideoDynamicLights);
         if FSlotScreen.Gamma <> Settings.Gamma then
           SetGamma(FSlotScreen.Gamma);
         { The Video page (field of view, UI scale, fullscreen / resolution). }
@@ -2526,6 +2624,7 @@ begin
   if FPhoto then
   begin
     UpdatePhoto(SecondsPassed);
+    UpdateDynamicLights;
     Exit;
   end;
   FStatusBar.Exists := true;
@@ -2730,6 +2829,7 @@ begin
   FPerfStatusBar := FPerfStatusBar + TimerSeconds(Timer, PerfT);
   PerfT := Timer;
   UpdateWeaponSprite(SecondsPassed);
+  UpdateDynamicLights;
   FPerfWeapon := FPerfWeapon + TimerSeconds(Timer, PerfT);
   Inc(FPerfFrames);
   FPerfClock := FPerfClock + SecondsPassed;

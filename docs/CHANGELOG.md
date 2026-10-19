@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Dynamic lights (Options -> Video): rockets, fireballs, plasma, explosions
+  and muzzle flashes light up their surroundings.
+
 ## v0.41.0 (2026-10-19)
 
 - Photo mode: `O` pauses the game, hides the HUD and lets the camera fly

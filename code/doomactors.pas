@@ -83,6 +83,8 @@ type
     function RenderKey: String;
     { TSpriteShape bookkeeping. }
     property Slot: Integer read FSlot write FSlot;
+    { The current frame is full bright (a muzzle flash, from the state table). }
+    property FrameBright: Boolean read FFrameBright;
   strict private
     procedure ApplySprite;
   public
