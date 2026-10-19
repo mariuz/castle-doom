@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.42.0 (2026-10-19)
 
 - Dynamic lights (Options -> Video): rockets, fireballs, plasma, explosions
   and muzzle flashes light up their surroundings.
