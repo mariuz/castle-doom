@@ -85,6 +85,8 @@ type
     property Slot: Integer read FSlot write FSlot;
     { The current frame is full bright (a muzzle flash, from the state table). }
     property FrameBright: Boolean read FFrameBright;
+    { How far the current sequence is (0 at its first frame, towards 1). }
+    function SequenceProgress: Single;
   strict private
     procedure ApplySprite;
   public
@@ -683,6 +685,14 @@ procedure TDoomActor.HideSprite;
 begin
   FHidden := true;
   SetShown(false);
+end;
+
+function TDoomActor.SequenceProgress: Single;
+begin
+  if Length(FSeq.Frames) <= 1 then
+    Result := 0
+  else
+    Result := FSeqIndex / Length(FSeq.Frames);
 end;
 
 function TDoomActor.RenderKey: String;

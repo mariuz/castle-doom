@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Dynamic lights: lamps, torches and candles glow too, explosions fade,
+  up to eight lights at once, and a switch on the title screen's Options.
+
 ## v0.43.0 (2026-10-19)
 
 - New Game -> Custom game: pick the game, PWADs, map, skill and a random

@@ -598,21 +598,27 @@ uniform covers walls, flats, sprites and the sky; the 2D weapon is scaled
 by the curve's gain at mid grey, and the status bar and menus stay as
 drawn.
 
-Dynamic lights (`Settings.DynamicLights`, Options -> Video): the same
-fragment code has four point lights, `doom_dlight0..3` (eye-space
-position, radius; radius 0 = off) and `doom_dlight_color0..3`; the
-vertex plugs pass the eye-space position (`doom_eye`). Each light adds
-a smoothstep falloff to its radius; the sum lowers the colormap level
-by up to 24 rows (brighter in Doom's own steps) and adds texel * colour.
-`TViewPlay.UpdateDynamicLights` picks, every frame, the four nearest
-of: missiles and bright effects or dying actors with a sprite in
-`SpriteDynamicLight`'s table (MISL, BAL1, PLSS, BFS1, BEXP...), monsters
-in a full-bright attack frame (`TDoomActor.FrameBright`) and the
-player's gun flash; it turns their Doom positions into eye space with
-the camera's `WorldInverseTransform`, and
-`TDoomLighting.SetDynamicLights` sends only the slots that changed. The
-log says `Lights: 2 dynamic lights, the nearest 21 units away` when the
-count changes.
+Dynamic lights (`Settings.DynamicLights`, Options -> Video or the title
+screen's Options panel): the same fragment code has eight point lights,
+the uniform arrays `doom_dlights[8]` (world position in CGE coordinates,
+radius) and `doom_dlight_colors[8]`, with `doom_dlight_count` (the loop
+stops there, so no lights cost one comparison) and `doom_view` (the
+camera's world to eye matrix, `Camera.WorldInverseTransform`); the vertex
+plugs pass the eye-space position (`doom_eye`). Each light adds a
+smoothstep falloff to its radius; the sum lowers the colormap level by
+up to 24 rows (brighter in Doom's own steps) and adds texel * colour.
+`TViewPlay.UpdateDynamicLights` picks, every frame, the eight nearest
+of: missiles, bright effects and dying actors with a sprite in
+`SpriteDynamicLight`'s table (MISL, BAL1, PLSS, BFS1, BEXP...; an
+explosion shrinks and dims with `TDoomActor.SequenceProgress`), monsters
+in a full-bright attack frame (`TDoomActor.FrameBright`), the player's
+gun flash, and decorations in `LampDynamicLight`'s table (COLU, TLMP,
+CAND, CBRA, the torches, FCAN...; they rank 400 units further away, so
+shots and flashes take the slots first). `TDoomLighting.SetDynamicLights`
+sends the arrays only when a light changed and the view matrix only
+while there are lights: one field per shader a frame instead of every
+light. The log says `Lights: 8 dynamic lights: 6 lamps, 2 shots,
+explosions and flashes` whenever those counts change.
 
 Animation is a frame sequence (`PlaySequence('ABCD', tics, loop)`) advanced by
 `AnimateTic`; `SequenceDone` tells the world when a one-shot sequence (pain,

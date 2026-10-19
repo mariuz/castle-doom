@@ -234,11 +234,15 @@ shown (only while on). Monster names come from the `CC_*` strings
 and `captions-menu`, unit test `TestCaptions`.
 Dynamic lights: `DLIGHTS` in a demo toggles `Settings.DynamicLights`
 (`settings.json`'s `dynamicLights`, Options -> Video -> DYNAMIC LIGHTS);
-the log says `Lights: N dynamic lights, the nearest D units away`
-whenever the count changes. A rocket from the E1M1 start:
+the log says `Lights: 8 dynamic lights: 6 lamps, 2 shots, explosions
+and flashes` whenever those counts change (E1M1's start sees six of its
+COLU lamps). A rocket from the E1M1 start:
 `DLIGHTS,Y,K,C:5,W:1,A:0,W:0.3,X,W:0.3,S` (the shot leaves a few frames
-after `X`; autotests `dynamic-lights`, `dynamic-lights-menu` with
-goldens, unit test `TestDynamicLights`). A test that toggles a saved
+after `X`); the lamps at (160, 864) and (480, 864):
+`DLIGHTS,Y,G:416:864,A:180,LOOK:-15,W:0.5,S` (autotests
+`dynamic-lights`, `dynamic-lights-menu`, `lamp-lights` and
+`options-dynamic-lights` (`--autotest MENUDLIGHTS`, the title screen's
+button) with goldens, unit test `TestDynamicLights`). A test that toggles a saved
 setting needs a fresh config directory (the harness gives one).
 Photo mode: `PHOTO` in a demo (or `KEY:O`, the `photo` action) pauses
 the world and frees the camera (`F:sec` flies where it looks, `LOOK:deg`

@@ -44,8 +44,9 @@ type
       to the camera; FDynLogTime throttles the log line. }
     FDynLights: array [0..MaxDynamicLights - 1] of TDynamicLight;
     FDynDist: array [0..MaxDynamicLights - 1] of Single;
+    FDynLamp: array [0..MaxDynamicLights - 1] of Boolean;
     FDynCount: Integer;
-    FDynLogged: Integer;
+    FDynLogged, FDynLampsLogged: Integer;
     { "Click to look around" while mouse look is wanted but the browser
       released the pointer (Esc, another window). }
     FClickPrompt: TDoomFontText;
@@ -165,7 +166,9 @@ type
     { Dynamic lights: the nearest missiles, explosions and muzzle flashes
       to the shader (Settings.DynamicLights), or none. }
     procedure UpdateDynamicLights;
-    procedure ConsiderLight(const Eye: TVector3; const X, Y, Z, Radius: Single; const Color: TVector3);
+    { Rank: the distance it competes with (lamps rank further away than
+      they are, so shots and flashes win the slots). }
+    procedure ConsiderLight(const Eye: TVector3; const X, Y, Z, Radius, Penalty: Single; const Color: TVector3);
     procedure SetDynamicLightsOn(const On: Boolean);
     { Photo mode on / off (gaPhoto, demo command PHOTO). }
     procedure SetPhotoMode(const On: Boolean);
@@ -252,7 +255,7 @@ uses Math, JsonParser,
   CastleLog, CastleUtils, CastleStringUtils, CastleWindow, CastleSoundEngine, CastleRenderOptions,
   CastleDownload, DoomActors, CastleInternalInspector,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleRenderContext,
-  DoomGeometry, DoomMap,
+  DoomGeometry, DoomMap, DoomThings,
   GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs, DoomMapInfo;
 
 type
@@ -492,8 +495,9 @@ end;
 procedure TViewPlay.Stop;
 begin
   SetPhotoMode(false);
-  DoomLightingInstance.SetDynamicLights([]);
+  DoomLightingInstance.SetDynamicLights([], TMatrix4.Identity);
   FDynLogged := 0;
+  FDynLampsLogged := 0;
   StopDemos(false);
   FreeAndNil(FDemoPlayer);
   { The page must stop keeping fingers from the engine (the menus). }
@@ -1433,13 +1437,14 @@ begin
     FMessageText.SetText('');
 end;
 
-procedure TViewPlay.ConsiderLight(const Eye: TVector3; const X, Y, Z, Radius: Single; const Color: TVector3);
+procedure TViewPlay.ConsiderLight(const Eye: TVector3; const X, Y, Z, Radius, Penalty: Single; const Color: TVector3);
 var
   D: Single;
   I, Slot: Integer;
 begin
   D := Sqrt(Sqr(X - Eye.X) + Sqr(Y - Eye.Y) + Sqr(Z - Eye.Z));
   if D > 1500 + Radius then Exit;
+  D := D + Penalty;
   if FDynCount < MaxDynamicLights then
   begin
     Slot := FDynCount;
@@ -1453,8 +1458,8 @@ begin
     if D >= FDynDist[Slot] then Exit;
   end;
   FDynDist[Slot] := D;
-  { Doom coordinates for now; UpdateDynamicLights turns them to eye space. }
-  FDynLights[Slot].Position := Vector3(X, Y, Z);
+  FDynLights[Slot].Position := DoomToCge(X, Y, Z);
+  FDynLamp[Slot] := Penalty > 0;
   FDynLights[Slot].Radius := Radius;
   FDynLights[Slot].Color := Color;
 end;
@@ -1463,9 +1468,8 @@ procedure TViewPlay.UpdateDynamicLights;
 var
   A: TDoomActor;
   Eye, Color, Fwd: TVector3;
-  Radius: Single;
-  M: TMatrix4;
-  I: Integer;
+  Radius, LampHeight: Single;
+  I, Lamps: Integer;
 begin
   FDynCount := 0;
   if Settings.DynamicLights and (FWorld <> nil) and FWorld.MapLoaded then
@@ -1474,35 +1478,48 @@ begin
     for A in FWorld.Actors do
     begin
       if A.Removed then Continue;
-      if (A.State = asMissile) or ((A.State in [asEffect, asDying]) and A.Bright and not A.SequenceDone) then
+      if A.State = asMissile then
       begin
         if SpriteDynamicLight(A.SpritePrefix, Radius, Color) then
-          ConsiderLight(Eye, A.DoomX, A.DoomY, A.DoomZ + 16, Radius, Color);
+          ConsiderLight(Eye, A.DoomX, A.DoomY, A.DoomZ + 16, Radius, 0, Color);
+      end else
+      if (A.State in [asEffect, asDying]) and A.Bright and not A.SequenceDone then
+      begin
+        { An explosion: shrinks and dims over its frames. }
+        if SpriteDynamicLight(A.SpritePrefix, Radius, Color) then
+          ConsiderLight(Eye, A.DoomX, A.DoomY, A.DoomZ + 16, Radius * (1 - 0.6 * A.SequenceProgress), 0,
+            Color * (1 - 0.5 * A.SequenceProgress));
       end else
       { A monster's muzzle flash: its attack frame is full bright. }
       if (A.State = asAttack) and A.FrameBright then
-        ConsiderLight(Eye, A.DoomX, A.DoomY, A.DoomZ + 40, 192, Vector3(1.0, 0.75, 0.4));
+        ConsiderLight(Eye, A.DoomX, A.DoomY, A.DoomZ + 40, 192, 0, Vector3(1.0, 0.75, 0.4))
+      else
+      { Lamps, torches and candles. }
+      if (A.Info <> nil) and (A.Info^.Kind = tkDecoration) and
+         LampDynamicLight(A.SpritePrefix, Radius, LampHeight, Color) then
+        ConsiderLight(Eye, A.DoomX, A.DoomY, A.DoomZ + LampHeight, Radius, 400, Color);
     end;
     { The player's gun flash, a little in front of the eye. }
     if (FWorld.Player.FlashFrame <> #0) and not FWorld.Player.Dead then
     begin
       Fwd := Vector3(Cos(DegToRad(FWorld.Player.Angle)), Sin(DegToRad(FWorld.Player.Angle)), 0);
       ConsiderLight(Eye, FWorld.Player.X + Fwd.X * 24, FWorld.Player.Y + Fwd.Y * 24,
-        FWorld.Player.Z + PlayerViewHeight, 320, Vector3(1.0, 0.85, 0.6));
+        FWorld.Player.Z + PlayerViewHeight, 320, 0, Vector3(1.0, 0.85, 0.6));
     end;
-    M := FViewport.Camera.WorldInverseTransform;
-    for I := 0 to FDynCount - 1 do
-      FDynLights[I].Position := M.MultPoint(DoomToCge(FDynLights[I].Position.X,
-        FDynLights[I].Position.Y, FDynLights[I].Position.Z));
   end;
-  DoomLightingInstance.SetDynamicLights(Slice(FDynLights, FDynCount));
-  if FDynCount <> FDynLogged then
+  DoomLightingInstance.SetDynamicLights(Slice(FDynLights, FDynCount), FViewport.Camera.WorldInverseTransform);
+  Lamps := 0;
+  for I := 0 to FDynCount - 1 do
+    if FDynLamp[I] then Inc(Lamps);
+  if (FDynCount <> FDynLogged) or (Lamps <> FDynLampsLogged) then
   begin
     if FDynCount > 0 then
-      WritelnLog('Lights', '%d dynamic lights, the nearest %.0f units away', [FDynCount, FDynDist[0]])
+      WritelnLog('Lights', '%d dynamic lights: %d lamps, %d shots, explosions and flashes', [
+        FDynCount, Lamps, FDynCount - Lamps])
     else
       WritelnLog('Lights', 'No dynamic lights');
     FDynLogged := FDynCount;
+    FDynLampsLogged := Lamps;
   end;
 end;
 

@@ -283,6 +283,12 @@
                 },
                 {
                   "$$ClassName": "TCastleButton",
+                  "Name": "ButtonDynamicLights",
+                  "Caption": "Dynamic lights: off",
+                  "FontSize": 22.0
+                },
+                {
+                  "$$ClassName": "TCastleButton",
                   "Name": "ButtonRenderScaleDown",
                   "Caption": "<",
                   "FontSize": 22.0

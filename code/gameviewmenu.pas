@@ -23,6 +23,7 @@ type
     FSfxLabel, FMusicLabel: TCastleLabel;
     FFovLabel, FUiScaleLabel, FRenderScaleLabel, FFrameCapLabel: TCastleLabel;
     FVSyncButton: TCastleButton;
+    FDynamicLightsButton: TCastleButton;
     FFullscreenButton: TCastleButton;
     { The Controls page: a button per action and slot; the one waiting
       for a key (FWaitSlot -1: none). }
@@ -138,6 +139,7 @@ type
     procedure ClickRenderScaleUp(Sender: TObject);
     procedure ClickFullscreen(Sender: TObject);
     procedure ClickVSync(Sender: TObject);
+    procedure ClickDynamicLights(Sender: TObject);
     procedure ClickFrameCapDown(Sender: TObject);
     procedure ClickFrameCapUp(Sender: TObject);
     procedure ClickControls(Sender: TObject);
@@ -296,6 +298,8 @@ begin
     refresh). }
   FVSyncButton := DesignedComponent('ButtonVSync') as TCastleButton;
   FVSyncButton.OnClick := {$ifdef FPC}@{$endif} ClickVSync;
+  FDynamicLightsButton := DesignedComponent('ButtonDynamicLights') as TCastleButton;
+  FDynamicLightsButton.OnClick := {$ifdef FPC}@{$endif} ClickDynamicLights;
   Click('ButtonFrameCapDown', {$ifdef FPC}@{$endif} ClickFrameCapDown);
   Click('ButtonFrameCapUp', {$ifdef FPC}@{$endif} ClickFrameCapUp);
   FFrameCapLabel := DesignedComponent('FrameCapLabel') as TCastleLabel;
@@ -1110,6 +1114,7 @@ begin
   FRenderScaleLabel.Caption := Format('Resolution %d%%', [Settings.RenderScale]);
   FFullscreenButton.Caption := 'Fullscreen: ' + BoolToStr(Settings.Fullscreen, 'on', 'off');
   FVSyncButton.Caption := 'V-sync: ' + BoolToStr(Settings.VSync, 'on', 'off');
+  FDynamicLightsButton.Caption := 'Dynamic lights: ' + BoolToStr(Settings.DynamicLights, 'on', 'off');
   if Settings.FrameCap > 0 then
     FFrameCapLabel.Caption := Format('Frame rate cap %d', [Settings.FrameCap])
   else
@@ -1157,6 +1162,14 @@ end;
 procedure TViewMenu.ClickRenderScaleUp(Sender: TObject);
 begin
   ChangeVideo(2, 1);
+end;
+
+procedure TViewMenu.ClickDynamicLights(Sender: TObject);
+begin
+  Settings.DynamicLights := not Settings.DynamicLights;
+  SaveSettings;
+  WritelnLog('Settings', 'Dynamic lights %s', [BoolToStr(Settings.DynamicLights, 'on', 'off')]);
+  UpdateVideoLabels;
 end;
 
 procedure TViewMenu.ClickVSync(Sender: TObject);
@@ -1786,6 +1799,12 @@ begin
     FDoomMenu.OpenPage(mpLoad)
   else if AutoTestMap = 'MENUOPTIONS' then
     ShowOptions(true)
+  else if AutoTestMap = 'MENUDLIGHTS' then
+  begin
+    { The Options panel after a click on "Dynamic lights". }
+    ShowOptions(true);
+    ClickDynamicLights(nil);
+  end
   else if AutoTestMap = 'MENUCONTROLS' then
   begin
     { The Controls page, after binding Q to "Use" like a click on its

@@ -47,13 +47,13 @@ const
   InverseColormap = 32;
 
   { Point lights the shader adds (dynamic lights, an option). }
-  MaxDynamicLights = 4;
+  MaxDynamicLights = 8;
 
 type
   TEffectNodeList = {$ifdef FPC}specialize{$endif} TList<TEffectNode>;
 
-  { A dynamic light: the position in eye space (the camera's, CGE units
-    = Doom units), the radius it reaches (0 = off) and its colour. }
+  { A dynamic light: the position in the world (CGE coordinates, units =
+    Doom units), the radius it reaches (0 = off) and its colour. }
   TDynamicLight = record
     Position: TVector3;
     Radius: Single;
@@ -70,6 +70,10 @@ type
     FFuzzScale: Single;
     FFuzzPhase: Integer;
     FLights: array [0..MaxDynamicLights - 1] of TDynamicLight;
+    FLightCount: Integer;
+    FView: TMatrix4;
+    function LightVectors: TVector4List;
+    function LightColors: TVector3List;
     procedure SetFuzzScale(const Value: Single);
     procedure SetFuzzPhase(const Value: Integer);
     procedure SetPaletteMapped(const Value: Boolean);
@@ -80,7 +84,6 @@ type
     procedure SetDiminish(const Value: Boolean);
     procedure SetGamma(const Value: Integer);
     procedure SendAll(const FieldName: String; const Value: Single);
-    function LightVector(const I: Integer): TVector4;
   public
     constructor Create;
     destructor Destroy; override;
@@ -136,9 +139,11 @@ type
     { Where the fuzz pattern starts (0..49), changed every tic like Doom's
       ever-advancing fuzzpos. }
     property FuzzPhase: Integer read FFuzzPhase write SetFuzzPhase;
-    { The dynamic lights shown (the first MaxDynamicLights; fewer turn
-      the rest off). Only changed slots are sent to the shaders. }
-    procedure SetDynamicLights(const Lights: array of TDynamicLight);
+    { The dynamic lights shown (the first MaxDynamicLights) and the
+      camera's world to eye matrix (Camera.WorldInverseTransform); the
+      shaders get the lights only when they change, the matrix while
+      there are lights. }
+    procedure SetDynamicLights(const Lights: array of TDynamicLight; const View: TMatrix4);
     { How many slots are on now. }
     function DynamicLightCount: Integer;
   end;
@@ -148,6 +153,11 @@ function DoomLightingInstance: TDoomLighting;
 { The dynamic light of a sprite (missiles and explosions by their sprite
   prefix): its radius in Doom units and colour; False for none. }
 function SpriteDynamicLight(const Sprite: String; out Radius: Single; out Color: TVector3): Boolean;
+
+{ The light of a lamp, torch or candle (a decoration, by its sprite
+  prefix): radius, the light's height above the thing's feet and colour;
+  False for other things. }
+function LampDynamicLight(const Sprite: String; out Radius, Height: Single; out Color: TVector3): Boolean;
 
 implementation
 
@@ -175,20 +185,19 @@ const
     'uniform float doom_fuzz_scale;' + NL +
     'uniform float doom_fuzz_phase;' + NL +
     'uniform float doom_gamma;' + NL +
-    'uniform vec4 doom_dlight0;' + NL +
-    'uniform vec4 doom_dlight1;' + NL +
-    'uniform vec4 doom_dlight2;' + NL +
-    'uniform vec4 doom_dlight3;' + NL +
-    'uniform vec3 doom_dlight_color0;' + NL +
-    'uniform vec3 doom_dlight_color1;' + NL +
-    'uniform vec3 doom_dlight_color2;' + NL +
-    'uniform vec3 doom_dlight_color3;' + NL +
+    { Dynamic lights: world positions and radii, colours, how many are
+      used (the first ones), and the camera's world to eye matrix. }
+    'uniform vec4 doom_dlights[8];' + NL +
+    'uniform vec3 doom_dlight_colors[8];' + NL +
+    'uniform float doom_dlight_count;' + NL +
+    'uniform mat4 doom_view;' + NL +
     '' + NL +
     { A dynamic light: a smooth falloff to its radius (w, 0 = off). }
     'void doom_dlight(vec4 l, vec3 c, inout float boost, inout vec3 tint)' + NL +
     '{' + NL +
     '  if (l.w <= 0.0) return;' + NL +
-    '  float f = clamp(1.0 - length(doom_eye - l.xyz) / l.w, 0.0, 1.0);' + NL +
+    '  vec3 p = (doom_view * vec4(l.xyz, 1.0)).xyz;' + NL +
+    '  float f = clamp(1.0 - length(doom_eye - p) / l.w, 0.0, 1.0);' + NL +
     '  f = f * f * (3.0 - 2.0 * f);' + NL +
     '  boost += f;' + NL +
     '  tint += c * f;' + NL +
@@ -258,10 +267,10 @@ const
       on top of the texel. }
     '  float doom_boost = 0.0;' + NL +
     '  vec3 doom_tint = vec3(0.0);' + NL +
-    '  doom_dlight(doom_dlight0, doom_dlight_color0, doom_boost, doom_tint);' + NL +
-    '  doom_dlight(doom_dlight1, doom_dlight_color1, doom_boost, doom_tint);' + NL +
-    '  doom_dlight(doom_dlight2, doom_dlight_color2, doom_boost, doom_tint);' + NL +
-    '  doom_dlight(doom_dlight3, doom_dlight_color3, doom_boost, doom_tint);' + NL +
+    '  for (int i = 0; i < 8; i++) {' + NL +
+    '    if (float(i) >= doom_dlight_count) break;' + NL +
+    '    doom_dlight(doom_dlights[i], doom_dlight_colors[i], doom_boost, doom_tint);' + NL +
+    '  }' + NL +
     '  level -= floor(min(doom_boost, 1.5) * 16.0);' + NL +
     '  vec3 doom_base = fragment_color.rgb;' + NL +
     '  level = clamp(level, 0.0, 31.0);' + NL +
@@ -378,6 +387,51 @@ const
     (Sprite: 'MISF'; Radius: 256; R: 1.0; G: 0.6; B: 0.25)
   );
 
+type
+  TLampLight = record
+    Sprite: String;
+    Radius, Height: Single;
+    R, G, B: Single;
+  end;
+
+const
+  LampLights: array [0..15] of TLampLight = (
+    (Sprite: 'COLU'; Radius: 256; Height: 48; R: 1.0; G: 0.95; B: 0.8),  { floor lamp }
+    (Sprite: 'TLMP'; Radius: 256; Height: 72; R: 0.85; G: 0.9; B: 1.0),  { tall tech lamp }
+    (Sprite: 'TLP2'; Radius: 224; Height: 56; R: 0.85; G: 0.9; B: 1.0),  { short tech lamp }
+    (Sprite: 'CAND'; Radius: 96; Height: 12; R: 1.0; G: 0.7; B: 0.3),    { candle }
+    (Sprite: 'CBRA'; Radius: 160; Height: 48; R: 1.0; G: 0.7; B: 0.3),   { candelabra }
+    (Sprite: 'TBLU'; Radius: 192; Height: 56; R: 0.4; G: 0.5; B: 1.0),   { tall torches }
+    (Sprite: 'TGRN'; Radius: 192; Height: 56; R: 0.4; G: 1.0; B: 0.4),
+    (Sprite: 'TRED'; Radius: 192; Height: 56; R: 1.0; G: 0.35; B: 0.25),
+    (Sprite: 'SMBT'; Radius: 160; Height: 40; R: 0.4; G: 0.5; B: 1.0),   { short torches }
+    (Sprite: 'SMGT'; Radius: 160; Height: 40; R: 0.4; G: 1.0; B: 0.4),
+    (Sprite: 'SMRT'; Radius: 160; Height: 40; R: 1.0; G: 0.35; B: 0.25),
+    (Sprite: 'FCAN'; Radius: 224; Height: 40; R: 1.0; G: 0.6; B: 0.25),  { burning barrel }
+    (Sprite: 'CEYE'; Radius: 128; Height: 48; R: 0.4; G: 1.0; B: 0.4),   { evil eye }
+    (Sprite: 'FSKU'; Radius: 128; Height: 40; R: 1.0; G: 0.6; B: 0.3),   { floating skull rock }
+    (Sprite: 'POL3'; Radius: 96; Height: 16; R: 1.0; G: 0.7; B: 0.3),    { skulls and candles }
+    (Sprite: 'TRE2'; Radius: 0; Height: 0; R: 0; G: 0; B: 0)              { (none: a tree) }
+  );
+
+function LampDynamicLight(const Sprite: String; out Radius, Height: Single; out Color: TVector3): Boolean;
+var
+  I: Integer;
+begin
+  for I := Low(LampLights) to High(LampLights) do
+    if (LampLights[I].Sprite = Sprite) and (LampLights[I].Radius > 0) then
+    begin
+      Radius := LampLights[I].Radius;
+      Height := LampLights[I].Height;
+      Color := Vector3(LampLights[I].R, LampLights[I].G, LampLights[I].B);
+      Exit(true);
+    end;
+  Radius := 0;
+  Height := 0;
+  Color := TVector3.Zero;
+  Result := false;
+end;
+
 function SpriteDynamicLight(const Sprite: String; out Radius: Single; out Color: TVector3): Boolean;
 var
   I: Integer;
@@ -478,7 +532,8 @@ end;
 function TDoomLighting.NewEffect(const VertexCode, FragmentInput: String): TEffectNode;
 var
   VertexPart, FragmentPart: TEffectPartNode;
-  I: Integer;
+  Vectors: TVector4List;
+  Colors: TVector3List;
 begin
   Result := TEffectNode.Create;
   Result.Language := slGLSL;
@@ -490,11 +545,17 @@ begin
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_scale', FFuzzScale));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_phase', FFuzzPhase));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_gamma', GammaExponent));
-  for I := 0 to MaxDynamicLights - 1 do
-  begin
-    Result.AddCustomField(TSFVec4f.Create(Result, true, 'doom_dlight' + IntToStr(I), LightVector(I)));
-    Result.AddCustomField(TSFVec3f.Create(Result, true, 'doom_dlight_color' + IntToStr(I), FLights[I].Color));
+  Vectors := LightVectors;
+  Colors := LightColors;
+  try
+    Result.AddCustomField(TMFVec4f.Create(Result, true, 'doom_dlights', Vectors.ToArray));
+    Result.AddCustomField(TMFVec3f.Create(Result, true, 'doom_dlight_colors', Colors.ToArray));
+  finally
+    FreeAndNil(Vectors);
+    FreeAndNil(Colors);
   end;
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_dlight_count', FLightCount));
+  Result.AddCustomField(TSFMatrix4f.Create(Result, true, 'doom_view', FView));
   if FIndexLutUrl <> '' then
   begin
     Result.AddCustomField(TSFNode.Create(Result, true, 'doom_index_lut', [TImageTextureNode],
@@ -616,52 +677,82 @@ begin
   SendAll('doom_fixed_colormap', Value);
 end;
 
-function TDoomLighting.LightVector(const I: Integer): TVector4;
+function TDoomLighting.LightVectors: TVector4List;
+var
+  I: Integer;
 begin
-  Result := Vector4(FLights[I].Position, FLights[I].Radius);
+  Result := TVector4List.Create;
+  for I := 0 to MaxDynamicLights - 1 do
+    Result.Add(Vector4(FLights[I].Position, FLights[I].Radius));
+end;
+
+function TDoomLighting.LightColors: TVector3List;
+var
+  I: Integer;
+begin
+  Result := TVector3List.Create;
+  for I := 0 to MaxDynamicLights - 1 do
+    Result.Add(FLights[I].Color);
 end;
 
 function TDoomLighting.DynamicLightCount: Integer;
-var
-  I: Integer;
 begin
-  Result := 0;
-  for I := 0 to MaxDynamicLights - 1 do
-    if FLights[I].Radius > 0 then Inc(Result);
+  Result := FLightCount;
 end;
 
-procedure TDoomLighting.SetDynamicLights(const Lights: array of TDynamicLight);
+procedure TDoomLighting.SetDynamicLights(const Lights: array of TDynamicLight; const View: TMatrix4);
 var
-  I: Integer;
+  I, Count: Integer;
   L: TDynamicLight;
+  Changed: Boolean;
   E: TEffectNode;
   F: TX3DField;
+  Vectors: TVector4List;
+  Colors: TVector3List;
 begin
+  Count := Min(Length(Lights), MaxDynamicLights);
+  Changed := Count <> FLightCount;
   for I := 0 to MaxDynamicLights - 1 do
   begin
-    if I < Length(Lights) then
+    if I < Count then
       L := Lights[I]
     else
       L := Default(TDynamicLight);
-    if L.Radius <= 0 then
+    if (FLights[I].Radius <> L.Radius) or not TVector3.PerfectlyEquals(FLights[I].Position, L.Position) or
+       not TVector3.PerfectlyEquals(FLights[I].Color, L.Color) then
     begin
-      { An unused slot: only its radius matters. }
-      if FLights[I].Radius <= 0 then Continue;
-      L := FLights[I];
-      L.Radius := 0;
-    end else
-    if (FLights[I].Radius = L.Radius) and TVector3.PerfectlyEquals(FLights[I].Position, L.Position) and
-       TVector3.PerfectlyEquals(FLights[I].Color, L.Color) then
-      Continue;
-    FLights[I] := L;
+      FLights[I] := L;
+      Changed := true;
+    end;
+  end;
+  if Changed then
+  begin
+    FLightCount := Count;
+    Vectors := LightVectors;
+    Colors := LightColors;
+    try
+      for E in FEffects do
+      begin
+        F := E.Field('doom_dlights');
+        if F is TMFVec4f then TMFVec4f(F).Send(Vectors);
+        F := E.Field('doom_dlight_colors');
+        if F is TMFVec3f then TMFVec3f(F).Send(Colors);
+        F := E.Field('doom_dlight_count');
+        if F is TSFFloat then TSFFloat(F).Send(Count);
+      end;
+    finally
+      FreeAndNil(Vectors);
+      FreeAndNil(Colors);
+    end;
+  end;
+  { The camera moves every frame; without lights the shader skips them. }
+  if (Count > 0) and not TMatrix4.PerfectlyEquals(FView, View) then
+  begin
+    FView := View;
     for E in FEffects do
     begin
-      F := E.Field('doom_dlight' + IntToStr(I));
-      if F is TSFVec4f then
-        TSFVec4f(F).Send(LightVector(I));
-      F := E.Field('doom_dlight_color' + IntToStr(I));
-      if F is TSFVec3f then
-        TSFVec3f(F).Send(L.Color);
+      F := E.Field('doom_view');
+      if F is TSFMatrix4f then TSFMatrix4f(F).Send(View);
     end;
   end;
 end;

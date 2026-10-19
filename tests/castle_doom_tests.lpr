@@ -1885,39 +1885,49 @@ procedure TTestGamepad.TestDynamicLights;
 var
   L: TDoomLighting;
   E: TEffectNode;
-  Radius: Single;
+  Radius, Height: Single;
   Color: TVector3;
-  Lights: array [0..4] of TDynamicLight;
+  Lights: array [0..9] of TDynamicLight;
   I: Integer;
+  View: TMatrix4;
 begin
   AssertTrue('rocket', SpriteDynamicLight('MISL', Radius, Color));
   AssertEquals('rocket radius', 256, Radius, 0.01);
   AssertTrue('plasma', SpriteDynamicLight('PLSS', Radius, Color));
   AssertTrue('plasma is blue', Color.Z > Color.X);
   AssertFalse('a puff has none', SpriteDynamicLight('PUFF', Radius, Color));
+  AssertTrue('floor lamp', LampDynamicLight('COLU', Radius, Height, Color));
+  AssertTrue('lamp height', Height > 0);
+  AssertTrue('red torch is red', LampDynamicLight('TRED', Radius, Height, Color) and (Color.X > Color.Z));
+  AssertFalse('a tree is no lamp', LampDynamicLight('TRE2', Radius, Height, Color));
   L := TDoomLighting.Create;
   try
     E := L.GeometryEffect;
-    AssertEquals('off at first', 0, (E.Field('doom_dlight0') as TSFVec4f).Value.W, 1e-6);
+    AssertEquals('none at first', 0, (E.Field('doom_dlight_count') as TSFFloat).Value, 1e-6);
+    AssertEquals('eight slots', MaxDynamicLights, (E.Field('doom_dlights') as TMFVec4f).Items.Count);
     for I := 0 to High(Lights) do
     begin
       Lights[I].Position := Vector3(I, 0, -100 * I);
       Lights[I].Radius := 100 + I;
       Lights[I].Color := Vector3(1, 0.5, 0);
     end;
-    { Five given, four kept. }
-    L.SetDynamicLights(Lights);
-    AssertEquals('four slots', MaxDynamicLights, L.DynamicLightCount);
-    AssertEquals('slot 2 position', -200, (E.Field('doom_dlight2') as TSFVec4f).Value.Z, 1e-6);
-    AssertEquals('slot 3 radius', 103, (E.Field('doom_dlight3') as TSFVec4f).Value.W, 1e-6);
-    AssertEquals('slot 1 colour', 0.5, (E.Field('doom_dlight_color1') as TSFVec3f).Value.Y, 1e-6);
-    L.SetDynamicLights(Slice(Lights, 1));
+    View := TranslationMatrix(Vector3(0, 0, -5));
+    { Ten given, eight kept. }
+    L.SetDynamicLights(Lights, View);
+    AssertEquals('eight lights', MaxDynamicLights, L.DynamicLightCount);
+    AssertEquals('count sent', MaxDynamicLights, (E.Field('doom_dlight_count') as TSFFloat).Value, 1e-6);
+    AssertEquals('slot 2 position', -200, (E.Field('doom_dlights') as TMFVec4f).Items[2].Z, 1e-6);
+    AssertEquals('slot 7 radius', 107, (E.Field('doom_dlights') as TMFVec4f).Items[7].W, 1e-6);
+    AssertEquals('slot 1 colour', 0.5, (E.Field('doom_dlight_colors') as TMFVec3f).Items[1].Y, 1e-6);
+    AssertEquals('view sent', -5, (E.Field('doom_view') as TSFMatrix4f).Value.Data[3, 2], 1e-6);
+    L.SetDynamicLights(Slice(Lights, 1), View);
     AssertEquals('one left', 1, L.DynamicLightCount);
-    AssertEquals('slot 1 off', 0, (E.Field('doom_dlight1') as TSFVec4f).Value.W, 1e-6);
+    AssertEquals('slot 1 off', 0, (E.Field('doom_dlights') as TMFVec4f).Items[1].W, 1e-6);
     FreeAndNil(E);
     { A new effect starts with the lights on now. }
     E := L.GeometryEffect;
-    AssertEquals('new effect', 100, (E.Field('doom_dlight0') as TSFVec4f).Value.W, 1e-6);
+    AssertEquals('new effect', 100, (E.Field('doom_dlights') as TMFVec4f).Items[0].W, 1e-6);
+    AssertEquals('new effect count', 1, (E.Field('doom_dlight_count') as TSFFloat).Value, 1e-6);
     FreeAndNil(E);
   finally
     FreeAndNil(L);

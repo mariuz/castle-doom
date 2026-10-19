@@ -113,7 +113,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   plays it back on its own random numbers, so it plays the
   same at any frame rate; a checksum every second says where a playback went out of sync.
 - Dynamic lights (Options -> Video, off by default): rockets, fireballs, plasma, BFG balls,
-  explosions and muzzle flashes light the walls and sprites around them in their colour.
+  explosions, muzzle flashes, lamps, torches and candles light the walls and sprites around
+  them in their colour.
 - Photo mode: `O` pauses the game, hides the HUD and lets the camera fly through the level (`F5`
   saves a screenshot without the HUD; `O` or Esc returns to the player).
 - Closed captions: Options -> Sound Volume -> Captions (or F4) shows a line for each sound heard ("Door opens, ahead",
