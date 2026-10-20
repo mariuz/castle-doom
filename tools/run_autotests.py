@@ -438,6 +438,21 @@ TESTS = [
       r'Editor: Added Imp at -288, 288', r'Editor: Exported E1M1: 989 vertices, 1179 lines',
       r'Editor: Play-test E1M1', r'Saved screenshot 1 at E1M1 \(player -416\.00 256\.00 2\d\.\d\d\)',
       r'Editor: Back to E1M1', r'Editor: Undone'], ['--edit'], lambda config: check_editor_wad(config)),
+    # The editor's selection and picker: two walls get STARBR1 from the
+    # picture picker, five things are box-selected, copied, pasted and the
+    # copies deleted, and a room in the void gets an alcove through its
+    # east wall and a closet against its west wall.
+    ('editor-select', 'E1M1',
+     'VIEW:-416:256:2,MODE:l,CLICK:-512:320,SHIFTCLICK:-256:320,KEY:Space,TYPE:STAR,S,KEY:Enter,'
+     'MODE:t,BOX:-520:120:-300:400,KEY:Ctrl+C,MOUSE:-416:-200,KEY:Ctrl+V,S,KEY:Delete,'
+     'VIEW:-2800:128:1.5,DRAW:-3000:0:-2744:0:-2744:256:-3000:256,DRAW:-2744:64:-2680:64:-2680:192:-2744:192,'
+     'DRAW:-3000:160:-2936:160:-2936:224:-3000:224,MODE:s,CLICK:-2968:192,S,EXPORT,Q',
+     [r'Editor: Picker: Wall texture for 2 lines', r'Editor: Wall texture STARBR1 on 2 lines',
+      r'Editor: Box selected 5 things', r'Editor: Pasted 5 things at -416, -192', r'Editor: Deleted 5 things',
+      r'Editor: Room drawn: sector 183 with 4 corners', r'Editor: Room drawn: sector 184 with 4 corners',
+      r'Editor: Exported E1M1: 997 vertices, 1189 lines, 1848 sides, 185 sectors, 292 things'],
+     ['--edit'], lambda config: check_map_wad(os.path.join(os.path.dirname(config), 'editor-select_e1m1.wad'),
+                                              'E1M1', 185, 292)),
     ('editor-menu', 'MENUKEYS', 'W:0.5,S,Q',
      [r'Menu: Custom game \(map editor\): freedoom1\.wad, PWADs none, map E1M1',
       r'Editor: Imported E1M1', r'Saved editor screenshot 1 of E1M1'],
@@ -891,7 +906,7 @@ GOLDEN = [
     'options-dynamic-lights_menudlights.png', 'lamp-lights_1.png', 'lamp-lights_2.png',
     'custom-game_menu1.png', 'custom-game_menu2.png', 'custom-game-doom2_menu1.png',
     'editor_edit_1.png', 'editor_edit_2.png', 'editor_edit_3.png', 'editor-menu_edit_1.png',
-    'editor-key_edit_1.png',
+    'editor-key_edit_1.png', 'editor-select_edit_1.png', 'editor-select_edit_2.png', 'editor-select_edit_3.png',
 ]
 
 

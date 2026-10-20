@@ -669,8 +669,12 @@ centre in Doom units, pixels a unit), `MODE:v|l|s|t`, `CLICK:x:y`,
 `DRAG:x1:y1:x2:y2`, `MOUSE:x:y`, `DRAW:x:y:x:y...` (a room), `KEY:name`
 (`KEY:Shift+PageUp`, `KEY:Ctrl+Z`), `THING:type` (what `A` adds),
 `EXPORT[:file]` (default `p_e1m1.wad`), `GLTF` / `X3D[:file]`, `PLAY`
-(the rest runs in the game), `S` (`p_edit_N.png`), `W:sec`, `Q`; log
-lines start with `Editor:`. A clear spot in E1M1's start room for a
+(the rest runs in the game), `S` (`p_edit_N.png`), `W:sec`, `Q`,
+`SHIFTCLICK:x:y` (add to the selection), `BOX:x1:y1:x2:y2` (box
+select, adding), `TYPE:text` (the picker's filter; `KEY:Space` opens
+it on the selected lines or sectors, `KEY:Enter` applies); log
+lines start with `Editor:` (autotest `editor-select` has the picker,
+box select, copy / paste and rooms against walls). A clear spot in E1M1's start room for a
 room: `DRAW:-480:192:-352:192:-352:288:-480:288` (autotest `editor`
 raises it to 24 and play-tests standing on it; its exported WAD is
 checked with Python `struct`, `check_map_wad`). `--export-map MAP FILE`,

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Map editor: Space opens a picker with pictures of the wall textures or flats (type to
+  filter); Shift+click and box selection (drag on nothing, or Ctrl+drag) select several
+  things, lines or sectors to move and change together; Ctrl+C / Ctrl+V copy things; rooms
+  drawn with corners on existing walls split them and attach to them.
+
 ## v0.45.0 (2026-10-20)
 
 - Map editor: `F7` in a game, Custom game -> Edit map or `--edit MAP` shows the map from

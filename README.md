@@ -66,9 +66,10 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   seed gives the same maps, saves keep it, and `--random-wad FILE` writes the PWAD.
 - Map editor: `F7` in a game (or New Game -> Custom game -> Edit map, or `--edit [MAP]`) opens
   the map from above like Doom Builder: select and drag vertices, lines, sectors and things,
-  draw new rooms (inside a sector, in the void, or joined to a wall), set floor and ceiling
-  heights, light, flats, wall textures, specials and tags, make doors, add and turn things,
-  undo / redo. `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
+  draw new rooms (inside a sector, in the void, or against a wall: corners on a wall split
+  it), select several with Shift+click or a box, set floor and ceiling heights, light,
+  specials and tags, pick wall textures and flats from their pictures (Space), make doors,
+  add, turn, copy and paste things, undo / redo. `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
   as a PWAD with its nodes built (it runs in other Doom ports: `-file e1m1-edited.wad`),
   `F3` / `F4` export the level's walls and floors as glTF / X3D with their textures for
   Blender, other engines or the Castle Game Engine editor. On the command line

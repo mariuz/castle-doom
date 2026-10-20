@@ -10,6 +10,11 @@
   door" (D); a line's wall texture (W), special, tag and split (X); things
   are added with A or Insert, their type changed with [ and ], turned
   with , and . and deleted with Delete. Ctrl+Z / Ctrl+Y undo and redo.
+  Shift+click adds to the selection, a drag on nothing (or Ctrl+drag)
+  selects a box, Ctrl+A everything; the keys then change all of it.
+  Space opens a picker with the pictures of the wall textures (lines) or
+  flats (sectors; Shift: ceilings), filtered by typing. Ctrl+C / Ctrl+V
+  copy and paste things.
   F9 play-tests (the map's PWAD stacked on the WADs as edit:/MAP; the
   editor key F7 in the game comes back), F2 exports the PWAD (a file on
   the desktop, a download in the browser), F3 / F4 the level as glTF /
@@ -24,19 +29,38 @@ unit GameViewEdit;
 interface
 
 uses Classes, SysUtils,
-  CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleColors,
+  CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleColors, CastleGLImages,
   DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomEditMap;
 
 type
   TEditMode = (emVertices, emLines, emSectors, emThings);
+  TEditIndexArray = array of Integer;
 
   TViewEdit = class(TCastleView)
   strict private
     FEdit: TDoomEditMap;
     FMode: TEditMode;
     FCenterX, FCenterY, FScale: Single;
+    { The selection: FSelected (the last one picked, whose values the
+      keys change from) and FMore, the others (Shift+click, box). }
     FSelected, FHover: Integer;
+    FMore: array of Integer;
     FGrid: Integer;
+    { A box selection being dragged from FBoxStart (window pixels). }
+    FBoxing: Boolean;
+    FBoxStart: TVector2;
+    FDragThings: array of Integer;
+    { Copied things, relative to their middle (Ctrl+C / Ctrl+V). }
+    FClipboard: TEditThingArray;
+    { The texture / flat picker: its kind (0 wall, 1 floor, 2 ceiling),
+      the typed filter, the names it shows, the highlighted one and the
+      first row shown; thumbnails made as they are first shown. }
+    FPicker: Boolean;
+    FPickerKind: Integer;
+    FPickerFilter: String;
+    FPickerList: TStringList;
+    FPickerIndex, FPickerTop: Integer;
+    FThumbs: TStringList;
     { Dragging the selection: where it started (Doom units, snapped) and
       the original places of what moves. }
     FDragging, FDragMoved: Boolean;
@@ -74,7 +98,8 @@ type
     procedure LoadMap(const AMapName: String);
     procedure UpdateLabels;
     function SelectionInfo: String;
-    procedure MouseDown(const P: TVector2; const Button: TCastleMouseButton);
+    procedure MouseDown(const P: TVector2; const Button: TCastleMouseButton;
+      const Shift: Boolean = false; const Ctrl: Boolean = false);
     procedure MouseMove(const P: TVector2);
     procedure MouseUp(const P: TVector2; const Button: TCastleMouseButton);
     procedure AddDrawPoint(const Pt: TEditPoint);
@@ -82,6 +107,7 @@ type
     function HandleKey(const Key: TKey; const Shift, Ctrl: Boolean): Boolean;
     function CycleName(const List: TStrings; const Current: String; const Delta: Integer): String;
     procedure ChangeWall(const Delta: Integer);
+    function MoreText: String;
     procedure CycleSpecial(const Delta: Integer);
     procedure ChangeTag(const Delta: Integer);
     procedure CycleThingType(const Delta: Integer);
@@ -92,6 +118,29 @@ type
     procedure Leave;
     procedure RunScript(const SecondsPassed: Single);
     procedure RunStep(const Step: String);
+    function IsSelected(const Index: Integer): Boolean;
+    { FSelected and FMore. }
+    function Selection: TEditIndexArray;
+    function SelectionCount: Integer;
+    procedure ClearSelection;
+    procedure SelectOnly(const Index: Integer);
+    procedure ToggleSelect(const Index: Integer);
+    procedure SelectBox(const A, B: TVector2);
+    procedure SelectAll;
+    function ModeCount: Integer;
+    procedure StartDrag(const P: TVector2);
+    procedure CopyThings;
+    procedure PasteThings;
+    procedure DeleteThings;
+    procedure SetLineTexture(const L: Integer; const Tex: String);
+    procedure OpenPicker(const Kind: Integer);
+    procedure FilterPicker;
+    procedure PickerApply(const TexName: String);
+    function PickerKey(const Key: TKey; const Ch: String): Boolean;
+    procedure PickerLayout(out Cols, Rows: Integer; out Cell, GridLeft, GridTop: Single);
+    function PickerCellAt(const P: TVector2): Integer;
+    function Thumb(const TexName: String): TDrawableImage;
+    procedure RenderPicker;
   public
     { Set before starting the view (the menu's or the game's objects). }
     Wad: TDoomWad;
@@ -133,7 +182,7 @@ implementation
 
 uses Math, StrUtils,
   CastleGLUtils, CastleLog, CastleWindow, CastleApplicationProperties, CastleUriUtils, CastleUtils,
-  CastleFilesUtils, CastleRectangles, CastleRenderOptions,
+  CastleFilesUtils, CastleRectangles, CastleRenderOptions, CastleFonts,
   {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
   DoomThings, DoomMap, GameViewPlay, GameViewMenu, DoomExport;
 
@@ -191,6 +240,10 @@ const
     'Right / middle drag, arrows  pan' + #10 +
     'Wheel, + -  zoom    Z  fit    G  grid' + #10 +
     'N  draw a room (click corners, Enter)' + #10 +
+    'Shift+click: add to the selection' + #10 +
+    'Drag on nothing / Ctrl+drag: box select' + #10 +
+    'Ctrl+A all, Ctrl+C / Ctrl+V copy things' + #10 +
+    'Space: texture / flat picker (Shift: ceiling)' + #10 +
     'Sector: PgUp PgDn floor (Shift: ceiling)' + #10 +
     '  B light  F C flats  P special  D door' + #10 +
     'Line: W texture  P special  X split' + #10 +
@@ -270,6 +323,10 @@ begin
   FMode := emSectors;
   FThingType := 7; { the imp }
   Skill := 2;
+  FPickerList := TStringList.Create;
+  FThumbs := TStringList.Create;
+  FThumbs.OwnsObjects := true;
+  FThumbs.Sorted := true;
 end;
 
 destructor TViewEdit.Destroy;
@@ -278,6 +335,8 @@ begin
   FreeAndNil(FTextures);
   FreeAndNil(FFlats);
   FreeAndNil(FSteps);
+  FreeAndNil(FPickerList);
+  FreeAndNil(FThumbs);
   inherited;
 end;
 
@@ -356,7 +415,8 @@ begin
     Message('Editing ' + FEdit.Name);
   MapName := FEdit.Name;
   WritelnLog('Editor', 'Imported %s from %s', [FEdit.Summary, Wad.Description]);
-  FSelected := -1;
+  ClearSelection;
+  FThumbs.Clear;
   FHover := -1;
   FDrawing := false;
   ZoomToFit;
@@ -453,7 +513,7 @@ procedure TViewEdit.SetMode(const Mode: TEditMode);
 begin
   if FMode = Mode then Exit;
   FMode := Mode;
-  FSelected := -1;
+  ClearSelection;
   FHover := -1;
   WritelnLog('Editor', 'Mode %s', [ModeNames[Mode]]);
 end;
@@ -486,17 +546,19 @@ var
 begin
   Result := '';
   if FSelected < 0 then Exit;
+  if Length(FMore) > 0 then
+    Result := Format('%d %s selected; the last one: ', [SelectionCount, LowerCase(ModeNames[FMode])]);
   case FMode of
     emVertices:
       if FSelected <= High(FEdit.Vertices) then
-        Result := Format('Vertex %d at %d, %d', [FSelected, FEdit.Vertices[FSelected].X, FEdit.Vertices[FSelected].Y]);
+        Result := Result + Format('Vertex %d at %d, %d', [FSelected, FEdit.Vertices[FSelected].X, FEdit.Vertices[FSelected].Y]);
     emLines:
       if FSelected <= High(FEdit.Lines) then
       begin
         L := FEdit.Lines[FSelected];
         Side := 'one-sided';
         if L.Side[1] >= 0 then Side := 'two-sided';
-        Result := Format('Line %d (%s), length %d, special %s, tag %d, flags %d', [FSelected, Side,
+        Result := Result + Format('Line %d (%s), length %d, special %s, tag %d, flags %d', [FSelected, Side,
           Round(Sqrt(Sqr(FEdit.Vertices[L.V2].X - FEdit.Vertices[L.V1].X) + Sqr(FEdit.Vertices[L.V2].Y - FEdit.Vertices[L.V1].Y))),
           ChoiceName(LineSpecials, L.Special), L.Tag, L.Flags]) + #10 +
           '  front: ' + SideText(L.Side[0]) + #10 + '  back: ' + SideText(L.Side[1]);
@@ -505,14 +567,14 @@ begin
       if FSelected <= High(FEdit.Sectors) then
       begin
         S := FEdit.Sectors[FSelected];
-        Result := Format('Sector %d: floor %d %s, ceiling %d %s, light %d, special %s, tag %d', [FSelected,
+        Result := Result + Format('Sector %d: floor %d %s, ceiling %d %s, light %d, special %s, tag %d', [FSelected,
           S.Floor, S.FloorTex, S.Ceiling, S.CeilingTex, S.Light, ChoiceName(SectorSpecials, S.Special), S.Tag]);
       end;
     emThings:
       if FSelected <= High(FEdit.Things) then
       begin
         T := FEdit.Things[FSelected];
-        Result := Format('Thing %d: %s at %d, %d, angle %d, flags %d', [FSelected, EditorThingName(T.TypeNum),
+        Result := Result + Format('Thing %d: %s at %d, %d, angle %d, flags %d', [FSelected, EditorThingName(T.TypeNum),
           T.X, T.Y, T.Angle, T.Flags]);
       end;
   end;
@@ -543,6 +605,528 @@ begin
   FHelpLabel.Exists := FHelp;
 end;
 
+{ Selection ------------------------------------------------------------------- }
+
+function TViewEdit.IsSelected(const Index: Integer): Boolean;
+var
+  I: Integer;
+begin
+  if Index < 0 then Exit(false);
+  if Index = FSelected then Exit(true);
+  for I := 0 to High(FMore) do
+    if FMore[I] = Index then Exit(true);
+  Result := false;
+end;
+
+function TViewEdit.Selection: TEditIndexArray;
+var
+  I: Integer;
+begin
+  Result := nil;
+  if FSelected < 0 then Exit;
+  SetLength(Result, Length(FMore) + 1);
+  Result[0] := FSelected;
+  for I := 0 to High(FMore) do
+    Result[I + 1] := FMore[I];
+end;
+
+function TViewEdit.SelectionCount: Integer;
+begin
+  if FSelected < 0 then Result := 0 else Result := Length(FMore) + 1;
+end;
+
+procedure TViewEdit.ClearSelection;
+begin
+  FSelected := -1;
+  FMore := nil;
+end;
+
+procedure TViewEdit.SelectOnly(const Index: Integer);
+begin
+  FSelected := Index;
+  FMore := nil;
+end;
+
+procedure TViewEdit.ToggleSelect(const Index: Integer);
+var
+  I: Integer;
+begin
+  if Index < 0 then Exit;
+  if Index = FSelected then
+  begin
+    { The next one becomes the main one. }
+    if Length(FMore) > 0 then
+    begin
+      FSelected := FMore[High(FMore)];
+      SetLength(FMore, Length(FMore) - 1);
+    end else
+      FSelected := -1;
+    Exit;
+  end;
+  for I := 0 to High(FMore) do
+    if FMore[I] = Index then
+    begin
+      Delete(FMore, I, 1);
+      Exit;
+    end;
+  if FSelected >= 0 then
+  begin
+    SetLength(FMore, Length(FMore) + 1);
+    FMore[High(FMore)] := FSelected;
+  end;
+  FSelected := Index;
+end;
+
+function TViewEdit.ModeCount: Integer;
+begin
+  case FMode of
+    emVertices: Result := Length(FEdit.Vertices);
+    emLines: Result := Length(FEdit.Lines);
+    emSectors: Result := Length(FEdit.Sectors);
+    else Result := Length(FEdit.Things);
+  end;
+end;
+
+{ Everything of the mode inside the box from A to B (window pixels): a
+  line with both ends in it, a sector with all its vertices. }
+procedure TViewEdit.SelectBox(const A, B: TVector2);
+var
+  D1, D2: TVector2;
+  X1, Y1, X2, Y2: Single;
+  I, L, Count: Integer;
+  Inside: array of Boolean;
+  SectorOut: array of Boolean;
+
+  function In_(const X, Y: Single): Boolean;
+  begin
+    Result := (X >= X1) and (X <= X2) and (Y >= Y1) and (Y <= Y2);
+  end;
+
+  procedure Take(const Index: Integer);
+  begin
+    if IsSelected(Index) then Exit;
+    ToggleSelect(Index);
+    Inc(Count);
+  end;
+
+begin
+  D1 := DoomOf(A);
+  D2 := DoomOf(B);
+  X1 := Min(D1.X, D2.X); X2 := Max(D1.X, D2.X);
+  Y1 := Min(D1.Y, D2.Y); Y2 := Max(D1.Y, D2.Y);
+  Count := 0;
+  SetLength(Inside, Length(FEdit.Vertices));
+  for I := 0 to High(FEdit.Vertices) do
+    Inside[I] := In_(FEdit.Vertices[I].X, FEdit.Vertices[I].Y);
+  case FMode of
+    emVertices:
+      for I := 0 to High(Inside) do
+        if Inside[I] then Take(I);
+    emLines:
+      for I := 0 to High(FEdit.Lines) do
+        if Inside[FEdit.Lines[I].V1] and Inside[FEdit.Lines[I].V2] then Take(I);
+    emSectors:
+      begin
+        SetLength(SectorOut, Length(FEdit.Sectors));
+        for L := 0 to High(FEdit.Lines) do
+          if not (Inside[FEdit.Lines[L].V1] and Inside[FEdit.Lines[L].V2]) then
+          begin
+            if FEdit.LineSector(L, 0) >= 0 then SectorOut[FEdit.LineSector(L, 0)] := true;
+            if FEdit.LineSector(L, 1) >= 0 then SectorOut[FEdit.LineSector(L, 1)] := true;
+          end;
+        for I := 0 to High(SectorOut) do
+          if not SectorOut[I] then Take(I);
+      end;
+    else
+      for I := 0 to High(FEdit.Things) do
+        if In_(FEdit.Things[I].X, FEdit.Things[I].Y) then Take(I);
+  end;
+  WritelnLog('Editor', 'Box selected %d %s, %d in all', [Count, LowerCase(ModeNames[FMode]), SelectionCount]);
+end;
+
+procedure TViewEdit.SelectAll;
+var
+  I: Integer;
+begin
+  ClearSelection;
+  for I := 0 to ModeCount - 1 do
+    ToggleSelect(I);
+  LogAction(Format('Selected all %d %s', [SelectionCount, LowerCase(ModeNames[FMode])]));
+end;
+
+{ Start moving the selection from P: the vertices of what is selected (a
+  vertex, the lines' and the sectors' ends), or the things. }
+procedure TViewEdit.StartDrag(const P: TVector2);
+var
+  I, Line: Integer;
+  Seen: array of Boolean;
+  Sel: TEditIndexArray;
+
+  procedure TakeVertex(const V: Integer);
+  begin
+    if Seen[V] then Exit;
+    Seen[V] := true;
+    SetLength(FDragVertices, Length(FDragVertices) + 1);
+    FDragVertices[High(FDragVertices)] := V;
+  end;
+
+begin
+  FDragging := true;
+  FDragMoved := false;
+  FDragStart := Snap(P);
+  FDragVertices := nil;
+  FDragThings := nil;
+  Sel := Selection;
+  SetLength(Seen, Length(FEdit.Vertices));
+  case FMode of
+    emVertices:
+      for I := 0 to High(Sel) do TakeVertex(Sel[I]);
+    emLines:
+      for I := 0 to High(Sel) do
+      begin
+        TakeVertex(FEdit.Lines[Sel[I]].V1);
+        TakeVertex(FEdit.Lines[Sel[I]].V2);
+      end;
+    emSectors:
+      for Line := 0 to High(FEdit.Lines) do
+        if IsSelected(FEdit.LineSector(Line, 0)) or IsSelected(FEdit.LineSector(Line, 1)) then
+        begin
+          TakeVertex(FEdit.Lines[Line].V1);
+          TakeVertex(FEdit.Lines[Line].V2);
+        end;
+    else
+      FDragThings := Sel;
+  end;
+  if FMode = emThings then
+  begin
+    SetLength(FDragOrigins, Length(FDragThings));
+    for I := 0 to High(FDragThings) do
+    begin
+      FDragOrigins[I].X := FEdit.Things[FDragThings[I]].X;
+      FDragOrigins[I].Y := FEdit.Things[FDragThings[I]].Y;
+    end;
+  end else
+  begin
+    SetLength(FDragOrigins, Length(FDragVertices));
+    for I := 0 to High(FDragVertices) do
+    begin
+      FDragOrigins[I].X := FEdit.Vertices[FDragVertices[I]].X;
+      FDragOrigins[I].Y := FEdit.Vertices[FDragVertices[I]].Y;
+    end;
+  end;
+end;
+
+procedure TViewEdit.CopyThings;
+var
+  Sel: TEditIndexArray;
+  I: Integer;
+  CX, CY: Single;
+begin
+  if (FMode <> emThings) or (SelectionCount = 0) then
+  begin
+    Message('Select things to copy');
+    Exit;
+  end;
+  Sel := Selection;
+  CX := 0;
+  CY := 0;
+  for I := 0 to High(Sel) do
+  begin
+    CX := CX + FEdit.Things[Sel[I]].X;
+    CY := CY + FEdit.Things[Sel[I]].Y;
+  end;
+  CX := Round(CX / Length(Sel));
+  CY := Round(CY / Length(Sel));
+  SetLength(FClipboard, Length(Sel));
+  for I := 0 to High(Sel) do
+  begin
+    FClipboard[I] := FEdit.Things[Sel[I]];
+    FClipboard[I].X := FClipboard[I].X - Round(CX);
+    FClipboard[I].Y := FClipboard[I].Y - Round(CY);
+  end;
+  LogAction(Format('Copied %d things', [Length(FClipboard)]));
+end;
+
+procedure TViewEdit.PasteThings;
+var
+  Pt: TEditPoint;
+  I, T: Integer;
+begin
+  if Length(FClipboard) = 0 then
+  begin
+    Message('Nothing copied');
+    Exit;
+  end;
+  Pt := Snap(FMouse);
+  SetMode(emThings);
+  { The pasted things become the selection. }
+  ClearSelection;
+  FEdit.BeginChange;
+  try
+    for I := 0 to High(FClipboard) do
+    begin
+      T := FEdit.AddThing(Pt.X + FClipboard[I].X, Pt.Y + FClipboard[I].Y, FClipboard[I].TypeNum, FClipboard[I].Angle);
+      FEdit.Things[T].Flags := FClipboard[I].Flags;
+      ToggleSelect(T);
+    end;
+  finally
+    FEdit.EndChange;
+  end;
+  LogAction(Format('Pasted %d things at %d, %d', [Length(FClipboard), Pt.X, Pt.Y]));
+end;
+
+procedure TViewEdit.DeleteThings;
+var
+  Sel: TEditIndexArray;
+  I, J, T: Integer;
+begin
+  Sel := Selection;
+  { Highest first, so the other indices stay right. }
+  for I := 1 to High(Sel) do
+    for J := I downto 1 do
+      if Sel[J] > Sel[J - 1] then
+      begin
+        T := Sel[J]; Sel[J] := Sel[J - 1]; Sel[J - 1] := T;
+      end;
+  FEdit.BeginChange;
+  try
+    for I := 0 to High(Sel) do
+      FEdit.DeleteThing(Sel[I]);
+  finally
+    FEdit.EndChange;
+  end;
+  LogAction(Format('Deleted %d things', [Length(Sel)]));
+  ClearSelection;
+end;
+
+{ The texture picker ------------------------------------------------------------ }
+
+const
+  PickerKindNames: array [0..2] of String = ('Wall texture', 'Floor flat', 'Ceiling flat');
+
+procedure TViewEdit.OpenPicker(const Kind: Integer);
+var
+  Current: String;
+  L: TEditLine;
+begin
+  if SelectionCount = 0 then
+  begin
+    Message('Select lines or sectors first');
+    Exit;
+  end;
+  FPicker := true;
+  FPickerKind := Kind;
+  FPickerFilter := '';
+  FilterPicker;
+  Current := '';
+  if Kind = 0 then
+  begin
+    L := FEdit.Lines[FSelected];
+    if L.Side[0] >= 0 then
+    begin
+      Current := FEdit.Sides[L.Side[0]].Middle;
+      if (Current = '') or (Current = '-') then Current := FEdit.Sides[L.Side[0]].Lower;
+      if (Current = '') or (Current = '-') then Current := FEdit.Sides[L.Side[0]].Upper;
+    end;
+  end else
+  if Kind = 1 then
+    Current := FEdit.Sectors[FSelected].FloorTex
+  else
+    Current := FEdit.Sectors[FSelected].CeilingTex;
+  FPickerIndex := Max(0, FPickerList.IndexOf(UpperCase(Current)));
+  FPickerTop := -1;
+  WritelnLog('Editor', 'Picker: %s for %d %s, %d to choose from', [PickerKindNames[Kind], SelectionCount,
+    LowerCase(ModeNames[FMode]), FPickerList.Count]);
+end;
+
+procedure TViewEdit.FilterPicker;
+var
+  Source: TStringList;
+  I: Integer;
+begin
+  if FPickerKind = 0 then Source := FTextures else Source := FFlats;
+  FPickerList.Clear;
+  for I := 0 to Source.Count - 1 do
+    if (FPickerFilter = '') or (Pos(FPickerFilter, Source[I]) > 0) then
+      FPickerList.Add(Source[I]);
+  FPickerIndex := 0;
+  FPickerTop := 0;
+end;
+
+procedure TViewEdit.SetLineTexture(const L: Integer; const Tex: String);
+var
+  Line: TEditLine;
+begin
+  Line := FEdit.Lines[L];
+  if Line.Side[1] < 0 then
+  begin
+    if Line.Side[0] >= 0 then FEdit.Sides[Line.Side[0]].Middle := Tex;
+  end else
+  begin
+    FEdit.Sides[Line.Side[0]].Upper := Tex;
+    FEdit.Sides[Line.Side[0]].Lower := Tex;
+    FEdit.Sides[Line.Side[1]].Upper := Tex;
+    FEdit.Sides[Line.Side[1]].Lower := Tex;
+  end;
+end;
+
+procedure TViewEdit.PickerApply(const TexName: String);
+var
+  Sel: TEditIndexArray;
+  I: Integer;
+begin
+  FPicker := false;
+  Sel := Selection;
+  FEdit.BeginChange;
+  try
+    FEdit.Snapshot;
+    for I := 0 to High(Sel) do
+      case FPickerKind of
+        0: SetLineTexture(Sel[I], TexName);
+        1: FEdit.Sectors[Sel[I]].FloorTex := TexName;
+        else FEdit.Sectors[Sel[I]].CeilingTex := TexName;
+      end;
+  finally
+    FEdit.EndChange;
+  end;
+  LogAction(Format('%s %s on %d %s', [PickerKindNames[FPickerKind], TexName, Length(Sel), LowerCase(ModeNames[FMode])]));
+end;
+
+function TViewEdit.PickerKey(const Key: TKey; const Ch: String): Boolean;
+var
+  Cols, Rows: Integer;
+  Cell, GridLeft, GridTop: Single;
+  C: Char;
+begin
+  Result := true;
+  PickerLayout(Cols, Rows, Cell, GridLeft, GridTop);
+  case Key of
+    keyEscape:
+      begin
+        FPicker := false;
+        Message('Picker closed');
+      end;
+    keyEnter:
+      if FPickerList.Count > 0 then
+        PickerApply(FPickerList[FPickerIndex]);
+    keyArrowLeft: FPickerIndex := Max(0, FPickerIndex - 1);
+    keyArrowRight: FPickerIndex := Min(FPickerList.Count - 1, FPickerIndex + 1);
+    keyArrowUp: FPickerIndex := Max(0, FPickerIndex - Cols);
+    keyArrowDown: FPickerIndex := Min(FPickerList.Count - 1, FPickerIndex + Cols);
+    keyPageUp: FPickerIndex := Max(0, FPickerIndex - Cols * Rows);
+    keyPageDown: FPickerIndex := Min(FPickerList.Count - 1, FPickerIndex + Cols * Rows);
+    keyBackSpace:
+      if FPickerFilter <> '' then
+      begin
+        SetLength(FPickerFilter, Length(FPickerFilter) - 1);
+        FilterPicker;
+      end;
+    else
+      begin
+        { Typed letters, digits, - and _ filter the names. }
+        if Length(Ch) <> 1 then Exit;
+        C := UpCase(Ch[1]);
+        if not CharInSet(C, ['A'..'Z', '0'..'9', '-', '_', '[', ']']) then Exit;
+        FPickerFilter := FPickerFilter + C;
+        FilterPicker;
+      end;
+  end;
+  { Keep the highlighted one in view. }
+  if FPickerList.Count > 0 then
+  begin
+    if FPickerIndex div Cols < FPickerTop then FPickerTop := FPickerIndex div Cols;
+    if FPickerIndex div Cols >= FPickerTop + Rows then FPickerTop := FPickerIndex div Cols - Rows + 1;
+  end;
+end;
+
+procedure TViewEdit.PickerLayout(out Cols, Rows: Integer; out Cell, GridLeft, GridTop: Single);
+var
+  W, H: Single;
+begin
+  W := Container.PixelsWidth;
+  H := Container.PixelsHeight;
+  Cell := Max(64, Round(H / 7));
+  Cols := Max(1, Trunc((W - 40) / Cell));
+  Rows := Max(1, Trunc((H - 110) / Cell));
+  GridLeft := (W - Cols * Cell) / 2;
+  GridTop := H - 70;
+end;
+
+function TViewEdit.PickerCellAt(const P: TVector2): Integer;
+var
+  Cols, Rows, C, R: Integer;
+  Cell, GridLeft, GridTop: Single;
+begin
+  Result := -1;
+  PickerLayout(Cols, Rows, Cell, GridLeft, GridTop);
+  if (P.X < GridLeft) or (P.Y > GridTop) then Exit;
+  C := Trunc((P.X - GridLeft) / Cell);
+  R := Trunc((GridTop - P.Y) / Cell);
+  if (C >= Cols) or (R >= Rows) then Exit;
+  Result := (FPickerTop + R) * Cols + C;
+  if Result >= FPickerList.Count then Result := -1;
+end;
+
+function TViewEdit.Thumb(const TexName: String): TDrawableImage;
+var
+  I: Integer;
+  Img: TDoomImage;
+  Key: String;
+begin
+  Key := Format('%d:%s', [Ord(FPickerKind <> 0), TexName]);
+  I := FThumbs.IndexOf(Key);
+  if I >= 0 then Exit(TDrawableImage(FThumbs.Objects[I]));
+  Result := nil;
+  if FPickerKind = 0 then Img := Graphics.Texture(TexName) else Img := Graphics.Flat(TexName);
+  if (Img <> nil) and (Img.Image <> nil) then
+    Result := TDrawableImage.Create(Img.Image.MakeCopy, false, true);
+  FThumbs.AddObject(Key, Result);
+end;
+
+procedure TViewEdit.RenderPicker;
+var
+  Cols, Rows, R, C, I: Integer;
+  Cell, GridLeft, GridTop, Scale, X, Y: Single;
+  Img: TDrawableImage;
+  Font: TCastleFont;
+  Rect: TFloatRectangle;
+begin
+  PickerLayout(Cols, Rows, Cell, GridLeft, GridTop);
+  if FPickerTop < 0 then
+    FPickerTop := Max(0, FPickerIndex div Cols - Rows div 2);
+  DrawRectangle(FloatRectangle(0, 0, Container.PixelsWidth, Container.PixelsHeight), Vector4(0.03, 0.03, 0.06, 0.93));
+  Font := FallbackFont;
+  Font.PushProperties;
+  try
+    Font.Size := Max(12, Cell / 8);
+    Font.Print(GridLeft, GridTop + 16, Vector4(1, 0.85, 0.4, 1),
+      Format('%s for %d %s: filter "%s" (%d)   type to filter, arrows, Enter, Esc', [
+      PickerKindNames[FPickerKind], SelectionCount, LowerCase(ModeNames[FMode]), FPickerFilter, FPickerList.Count]));
+    for R := 0 to Rows - 1 do
+      for C := 0 to Cols - 1 do
+      begin
+        I := (FPickerTop + R) * Cols + C;
+        if I >= FPickerList.Count then Break;
+        X := GridLeft + C * Cell;
+        Y := GridTop - (R + 1) * Cell;
+        if I = FPickerIndex then
+          DrawRectangle(FloatRectangle(X + 1, Y + 1, Cell - 2, Cell - 2), Vector4(1, 0.55, 0.1, 1));
+        Img := Thumb(FPickerList[I]);
+        if Img <> nil then
+        begin
+          { Fit in the cell above the name, keeping the proportions. }
+          Scale := Min((Cell - 10) / Img.Width, (Cell - 10 - Font.Height - 2) / Img.Height);
+          Rect := FloatRectangle(X + (Cell - Img.Width * Scale) / 2, Y + Font.Height + 6,
+            Img.Width * Scale, Img.Height * Scale);
+          Img.Draw(Rect);
+        end;
+        Font.Print(X + 5, Y + 4, Vector4(0.9, 0.9, 0.9, 1), FPickerList[I]);
+      end;
+  finally
+    Font.PopProperties;
+  end;
+end;
+
 { Drawing ------------------------------------------------------------------- }
 
 procedure TViewEdit.Render;
@@ -569,6 +1153,8 @@ var
   Color: TCastleColor;
   Box: array [0..9] of TVector2;
   Sel: Boolean;
+  Mark: array of Boolean;
+  SelIndex: TEditIndexArray;
 
   procedure Add(var Arr: array of TVector2; var N: Integer; const P, Q: TVector2);
   begin
@@ -588,9 +1174,28 @@ var
     end;
   end;
 
+  function Marked_(const Index: Integer): Boolean;
+  begin
+    Result := (Index >= 0) and (Index <= High(Mark)) and Mark[Index];
+  end;
+
+  function LineSelected(const L: Integer): Boolean;
+  begin
+    case FMode of
+      emLines: Result := Marked_(L);
+      emSectors: Result := Marked_(FEdit.LineSector(L, 0)) or Marked_(FEdit.LineSector(L, 1));
+      else Result := false;
+    end;
+  end;
+
 begin
   inherited;
   DrawRectangle(FloatRectangle(0, 0, Container.PixelsWidth, Container.PixelsHeight), ColorBack);
+  { The selection as marks by index (of the mode's objects). }
+  SetLength(Mark, ModeCount);
+  SelIndex := Selection;
+  for I := 0 to High(SelIndex) do
+    if SelIndex[I] <= High(Mark) then Mark[SelIndex[I]] := true;
 
   { The grid, when its cells are at least 8 pixels. }
   G := FGrid;
@@ -634,7 +1239,7 @@ begin
   begin
     A := ScreenOf(FEdit.Vertices[FEdit.Lines[I].V1].X, FEdit.Vertices[FEdit.Lines[I].V1].Y);
     B := ScreenOf(FEdit.Vertices[FEdit.Lines[I].V2].X, FEdit.Vertices[FEdit.Lines[I].V2].Y);
-    if LineMarked(I, FSelected) then
+    if LineSelected(I) then
       Add(Marked, NM, A, B)
     else if LineMarked(I, FHover) then
       Add(Hovered, NH, A, B)
@@ -664,11 +1269,11 @@ begin
     begin
       A := ScreenOf(FEdit.Vertices[I].X, FEdit.Vertices[I].Y);
       if (A.X < -4) or (A.Y < -4) or (A.X > Container.PixelsWidth + 4) or (A.Y > Container.PixelsHeight + 4) then Continue;
-      if I = FSelected then Color := ColorSelected
+      if Marked_(I) then Color := ColorSelected
       else if I = FHover then Color := ColorHover
       else Color := ColorVertex;
       R := 2;
-      if (I = FSelected) or (I = FHover) then R := 4;
+      if Marked_(I) or (I = FHover) then R := 4;
       DrawRectangle(FloatRectangle(A.X - R, A.Y - R, 2 * R, 2 * R), Color);
     end;
 
@@ -686,7 +1291,7 @@ begin
       if Info^.Kind = tkMonster then Color := ColorMonster
       else if Info^.Kind = tkPickup then Color := ColorItem;
     end;
-    Sel := (FMode = emThings) and (I = FSelected);
+    Sel := (FMode = emThings) and Marked_(I);
     if Sel then Color := ColorSelected
     else if (FMode = emThings) and (I = FHover) then Color := ColorHover
     else if FMode <> emThings then Color.W := 0.6;
@@ -723,28 +1328,40 @@ begin
     DrawRectangle(FloatRectangle(A.X - 3, A.Y - 3, 6, 6), ColorHover);
   end;
 
+  { The box selection being dragged. }
+  if FBoxing then
+  begin
+    A := FBoxStart;
+    B := FMouse;
+    DrawPrimitive2D(pmLineLoop, [A, Vector2(B.X, A.Y), B, Vector2(A.X, B.Y)], ColorHover);
+  end;
+
   { The help panel's background (the label draws after this). }
   if (FHelpLabel <> nil) and FHelpLabel.Exists then
     DrawRectangle(FHelpLabel.RenderRect, Vector4(0.1, 0.12, 0.2, 0.9));
+
+  if FPicker then RenderPicker;
 end;
 
 { Input --------------------------------------------------------------------- }
 
-procedure TViewEdit.MouseDown(const P: TVector2; const Button: TCastleMouseButton);
+procedure TViewEdit.MouseDown(const P: TVector2; const Button: TCastleMouseButton;
+  const Shift, Ctrl: Boolean);
 var
-  I, Line: Integer;
-  Seen: array of Boolean;
-
-  procedure TakeVertex(const V: Integer);
-  begin
-    if Seen[V] then Exit;
-    Seen[V] := true;
-    SetLength(FDragVertices, Length(FDragVertices) + 1);
-    FDragVertices[High(FDragVertices)] := V;
-  end;
-
+  Picked: Integer;
 begin
   FMouse := P;
+  if FPicker then
+  begin
+    { A click picks; beside the grid it closes. }
+    Picked := PickerCellAt(P);
+    if (Button = buttonLeft) and (Picked >= 0) then
+      PickerApply(FPickerList[Picked])
+    else
+      FPicker := false;
+    UpdateLabels;
+    Exit;
+  end;
   if Button <> buttonLeft then
   begin
     FPanning := true;
@@ -756,48 +1373,32 @@ begin
     AddDrawPoint(SnapToVertex(P));
     Exit;
   end;
-  FSelected := Pick(P);
-  FDragging := FSelected >= 0;
-  FDragMoved := false;
-  if not FDragging then
+  Picked := -1;
+  if not Ctrl then Picked := Pick(P);
+  if Picked < 0 then
   begin
+    { On nothing (or with Ctrl): a box selection, adding with Shift. }
+    if not Shift then ClearSelection;
+    FBoxing := true;
+    FBoxStart := P;
     UpdateLabels;
     Exit;
   end;
-  FDragStart := Snap(P);
-  { What moves: the vertex, the line's or the sector's vertices, the thing. }
-  FDragVertices := nil;
-  SetLength(Seen, Length(FEdit.Vertices));
-  case FMode of
-    emVertices: TakeVertex(FSelected);
-    emLines:
-      begin
-        TakeVertex(FEdit.Lines[FSelected].V1);
-        TakeVertex(FEdit.Lines[FSelected].V2);
-      end;
-    emSectors:
-      for Line := 0 to High(FEdit.Lines) do
-        if (FEdit.LineSector(Line, 0) = FSelected) or (FEdit.LineSector(Line, 1) = FSelected) then
-        begin
-          TakeVertex(FEdit.Lines[Line].V1);
-          TakeVertex(FEdit.Lines[Line].V2);
-        end;
-    else ;
-  end;
-  if FMode = emThings then
+  if Shift then
   begin
-    SetLength(FDragOrigins, 1);
-    FDragOrigins[0].X := FEdit.Things[FSelected].X;
-    FDragOrigins[0].Y := FEdit.Things[FSelected].Y;
-  end else
-  begin
-    SetLength(FDragOrigins, Length(FDragVertices));
-    for I := 0 to High(FDragVertices) do
-    begin
-      FDragOrigins[I].X := FEdit.Vertices[FDragVertices[I]].X;
-      FDragOrigins[I].Y := FEdit.Vertices[FDragVertices[I]].Y;
-    end;
+    ToggleSelect(Picked);
+    UpdateLabels;
+    Exit;
   end;
+  if not IsSelected(Picked) then
+    SelectOnly(Picked)
+  else if Picked <> FSelected then
+  begin
+    { The clicked one becomes the main one, the rest stays selected. }
+    ToggleSelect(Picked);
+    ToggleSelect(Picked);
+  end;
+  StartDrag(P);
   UpdateLabels;
 end;
 
@@ -827,8 +1428,11 @@ begin
       end;
       if FMode = emThings then
       begin
-        FEdit.Things[FSelected].X := FDragOrigins[0].X + DX;
-        FEdit.Things[FSelected].Y := FDragOrigins[0].Y + DY;
+        for I := 0 to High(FDragThings) do
+        begin
+          FEdit.Things[FDragThings[I]].X := FDragOrigins[I].X + DX;
+          FEdit.Things[FDragThings[I]].Y := FDragOrigins[I].Y + DY;
+        end;
       end else
         for I := 0 to High(FDragVertices) do
         begin
@@ -837,7 +1441,7 @@ begin
         end;
     end;
   end else
-  if not FDrawing then
+  if not (FDrawing or FBoxing or FPicker) then
     FHover := Pick(P);
   UpdateLabels;
 end;
@@ -851,28 +1455,46 @@ begin
     FPanning := false;
     Exit;
   end;
+  if FBoxing then
+  begin
+    FBoxing := false;
+    FMouse := P;
+    SelectBox(FBoxStart, P);
+    UpdateLabels;
+    Exit;
+  end;
   if not FDragging then Exit;
   FDragging := false;
   if not FDragMoved then Exit;
   Pt := Snap(P);
   case FMode of
     emVertices:
+      if SelectionCount > 1 then
+        LogAction(Format('Moved %d vertices by %d, %d', [SelectionCount, Pt.X - FDragStart.X, Pt.Y - FDragStart.Y]))
+      else
       begin
         { Dropped on another vertex: they merge. }
         Pt.X := FEdit.Vertices[FSelected].X;
         Pt.Y := FEdit.Vertices[FSelected].Y;
         if FEdit.MergeVertex(FSelected) then
         begin
-          FSelected := -1;
+          ClearSelection;
           LogAction(Format('Merged vertices at %d, %d', [Pt.X, Pt.Y]));
         end else
           LogAction(Format('Moved vertex to %d, %d', [Pt.X, Pt.Y]));
       end;
     emThings:
-      LogAction(Format('Moved thing %d to %d, %d', [FSelected, FEdit.Things[FSelected].X, FEdit.Things[FSelected].Y]));
+      if SelectionCount > 1 then
+        LogAction(Format('Moved %d things by %d, %d', [SelectionCount, Pt.X - FDragStart.X, Pt.Y - FDragStart.Y]))
+      else
+        LogAction(Format('Moved thing %d to %d, %d', [FSelected, FEdit.Things[FSelected].X, FEdit.Things[FSelected].Y]));
     else
-      LogAction(Format('Moved %s %d by %d, %d', [LowerCase(Copy(ModeNames[FMode], 1, Length(ModeNames[FMode]) - 1)),
-        FSelected, Pt.X - FDragStart.X, Pt.Y - FDragStart.Y]));
+      if SelectionCount > 1 then
+        LogAction(Format('Moved %d %s by %d, %d', [SelectionCount, LowerCase(ModeNames[FMode]),
+          Pt.X - FDragStart.X, Pt.Y - FDragStart.Y]))
+      else
+        LogAction(Format('Moved %s %d by %d, %d', [LowerCase(Copy(ModeNames[FMode], 1, Length(ModeNames[FMode]) - 1)),
+          FSelected, Pt.X - FDragStart.X, Pt.Y - FDragStart.Y]));
   end;
   UpdateLabels;
 end;
@@ -905,7 +1527,7 @@ begin
     LogAction(Format('Room drawn: sector %d with %d corners, floor %d, ceiling %d', [Sec, Length(FDrawPoints),
       FEdit.Sectors[Sec].Floor, FEdit.Sectors[Sec].Ceiling]));
     SetMode(emSectors);
-    FSelected := Sec;
+    SelectOnly(Sec);
   end;
   FDrawPoints := nil;
   UpdateLabels;
@@ -924,78 +1546,100 @@ end;
 procedure TViewEdit.ChangeWall(const Delta: Integer);
 var
   L: TEditLine;
-  S: Integer;
+  S, I: Integer;
   Tex: String;
+  Sel: TEditIndexArray;
 begin
   L := FEdit.Lines[FSelected];
   S := L.Side[0];
   if S < 0 then S := L.Side[1];
   if S < 0 then Exit;
-  FEdit.Snapshot;
   if L.Side[1] < 0 then
-  begin
-    Tex := CycleName(FTextures, FEdit.Sides[S].Middle, Delta);
-    FEdit.Sides[S].Middle := Tex;
-  end else
+    Tex := FEdit.Sides[S].Middle
+  else
   begin
     Tex := FEdit.Sides[S].Lower;
     if (Tex = '') or (Tex = '-') then Tex := FEdit.Sides[S].Upper;
-    Tex := CycleName(FTextures, Tex, Delta);
-    FEdit.Sides[L.Side[0]].Upper := Tex;
-    FEdit.Sides[L.Side[0]].Lower := Tex;
-    FEdit.Sides[L.Side[1]].Upper := Tex;
-    FEdit.Sides[L.Side[1]].Lower := Tex;
   end;
-  LogAction(Format('Line %d wall %s', [FSelected, Tex]));
+  Tex := CycleName(FTextures, Tex, Delta);
+  Sel := Selection;
+  FEdit.Snapshot;
+  for I := 0 to High(Sel) do
+    SetLineTexture(Sel[I], Tex);
+  LogAction(Format('Line %d wall %s%s', [FSelected, Tex, MoreText]));
+end;
+
+{ ", and 3 more" when more than one is selected. }
+function TViewEdit.MoreText: String;
+begin
+  if Length(FMore) > 0 then
+    Result := Format(' (and %d more)', [Length(FMore)])
+  else
+    Result := '';
 end;
 
 procedure TViewEdit.CycleSpecial(const Delta: Integer);
 var
-  I: Integer;
+  I, K: Integer;
+  Sel: TEditIndexArray;
 begin
+  Sel := Selection;
   FEdit.Snapshot;
   if FMode = emLines then
   begin
     I := ChoiceIndex(LineSpecials, FEdit.Lines[FSelected].Special);
     I := (Max(I, 0) + Delta + Length(LineSpecials)) mod Length(LineSpecials);
-    FEdit.Lines[FSelected].Special := LineSpecials[I].Num;
-    LogAction(Format('Line %d special %d (%s)', [FSelected, LineSpecials[I].Num, LineSpecials[I].Name]));
+    for K := 0 to High(Sel) do
+      FEdit.Lines[Sel[K]].Special := LineSpecials[I].Num;
+    LogAction(Format('Line %d special %d (%s)%s', [FSelected, LineSpecials[I].Num, LineSpecials[I].Name, MoreText]));
   end else
   begin
     I := ChoiceIndex(SectorSpecials, FEdit.Sectors[FSelected].Special);
     I := (Max(I, 0) + Delta + Length(SectorSpecials)) mod Length(SectorSpecials);
-    FEdit.Sectors[FSelected].Special := SectorSpecials[I].Num;
-    LogAction(Format('Sector %d special %d (%s)', [FSelected, SectorSpecials[I].Num, SectorSpecials[I].Name]));
+    for K := 0 to High(Sel) do
+      FEdit.Sectors[Sel[K]].Special := SectorSpecials[I].Num;
+    LogAction(Format('Sector %d special %d (%s)%s', [FSelected, SectorSpecials[I].Num, SectorSpecials[I].Name, MoreText]));
   end;
 end;
 
 procedure TViewEdit.ChangeTag(const Delta: Integer);
+var
+  K, NewTag: Integer;
+  Sel: TEditIndexArray;
 begin
+  Sel := Selection;
   FEdit.Snapshot;
   if FMode = emLines then
   begin
-    FEdit.Lines[FSelected].Tag := Max(0, FEdit.Lines[FSelected].Tag + Delta);
-    LogAction(Format('Line %d tag %d', [FSelected, FEdit.Lines[FSelected].Tag]));
+    NewTag := Max(0, FEdit.Lines[FSelected].Tag + Delta);
+    for K := 0 to High(Sel) do
+      FEdit.Lines[Sel[K]].Tag := NewTag;
+    LogAction(Format('Line %d tag %d%s', [FSelected, NewTag, MoreText]));
   end else
   begin
-    FEdit.Sectors[FSelected].Tag := Max(0, FEdit.Sectors[FSelected].Tag + Delta);
-    LogAction(Format('Sector %d tag %d', [FSelected, FEdit.Sectors[FSelected].Tag]));
+    NewTag := Max(0, FEdit.Sectors[FSelected].Tag + Delta);
+    for K := 0 to High(Sel) do
+      FEdit.Sectors[Sel[K]].Tag := NewTag;
+    LogAction(Format('Sector %d tag %d%s', [FSelected, NewTag, MoreText]));
   end;
 end;
 
 procedure TViewEdit.CycleThingType(const Delta: Integer);
 var
-  I: Integer;
+  I, K: Integer;
+  Sel: TEditIndexArray;
 begin
   if (FMode = emThings) and (FSelected >= 0) then
   begin
     I := ChoiceIndex(ThingChoices, FEdit.Things[FSelected].TypeNum);
     if I < 0 then I := FThingType;
     I := (I + Delta + Length(ThingChoices)) mod Length(ThingChoices);
+    Sel := Selection;
     FEdit.Snapshot;
-    FEdit.Things[FSelected].TypeNum := ThingChoices[I].Num;
+    for K := 0 to High(Sel) do
+      FEdit.Things[Sel[K]].TypeNum := ThingChoices[I].Num;
     FThingType := I;
-    LogAction(Format('Thing %d is now a %s', [FSelected, ThingChoices[I].Name]));
+    LogAction(Format('Thing %d is now a %s%s', [FSelected, ThingChoices[I].Name, MoreText]));
   end else
   begin
     FThingType := (FThingType + Delta + Length(ThingChoices)) mod Length(ThingChoices);
@@ -1007,9 +1651,17 @@ function TViewEdit.HandleKey(const Key: TKey; const Shift, Ctrl: Boolean): Boole
 var
   Pt: TEditPoint;
   D: TVector2;
-  V, Dir: Integer;
+  V, Dir, K: Integer;
+  Sel: TEditIndexArray;
+  Tex: String;
 begin
   Result := true;
+  if FPicker then
+  begin
+    Result := PickerKey(Key, '');
+    UpdateLabels;
+    Exit;
+  end;
   Dir := 1;
   if Shift then Dir := -1;
   if FDrawing then
@@ -1049,9 +1701,26 @@ begin
       keyY: if FEdit.Redo then LogAction('Redone') else Message('Nothing to redo');
       keyPageDown: NextMap(1);
       keyPageUp: NextMap(-1);
+      keyA:
+        begin
+          SelectAll;
+          UpdateLabels;
+          Exit;
+        end;
+      keyC:
+        begin
+          CopyThings;
+          Exit;
+        end;
+      keyV:
+        begin
+          PasteThings;
+          UpdateLabels;
+          Exit;
+        end;
       else Exit(false);
     end;
-    FSelected := -1;
+    ClearSelection;
     UpdateLabels;
     Exit;
   end;
@@ -1080,7 +1749,7 @@ begin
       begin
         FDrawing := true;
         FDrawPoints := nil;
-        FSelected := -1;
+        ClearSelection;
         Message('Drawing a room: click its corners');
       end;
     keyF9: PlayTest;
@@ -1089,14 +1758,24 @@ begin
     keyF4: ExportScene(false, '');
     keyEscape:
       if FSelected >= 0 then
-        FSelected := -1
+        ClearSelection
       else
         Leave;
+    keySpace:
+      { The picture picker: walls of the selected lines, floors (Shift:
+        ceilings) of the selected sectors. }
+      if FMode = emLines then
+        OpenPicker(0)
+      else if FMode = emSectors then
+      begin
+        if Shift then OpenPicker(2) else OpenPicker(1);
+      end else
+        Exit(false);
     keyA, keyInsert:
       begin
         Pt := Snap(FMouse);
         SetMode(emThings);
-        FSelected := FEdit.AddThing(Pt.X, Pt.Y, ThingChoices[FThingType].Num, 90);
+        SelectOnly(FEdit.AddThing(Pt.X, Pt.Y, ThingChoices[FThingType].Num, 90));
         LogAction(Format('Added %s at %d, %d', [ThingChoices[FThingType].Name, Pt.X, Pt.Y]));
       end;
     keyLeftBracket: CycleThingType(-1);
@@ -1110,35 +1789,55 @@ begin
             keyPageUp, keyPageDown:
               begin
                 if Key = keyPageUp then V := 8 else V := -8;
-                if Shift then FEdit.ChangeSector(FSelected, 0, V, 0) else FEdit.ChangeSector(FSelected, V, 0, 0);
-                LogAction(Format('Sector %d floor %d, ceiling %d', [FSelected,
-                  FEdit.Sectors[FSelected].Floor, FEdit.Sectors[FSelected].Ceiling]));
+                Sel := Selection;
+                FEdit.BeginChange;
+                for K := 0 to High(Sel) do
+                  if Shift then FEdit.ChangeSector(Sel[K], 0, V, 0) else FEdit.ChangeSector(Sel[K], V, 0, 0);
+                FEdit.EndChange;
+                LogAction(Format('Sector %d floor %d, ceiling %d%s', [FSelected,
+                  FEdit.Sectors[FSelected].Floor, FEdit.Sectors[FSelected].Ceiling, MoreText]));
               end;
             keyB:
               begin
-                FEdit.ChangeSector(FSelected, 0, 0, 16 * Dir);
-                LogAction(Format('Sector %d light %d', [FSelected, FEdit.Sectors[FSelected].Light]));
+                Sel := Selection;
+                FEdit.BeginChange;
+                for K := 0 to High(Sel) do
+                  FEdit.ChangeSector(Sel[K], 0, 0, 16 * Dir);
+                FEdit.EndChange;
+                LogAction(Format('Sector %d light %d%s', [FSelected, FEdit.Sectors[FSelected].Light, MoreText]));
               end;
-            keyF:
+            keyF, keyC:
               begin
+                Sel := Selection;
                 FEdit.Snapshot;
-                FEdit.Sectors[FSelected].FloorTex := CycleName(FFlats, FEdit.Sectors[FSelected].FloorTex, Dir);
-                LogAction(Format('Sector %d floor flat %s', [FSelected, FEdit.Sectors[FSelected].FloorTex]));
-              end;
-            keyC:
-              begin
-                FEdit.Snapshot;
-                FEdit.Sectors[FSelected].CeilingTex := CycleName(FFlats, FEdit.Sectors[FSelected].CeilingTex, Dir);
-                LogAction(Format('Sector %d ceiling flat %s', [FSelected, FEdit.Sectors[FSelected].CeilingTex]));
+                if Key = keyF then
+                begin
+                  Tex := CycleName(FFlats, FEdit.Sectors[FSelected].FloorTex, Dir);
+                  for K := 0 to High(Sel) do FEdit.Sectors[Sel[K]].FloorTex := Tex;
+                  LogAction(Format('Sector %d floor flat %s%s', [FSelected, Tex, MoreText]));
+                end else
+                begin
+                  Tex := CycleName(FFlats, FEdit.Sectors[FSelected].CeilingTex, Dir);
+                  for K := 0 to High(Sel) do FEdit.Sectors[Sel[K]].CeilingTex := Tex;
+                  LogAction(Format('Sector %d ceiling flat %s%s', [FSelected, Tex, MoreText]));
+                end;
               end;
             keyP: CycleSpecial(Dir);
             keyComma: ChangeTag(-1);
             keyPeriod: ChangeTag(1);
             keyD:
-              if FEdit.MakeDoor(FSelected) then
-                LogAction(Format('Sector %d is a door', [FSelected]))
-              else
-                Message('A door needs two-sided lines');
+              begin
+                Sel := Selection;
+                V := 0;
+                FEdit.BeginChange;
+                for K := 0 to High(Sel) do
+                  if FEdit.MakeDoor(Sel[K]) then Inc(V);
+                FEdit.EndChange;
+                if V > 0 then
+                  LogAction(Format('Sector %d is a door%s', [FSelected, MoreText]))
+                else
+                  Message('A door needs two-sided lines');
+              end;
             else Exit(false);
           end;
         emLines:
@@ -1165,15 +1864,13 @@ begin
               begin
                 FEdit.Snapshot;
                 if Key = keyComma then V := 45 else V := -45;
-                FEdit.Things[FSelected].Angle := (FEdit.Things[FSelected].Angle + V + 360) mod 360;
-                LogAction(Format('Thing %d angle %d', [FSelected, FEdit.Things[FSelected].Angle]));
+                Sel := Selection;
+                for K := 0 to High(Sel) do
+                  FEdit.Things[Sel[K]].Angle := (FEdit.Things[Sel[K]].Angle + V + 360) mod 360;
+                LogAction(Format('Thing %d angle %d%s', [FSelected, FEdit.Things[FSelected].Angle, MoreText]));
               end;
             keyDelete:
-              begin
-                FEdit.DeleteThing(FSelected);
-                LogAction(Format('Thing %d deleted', [FSelected]));
-                FSelected := -1;
-              end;
+              DeleteThings;
             else Exit(false);
           end;
         else Exit(false);
@@ -1190,17 +1887,29 @@ begin
   case Event.EventType of
     itMouseButton:
       begin
-        MouseDown(Event.Position, Event.MouseButton);
+        MouseDown(Event.Position, Event.MouseButton, mkShift in Event.ModifiersDown, mkCtrl in Event.ModifiersDown);
         Exit(true);
       end;
     itMouseWheel:
       begin
-        if Event.MouseWheelScroll > 0 then Zoom(1.2, Event.Position) else Zoom(1 / 1.2, Event.Position);
+        if FPicker then
+        begin
+          if Event.MouseWheelScroll > 0 then PickerKey(keyArrowUp, '') else PickerKey(keyArrowDown, '');
+        end else if Event.MouseWheelScroll > 0 then
+          Zoom(1.2, Event.Position)
+        else
+          Zoom(1 / 1.2, Event.Position);
         UpdateLabels;
         Exit(true);
       end;
     itKey:
-      Exit(HandleKey(Event.Key, mkShift in Event.ModifiersDown, mkCtrl in Event.ModifiersDown));
+      if FPicker then
+      begin
+        PickerKey(Event.Key, Event.KeyString);
+        UpdateLabels;
+        Exit(true);
+      end else
+        Exit(HandleKey(Event.Key, mkShift in Event.ModifiersDown, mkCtrl in Event.ModifiersDown));
     else ;
   end;
 end;
@@ -1459,6 +2168,25 @@ begin
       MouseMove(At(1));
       MouseDown(At(1), buttonLeft);
       MouseUp(At(1), buttonLeft);
+    end else
+    if Cmd = 'SHIFTCLICK' then
+    begin
+      MouseMove(At(1));
+      MouseDown(At(1), buttonLeft, true);
+      MouseUp(At(1), buttonLeft);
+    end else
+    if Cmd = 'BOX' then
+    begin
+      { A box selection (Ctrl+drag), adding to the selection. }
+      MouseMove(At(1));
+      MouseDown(At(1), buttonLeft, true, true);
+      MouseMove(At(3));
+      MouseUp(At(3), buttonLeft);
+    end else
+    if Cmd = 'TYPE' then
+    begin
+      for I := 1 to Length(Step) - 5 do
+        PickerKey(keyNone, Step[I + 5]);
     end else
     if Cmd = 'DRAG' then
     begin

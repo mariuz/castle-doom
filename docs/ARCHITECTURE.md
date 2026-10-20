@@ -1632,7 +1632,20 @@ and the game (`OpenEditor`, the `editor` action, F7) hand it their WAD,
 graphics, sounds and music and the map name; `Fresh` imports anew,
 otherwise (back from a play-test, `PlayTesting`) the edited map stays.
 `PlayTest` registers the PWAD, stacks `edit:/MAP` on the WAD and starts
-the play view on it. In an autotest the demo script drives the editor
+the play view on it. The selection is `FSelected` (the last one picked:
+the keys step its values and give them to all) and `FMore`; `Render`
+marks it by index each frame. A press on nothing (or with Ctrl) starts
+a box (`SelectBox`: a line needs both ends inside, a sector all its
+lines' ends); edits of the selection run between
+`TDoomEditMap.BeginChange` / `EndChange`, one undo step. The picker
+(`FPicker`, drawn last in `Render` with `FallbackFont`) filters
+`TDoomWad.TextureNames` / `FlatNames` by the typed text and makes a
+`TDrawableImage` thumbnail per name the first time it is shown.
+`DrawSector` before validating splits the lines that new corners lie on
+(`SplitLineAtPoint`) and adds the existing vertices that lie on new
+edges as corners (`AddVerticesOnEdge`), so a room against a wall shares
+that wall's pieces; it captures the map first and restores it when it
+refuses the room, then pushes that capture as the undo step. In an autotest the demo script drives the editor
 (`RunStep`: `VIEW`, `MODE`, `CLICK`, `DRAG`, `DRAW`, `MOUSE`, `KEY`,
 `THING`, `EXPORT`, `GLTF`, `X3D`, `PLAY`, `S`, `W`, `Q`); `PLAY` hands
 the rest of the script to the game (`AutoTestDemo`) and the game's

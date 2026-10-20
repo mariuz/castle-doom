@@ -6,6 +6,20 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Map editor, the next steps: a picture picker for wall textures and
+  flats (Space; thumbnails made from the WAD's images as they are shown,
+  typed letters filter the names, arrows / wheel / Enter / a click),
+  multiple selection (Shift+click toggles, a drag on nothing or a
+  Ctrl+drag selects a box, Ctrl+A everything of the mode; moving,
+  heights, light, flats, textures, specials, tags, doors, thing types,
+  angles and deletion act on all of it as one undo step through
+  `TDoomEditMap.BeginChange`), copy and paste of things (Ctrl+C /
+  Ctrl+V), and rooms against walls: corners on a line split it, existing
+  vertices on a new edge become corners, an edge along a wall of the
+  void joins through it, one along a line of the sector the room is in
+  gives that side to the room, and a refused room leaves the map as it
+  was. Autotest `editor-select` (goldens), unit test `TestEditWalls`.
+
 - Map editor (`GameViewEdit` over `DoomEditMap`): `F7` in a game, the
   custom game page's EDIT MAP or `--edit [MAP]` imports a map of the
   loaded WADs (vanilla format; Hexen and UDMF maps are refused) and
@@ -1095,15 +1109,15 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels and the desktop menu are done (see above); left are demos in the browser (files through the save storage and the home page, like the save bundle), the demo-script cheats as recorded events, and a ghost of a recording to race. | Easier bug reports; replays. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | M |
-| **Map editor, the rest**: the 2D editor, play-test and exports are done (see above); left are a texture / flat picker showing the pictures (cycling names with W / F / C now), selecting several things at once (box selection, copy and paste), drawing rooms across existing lines (splitting them on the way, like Doom Builder), deleting sectors and lines, flipping lines and editing line flags and thing skill flags, a 3D preview inside the editor, opening PWAD files in the browser (an `<input type=file>`), and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
+| **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection and rooms against walls are done (see above); left are rooms that cross lines inside a sector (cutting it in two), deleting sectors and lines, flipping lines and editing line flags and thing skill flags (a small properties panel), copying geometry (not only things), a 3D preview inside the editor, opening PWAD files in the browser (an `<input type=file>`), and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
 | **Custom game page, the rest**: the page is done (see above); left are "Open IWAD..." on it (a file dialog row, like PWADs), the PWADs' order and removing one, a list of recent WAD sets, and the browser's own files (an `<input type=file>` the page script hands to the WAD loader). | The Options panel's WAD buttons could go. | `DoomMenu`, `GameViewMenu`, `tools/patch_web_page.py` | M |
 
 ## Suggested next three
 
-1. Map editor, the rest (M, see New features): a texture and flat
-   picker with pictures, multiple selection, and rooms drawn across
-   existing lines.
-2. Custom game page, the rest (M, see New features).
+1. Custom game page, the rest (M, see New features).
+2. Map editor, the rest (M, see New features): a properties panel for
+   line and thing flags, deleting sectors and lines, and rooms that cut
+   a sector in two.
 3. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
 

@@ -65,6 +65,8 @@ type
     var
       FUndo, FRedo: array of TState;
       FModified: Boolean;
+      FGroup: Integer;
+      FGroupTaken: Boolean;
     function Capture: TState;
     procedure Restore(const S: TState);
     function AddSide(const Sector: Integer; const Upper, Lower, Middle: String): Integer;
@@ -73,6 +75,10 @@ type
     function FindLine(const V1, V2: Integer): Integer;
     procedure DeleteLine(const L: Integer);
     procedure DeleteVertex(const V: Integer);
+    procedure PushUndo(const S: TState);
+    function OnLineInside(const X, Y, L: Integer): Boolean;
+    procedure SplitLineAtPoint(const L, X, Y: Integer);
+    procedure AddVerticesOnEdge(const A, B: TEditPoint; var Q: TEditPoints);
   public
     { The map lump name (E1M1, MAP01...). }
     Name: String;
@@ -112,6 +118,10 @@ type
 
     { Edits. Each first remembers the map for Undo (Snapshot). }
     procedure Snapshot;
+    { Edits between BeginChange and EndChange are one undo step (the
+      editor's change of every selected sector...). }
+    procedure BeginChange;
+    procedure EndChange;
     function Undo: Boolean;
     function Redo: Boolean;
     function CanUndo: Boolean;
@@ -135,9 +145,11 @@ type
     { A new sector from a polygon (3 or more points, either winding): in
       an existing sector (two-sided walls, its heights and flats) or in
       the void (one-sided walls), where edges on existing one-sided lines
-      (both ends on their vertices) join the room to the map. The new
-      sector, -1 with Error when the polygon crosses lines, contains
-      vertices or is not simple. }
+      (both ends on their vertices) join the room to the map; corners
+      on a line split it, and an edge along a line of the sector the
+      room is in gives that line's side to the room. The new sector, -1
+      with Error (and the map as before) when the polygon crosses lines,
+      contains vertices, spans two sectors or is not simple. }
     function DrawSector(const Points: TEditPoints; out Error: String): Integer;
     { Doom Builder's "make door": the sector's ceiling down to its floor,
       its two-sided lines a DR door (special 1) facing outwards with DOOR3
@@ -828,12 +840,33 @@ end;
 
 procedure TDoomEditMap.Snapshot;
 begin
+  PushUndo(Capture);
+end;
+
+procedure TDoomEditMap.PushUndo(const S: TState);
+begin
+  FModified := true;
+  if FGroup > 0 then
+  begin
+    if FGroupTaken then Exit;
+    FGroupTaken := true;
+  end;
   if Length(FUndo) >= MaxUndo then
     Delete(FUndo, 0, 1);
   SetLength(FUndo, Length(FUndo) + 1);
-  FUndo[High(FUndo)] := Capture;
+  FUndo[High(FUndo)] := S;
   FRedo := nil;
-  FModified := true;
+end;
+
+procedure TDoomEditMap.BeginChange;
+begin
+  Inc(FGroup);
+  if FGroup = 1 then FGroupTaken := false;
+end;
+
+procedure TDoomEditMap.EndChange;
+begin
+  if FGroup > 0 then Dec(FGroup);
 end;
 
 function TDoomEditMap.CanUndo: Boolean;
@@ -1034,7 +1067,9 @@ var
   N, I, J, K, L, Outer, Sec, NewSide, OuterSide, V1, V2, Shared, FrontSide: Integer;
   Area, MX, MY, NX, NY, Len, T1, T2: Double;
   Pt: TEditPoint;
-  SharedLine: array of Integer;
+  Q: TEditPoints;
+  SharedLine, SharedSide: array of Integer;
+  Before: TState;
   Wall: String;
   X1, Y1, X2, Y2: Double;
 begin
@@ -1084,12 +1119,36 @@ begin
       end;
     end;
 
-  { Each edge: on an existing line (shared) or clear of every line. }
+  Before := Capture;
+  { Corners on existing lines split them, and existing vertices on the
+    room's edges become corners too: then every edge runs from vertex to
+    vertex and an edge along a wall is that wall's line. }
+  for I := 0 to N - 1 do
+    if FindVertex(P[I].X, P[I].Y) < 0 then
+      for L := 0 to High(Lines) do
+        if OnLineInside(P[I].X, P[I].Y, L) then
+        begin
+          SplitLineAtPoint(L, P[I].X, P[I].Y);
+          Break;
+        end;
+  Q := nil;
+  for I := 0 to N - 1 do
+  begin
+    SetLength(Q, Length(Q) + 1);
+    Q[High(Q)] := P[I];
+    AddVerticesOnEdge(P[I], P[(I + 1) mod N], Q);
+  end;
+  P := Q;
+  N := Length(P);
+
+  { Each edge: an existing line (shared) or clear of every line. }
   SetLength(SharedLine, N);
+  SetLength(SharedSide, N);
   Shared := 0;
   for I := 0 to N - 1 do
   begin
     SharedLine[I] := -1;
+    SharedSide[I] := -1;
     X1 := P[I].X; Y1 := P[I].Y;
     X2 := P[(I + 1) mod N].X; Y2 := P[(I + 1) mod N].Y;
     V1 := FindVertex(P[I].X, P[I].Y);
@@ -1099,11 +1158,9 @@ begin
       L := FindLine(V1, V2);
       if L >= 0 then
       begin
-        if Lines[L].Side[1] >= 0 then
-        begin
-          Error := Format('Line %d is already two-sided', [L]);
-          Exit;
-        end;
+        { The room is on the line's front (right) when the edge runs the
+          line's way (the room is clockwise), else on its back. }
+        if Lines[L].V1 = V1 then SharedSide[I] := 0 else SharedSide[I] := 1;
         SharedLine[I] := L;
         Inc(Shared);
         Continue;
@@ -1126,7 +1183,8 @@ begin
       if SamePoint(X1, Y1, MX, MY) or SamePoint(X1, Y1, NX, NY) or
          SamePoint(X2, Y2, MX, MY) or SamePoint(X2, Y2, NX, NY) then
         Continue;
-      Error := Format('The room''s wall %d crosses line %d (split lines with X to join them)', [I + 1, L]);
+      Error := Format('The room''s wall %d crosses line %d', [I + 1, L]);
+      Restore(Before);
       Exit;
     end;
   end;
@@ -1141,12 +1199,14 @@ begin
       if J = 0 then
       begin
         Error := Format('The room would contain vertex %d', [I]);
+        Restore(Before);
         Exit;
       end;
     end;
 
-  { Where the room is: a point just inside its first non-shared edge. }
-  Outer := -1;
+  { Where the room is: a point just inside its first new edge, else the
+    sector on the room's side of a shared one (-1: the void). }
+  Outer := -2;
   for I := 0 to N - 1 do
     if SharedLine[I] < 0 then
     begin
@@ -1159,13 +1219,17 @@ begin
       Outer := SectorAt(MX, MY);
       Break;
     end;
-  if (Shared > 0) and (Outer >= 0) then
-  begin
-    Error := 'A room on existing walls must be drawn outside the map';
-    Exit;
-  end;
+  if Outer = -2 then
+    Outer := LineSector(SharedLine[0], SharedSide[0]);
+  { Every shared line must have Outer (or the void) on the room's side. }
+  for I := 0 to N - 1 do
+    if (SharedLine[I] >= 0) and (LineSector(SharedLine[I], SharedSide[I]) <> Outer) then
+    begin
+      Error := Format('The room would span two sectors at line %d', [SharedLine[I]]);
+      Restore(Before);
+      Exit;
+    end;
 
-  Snapshot;
   Sec := Length(Sectors);
   SetLength(Sectors, Sec + 1);
   if Outer >= 0 then
@@ -1180,7 +1244,7 @@ begin
     for I := 0 to N - 1 do
       if SharedLine[I] >= 0 then
       begin
-        K := LineSector(SharedLine[I], 0);
+        K := LineSector(SharedLine[I], 1 - SharedSide[I]);
         if K >= 0 then
         begin
           Sectors[Sec] := Sectors[K];
@@ -1194,10 +1258,21 @@ begin
 
   for I := 0 to N - 1 do
   begin
-    if SharedLine[I] >= 0 then
+    L := SharedLine[I];
+    if (L >= 0) and (Lines[L].Side[SharedSide[I]] >= 0) then
     begin
-      { The existing wall joins the two rooms. }
-      L := SharedLine[I];
+      { The room takes over the line's side that faces it (a copy: maps
+        may share sidedefs between lines). }
+      K := Length(Sides);
+      SetLength(Sides, K + 1);
+      Sides[K] := Sides[Lines[L].Side[SharedSide[I]]];
+      Sides[K].Sector := Sec;
+      Lines[L].Side[SharedSide[I]] := K;
+      Continue;
+    end;
+    if L >= 0 then
+    begin
+      { A wall to the void: it joins the two rooms. }
       FrontSide := Lines[L].Side[0];
       if FrontSide >= 0 then
       begin
@@ -1233,7 +1308,82 @@ begin
       Lines[L].Flags := ML_BLOCKING;
     end;
   end;
+  PushUndo(Before);
   Result := Sec;
+end;
+
+{ (X, Y) lies on line L, not at its ends (exact: whole units). }
+function TDoomEditMap.OnLineInside(const X, Y, L: Integer): Boolean;
+var
+  AX, AY, BX, BY: Int64;
+begin
+  AX := Vertices[Lines[L].V1].X; AY := Vertices[Lines[L].V1].Y;
+  BX := Vertices[Lines[L].V2].X; BY := Vertices[Lines[L].V2].Y;
+  Result := ((BX - AX) * (Y - AY) - (BY - AY) * (X - AX) = 0) and
+    (X >= Min(AX, BX)) and (X <= Max(AX, BX)) and (Y >= Min(AY, BY)) and (Y <= Max(AY, BY)) and
+    not ((X = AX) and (Y = AY)) and not ((X = BX) and (Y = BY));
+end;
+
+procedure TDoomEditMap.SplitLineAtPoint(const L, X, Y: Integer);
+var
+  V, N, S: Integer;
+begin
+  V := VertexAt(X, Y);
+  N := Length(Lines);
+  SetLength(Lines, N + 1);
+  Lines[N] := Lines[L];
+  Lines[N].V1 := V;
+  Lines[L].V2 := V;
+  for S := 0 to 1 do
+    if Lines[L].Side[S] >= 0 then
+    begin
+      Lines[N].Side[S] := Length(Sides);
+      SetLength(Sides, Length(Sides) + 1);
+      Sides[High(Sides)] := Sides[Lines[L].Side[S]];
+    end;
+end;
+
+{ Add to Q, in order from A to B, the vertices on segment A-B between its
+  ends. }
+procedure TDoomEditMap.AddVerticesOnEdge(const A, B: TEditPoint; var Q: TEditPoints);
+var
+  I, J, Count: Integer;
+  T: array of Double;
+  Idx: array of Integer;
+  Tmp: Double;
+  TmpI: Integer;
+  DX, DY: Int64;
+begin
+  DX := B.X - A.X;
+  DY := B.Y - A.Y;
+  Count := 0;
+  SetLength(T, 0);
+  SetLength(Idx, 0);
+  for I := 0 to High(Vertices) do
+  begin
+    if DX * (Vertices[I].Y - A.Y) - DY * (Vertices[I].X - A.X) <> 0 then Continue;
+    if (Vertices[I].X < Min(A.X, B.X)) or (Vertices[I].X > Max(A.X, B.X)) or
+       (Vertices[I].Y < Min(A.Y, B.Y)) or (Vertices[I].Y > Max(A.Y, B.Y)) then Continue;
+    if ((Vertices[I].X = A.X) and (Vertices[I].Y = A.Y)) or ((Vertices[I].X = B.X) and (Vertices[I].Y = B.Y)) then Continue;
+    SetLength(T, Count + 1);
+    SetLength(Idx, Count + 1);
+    T[Count] := ((Vertices[I].X - A.X) * DX + (Vertices[I].Y - A.Y) * DY) / (DX * DX + DY * DY);
+    Idx[Count] := I;
+    Inc(Count);
+  end;
+  for I := 1 to Count - 1 do
+    for J := I downto 1 do
+      if T[J] < T[J - 1] then
+      begin
+        Tmp := T[J]; T[J] := T[J - 1]; T[J - 1] := Tmp;
+        TmpI := Idx[J]; Idx[J] := Idx[J - 1]; Idx[J - 1] := TmpI;
+      end;
+  for I := 0 to Count - 1 do
+  begin
+    SetLength(Q, Length(Q) + 1);
+    Q[High(Q)].X := Vertices[Idx[I]].X;
+    Q[High(Q)].Y := Vertices[Idx[I]].Y;
+  end;
 end;
 
 function TDoomEditMap.MakeDoor(const Sec: Integer): Boolean;

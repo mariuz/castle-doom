@@ -119,6 +119,7 @@ type
     procedure TestEditRoundTrip;
     procedure TestEditOperations;
     procedure TestSceneExport;
+    procedure TestEditWalls;
   end;
 
   TTestStates = class(TTestCase)
@@ -2358,6 +2359,88 @@ begin
     FreeAndNil(M);
     FreeAndNil(G);
     FreeAndNil(W);
+  end;
+end;
+
+{ Rooms drawn against walls: corners on a line split it; an alcove in the
+  void joins through the wall's middle piece, a room inside a sector
+  along its wall takes that piece's side; a crossing room leaves the map
+  as it was; BeginChange makes one undo step. }
+procedure TTestEditor.TestEditWalls;
+
+  function Pts(const C: array of Integer): TEditPoints;
+  var
+    I: Integer;
+  begin
+    SetLength(Result, Length(C) div 2);
+    for I := 0 to High(Result) do
+    begin
+      Result[I].X := C[I * 2];
+      Result[I].Y := C[I * 2 + 1];
+    end;
+  end;
+
+var
+  E: TDoomEditMap;
+  Error: String;
+  L, Lines: Integer;
+  Data: TMemoryStream;
+  W: TDoomWad;
+  M: TDoomMap;
+begin
+  E := TDoomEditMap.Create;
+  try
+    E.Clear('E1M1');
+    AssertEquals('room', 0, E.DrawSector(Pts([0, 0, 256, 0, 256, 256, 0, 256]), Error));
+    { An alcove east, its corners on the east wall. }
+    AssertEquals('alcove: ' + Error, 1, E.DrawSector(Pts([256, 64, 320, 64, 320, 192, 256, 192]), Error));
+    AssertEquals('east wall split in three, 3 new walls', 9, Length(E.Lines));
+    AssertEquals('in the alcove', 1, E.SectorAt(288, 128));
+    L := E.NearestLine(256, 128, 1);
+    AssertTrue('the middle piece is two-sided', E.Lines[L].Side[1] >= 0);
+    L := E.NearestLine(256, 20, 1);
+    AssertEquals('the lower piece stays a wall', -1, E.Lines[L].Side[1]);
+    { A room inside the first one, along its west wall. }
+    AssertEquals('closet: ' + Error, 2, E.DrawSector(Pts([0, 160, 64, 160, 64, 224, 0, 224]), Error));
+    AssertEquals('in the closet', 2, E.SectorAt(32, 192));
+    AssertEquals('outside it', 0, E.SectorAt(32, 32));
+    L := E.NearestLine(0, 192, 1);
+    AssertEquals('west piece one-sided', -1, E.Lines[L].Side[1]);
+    AssertEquals('west piece faces the closet', 2, E.LineSector(L, 0));
+    { Crossing the east wall away from its corners: refused, unchanged. }
+    Lines := Length(E.Lines);
+    AssertEquals('crossing', -1, E.DrawSector(Pts([200, 200, 300, 200, 300, 240, 200, 240]), Error));
+    AssertEquals('unchanged', Lines, Length(E.Lines));
+    { One undo step for a change of two sectors. }
+    E.BeginChange;
+    E.ChangeSector(0, 8, 0, 0);
+    E.ChangeSector(1, 8, 0, 0);
+    E.EndChange;
+    AssertTrue('undo', E.Undo);
+    AssertEquals('both back', 0, E.Sectors[0].Floor + E.Sectors[1].Floor);
+    AssertTrue('closet still there', Length(E.Sectors) = 3);
+    Data := E.SaveToWad;
+    try
+      RegisterEditedWad('E1M1', Data);
+    finally
+      FreeAndNil(Data);
+    end;
+    W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+    try
+      W.AddFile(EditedWadUrl('E1M1'));
+      M := TDoomMap.Create(W, 'E1M1');
+      try
+        AssertEquals('area', 256 * 256 + 64 * 128, PolygonArea(M), 0.5);
+        AssertEquals('closet', 2, M.SectorAt(32, 192));
+        AssertEquals('alcove', 1, M.SectorAt(288, 128));
+      finally
+        FreeAndNil(M);
+      end;
+    finally
+      FreeAndNil(W);
+    end;
+  finally
+    FreeAndNil(E);
   end;
 end;
 
