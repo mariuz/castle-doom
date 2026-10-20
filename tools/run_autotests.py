@@ -425,6 +425,16 @@ TESTS = [
      [r'Menu: Custom game: freedoom2\.wad, PWADs none, map MAP02, skill 3, random seed none',
       r'Load: MAP02: map parsed'],
      ['--menukeys', 'E,D,D,D,D,D,E,R,S,D,D,R,D,D,D,E'], None),
+    ('photo-controls', 'E1M1',
+     'Y,P:3001:300,W:0.2,SAVE:1,PADDOWN:Y,PADUP:Y,W:0.2,KEY:Plus,KEY:Plus,KEY:Plus,KEY:[,KEY:[,W:3.5,S,SAVE:2,'
+     'KEY:E,W:1.5,SAVE:3,S,PADDOWN:Y,PADUP:Y,W:0.3,SAVE:4,Q',
+     [r'Gamepad: Y: photo', r'Photo: Field of view 75', r'Photo: Tilt -10', r'Photo: The game runs',
+      r'Photo: Photo mode off, back at the player'],
+     ['--fixed-step'], lambda config: check_photo_running(config)),
+    ('photo-touch', 'E1M1',
+     'TOUCH,W:0.5,TDOWN:1:0.80:0.92,TUP:1,W:0.3,TDOWN:2:0.2:0.3,TMOVE:2:0.2:0.45,W:1,TUP:2,W:2.5,S,'
+     'TDOWN:1:0.80:0.92,TUP:1,W:0.3,Q',
+     [r'Touch: Button PHOTO', r'Photo: Photo mode on', r'Photo: Photo mode off'], ['--fixed-step'], None),
     ('random-menu', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: E1M1', r'Load: E1M1: map parsed', r'Message: R1: '],
      ['--menukeys', 'E,D,D,D,D,E,E'], None),
     ('random-menu-doom2', 'MENUKEYS', 'W:1,Q', [r'Random: seed \d+: MAP01', r'Load: MAP01: map parsed', r'Message: R1: '],
@@ -570,6 +580,16 @@ def check_stats(config):
     assert s['showStats'] is True, 'showStats: %s' % s['showStats']
     best = s['bestTimes'].get('freedoom1.wad E1M1 skill 3')
     assert best is not None and best <= 3, 'bestTimes: %s' % s['bestTimes']
+
+
+def check_photo_running(config):
+    """Paused, the tics stand still; running (E), they go on; the player
+    stays where photo mode began."""
+    s = [save_json(config, n) for n in (1, 2, 3, 4)]
+    assert s[1]['tic'] - s[0]['tic'] < 5, 'paused: tics %s -> %s' % (s[0]['tic'], s[1]['tic'])
+    assert s[2]['tic'] - s[1]['tic'] > 30, 'running: tics %s -> %s' % (s[1]['tic'], s[2]['tic'])
+    for k in ('x', 'y'):
+        assert abs(s[0]['player'][k] - s[3]['player'][k]) < 1, 'player moved: %s' % s[3]['player']
 
 
 def check_setting(config, key, value):
@@ -737,6 +757,7 @@ GOLDEN = [
     'gamma_1.png', 'gamma_2.png', 'gamma_3.png', 'captions_1.png', 'captions_2.png', 'captions-menu_1.png',
     'photo-mode_1.png', 'photo-mode_2.png', 'photo-mode_3.png', 'photo-mode_4.png',
     'dynamic-lights_1.png', 'dynamic-lights_2.png', 'dynamic-lights_3.png', 'dynamic-lights-menu_1.png',
+    'photo-controls_1.png', 'photo-controls_2.png', 'photo-touch_1.png',
     'options-dynamic-lights_menudlights.png', 'lamp-lights_1.png', 'lamp-lights_2.png',
     'custom-game_menu1.png', 'custom-game_menu2.png', 'custom-game-doom2_menu1.png',
 ]

@@ -1430,7 +1430,18 @@ hint hidden), gamma, light diminishing and mouse look through. Leaving
 puts the camera back (`SetView`, `CancelFalling`) and forgets the last
 walk (`FWalkKnown`), so the flight is no momentum of the player's; a map
 change, the view's `Stop` and the browser's pointer-lock cancel leave
-photo mode first.
+photo mode first. Inside it, use toggles `FPhotoRunning`: `UpdatePhoto`
+then feeds the world the pose photo mode began with (so the player
+stands still while monsters move and shoot; a push is stopped through
+`StopPush`, so a recorded demo stays in sync, a teleport moves that
+pose, death ends photo mode). `PhotoZoom` narrows the camera's field
+of view in 5-degree steps (10..120) and `PhotoTilt` turns its up vector
+around the direction, with `PreferGravityUpForRotations` off so mouse
+look keeps the tilt; leaving restores both. The gamepad's `gpaPhoto`
+(Y), the touch button `tbPhoto` (top right, left of MAP) and, inside,
+the pad's and touch's use / weapon buttons do the same, and the sticks
+or the touch stick fly the camera (`ApplyTouch` moves along the view
+direction there).
 - `UseGameController` for the sticks. In the game a button press runs
   the actions bound to it (`TViewPlay.PadPressed` through
   `PadButtonOfEvent`), the triggers have no events and are edge-detected

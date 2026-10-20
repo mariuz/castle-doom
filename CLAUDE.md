@@ -249,6 +249,11 @@ the world and frees the camera (`F:sec` flies where it looks, `LOOK:deg`
 tilts); the log says `Photo: Photo mode on at (-416, 256, 40), the game
 is paused` and `Photo mode off, back at the player`. Autotest
 `photo-mode` (goldens; its saves check the player's place and the tics).
+Inside it `KEY:E` lets the game run (`Photo: The game runs`),
+`KEY:Plus` / `KEY:Minus` zoom (`Photo: Field of view 85`) and `KEY:[` /
+`KEY:]` tilt (`Photo: Tilt -5`); the pad's Y is `PADDOWN:Y,PADUP:Y` and
+the touch PHOTO button `TDOWN:1:0.80:0.92,TUP:1` (autotests
+`photo-controls`, `photo-touch` with goldens).
 Settings (`GameSettings`, `settings.json` next to the saves; the log
 prints `Settings:` when one is loaded): `VOL:sfx:music` sets both volumes
 like the F4 menu (and saves them), `SOUNDMENU` opens that menu for a

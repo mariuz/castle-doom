@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Photo mode on the gamepad (Y) and touch screens (PHOTO); inside it,
+  E lets the game run behind the free camera, + / - zoom and [ / ] tilt.
+
 ## v0.44.0 (2026-10-20)
 
 - Dynamic lights: lamps, torches and candles glow too, explosions fade,

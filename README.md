@@ -115,8 +115,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Dynamic lights (Options -> Video, off by default): rockets, fireballs, plasma, BFG balls,
   explosions, muzzle flashes, lamps, torches and candles light the walls and sprites around
   them in their colour.
-- Photo mode: `O` pauses the game, hides the HUD and lets the camera fly through the level (`F5`
-  saves a screenshot without the HUD; `O` or Esc returns to the player).
+- Photo mode: `O` (gamepad Y, touch PHOTO) pauses the game, hides the HUD and lets the camera fly
+  through the level; `E` lets the game run behind it, `+`/`-` zoom, `[`/`]` tilt, `F5` saves a
+  screenshot without the HUD, `O` or Esc returns to the player.
 - Closed captions: Options -> Sound Volume -> Captions (or F4) shows a line for each sound heard ("Door opens, ahead",
   "Serpentipede sees you, left") under the messages.
 - Gamma correction: `F11` (or Options -> Brightness) brightens the dark parts in Doom's five

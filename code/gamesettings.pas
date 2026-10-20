@@ -25,7 +25,7 @@ type
 
   { The gamepad's bindable actions (the sticks move and look, Start opens
     the menu, and the menus use the D-pad, A and B whatever is bound). }
-  TPadAction = (gpaFire, gpaUse, gpaAutomap, gpaNextWeapon, gpaPrevWeapon);
+  TPadAction = (gpaFire, gpaUse, gpaAutomap, gpaNextWeapon, gpaPrevWeapon, gpaPhoto);
   { A gamepad button in the standard (Xbox) layout; the triggers count as
     buttons when pressed past half way. Start and Guide are not bindable. }
   { A mouse button or wheel direction bound to an action (one per action,
@@ -81,7 +81,7 @@ type
       places (GameTouch's TTouchButton order without tbNone: fractions of
       the width and height from the bottom left; X < 0 = the default). }
     TouchOpacity: Integer;
-    TouchPlaces: array [0..5] of TVector2;
+    TouchPlaces: array [0..6] of TVector2;
     { Gamepad bindings: two buttons per action (pbNone = unused). }
     Pad: array [TPadAction, 0..1] of TPadButton;
   end;
@@ -98,8 +98,8 @@ const
   TouchSizes: array [0..3] of Integer = (75, 100, 125, 150);
   TouchOpacities: array [0..3] of Integer = (25, 50, 75, 100);
   { settings.json's names of the touch buttons (TouchPlaces' order). }
-  TouchButtonIds: array [0..5] of String = ('fire', 'use', 'prevWeapon',
-    'nextWeapon', 'automap', 'menu');
+  TouchButtonIds: array [0..6] of String = ('fire', 'use', 'prevWeapon',
+    'nextWeapon', 'automap', 'menu', 'photo');
   { Gamma correction levels (Doom's usegamma): 0 = off. }
   MaxGamma = 4;
   { The frame rate cap's choices (0 = no cap); 120 is CGE's default. }
@@ -155,17 +155,17 @@ const
     gaAutomap, gaPrevWeapon, gaPhoto);
 
   PadActionNames: array [TPadAction] of String = (
-    'Fire', 'Use / open', 'Automap', 'Next weapon', 'Previous weapon');
+    'Fire', 'Use / open', 'Automap', 'Next weapon', 'Previous weapon', 'Photo mode');
   { The JSON keys of settings.json's "pad" object. }
   PadActionIds: array [TPadAction] of String = (
-    'fire', 'use', 'automap', 'nextWeapon', 'prevWeapon');
+    'fire', 'use', 'automap', 'nextWeapon', 'prevWeapon', 'photo');
   { settings.json's, the log's and the Controls page's button names. }
   PadButtonNames: array [TPadButton] of String = ('-', 'A', 'B', 'X', 'Y',
     'LB', 'RB', 'LT', 'RT', 'LS', 'RS', 'DPadUp', 'DPadDown', 'DPadLeft',
     'DPadRight', 'View');
   DefaultPad: array [TPadAction, 0..1] of TPadButton = (
     (pbRightTrigger, pbNone), (pbA, pbX), (pbView, pbNone),
-    (pbRightBumper, pbNone), (pbLeftBumper, pbNone));
+    (pbRightBumper, pbNone), (pbLeftBumper, pbNone), (pbY, pbNone));
 
 var
   Settings: TGameSettings;

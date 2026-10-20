@@ -1994,6 +1994,7 @@ begin
   ResetPad;
   AssertTrue('RT fires', PadIs(pbRightTrigger, gpaFire));
   AssertTrue('X uses', PadIs(pbX, gpaUse));
+  AssertTrue('Y: photo mode', PadIs(pbY, gpaPhoto));
   AssertEquals('use text', 'A / X', PadActionText(gpaUse));
   { A button moves from the action that had it. }
   BindPad(gpaFire, 1, pbX);
@@ -2132,6 +2133,9 @@ begin
     AssertTrue('< left of >', V.X < Middle.X);
     T.ButtonCircle(tbMenu, Middle, Radius);
     AssertTrue('menu at the right', Middle.X > 1400);
+    V := Middle;
+    T.ButtonCircle(tbPhoto, Middle, Radius);
+    AssertTrue('photo at the right too, left of menu', (Middle.X > 1000) and (Middle.X < V.X));
     T.TouchDown(5, Vector2(1300, 400));
     T.TouchMove(5, Vector2(1300, 500));
     AssertTrue('stick on the right', T.MoveVector.Y > 0.5);

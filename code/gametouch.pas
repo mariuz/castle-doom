@@ -20,7 +20,7 @@ uses Classes,
   DoomGraphics;
 
 type
-  TTouchButton = (tbNone, tbFire, tbUse, tbPrevWeapon, tbNextWeapon, tbAutomap, tbMenu);
+  TTouchButton = (tbNone, tbFire, tbUse, tbPrevWeapon, tbNextWeapon, tbAutomap, tbMenu, tbPhoto);
   TTouchButtonEvent = procedure (const Button: TTouchButton) of object;
   TTouchMovedEvent = procedure (const Button: TTouchButton; const Position: TVector2) of object;
 
@@ -115,7 +115,7 @@ type
   end;
 
 const
-  TouchButtonNames: array [TTouchButton] of String = ('', 'FIRE', 'USE', '<', '>', 'MAP', 'MENU');
+  TouchButtonNames: array [TTouchButton] of String = ('', 'FIRE', 'USE', '<', '>', 'MAP', 'MENU', 'PHOTO');
 
 var
   { Show the touch controls: --touch, the TOUCH demo command, or in the
@@ -281,10 +281,11 @@ begin
     tbNextWeapon: begin Middle := Vector2(W - 0.12 * U, M + 0.45 * U); Radius := 0.06 * U; end;
     tbAutomap: begin Middle := Vector2(W - 0.22 * U, H - 0.08 * U); Radius := 0.06 * U; end;
     tbMenu: begin Middle := Vector2(W - 0.08 * U, H - 0.08 * U); Radius := 0.06 * U; end;
+    tbPhoto: begin Middle := Vector2(W - 0.36 * U, H - 0.08 * U); Radius := 0.06 * U; end;
     else begin Middle := TVector2.Zero; Radius := 0; end;
   end;
-  { MAP and MENU stay at the top right, away from Doom's messages. }
-  if not (B in [tbAutomap, tbMenu]) then
+  { MAP, MENU and PHOTO stay at the top right, away from Doom's messages. }
+  if not (B in [tbAutomap, tbMenu, tbPhoto]) then
     Middle := Mirror(Middle);
   { A place of the player's own wins (it is not mirrored). }
   if (B <> tbNone) and (FCustom[B].X >= 0) then

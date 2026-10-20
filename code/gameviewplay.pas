@@ -40,6 +40,10 @@ type
     FPhotoPos, FPhotoDir, FPhotoUp: TVector3;
     FPhotoAutomap, FPhotoInfo: Boolean;
     FPhotoHintTime: Single;
+    { The world keeps running behind the free camera (the player stands
+      where photo mode began); the camera's field of view and tilt. }
+    FPhotoRunning: Boolean;
+    FPhotoFov, FPhotoTilt: Single;
     { Dynamic lights picked this frame (nearest first) and their distances
       to the camera; FDynLogTime throttles the log line. }
     FDynLights: array [0..MaxDynamicLights - 1] of TDynamicLight;
@@ -173,6 +177,11 @@ type
     { Photo mode on / off (gaPhoto, demo command PHOTO). }
     procedure SetPhotoMode(const On: Boolean);
     procedure UpdatePhoto(const SecondsPassed: Single);
+    { Photo mode's own controls: the world running or not, zoom (field of
+      view, Steps of 5 degrees narrower) and tilt (Steps of 5 degrees). }
+    procedure TogglePhotoRunning;
+    procedure PhotoZoom(const Steps: Integer);
+    procedure PhotoTilt(const Steps: Integer);
     { The navigation's keys from Settings.Keys, and the help panel's
       lines for them. }
     procedure ApplyKeyBindings;
@@ -1066,7 +1075,19 @@ procedure TViewPlay.TouchButton(const Button: TTouchButton);
 begin
   if FWorld = nil then Exit;
   WritelnLog('Touch', 'Button %s', [TouchButtonNames[Button]]);
+  if FPhoto then
+  begin
+    case Button of
+      tbPhoto, tbMenu: SetPhotoMode(false);
+      tbUse: TogglePhotoRunning;
+      tbNextWeapon: PhotoZoom(1);
+      tbPrevWeapon: PhotoZoom(-1);
+      else ;
+    end;
+    Exit;
+  end;
   case Button of
+    tbPhoto: SetPhotoMode(true);
     tbUse: FWorld.UseInFront;
     tbPrevWeapon: FWorld.NextWeapon(-1);
     tbNextWeapon: FWorld.NextWeapon(1);
@@ -1086,14 +1107,28 @@ begin
     if PadIs(B, A) then
     begin
       Result := true;
+      WritelnLog('Gamepad', '%s: %s', [PadButtonNames[B], PadActionIds[A]]);
+      { Photo mode: the photo button leaves, use runs / pauses the game,
+        the weapon buttons zoom; nothing else. }
+      if FPhoto then
+      begin
+        case A of
+          gpaPhoto: SetPhotoMode(false);
+          gpaUse: TogglePhotoRunning;
+          gpaNextWeapon: PhotoZoom(1);
+          gpaPrevWeapon: PhotoZoom(-1);
+          else ;
+        end;
+        Exit;
+      end;
       case A of
+        gpaPhoto: SetPhotoMode(true);
         gpaFire: FWorld.FireWeapon;
         gpaUse: FWorld.UseInFront;
         gpaAutomap: FAutomap.Exists := not FAutomap.Exists;
         gpaNextWeapon: FWorld.NextWeapon(1);
         gpaPrevWeapon: FWorld.NextWeapon(-1);
       end;
-      WritelnLog('Gamepad', '%s: %s', [PadButtonNames[B], PadActionIds[A]]);
     end;
 end;
 
@@ -1173,6 +1208,9 @@ begin
   if Forward.Length < 0.001 then Exit;
   Forward := Forward.Normalize;
   Right := Vector3(-Forward.Z, 0, Forward.X);
+  { Photo mode flies where the camera looks. }
+  if FPhoto then
+    Forward := Dir.Normalize;
   { Doom's running speed at the stick's edge, walking half way. }
   Speed := 2 * 290 * FWorld.PlayerMoveFactor * Stick.Length;
   TWalkNavigationAccess(FNavigation).Move(
@@ -1390,6 +1428,11 @@ begin
     FNavigation.PreferGravityUpForMoving := false;
     FNavigation.HeadBobbing := 0;
     FNavigation.MoveSpeed := 290;
+    { Mouse look keeps a tilted camera tilted. }
+    FNavigation.PreferGravityUpForRotations := false;
+    FPhotoRunning := false;
+    FPhotoFov := Settings.FieldOfView;
+    FPhotoTilt := 0;
     FPhotoHintTime := 3;
     Feet := CgeToDoom(FPhotoPos);
     WritelnLog('Photo', 'Photo mode on at (%.0f, %.0f, %.0f), the game is paused', [Feet.X, Feet.Y, Feet.Z]);
@@ -1400,7 +1443,10 @@ begin
     FNavigation.CheckCollisions := true;
     FNavigation.PreferGravityUpForMoving := true;
     FNavigation.HeadBobbing := 0.03;
+    FNavigation.PreferGravityUpForRotations := true;
     FNavigation.CancelFalling;
+    FPhotoRunning := false;
+    ApplyFieldOfView;
     FAutomap.Exists := FPhotoAutomap;
     FInfoLabel.Exists := FPhotoInfo;
     FPaletteFlash.Exists := true;
@@ -1411,10 +1457,69 @@ begin
   end;
 end;
 
-{ Photo mode's frame: the world stands still, the HUD is hidden and only
-  a hint shows for the first seconds. }
-procedure TViewPlay.UpdatePhoto(const SecondsPassed: Single);
+procedure TViewPlay.TogglePhotoRunning;
 begin
+  FPhotoRunning := not FPhotoRunning;
+  WritelnLog('Photo', 'The game %s', [Iff(FPhotoRunning, 'runs', 'is paused')]);
+end;
+
+procedure TViewPlay.PhotoZoom(const Steps: Integer);
+begin
+  FPhotoFov := Max(10, Min(MaxFieldOfView, FPhotoFov - 5 * Steps));
+  FViewport.Camera.Perspective.FieldOfView := DegToRad(FPhotoFov);
+  WritelnLog('Photo', 'Field of view %.0f', [FPhotoFov]);
+end;
+
+procedure TViewPlay.PhotoTilt(const Steps: Integer);
+var
+  Pos, Dir, Up: TVector3;
+begin
+  FPhotoTilt := FPhotoTilt + 5 * Steps;
+  FViewport.Camera.GetView(Pos, Dir, Up);
+  Up := RotatePointAroundAxisRad(DegToRad(5 * Steps), Up, Dir);
+  FViewport.Camera.SetView(Pos, Dir, Up);
+  WritelnLog('Photo', 'Tilt %.0f', [FPhotoTilt]);
+end;
+
+{ Photo mode's frame: the world stands still (or runs, the player
+  standing where photo mode began), the HUD is hidden and only a hint
+  shows for the first seconds. }
+procedure TViewPlay.UpdatePhoto(const SecondsPassed: Single);
+var
+  Feet: TVector3;
+  Angle: Single;
+begin
+  if FPhotoRunning then
+  begin
+    Feet := CgeToDoom(FPhotoPos);
+    Feet.Z := Feet.Z - PlayerViewHeight;
+    Angle := RadToDeg(ArcTan2(-FPhotoDir.Z, FPhotoDir.X));
+    FWorld.PlayerWalkVX := 0;
+    FWorld.PlayerWalkVY := 0;
+    FLevelTime := FLevelTime + SecondsPassed;
+    FWorld.Update(SecondsPassed, Feet.X, Feet.Y, Feet.Z, Angle, FPhotoPos, FPhotoDir);
+    { What the world does to the player waits, or is dropped: a push
+      stops, a teleport moves the place photo mode returns to. }
+    if (FWorld.PlayerPushDX <> 0) or (FWorld.PlayerPushDY <> 0) then
+    begin
+      FWorld.StopPush;
+      FWorld.PlayerPushDX := 0;
+      FWorld.PlayerPushDY := 0;
+    end;
+    FWorld.PlayerTurn := 0;
+    FWorld.PlayerKnockUp := 0;
+    if FWorld.PlayerTeleported then
+    begin
+      FWorld.PlayerTeleported := false;
+      FPhotoPos := DoomToCge(FWorld.PlayerTeleportX, FWorld.PlayerTeleportY,
+        FWorld.PlayerTeleportZ + PlayerViewHeight);
+    end;
+    if FWorld.Player.Dead then
+    begin
+      SetPhotoMode(false);
+      Exit;
+    end;
+  end;
   FNavigation.Exists := true;
   FStatusBar.Exists := false;
   FWeaponImage.Exists := false;
@@ -1431,8 +1536,9 @@ begin
   begin
     FPhotoHintTime := FPhotoHintTime - SecondsPassed;
     FMessageText.SetScale(Max(1, Round(FViewport.EffectiveHeight / 200)));
-    FMessageText.SetText(UpperCase(Format('Photo mode: %s or Esc returns, %s saves a screenshot', [
-      ActionInputText(gaPhoto), ActionInputText(gaScreenshot)])));
+    FMessageText.SetText(UpperCase(Format('Photo mode: %s or Esc returns, %s saves a screenshot' + #10 +
+      '%s runs or pauses the game, + / - zoom, [ / ] tilt', [
+      ActionInputText(gaPhoto), ActionInputText(gaScreenshot), ActionInputText(gaUse)])));
   end else
     FMessageText.SetText('');
 end;
@@ -2640,8 +2746,12 @@ begin
   end;
   if FPhoto then
   begin
+    CheckPadTriggers;
+    if FTouch.Exists then
+      ApplyTouch(SecondsPassed);
     UpdatePhoto(SecondsPassed);
-    UpdateDynamicLights;
+    if FPhoto then
+      UpdateDynamicLights;
     Exit;
   end;
   FStatusBar.Exists := true;
@@ -2926,6 +3036,28 @@ begin
       FMessageText.SetText('');
       FPhotoHintTime := 0;
       WritelnLog('Photo', 'Screenshot saved: %s', [Container.SaveScreenToDefaultFile]);
+      Exit(true);
+    end;
+    if EventIs(Event, gaUse) then
+    begin
+      TogglePhotoRunning;
+      Exit(true);
+    end;
+    if Event.IsKey(keyPlus) or Event.IsKey(keyNumpadPlus) or Event.IsKey(keyEqual) or
+       ((Event.EventType = itMouseWheel) and (Event.MouseWheelScroll > 0)) then
+    begin
+      PhotoZoom(1);
+      Exit(true);
+    end;
+    if Event.IsKey(keyMinus) or Event.IsKey(keyNumpadMinus) or
+       ((Event.EventType = itMouseWheel) and (Event.MouseWheelScroll < 0)) then
+    begin
+      PhotoZoom(-1);
+      Exit(true);
+    end;
+    if Event.IsKey(keyLeftBracket) or Event.IsKey(keyRightBracket) then
+    begin
+      if Event.IsKey(keyLeftBracket) then PhotoTilt(-1) else PhotoTilt(1);
       Exit(true);
     end;
     if not (EventIs(Event, gaGamma) or EventIs(Event, gaLightDiminish) or EventIs(Event, gaMouseLook)) then
