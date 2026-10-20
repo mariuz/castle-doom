@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.45.0 (2026-10-20)
 
 - Map editor: `F7` in a game, Custom game -> Edit map or `--edit MAP` shows the map from
   above; move vertices, lines, sectors and things, draw rooms, change heights, light,
