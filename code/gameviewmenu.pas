@@ -90,6 +90,8 @@ type
       download it waited for arrives. }
     procedure StartFromCommandLine;
     procedure StartRequestedNewGame(Sender: TObject);
+    { The map editor on the chosen map (--edit, the custom game page). }
+    procedure StartEditor;
     procedure SetupDoomMenu;
     procedure RefreshSlots;
     procedure DoomMenuAction(const Action: TDoomMenuAction);
@@ -226,7 +228,7 @@ implementation
 uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils, CastleRectangles,
   CastleStringUtils,
   CastleFilesUtils,
-  GameViewPlay, GameSaveBundle, GameSaveStorage, GameGamepad, GameViewDesign;
+  GameViewPlay, GameSaveBundle, GameSaveStorage, GameGamepad, GameViewDesign, GameViewEdit;
 
 const
   Freedoom1 = 'castle-data:/wads/freedoom1.wad';
@@ -254,6 +256,10 @@ procedure TViewMenu.Start;
 begin
   inherited;
   if CmdSkill >= 0 then FSkill := CmdSkill;
+  { Back from the map editor's play-test: without its PWAD (the editor
+  key in a later game opens the editor anew). }
+  RemoveEditedWads(FWad);
+  ViewEdit.PlayTesting := false;
 
   { The whole screen is data/menu.castle-user-interface (a CGE editor
     design): the black background, Doom's menu over TITLEPIC (320x200
@@ -381,7 +387,7 @@ begin
     AutoTestMenu;
     Exit;
   end;
-  if (AutoTestMap <> '') or (CmdIwad <> '') or (CmdPwads.Count > 0) or (CmdWarp <> '') then
+  if (AutoTestMap <> '') or (CmdIwad <> '') or (CmdPwads.Count > 0) or (CmdWarp <> '') or CmdEdit then
   begin
     { Command line: explicit IWAD, or Freedoom matching the map names. }
     if CmdIwad <> '' then
@@ -435,7 +441,7 @@ begin
     else if CmdWarp <> '' then
       FMapIndex := Max(0, FWad.MapNames.IndexOf(CmdWarp));
     UpdateMapLabel;
-    if (AutoTestMap <> '') or (CmdWarp <> '') then
+    if (AutoTestMap <> '') or (CmdWarp <> '') or CmdEdit then
     begin
       { Cannot change the view inside Start; do it after the first render. }
       WaitForRenderAndCall({$ifdef FPC}@{$endif} AutoStart);
@@ -767,14 +773,14 @@ begin
   begin
     if FDoomMenu.CustomDelta < 0 then ClickPrevMap(nil) else ClickNextMap(nil);
   end else
-  if Item = 'START' then
+  if (Item = 'START') or (Item = 'EDIT') then
   begin
     MapName := '';
     if FWad.MapNames.Count > 0 then
       MapName := FWad.MapNames[Clamped(FMapIndex, 0, FWad.MapNames.Count - 1)];
     Seed := StrToInt64Def(FDoomMenu.CustomSeed, -1);
-    WritelnLog('Menu', 'Custom game: %s, PWADs %s, map %s, skill %d, random seed %s', [
-      ExtractUriName(FIwadUrl), FDoomMenu.CustomPwads, MapName, FDoomMenu.Skill + 1,
+    WritelnLog('Menu', 'Custom game%s: %s, PWADs %s, map %s, skill %d, random seed %s', [
+      Iff(Item = 'EDIT', ' (map editor)', ''), ExtractUriName(FIwadUrl), FDoomMenu.CustomPwads, MapName, FDoomMenu.Skill + 1,
       Iff(Seed >= 0, IntToStr(Seed), 'none')]);
     Pwads := WithoutRandomPwads(FPwads);
     try
@@ -787,7 +793,7 @@ begin
     if FWad = nil then Exit;
     FMapIndex := Max(0, FWad.MapNames.IndexOf(MapName));
     FCustomOpen := false;
-    StartGame;
+    if Item = 'EDIT' then StartEditor else StartGame;
     Exit;
   end;
   ShowCustomPage;
@@ -1718,7 +1724,32 @@ end;
 
 procedure TViewMenu.AutoStart(Sender: TObject);
 begin
-  StartGame;
+  if CmdEdit then
+  begin
+    { --edit: once (back in the menu, the command line is done). }
+    CmdEdit := false;
+    StartEditor;
+    if AutoTestPrefix = '' then
+    begin
+      CmdWarp := '';
+      CmdIwad := '';
+      CmdPwads.Clear;
+    end;
+  end else
+    StartGame;
+end;
+
+procedure TViewMenu.StartEditor;
+begin
+  if (FWad = nil) or (FWad.MapNames.Count = 0) then Exit;
+  ViewEdit.Wad := FWad;
+  ViewEdit.Graphics := FGraphics;
+  ViewEdit.Sounds := FSounds;
+  ViewEdit.Music := FMusic;
+  ViewEdit.MapName := FWad.MapNames[FMapIndex];
+  ViewEdit.Skill := FSkill;
+  ViewEdit.Fresh := true;
+  Container.View := ViewEdit;
 end;
 
 { --playdemo FILE: the demo's WADs, then the play view plays it. }

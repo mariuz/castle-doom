@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Map editor: `F7` in a game, Custom game -> Edit map or `--edit MAP` shows the map from
+  above; move vertices, lines, sectors and things, draw rooms, change heights, light,
+  textures, specials and tags, make doors, add things, undo. `F9` play-tests, `F2` exports a
+  PWAD that other Doom ports play (`--export-map MAP FILE` without the editor).
+- Levels as 3D models: `F3` / `F4` in the editor (or `--export-gltf` / `--export-x3d MAP
+  FILE`) write the walls and floors as glTF or X3D with their textures.
+- The "Doom Map" Castle Game Engine component gets PWADs, skill, monsters and extra light
+  properties and glTF / X3D export.
+
 - Photo mode on the gamepad (Y) and touch screens (PHOTO); inside it,
   E lets the game run behind the free camera, + / - zoom and [ / ] tilt.
 

@@ -64,6 +64,19 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   on, its key before it), with windows, secret closets, lights, nukage and sky rooms, monsters and supplies that grow
   with the map number, an exit switch in the farthest room and names in a UMAPINFO. The same
   seed gives the same maps, saves keep it, and `--random-wad FILE` writes the PWAD.
+- Map editor: `F7` in a game (or New Game -> Custom game -> Edit map, or `--edit [MAP]`) opens
+  the map from above like Doom Builder: select and drag vertices, lines, sectors and things,
+  draw new rooms (inside a sector, in the void, or joined to a wall), set floor and ceiling
+  heights, light, flats, wall textures, specials and tags, make doors, add and turn things,
+  undo / redo. `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
+  as a PWAD with its nodes built (it runs in other Doom ports: `-file e1m1-edited.wad`),
+  `F3` / `F4` export the level's walls and floors as glTF / X3D with their textures for
+  Blender, other engines or the Castle Game Engine editor. On the command line
+  `--export-map MAP FILE`, `--export-gltf MAP FILE` and `--export-x3d MAP FILE` do the same
+  for any map of the loaded WADs.
+- A Doom level as a Castle Game Engine component: "Doom Map" (`TDoomMapTransform`) in a design
+  builds a map from its WAD, PWADs, skill, monsters on / off and extra light (all editable in
+  the CGE editor's inspector) and can export it as glTF / X3D.
 - Textured walls with Doom's pegging rules and offsets, masked middle textures (grates),
   floors and ceilings from BSP subsectors, sky, sector light levels with "fake contrast".
 - Doors (manual, switch, walk-over, locked, blazing), lifts (perpetual ones stop and
@@ -260,6 +273,11 @@ data/play.castle-user-interface  the play view's HUD, texts and screens: a CGE e
 data/menu.castle-user-interface  the title screen, Doom's menu and the Options panel: a CGE editor design
 code/doommaptransform.pas  TDoomMapTransform: a Doom level built from a WAD inside a design ("Doom Map" in the editor)
 code/gameviewdesign.pas  --autotest MAPCOMPONENT: shows data/mapcomponent.castle-user-interface, a design with that component
+code/doomeditmap.pas    the map editor's data: import from a WAD, edits, undo, PWAD export
+code/doomnodebuilder.pas  BSP node builder (vanilla SEGS / SSECTORS / NODES) for exported maps
+code/doomwadwriter.pas  writing lumps, BLOCKMAP and PWAD files (editor and random maps)
+code/doomexport.pas     a level's geometry and textures as glTF 2.0 or X3D
+code/gameviewedit.pas   the map editor's 2D view (F7, --edit), play-test and export
 ```
 
 Freedoom is Copyright (c) 2001-2024 Contributors to the Freedoom project, BSD licence

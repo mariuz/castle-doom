@@ -8,6 +8,8 @@ report: the last 40
 console lines (the game's log) shown over the page when the WebAssembly
 program stops (any exception does: FPC's wasm32 target cannot catch
 them), e.g. after the CRASH demo command (play/?map=E1M1&demo=W:2,CRASH),
+for the map editor's export (GameViewEdit): window.castleDoomDownload(name,
+bytes, type) saves a "binary string" (one character per byte) as a file,
 and for the touch controls (GameTouch): CGE's web backend reports every
 pointer as finger 0, so the page tracks the fingers itself. While the game
 is played (it calls window.castleDoomTouches(1) every frame) touch
@@ -186,6 +188,25 @@ TOUCH_NEW = """
   </script>"""
 
 
+DOWNLOAD_NEW = """
+  <script>
+    /* Castle DOOM's file saving (tools/patch_web_page.py): the map
+       editor's PWAD export, bytes as a "binary string". */
+    window.castleDoomDownload = function (name, bytes, type) {
+      const data = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) data[i] = bytes.charCodeAt(i) & 255;
+      const url = URL.createObjectURL(new Blob([data], {type: type || 'application/octet-stream'}));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    };
+  </script>"""
+
+
 def main():
     if len(sys.argv) != 2:
         print(__doc__)
@@ -206,6 +227,12 @@ def main():
             sys.exit(1)
         text = CRASH_TAG.sub(lambda m: TOUCH_NEW + m.group(1), text)
         done.append('touch controls')
+    if 'castleDoomDownload' not in text:
+        if len(CRASH_TAG.findall(text)) != 1:
+            print('%s: the game script tag was not found, cannot add file saving' % path)
+            sys.exit(1)
+        text = CRASH_TAG.sub(lambda m: DOWNLOAD_NEW + m.group(1), text)
+        done.append('file saving')
     if 'manifest.webmanifest' not in text:
         if len(MANIFEST_TAG.findall(text)) != 1:
             print('%s: the title was not found, cannot link the manifest' % path)

@@ -33,6 +33,7 @@ type
     procedure ReadDirectory(const FileIndex: Integer);
     procedure ReadPalette;
     procedure CollectMapNames;
+    function CollectResourceNames(const Textures, Flats: Boolean): TStringList;
   public
     { Load the IWAD (castle-data:/..., file:///..., or a plain path). }
     constructor Create(const AUrl: String);
@@ -40,6 +41,13 @@ type
     { Stack a PWAD on top; its lumps override earlier ones by name.
       random:/SEED is generated (DoomRandomMap), not read. }
     procedure AddFile(const AUrl: String);
+    { Take the last file off the stack (the map editor's play-test PWAD,
+      edit:/MAP, when the editor takes over again). Never the IWAD. }
+    procedure RemoveLastFile;
+    { The textures (TEXTURE1 / TEXTURE2) and the flats, sorted, for the
+      map editor's choices. }
+    function TextureNames: TStringList;
+    function FlatNames: TStringList;
     { The bytes of a loaded file (0 = the IWAD). }
     function FileData(const Index: Integer): TMemoryStream;
     { The names of all textures (TEXTURE1 / TEXTURE2) and flats, sorted. }
@@ -90,7 +98,7 @@ function DoomName(const P: PByte): String;
 implementation
 
 uses Math, CastleDownload, CastleLog, CastleUtils, CastleClassUtils, CastleUriUtils,
-  DoomRandomMap;
+  DoomRandomMap, DoomEditMap;
 
 function DoomName(const P: PByte): String;
 var
@@ -133,6 +141,7 @@ var
   Seed: Cardinal;
   Names, Log: TStringList;
   I: Integer;
+  EditedMap: String;
 begin
   FileUrl := AUrl;
   { Plain file names (from the command line) become file:// URLs. }
@@ -156,6 +165,13 @@ begin
         FreeAndNil(Log);
         FreeAndNil(Names);
       end;
+    end else
+    if IsEditedWadUrl(FileUrl, EditedMap) then
+    begin
+      { The map editor's map (play-test), kept in memory. }
+      Data := EditedWadData(EditedMap);
+      if Data = nil then
+        raise Exception.CreateFmt('The map editor has no %s now', [EditedMap]);
     end else
     begin
       Data := TMemoryStream.Create;
@@ -265,7 +281,40 @@ begin
   Result := FFiles[Index];
 end;
 
+procedure TDoomWad.RemoveLastFile;
+var
+  N, I: Integer;
+begin
+  if Length(FFiles) <= 1 then Exit;
+  N := High(FFiles);
+  I := Length(FLumps);
+  while (I > 0) and (FLumps[I - 1].FileIndex = N) do
+    Dec(I);
+  SetLength(FLumps, I);
+  FreeAndNil(FFiles[N]);
+  SetLength(FFiles, N);
+  WritelnLog('WAD', 'Removed %s', [FFileUrls[N]]);
+  FFileUrls.Delete(N);
+  ReadPalette;
+  CollectMapNames;
+end;
+
+function TDoomWad.TextureNames: TStringList;
+begin
+  Result := CollectResourceNames(true, false);
+end;
+
+function TDoomWad.FlatNames: TStringList;
+begin
+  Result := CollectResourceNames(false, true);
+end;
+
 function TDoomWad.ResourceNames: TStringList;
+begin
+  Result := CollectResourceNames(true, true);
+end;
+
+function TDoomWad.CollectResourceNames(const Textures, Flats: Boolean): TStringList;
 var
   I, J, N, Offset: Integer;
   P: PByte;
@@ -279,6 +328,7 @@ begin
   begin
     if (FLumps[I].Name = 'TEXTURE1') or (FLumps[I].Name = 'TEXTURE2') then
     begin
+      if not Textures then Continue;
       P := LumpPointer(I);
       if FLumps[I].Size < 4 then Continue;
       N := PInt32(P)^;
@@ -292,7 +342,7 @@ begin
     end
     else if (FLumps[I].Name = 'F_START') or (FLumps[I].Name = 'FF_START') then InFlats := true
     else if (FLumps[I].Name = 'F_END') or (FLumps[I].Name = 'FF_END') then InFlats := false
-    else if InFlats and (FLumps[I].Size > 0) then
+    else if Flats and InFlats and (FLumps[I].Size > 0) then
       Result.Add(FLumps[I].Name);
   end;
 end;
@@ -457,6 +507,7 @@ function TDoomWad.Description: String;
 var
   I: Integer;
   Seed: Cardinal;
+  EditedMap: String;
 begin
   Result := '';
   for I := 0 to FFileUrls.Count - 1 do
@@ -464,6 +515,8 @@ begin
     if I > 0 then Result := Result + ' + ';
     if IsRandomWadUrl(FFileUrls[I], Seed) then
       Result := Result + 'random maps ' + IntToStr(Seed)
+    else if IsEditedWadUrl(FFileUrls[I], EditedMap) then
+      Result := Result + 'edited ' + EditedMap
     else
       Result := Result + ExtractUriName(FFileUrls[I]);
   end;

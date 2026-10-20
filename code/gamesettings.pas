@@ -21,7 +21,7 @@ type
     gaWeapon1, gaWeapon2, gaWeapon3, gaWeapon4, gaWeapon5, gaWeapon6, gaWeapon7,
     gaNextWeapon, gaPrevWeapon,
     gaLightDiminish, gaMouseLook, gaMusic, gaHelp, gaGrid, gaRevealMap,
-    gaNextMap, gaPrevMap, gaScreenshot, gaQuickSave, gaQuickLoad, gaStats, gaGamma, gaPhoto);
+    gaNextMap, gaPrevMap, gaScreenshot, gaQuickSave, gaQuickLoad, gaStats, gaGamma, gaPhoto, gaEditor);
 
   { The gamepad's bindable actions (the sticks move and look, Start opens
     the menu, and the menus use the D-pad, A and B whatever is bound). }
@@ -113,7 +113,7 @@ const
     'Plasma rifle', 'BFG 9000', 'Next weapon', 'Previous weapon',
     'Light diminishing', 'Mouse look', 'Music on / off', 'Help', 'Automap grid',
     'Reveal map', 'Next map', 'Previous map', 'Screenshot', 'Quick save',
-    'Quick load', 'Level statistics', 'Brightness (gamma)', 'Photo mode');
+    'Quick load', 'Level statistics', 'Brightness (gamma)', 'Photo mode', 'Map editor');
   { The JSON keys of settings.json's "keys" object. }
   ActionIds: array [TGameAction] of String = (
     'forward', 'backward', 'strafeLeft', 'strafeRight',
@@ -121,7 +121,7 @@ const
     'weapon1', 'weapon2', 'weapon3', 'weapon4', 'weapon5', 'weapon6', 'weapon7',
     'nextWeapon', 'prevWeapon',
     'lightDiminish', 'mouseLook', 'music', 'help', 'grid', 'revealMap',
-    'nextMap', 'prevMap', 'screenshot', 'quickSave', 'quickLoad', 'stats', 'gamma', 'photo');
+    'nextMap', 'prevMap', 'screenshot', 'quickSave', 'quickLoad', 'stats', 'gamma', 'photo', 'editor');
   DefaultKeys: array [TGameAction, 0..1] of TKey = (
     (keyW, keyArrowUp), (keyS, keyArrowDown), (keyA, keyNone), (keyD, keyNone),
     (keyArrowLeft, keyNone), (keyArrowRight, keyNone), (keyShift, keyNone),
@@ -132,7 +132,7 @@ const
     (keyF, keyNone), (keyM, keyNone), (keyJ, keyNone), (keyH, keyNone),
     (keyG, keyNone), (keyI, keyNone), (keyN, keyNone), (keyP, keyNone),
     (keyF5, keyNone), (keyF6, keyNone), (keyF9, keyNone), (keyL, keyNone), (keyF11, keyNone),
-    (keyO, keyNone));
+    (keyO, keyNone), (keyF7, keyNone));
 
   { settings.json's mouse names and the Controls page's. }
   MouseBindIds: array [TMouseBind] of String = ('None', 'Left', 'Middle',
@@ -143,7 +143,7 @@ const
   DefaultMouse: array [TGameAction] of TMouseBind = (
     mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbLeft, mbNone, mbNone,
     mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbWheelUp, mbWheelDown,
-    mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone);
+    mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone, mbNone);
 
   { The Controls page's pages: their titles and first / last actions. }
   ControlsPageCount = 3;
@@ -152,7 +152,7 @@ const
   ControlsPageFirst: array [0..ControlsPageCount - 1] of TGameAction = (
     gaForward, gaWeapon1, gaLightDiminish);
   ControlsPageLast: array [0..ControlsPageCount - 1] of TGameAction = (
-    gaAutomap, gaPrevWeapon, gaPhoto);
+    gaAutomap, gaPrevWeapon, gaEditor);
 
   PadActionNames: array [TPadAction] of String = (
     'Fire', 'Use / open', 'Automap', 'Next weapon', 'Previous weapon', 'Photo mode');

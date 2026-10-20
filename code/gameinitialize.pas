@@ -10,7 +10,7 @@ uses SysUtils, Classes,
   CastleKeysMouse,
   CastleUtils, CastleTimeUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
-  DoomLighting, DoomDehacked, DoomMusic, DoomGeometry, DoomRandomMap, DoomWad, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameSettings, GameSaveBundle, GameLogFilter, GameCrash, GameTouch;
+  DoomLighting, DoomDehacked, DoomEditMap, DoomMusic, DoomGeometry, DoomRandomMap, DoomWad, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameViewEdit, DoomExport, DoomGraphics, GameSettings, GameSaveBundle, GameLogFilter, GameCrash, GameTouch;
 
 var
   Window: TCastleWindow;
@@ -61,6 +61,71 @@ begin
   end;
 end;
 
+{ --export-map MAP FILE: the map editor's export without the editor: MAP
+  from the IWAD and PWADs (-iwad, -file) as a PWAD of its own, with its
+  nodes built anew. }
+procedure ExportMap(const MapName, FileName, Iwad: String);
+var
+  Wad: TDoomWad;
+  Edit: TDoomEditMap;
+  Data: TMemoryStream;
+  Error: String;
+  I: Integer;
+begin
+  if Iwad <> '' then
+    Wad := TDoomWad.Create(Iwad)
+  else
+    Wad := TDoomWad.Create('castle-data:/wads/freedoom1.wad');
+  Edit := TDoomEditMap.Create;
+  try
+    for I := 0 to CmdPwads.Count - 1 do
+      Wad.AddFile(CmdPwads[I]);
+    if not Edit.LoadFromWad(Wad, MapName, Error) then
+    begin
+      WritelnWarning('Editor', 'Cannot export: %s', [Error]);
+      Exit;
+    end;
+    Data := Edit.SaveToWad;
+    try
+      Data.SaveToFile(FileName);
+    finally
+      FreeAndNil(Data);
+    end;
+    WritelnLog('Editor', 'Exported %s to %s', [Edit.Summary, FileName]);
+  finally
+    FreeAndNil(Edit);
+    FreeAndNil(Wad);
+  end;
+end;
+
+{ --export-gltf / --export-x3d MAP FILE: the level's geometry and
+  textures as a 3D model (DoomExport). }
+procedure ExportScene(const MapName, FileName, Iwad: String; const Gltf: Boolean);
+var
+  Wad: TDoomWad;
+  Graphics: TDoomGraphics;
+  Error: String;
+  I: Integer;
+begin
+  if Iwad <> '' then
+    Wad := TDoomWad.Create(Iwad)
+  else if Copy(MapName, 1, 3) = 'MAP' then
+    Wad := TDoomWad.Create('castle-data:/wads/freedoom2.wad')
+  else
+    Wad := TDoomWad.Create('castle-data:/wads/freedoom1.wad');
+  Graphics := nil;
+  try
+    for I := 0 to CmdPwads.Count - 1 do
+      Wad.AddFile(CmdPwads[I]);
+    Graphics := TDoomGraphics.Create(Wad);
+    if not ExportLevel(Wad, Graphics, MapName, FileName, Gltf, Error) then
+      WritelnWarning('Export', 'Cannot export %s: %s', [MapName, Error]);
+  finally
+    FreeAndNil(Graphics);
+    FreeAndNil(Wad);
+  end;
+end;
+
 { -random [SEED]: the random maps' PWAD on top (a new seed when none is
   given), starting at its first map unless -warp says otherwise. }
 procedure UseRandomMaps(const SeedText: String; out Seed: Cardinal);
@@ -73,12 +138,18 @@ end;
 procedure ApplicationInitialize;
 var
   I: Integer;
-  ExportSaves, ImportSaves, RandomWadFile: String;
+  ExportSaves, ImportSaves, RandomWadFile, ExportMapName, ExportMapFile, SceneMap, SceneFile: String;
+  SceneGltf: Boolean;
   RandomSeed: Cardinal;
 begin
   ExportSaves := '';
   ImportSaves := '';
   RandomWadFile := '';
+  ExportMapName := '';
+  ExportMapFile := '';
+  SceneMap := '';
+  SceneFile := '';
+  SceneGltf := true;
   RandomSeed := 0;
   { --autotest MAPNAME OUTPUT_PREFIX : load the map, save screenshots, quit. }
   { Doom-style options: -iwad FILE, -file PWAD [PWAD...], -deh PATCH [PATCH...],
@@ -172,6 +243,29 @@ begin
       RandomWadFile := Parameters[I + 1];
       Inc(I);
     end else
+    if (Parameters[I] = '--export-map') and (I + 2 <= Parameters.High) then
+    begin
+      ExportMapName := UpperCase(Parameters[I + 1]);
+      ExportMapFile := Parameters[I + 2];
+      Inc(I, 2);
+    end else
+    if ((Parameters[I] = '--export-gltf') or (Parameters[I] = '--export-x3d')) and (I + 2 <= Parameters.High) then
+    begin
+      SceneGltf := Parameters[I] = '--export-gltf';
+      SceneMap := UpperCase(Parameters[I + 1]);
+      SceneFile := Parameters[I + 2];
+      Inc(I, 2);
+    end else
+    if Parameters[I] = '--edit' then
+    begin
+      { --edit [MAP]: the map editor on MAP (else the first map). }
+      CmdEdit := true;
+      if (I + 1 <= Parameters.High) and (Parameters[I + 1] <> '') and (Parameters[I + 1][1] <> '-') then
+      begin
+        CmdWarp := UpperCase(Parameters[I + 1]);
+        Inc(I);
+      end;
+    end else
     if (Parameters[I] = '--menukeys') and (I + 1 <= Parameters.High) then
     begin
       AutoTestMenuKeys := Parameters[I + 1];
@@ -246,6 +340,16 @@ begin
     WriteRandomWad(RandomWadFile, CmdIwad, RandomSeed);
     Halt;
   end;
+  if ExportMapFile <> '' then
+  begin
+    ExportMap(ExportMapName, ExportMapFile, CmdIwad);
+    Halt;
+  end;
+  if SceneFile <> '' then
+  begin
+    ExportScene(SceneMap, SceneFile, CmdIwad, SceneGltf);
+    Halt;
+  end;
   Window.Container.LoadSettings('castle-data:/CastleSettings.xml');
   { --fixed-step: no frame advances more than a tic (TViewPlay.Update
     also keeps frames from being shorter), so the world, the walk
@@ -289,6 +393,8 @@ begin
   ViewPlay := TViewPlay.Create(Application);
   ViewPlay.Name := 'ViewPlay';
   ViewDesign := TViewDesign.Create(Application);
+  ViewEdit := TViewEdit.Create(Application);
+  ViewEdit.Name := 'ViewEdit';
   ViewDesign.Name := 'ViewDesign';
   Window.Container.View := ViewMenu;
 end;

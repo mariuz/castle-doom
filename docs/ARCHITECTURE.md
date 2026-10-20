@@ -307,6 +307,44 @@ texture, its room-side line flagged secret (32). Thing spots skip any
 leaf of another sector inside their room (`SpotClear`). The random stream is a xorshift32 seeded from the seed and the
 map number, independent of `System.Random`.
 
+### The map editor's data (`DoomEditMap`, `DoomNodeBuilder`)
+
+`TDoomEditMap` holds a map as the WAD's own records in plain arrays
+(`Vertices`, `Lines`, `Sides`, `Sectors`, `Things`, whole units), read
+by `LoadFromWad` straight from the map's lumps (the node builder's split
+vertices dropped; Hexen and UDMF maps refused) and changed by the
+editor's operations, each of which first pushes a copy of all five
+arrays on the undo stack (`Snapshot`; dynamic arrays of records copy
+cheaply). Its queries are Doom Builder's: `SectorAt` casts a ray to the
+east and takes the side of the nearest line it crosses (no BSP needed
+while editing), `NearestVertex` / `NearestLine` / `NearestThing` pick.
+`DrawSector` takes a polygon, turns it clockwise (so each new line's
+front, its right side, faces in), refuses crossings, vertices inside and
+self-intersections, finds the sector around it from a point just inside
+its first new edge and makes two-sided walls there (one-sided ones in
+the void); an edge on an existing one-sided line (both ends on its
+vertices) makes that line two-sided instead, joining the room to the
+map. `MakeDoor` flips the sector's two-sided lines so the door is at
+their back (DR doors open the back sector), gives them special 1 and
+DOOR3 above, and closes the ceiling.
+
+`WriteLumps` / `SaveToWad` write the map as a PWAD (THINGS ... BLOCKMAP,
+an empty REJECT) through `DoomWadWriter` (shared with the random maps)
+after `TNodeBuilder` built its BSP: the usual recursive idbsp-style
+build over segs (one per line side), each node partitioned along one of
+at most 160 candidate segs by the fewest splits and the best balance,
+until every set is convex and of one sector; split points are rounded to
+whole units (the 16-bit format) and new vertices appended to VERTEXES;
+nodes are numbered parent first and written reversed, so the root is
+last. The unit test round-trips E1M1 and MAP01 through it (the same
+lines, the polygons' area within 0.2%, the same sector at 3000 points
+inside the map), and the exported E1M1 plays in dsda-doom.
+
+`edit:/MAP` is a WAD URL like `random:/SEED`: `TDoomWad.AddFile` takes
+the bytes `RegisterEditedWad` kept in memory, `RemoveLastFile` takes the
+file off the stack again. The play-test stacks it on the game's WADs;
+the menu and the editor remove it when they start.
+
 ---
 
 ## 6. DoomGeometry: from sectors to X3D scenes
@@ -1558,7 +1596,12 @@ the player position.
 ### A level as a component
 
 `TDoomMapTransform` (`doommaptransform.pas`) is a `TCastleTransform` with
-published `Wad`, `MapName` and `Things`. Setting them marks it dirty and
+published `Wad`, `MapName`, `Things`, `Monsters`, `Skill` (whose
+THINGS flags show), `ExtraLight` (added to every sector's light before
+the geometry is built) and `Pwads` (a `TStrings` of URLs stacked on the
+WAD, e.g. a map editor export), plus read-only `SectorCount`,
+`LineCount` and `ThingCount` for the inspector; `ExportGltf` /
+`ExportX3D` write what it shows (`DoomExport`). Setting them marks it dirty and
 its next `Update` builds the level: `TDoomWad`, `TDoomGraphics`,
 `TDoomMap`, a `TDoomGeometry` with every sector static (one chunk; the
 atlas and the lighting effects as in the game) under a `Map` child, the
@@ -1570,7 +1613,51 @@ empty), so it works in the editor and on the web. `StartEye` /
 `StartDirection` give a camera the player start. The design
 `data/mapcomponent.castle-user-interface` (a viewport, a camera and the
 component on E1M1) is what `--autotest MAPCOMPONENT` (`GameViewDesign`)
-shows and screenshots, and what the editor shows for the same file.
+shows and screenshots, and what the editor shows for the same file;
+the autotest then sets skill 5, no monsters and extra light 96, waits
+for the rebuild, screenshots again and exports glTF.
+
+### The map editor (`GameViewEdit`)
+
+`TViewEdit` is a view drawing `TDoomEditMap` from above in its `Render`
+(window pixels: `ScreenOf` / `DoomOf` with a centre and a scale; the
+grid, the lines by kind with front ticks, vertex squares, thing boxes of
+their radius with their facing, the room being drawn) and four labels
+over it. Mouse presses pick by mode and start a drag that takes one
+`Snapshot` when it first moves and then moves the vertices (or the
+thing) from their original places by the snapped offset; a vertex
+dropped on another merges (`MergeVertex`). Keys are in `HandleKey`.
+The menu (`StartEditor`, from `--edit` or the custom page's EDIT MAP)
+and the game (`OpenEditor`, the `editor` action, F7) hand it their WAD,
+graphics, sounds and music and the map name; `Fresh` imports anew,
+otherwise (back from a play-test, `PlayTesting`) the edited map stays.
+`PlayTest` registers the PWAD, stacks `edit:/MAP` on the WAD and starts
+the play view on it. In an autotest the demo script drives the editor
+(`RunStep`: `VIEW`, `MODE`, `CLICK`, `DRAG`, `DRAW`, `MOUSE`, `KEY`,
+`THING`, `EXPORT`, `GLTF`, `X3D`, `PLAY`, `S`, `W`, `Q`); `PLAY` hands
+the rest of the script to the game (`AutoTestDemo`) and the game's
+`EDIT` (or the editor key) hands its rest back. In the browser `F2`
+calls the page's `castleDoomDownload` (`tools/patch_web_page.py`) with
+the PWAD as a binary string; glTF / X3D need files and stay desktop
+only.
+
+### Levels as 3D models (`DoomExport`)
+
+`ExportMapGeometry` builds the level's `TDoomGeometry` without the atlas
+(`UseTextureAtlas` off for the call, every sector static), so each
+`TGeomBatch` is one texture; it gathers the batches of all chunks by
+image and opacity (skipping the deep water's collision-only and the
+per-sector sky batches), turns the light attribute into vertex colours
+(level / 255, walls with Doom's fake contrast of 16, full bright 1) and
+writes the textures as PNG beside the model. glTF 2.0 gets one mesh
+with a primitive per texture (positions, texture coordinates with v
+flipped, colours, 32-bit indices in one `.bin`), unlit materials
+(`KHR_materials_unlit`), nearest-texel repeating samplers, `MASK` for
+masked textures and `BLEND` for Boom's translucent ones; X3D gets a
+`Shape` per texture with an `UnlitMaterial` whose emissive texture is
+the image (`TextureProperties` with nearest filtering) and `alphaMode`,
+saved by CGE's `SaveNode`. Coordinates are CGE's (Y up, 1 unit = 1
+Doom unit). The unit test reads both back with `LoadNode`.
 
 ### The engine's inspector
 

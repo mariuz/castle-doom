@@ -96,8 +96,8 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 44 cases) cover the parsers,
-every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps and both music synthesizers:
+Unit tests (FPCUnit, no window, about 20 s, 47 cases) cover the parsers,
+every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
 code 1 on a failure; CI runs them before the autotests). The node-format
@@ -206,7 +206,7 @@ page after binding Q to Use (autotests `controls-page`, `key-bindings`),
 after binding K to light diminishing. The weapon keys and hotkeys are
 actions too (`weapon1`..`weapon7`, `nextWeapon`, `prevWeapon`,
 `lightDiminish`, `mouseLook`, `music`, `help`, `grid`, `revealMap`,
-`nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`, `stats`, `gamma`, `photo`):
+`nextMap`, `prevMap`, `screenshot`, `quickSave`, `quickLoad`, `stats`, `gamma`, `photo`, `editor`):
 `BIND:weapon5:Q,KEY:Q` selects the rocket launcher (autotest
 `hotkey-bindings`, unit test `TestKeyBindings`). Each action also has
 one mouse binding (`GameSettings.Mouse`, `settings.json`'s `mouse`:
@@ -661,6 +661,29 @@ then `D,D,R,R` picks E1M3, `D,L` skill 2, `D,E,4,2,E` the seed 42 and
 `D,E` starts (log `Menu: Custom game: freedoom1.wad, PWADs none, map
 E1M3, skill 2, random seed 42`; autotests `custom-game`,
 `custom-game-doom2` with goldens, unit test `TestCustomGamePage`).
+Map editor (`GameViewEdit` over `DoomEditMap`, docs in ARCHITECTURE):
+`--autotest E1M1 p --edit --demo "..."` opens it (`--edit [MAP]` alone
+for a user; `KEY:F7` or `EDIT` in a game demo opens it on that map and
+hands it the rest of the script). Its script: `VIEW:x:y:scale` (screen
+centre in Doom units, pixels a unit), `MODE:v|l|s|t`, `CLICK:x:y`,
+`DRAG:x1:y1:x2:y2`, `MOUSE:x:y`, `DRAW:x:y:x:y...` (a room), `KEY:name`
+(`KEY:Shift+PageUp`, `KEY:Ctrl+Z`), `THING:type` (what `A` adds),
+`EXPORT[:file]` (default `p_e1m1.wad`), `GLTF` / `X3D[:file]`, `PLAY`
+(the rest runs in the game), `S` (`p_edit_N.png`), `W:sec`, `Q`; log
+lines start with `Editor:`. A clear spot in E1M1's start room for a
+room: `DRAW:-480:192:-352:192:-352:288:-480:288` (autotest `editor`
+raises it to 24 and play-tests standing on it; its exported WAD is
+checked with Python `struct`, `check_map_wad`). `--export-map MAP FILE`,
+`--export-gltf MAP FILE` and `--export-x3d MAP FILE` quit after writing
+(harness `export`; like `--random-wad` they open a window first, so use `xvfb-run`). To check an exported PWAD in
+another port: `dsda-doom -iwad data/wads/freedoom1.wad -file FILE -warp
+1 1` under `xvfb-run`, screenshot with PIL's `ImageGrab`. To look at a
+glTF / X3D export, a ten-line CGE program (`TCastleScene.Load`, a
+camera at `(-416, 41, -256)` looking +X, `SaveScreen`) built with
+`castle-engine simple-compile` renders it. The test build sees changed
+`code/` units only through the game's `.ppu` files; `simple-compile
+tests/castle_doom_tests.lpr --compiler-option=-Fucode` compiles them
+from source instead.
 Demos (`DoomDemo`, the world records and replays itself): `--record
 FILE` (or Options -> Record demo...) records the next game started,
 level after level (each from its saved state, reloaded so the playback

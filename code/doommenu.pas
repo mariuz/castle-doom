@@ -479,7 +479,7 @@ begin
     mpOptions: Result := 8;
     mpSound: Result := 5;
     mpVideo: Result := {$ifdef WASI} 7 {$else} 8 {$endif};
-    mpCustom: Result := 7;
+    mpCustom: Result := 8;
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
     mpLoad, mpSave: Result := 6;
@@ -503,8 +503,8 @@ const
   VideoItems: array [0..7] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN',
     'T:V-SYNC', 'T:FRAME RATE', 'T:DYNAMIC LIGHTS');
   {$endif}
-  CustomItems: array [0..6] of String = ('T:GAME', 'T:PWADS', 'T:MAP', 'T:SKILL', 'T:RANDOM SEED', '',
-    'T:START');
+  CustomItems: array [0..7] of String = ('T:GAME', 'T:PWADS', 'T:MAP', 'T:SKILL', 'T:RANDOM SEED', '',
+    'T:START', 'T:EDIT MAP');
 begin
   case Page of
     mpMain: Result := FMainItems[Index];
@@ -641,6 +641,8 @@ begin
     mpCustom:
       if ItemName = 'T:START' then
         CustomRequest('START', 0)
+      else if ItemName = 'T:EDIT MAP' then
+        CustomRequest('EDIT', 0)
       else if ItemName = 'T:RANDOM SEED' then
       begin
         { Type the seed's digits, Enter keeps them (none: no seed). }

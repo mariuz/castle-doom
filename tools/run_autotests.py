@@ -425,6 +425,26 @@ TESTS = [
      [r'Menu: Custom game: freedoom2\.wad, PWADs none, map MAP02, skill 3, random seed none',
       r'Load: MAP02: map parsed'],
      ['--menukeys', 'E,D,D,D,D,D,E,R,S,D,D,R,D,D,D,E'], None),
+    # The map editor (GameViewEdit): a raised platform drawn in E1M1's
+    # start room, an imp added, the PWAD exported, a play-test standing on
+    # the platform, back with the game's EDIT, undo.
+    ('editor', 'E1M1',
+     'VIEW:-416:256:2,S,DRAW:-480:192:-352:192:-352:288:-480:288,KEY:PageUp,KEY:PageUp,KEY:PageUp,'
+     'KEY:B,KEY:F,THING:3001,MOUSE:-300:300,KEY:A,MODE:s,CLICK:-416:256,KEY:H,S,EXPORT,PLAY,W:2,S,EDIT,'
+     'W:0.3,KEY:Ctrl+Z,KEY:H,S,Q',
+     [r'Editor: Imported E1M1: 985 vertices, 1175 lines, 1829 sides, 182 sectors, 292 things',
+      r'Editor: Room drawn: sector 182 with 4 corners, floor 0, ceiling 128',
+      r'Editor: Sector 182 floor 24, ceiling 128', r'Editor: Sector 182 light 208',
+      r'Editor: Added Imp at -288, 288', r'Editor: Exported E1M1: 989 vertices, 1179 lines',
+      r'Editor: Play-test E1M1', r'Saved screenshot 1 at E1M1 \(player -416\.00 256\.00 2\d\.\d\d\)',
+      r'Editor: Back to E1M1', r'Editor: Undone'], ['--edit'], lambda config: check_editor_wad(config)),
+    ('editor-menu', 'MENUKEYS', 'W:0.5,S,Q',
+     [r'Menu: Custom game \(map editor\): freedoom1\.wad, PWADs none, map E1M1',
+      r'Editor: Imported E1M1', r'Saved editor screenshot 1 of E1M1'],
+     ['--menukeys', 'E,D,D,D,D,D,E,D,D,D,D,D,D,E'], None),
+    ('editor-key', 'E1M1', 'W:0.5,KEY:F7,W:0.2,MODE:t,CLICK:-416:256,S,Q',
+     [r'Editor: Opened from the game on E1M1', r'Editor: Imported E1M1', r'Editor: Mode Things',
+      r'Saved editor screenshot 1 of E1M1'], [], None),
     ('photo-controls', 'E1M1',
      'Y,P:3001:300,W:0.2,SAVE:1,PADDOWN:Y,PADUP:Y,W:0.2,KEY:Plus,KEY:Plus,KEY:Plus,KEY:[,KEY:[,W:3.5,S,SAVE:2,'
      'KEY:E,W:1.5,SAVE:3,S,PADDOWN:Y,PADUP:Y,W:0.3,SAVE:4,Q',
@@ -707,6 +727,116 @@ def check_touch(config):
     assert 15 < turned < 21, 'look: turned %s' % turned
 
 
+def read_wad(path):
+    """A WAD's directory: [(name, bytes)]."""
+    import struct
+    with open(path, 'rb') as f:
+        data = f.read()
+    ident, count, offset = struct.unpack_from('<4sii', data, 0)
+    assert ident in (b'PWAD', b'IWAD'), 'not a WAD'
+    lumps = []
+    for i in range(count):
+        pos, size, name = struct.unpack_from('<ii8s', data, offset + 16 * i)
+        lumps.append((name.rstrip(b'\0').decode(), data[pos:pos + size]))
+    return lumps
+
+
+def check_map_wad(path, mapname, sectors, things):
+    """A PWAD of one map with a usable vanilla BSP: every lump, every seg
+    on its line, every node child in range, the root last."""
+    import struct
+    lumps = read_wad(path)
+    names = [n for n, _ in lumps]
+    assert names == [mapname, 'THINGS', 'LINEDEFS', 'SIDEDEFS', 'VERTEXES', 'SEGS', 'SSECTORS',
+                     'NODES', 'SECTORS', 'REJECT', 'BLOCKMAP'], 'lumps %s' % names
+    d = dict(lumps)
+    assert len(d['SECTORS']) // 26 == sectors, '%d sectors' % (len(d['SECTORS']) // 26)
+    assert len(d['THINGS']) // 10 == things, '%d things' % (len(d['THINGS']) // 10)
+    nsegs = len(d['SEGS']) // 12
+    nsubs = len(d['SSECTORS']) // 4
+    nnodes = len(d['NODES']) // 28
+    nlines = len(d['LINEDEFS']) // 14
+    nverts = len(d['VERTEXES']) // 4
+    assert nsegs and nsubs and nnodes, 'empty BSP'
+    covered = 0
+    for i in range(nsubs):
+        count, first = struct.unpack_from('<HH', d['SSECTORS'], i * 4)
+        assert count > 0 and first == covered, 'subsector %d' % i
+        covered += count
+    assert covered == nsegs, 'segs not all in subsectors'
+    for i in range(nsegs):
+        v1, v2, angle, line, side, off = struct.unpack_from('<HHHHHh', d['SEGS'], i * 12)
+        assert v1 < nverts and v2 < nverts and line < nlines and side in (0, 1), 'seg %d' % i
+    for i in range(nnodes):
+        c0, c1 = struct.unpack_from('<HH', d['NODES'], i * 28 + 24)
+        for c in (c0, c1):
+            if c & 0x8000:
+                assert c & 0x7fff < nsubs, 'node %d' % i
+            else:
+                assert c < i, 'node %d child %d not before it' % (i, c)
+    return d
+
+
+def check_editor_wad(config):
+    """The editor's export: E1M1 with the new sector (182, floor 24,
+    light 208) and the imp."""
+    import struct
+    out = os.path.dirname(config)
+    d = check_map_wad(os.path.join(out, 'editor_e1m1.wad'), 'E1M1', 183, 293)
+    floor, ceiling = struct.unpack_from('<hh', d['SECTORS'], 182 * 26)
+    light = struct.unpack_from('<h', d['SECTORS'], 182 * 26 + 20)[0]
+    assert (floor, ceiling, light) == (24, 128, 208), 'sector 182: %d %d %d' % (floor, ceiling, light)
+    x, y, angle, kind, flags = struct.unpack_from('<hhhhh', d['THINGS'], 292 * 10)
+    assert (x, y, kind) == (-288, 288, 3001), 'thing 292: %d %d %d' % (x, y, kind)
+
+
+def export_test(exe, out):
+    """--export-map, --export-gltf and --export-x3d: E1M1 as a PWAD with
+    its BSP built anew, and its geometry as glTF and X3D with textures."""
+    import json
+    config = os.path.join(out, 'config-export')
+    shutil.rmtree(config, ignore_errors=True)
+    os.makedirs(config)
+    env = dict(os.environ, XDG_CONFIG_HOME=config)
+    start = time.time()
+    problems = []
+    for args in (['--export-map', 'E1M1', os.path.join(out, 'export-e1m1.wad')],
+                 ['--export-gltf', 'E1M1', os.path.join(out, 'export-e1m1.gltf')],
+                 ['--export-x3d', 'MAP01', os.path.join(out, 'export-map01.x3d')]):
+        p = subprocess.run([exe] + args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, timeout=TIMEOUT)
+        log = p.stdout.decode('utf-8', 'replace')
+        with open(os.path.join(out, 'export-%s.log' % args[0][2:]), 'w') as f:
+            f.write(log)
+        if p.returncode != 0:
+            problems.append('%s: exit code %d' % (args[0], p.returncode))
+        if re.search(r'Exception|Warning: (Editor|Export)', log):
+            problems.append('%s: %s' % (args[0], re.search(r'.*(Exception|Warning).*', log).group(0)))
+    try:
+        check_map_wad(os.path.join(out, 'export-e1m1.wad'), 'E1M1', 182, 292)
+    except Exception as e:
+        problems.append('PWAD: %s' % e)
+    try:
+        with open(os.path.join(out, 'export-e1m1.gltf')) as f:
+            g = json.load(f)
+        assert g['asset']['version'] == '2.0'
+        size = os.path.getsize(os.path.join(out, 'export-e1m1.bin'))
+        assert g['buffers'][0]['byteLength'] == size, 'bin size'
+        for v in g['bufferViews']:
+            assert v['byteOffset'] + v['byteLength'] <= size, 'buffer view out of the bin'
+        prims = g['meshes'][0]['primitives']
+        assert len(prims) == len(g['materials']) > 100, '%d primitives' % len(prims)
+        for img in g['images']:
+            assert os.path.exists(os.path.join(out, img['uri'])), 'missing %s' % img['uri']
+        tris = sum(g['accessors'][p['indices']]['count'] for p in prims) // 3
+        assert tris > 5000, '%d triangles' % tris
+    except Exception as e:
+        problems.append('glTF: %s' % e)
+    x3d = os.path.join(out, 'export-map01.x3d')
+    if not os.path.exists(x3d) or 'IndexedTriangleSet' not in open(x3d).read():
+        problems.append('X3D: no geometry in %s' % x3d)
+    return problems, time.time() - start
+
+
 def check_log_filtered(config):
     with open(os.path.join(config, 'castle-doom', 'castle-doom-filtered.log')) as f:
         log = f.read()
@@ -760,6 +890,8 @@ GOLDEN = [
     'photo-controls_1.png', 'photo-controls_2.png', 'photo-touch_1.png',
     'options-dynamic-lights_menudlights.png', 'lamp-lights_1.png', 'lamp-lights_2.png',
     'custom-game_menu1.png', 'custom-game_menu2.png', 'custom-game-doom2_menu1.png',
+    'editor_edit_1.png', 'editor_edit_2.png', 'editor_edit_3.png', 'editor-menu_edit_1.png',
+    'editor-key_edit_1.png',
 ]
 
 
@@ -1043,6 +1175,11 @@ def main():
         problems, secs = demo_test(exe, out)
         results.append(('demo', problems, secs))
         print('%-16s %s (%.0f s)%s' % ('demo', 'FAIL' if problems else 'ok', secs,
+                                        ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'export' in only:
+        problems, secs = export_test(exe, out)
+        results.append(('export', problems, secs))
+        print('%-16s %s (%.0f s)%s' % ('export', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)

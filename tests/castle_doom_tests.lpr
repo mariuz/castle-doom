@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad;
 
 function DataPath(const Name: String): String;
 begin
@@ -107,6 +107,18 @@ type
     procedure TestDynamicLights;
     procedure TestCustomGamePage;
     procedure TestTouchControls;
+  end;
+
+  TTestEditor = class(TTestCase)
+  strict private
+    FTriangles, FShapes: Integer;
+    procedure CountTriangles(Node: TX3DNode);
+    procedure CountShape(Node: TX3DNode);
+    procedure CheckEditRoundTrip(const IwadName, MapName: String; const Tolerance: Double);
+  published
+    procedure TestEditRoundTrip;
+    procedure TestEditOperations;
+    procedure TestSceneExport;
   end;
 
   TTestStates = class(TTestCase)
@@ -1976,7 +1988,9 @@ begin
     AssertEquals('seed cleared', '', FMenu.CustomSeed);
     Key(keyArrowDown);                        { over the blank row to START }
     Key(keyEnter);
-    AssertEquals('requests', 'GAME 1;CLEAR 0;PWADS 0;MAP -1;START 0;', FMenuRequests);
+    Key(keyArrowDown);                        { EDIT MAP: the map editor }
+    Key(keyEnter);
+    AssertEquals('requests', 'GAME 1;CLEAR 0;PWADS 0;MAP -1;START 0;EDIT 0;', FMenuRequests);
     Key(keyEscape);
     { Back to the episodes, or (no WAD set up) the main page. }
     AssertTrue('back', FMenu.Page = mpMain);
@@ -2214,10 +2228,272 @@ begin
   AssertEquals('unplugged', 0, Controllers.Count);
 end;
 
+{ TTestEditor }
+
+procedure TTestEditor.CountTriangles(Node: TX3DNode);
+begin
+  Inc(FTriangles, TIndexedTriangleSetNode(Node).FdIndex.Count div 3);
+end;
+
+procedure TTestEditor.CountShape(Node: TX3DNode);
+begin
+  Inc(FShapes);
+end;
+
+{ A map through the editor (DoomEditMap) and back: its PWAD, with the
+  BSP of DoomNodeBuilder, loads like the original (the same lines,
+  sectors and things, subsector polygons covering the same area, the
+  same sector at sample points). }
+procedure TTestEditor.CheckEditRoundTrip(const IwadName, MapName: String; const Tolerance: Double);
+var
+  W, W2: TDoomWad;
+  E: TDoomEditMap;
+  M, M2: TDoomMap;
+  Error: String;
+  Data: TMemoryStream;
+  I, Same, Tested, S1, S2: Integer;
+  X, Y: Single;
+begin
+  Error := '';
+  W := TDoomWad.Create(WadUrl(IwadName));
+  E := TDoomEditMap.Create;
+  try
+    AssertTrue('imported: ' + Error, E.LoadFromWad(W, MapName, Error));
+    M := TDoomMap.Create(W, MapName);
+    try
+      AssertEquals('lines', Length(M.Linedefs), Length(E.Lines));
+      AssertEquals('sectors', Length(M.Sectors), Length(E.Sectors));
+      AssertEquals('things', Length(M.Things), Length(E.Things));
+      Data := E.SaveToWad;
+      try
+        RegisterEditedWad(MapName, Data);
+      finally
+        FreeAndNil(Data);
+      end;
+      W2 := TDoomWad.Create(WadUrl(IwadName));
+      try
+        W2.AddFile(EditedWadUrl(MapName));
+        AssertTrue('described', Pos('edited ' + MapName, W2.Description) > 0);
+        M2 := TDoomMap.Create(W2, MapName);
+        try
+          AssertEquals('nodes format', 'VANILLA', M2.NodesFormat);
+          AssertEquals('lines back', Length(M.Linedefs), Length(M2.Linedefs));
+          AssertEquals('sides back', Length(M.Sidedefs), Length(M2.Sidedefs));
+          AssertEquals('things back', Length(M.Things), Length(M2.Things));
+          AssertEquals('polygon area', PolygonArea(M), PolygonArea(M2), PolygonArea(M) * Tolerance);
+          for I := 0 to High(M2.Subsectors) do
+            AssertTrue('subsector sector', M2.Subsectors[I].Sector >= 0);
+          RandSeed := 11;
+          Same := 0;
+          Tested := 0;
+          for I := 1 to 3000 do
+          begin
+            X := M.MinX + Random * (M.MaxX - M.MinX);
+            Y := M.MinY + Random * (M.MaxY - M.MinY);
+            { Outside the map any BSP answers something else. }
+            if E.SectorAt(X, Y) < 0 then Continue;
+            S1 := M.SectorAt(X, Y);
+            S2 := M2.SectorAt(X, Y);
+            Inc(Tested);
+            if S1 = S2 then Inc(Same);
+          end;
+          AssertTrue(Format('same sectors at %d of %d points', [Same, Tested]), Same >= Tested * 0.995);
+          { The editor's own lookup agrees too (inside the map). }
+          AssertEquals('editor sector at the start', M.SectorAt(M.Things[0].X + 1, M.Things[0].Y + 1),
+            E.SectorAt(M.Things[0].X + 1, M.Things[0].Y + 1));
+        finally
+          FreeAndNil(M2);
+        end;
+        W2.RemoveLastFile;
+        AssertEquals('removed', 1, W2.FileUrls.Count);
+      finally
+        FreeAndNil(W2);
+      end;
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(E);
+    FreeAndNil(W);
+  end;
+end;
+
+{ E1M1's geometry as glTF and X3D (DoomExport), read back by CGE: the
+  same triangles in both, a texture per material. }
+procedure TTestEditor.TestSceneExport;
+var
+  W: TDoomWad;
+  G: TDoomGraphics;
+  M: TDoomMap;
+  Error, Dir: String;
+  Gltf, X3d: TX3DRootNode;
+
+begin
+  Error := '';
+  Dir := GetTempDir + 'castle-doom-export-test';
+  ForceDirectories(Dir);
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  G := TDoomGraphics.Create(W);
+  M := TDoomMap.Create(W, 'E1M1');
+  try
+    AssertTrue('glTF: ' + Error, ExportMapGeometry(M, G, Dir + '/e1m1.gltf', true, Error));
+    AssertTrue('X3D: ' + Error, ExportMapGeometry(M, G, Dir + '/e1m1.x3d', false, Error));
+    AssertTrue('bin', FileExists(Dir + '/e1m1.bin'));
+    AssertTrue('a texture', FileExists(Dir + '/e1m1_textures/A-MUD.png'));
+    Gltf := LoadNode(FilenameToUriSafe(Dir + '/e1m1.gltf'));
+    X3d := LoadNode(FilenameToUriSafe(Dir + '/e1m1.x3d'));
+    try
+      FTriangles := 0;
+      X3d.EnumerateNodes(TIndexedTriangleSetNode, {$ifdef FPC}@{$endif}CountTriangles, false);
+      AssertTrue('X3D triangles', FTriangles > 5000);
+      FShapes := 0;
+      FTriangles := 0;
+      Gltf.EnumerateNodes(TShapeNode, {$ifdef FPC}@{$endif}CountShape, false);
+      AssertTrue('glTF shapes', FShapes > 100);
+    finally
+      FreeAndNil(Gltf);
+      FreeAndNil(X3d);
+    end;
+  finally
+    FreeAndNil(M);
+    FreeAndNil(G);
+    FreeAndNil(W);
+  end;
+end;
+
+procedure TTestEditor.TestEditRoundTrip;
+begin
+  CheckEditRoundTrip('freedoom1.wad', 'E1M1', 0.002);
+  CheckEditRoundTrip('freedoom2.wad', 'MAP01', 0.002);
+end;
+
+procedure TTestEditor.TestEditOperations;
+
+  function Pts(const C: array of Integer): TEditPoints;
+  var
+    I: Integer;
+  begin
+    SetLength(Result, Length(C) div 2);
+    for I := 0 to High(Result) do
+    begin
+      Result[I].X := C[I * 2];
+      Result[I].Y := C[I * 2 + 1];
+    end;
+  end;
+
+var
+  E: TDoomEditMap;
+  Error: String;
+  Sec, I, V, TwoSided: Integer;
+  Data: TMemoryStream;
+  W: TDoomWad;
+  M: TDoomMap;
+  Textures, Flats: TStringList;
+begin
+  E := TDoomEditMap.Create;
+  try
+    E.Clear('E1M1');
+    { A room in the void, drawn counter-clockwise (the editor turns it). }
+    Sec := E.DrawSector(Pts([0, 0, 256, 0, 256, 256, 0, 256]), Error);
+    AssertEquals('first room: ' + Error, 0, Sec);
+    AssertEquals('4 walls', 4, Length(E.Lines));
+    for I := 0 to 3 do
+    begin
+      AssertEquals('one-sided', -1, E.Lines[I].Side[1]);
+      AssertEquals('room in front', 0, E.LineSector(I, 0));
+    end;
+    AssertEquals('inside', 0, E.SectorAt(128, 128));
+    AssertEquals('outside', -1, E.SectorAt(300, 128));
+    { A platform inside it: two-sided walls. }
+    Sec := E.DrawSector(Pts([64, 64, 64, 192, 192, 192, 192, 64]), Error);
+    AssertEquals('second room: ' + Error, 1, Sec);
+    AssertEquals('8 walls', 8, Length(E.Lines));
+    AssertEquals('platform inside', 1, E.SectorAt(128, 128));
+    AssertEquals('around it', 0, E.SectorAt(32, 32));
+    E.ChangeSector(1, 24, 0, 32);
+    AssertEquals('raised', 24, E.Sectors[1].Floor);
+    AssertEquals('lit', E.Sectors[0].Light + 32, E.Sectors[1].Light);
+    { Crossing lines are refused. }
+    AssertEquals('crossing refused', -1, E.DrawSector(Pts([100, 100, 300, 100, 300, 300]), Error));
+    AssertTrue('crossing error', Pos('crosses', Error) > 0);
+    { A room on the first one's east wall: the wall becomes two-sided. }
+    Sec := E.DrawSector(Pts([256, 0, 512, 0, 512, 256, 256, 256]), Error);
+    AssertEquals('joined room: ' + Error, 2, Sec);
+    AssertEquals('11 walls', 11, Length(E.Lines));
+    TwoSided := 0;
+    for I := 0 to High(E.Lines) do
+      if E.Lines[I].Side[1] >= 0 then Inc(TwoSided);
+    AssertEquals('two-sided walls', 5, TwoSided);
+    AssertEquals('east room', 2, E.SectorAt(400, 128));
+    { Undo / redo. }
+    AssertTrue('undo', E.Undo);
+    AssertEquals('undone', 8, Length(E.Lines));
+    AssertTrue('redo', E.Redo);
+    AssertEquals('redone', 11, Length(E.Lines));
+    { A door between: split the east room's north wall... simpler, the
+      platform as a door. }
+    AssertTrue('door', E.MakeDoor(1));
+    AssertEquals('door closed', E.Sectors[1].Floor, E.Sectors[1].Ceiling);
+    for I := 0 to High(E.Lines) do
+      if E.Lines[I].Special = 1 then
+        AssertEquals('door at the back', 1, E.LineSector(I, 1));
+    { Splitting a line, merging a vertex back. }
+    I := E.NearestLine(384, 256, 8);
+    AssertTrue('north wall found', I >= 0);
+    V := E.SplitLine(I, 384, 256);
+    AssertTrue('split', V >= 0);
+    AssertEquals('12 walls', 12, Length(E.Lines));
+    E.MoveVertex(V, 256, 256);
+    AssertEquals('merged back', 11, Length(E.Lines));
+    { Things. }
+    AssertEquals('thing', 0, E.AddThing(32, 32, 1, 90));
+    E.AddThing(400, 128, 3001, 180);
+    E.MoveThing(1, 420, 100);
+    AssertEquals('moved', 420, E.Things[1].X);
+    AssertEquals('nearest thing', 1, E.NearestThing(410, 110, 32));
+    { Written and read back as a map. }
+    Data := E.SaveToWad;
+    try
+      RegisterEditedWad('E1M1', Data);
+    finally
+      FreeAndNil(Data);
+    end;
+    W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+    try
+      W.AddFile(EditedWadUrl('E1M1'));
+      M := TDoomMap.Create(W, 'E1M1');
+      try
+        AssertEquals('sectors', 3, Length(M.Sectors));
+        AssertEquals('things', 2, Length(M.Things));
+        AssertEquals('area', 512 * 256, PolygonArea(M), 0.5);
+        AssertEquals('platform', 1, M.SectorAt(128, 128));
+        AssertEquals('west room', 0, M.SectorAt(32, 32));
+        AssertEquals('east room', 2, M.SectorAt(400, 128));
+      finally
+        FreeAndNil(M);
+      end;
+      Textures := W.TextureNames;
+      Flats := W.FlatNames;
+      try
+        AssertTrue('STARTAN3 a texture', Textures.IndexOf('STARTAN3') >= 0);
+        AssertTrue('FLOOR4_8 a flat', Flats.IndexOf('FLOOR4_8') >= 0);
+        AssertTrue('FLOOR4_8 no texture', Textures.IndexOf('FLOOR4_8') < 0);
+      finally
+        FreeAndNil(Textures);
+        FreeAndNil(Flats);
+      end;
+    finally
+      FreeAndNil(W);
+    end;
+  finally
+    FreeAndNil(E);
+  end;
+end;
+
 var
   App: TTestRunner;
 begin
-  RegisterTests([TTestWad, TTestMap, TTestMusic, TTestDehacked, TTestGamepad, TTestStates]);
+  RegisterTests([TTestWad, TTestMap, TTestMusic, TTestDehacked, TTestGamepad, TTestStates, TTestEditor]);
   DefaultFormat := fPlain;
   DefaultRunAllTests := true;
   App := TTestRunner.Create(nil);

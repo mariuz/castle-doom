@@ -159,6 +159,8 @@ type
     procedure UpdateScroll(const Tics: Single; const DoomEye: TVector3);
     function FindBatch(const Key: String): TGeomBatch;
     property Built: Boolean read FBuilt;
+    { The chunk's triangles by texture (DoomExport reads them). }
+    property Batches: TGeomBatchDict read FBatches;
   end;
 
   TMapChunkList = {$ifdef FPC}specialize{$endif} TObjectList<TMapChunk>;
@@ -223,6 +225,8 @@ type
     function ChunkOfLine(const Line: Integer): TMapChunk;
     property Map: TDoomMap read FMap;
     property Graphics: TDoomGraphics read FGraphics;
+    { The static chunk and one per dynamic sector (DoomExport). }
+    property Chunks: TMapChunkList read FChunks;
     property SkyScene: TCastleScene read FSkyScene;
     { Boom's deep water (242): where the viewer is relative to their
       sector's control sector; a change regenerates the deep water

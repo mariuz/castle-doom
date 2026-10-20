@@ -52,7 +52,7 @@ function BuildRandomWad(const Seed: Cardinal; const IsDoom2: Boolean; const Avai
 
 implementation
 
-uses Math, DateUtils;
+uses Math, DateUtils, DoomWadWriter;
 
 const
   Grid = 32;
@@ -1689,33 +1689,6 @@ end;
 
 { Writing ---------------------------------------------------------------------- }
 
-procedure W16(const S: TStream; const V: Integer);
-var
-  Wd: Word;
-begin
-  Wd := Word(V and $FFFF);
-  S.WriteBuffer(Wd, 2);
-end;
-
-procedure W32(const S: TStream; const V: Integer);
-var
-  L: LongInt;
-begin
-  L := V;
-  S.WriteBuffer(L, 4);
-end;
-
-procedure WName(const S: TStream; const Name: String);
-var
-  B: array [0..7] of Byte;
-  I: Integer;
-begin
-  FillChar(B, SizeOf(B), 0);
-  for I := 1 to Min(8, Length(Name)) do
-    B[I - 1] := Ord(UpCase(Name[I]));
-  S.WriteBuffer(B, 8);
-end;
-
 procedure TMapGen.WriteLumps(const Names: TStrings; const Data: TList);
 var
   S: TMemoryStream;
@@ -1902,7 +1875,7 @@ var
   Data: TList;
   MapNames: TStringList;
   Gen: TMapGen;
-  I, DirOffset: Integer;
+  I: Integer;
   Text: String;
   S: TMemoryStream;
 begin
@@ -1931,31 +1904,7 @@ begin
     Names.Add('UMAPINFO');
     Data.Add(S);
 
-    Result := TMemoryStream.Create;
-    Result.WriteBuffer(PChar('PWAD')^, 4);
-    W32(Result, Names.Count);
-    W32(Result, 0); { the directory's offset, below }
-    for I := 0 to Data.Count - 1 do
-      Result.CopyFrom(TMemoryStream(Data[I]), 0);
-    DirOffset := Result.Position;
-    for I := 0 to Names.Count - 1 do
-    begin
-      W32(Result, 12);
-      W32(Result, TMemoryStream(Data[I]).Size);
-      WName(Result, Names[I]);
-    end;
-    { The lumps' offsets, now that the sizes are known. }
-    Result.Position := DirOffset;
-    DirOffset := 12;
-    for I := 0 to Names.Count - 1 do
-    begin
-      W32(Result, DirOffset);
-      Result.Seek(12, soCurrent);
-      Inc(DirOffset, TMemoryStream(Data[I]).Size);
-    end;
-    Result.Position := 8;
-    W32(Result, Result.Size - 16 * Names.Count);
-    Result.Position := 0;
+    Result := MakePwad(Names, Data);
   finally
     for I := 0 to Data.Count - 1 do
       TObject(Data[I]).Free;

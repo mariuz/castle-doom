@@ -167,7 +167,7 @@
         "N / P: next / previous map   J: music on/off   F4: volume",
         "F2 / F3: save / load   F6 / F9: quick save / load   L: stats",
         "F5: screenshot   O: photo mode   F1: Read This! (title menu)",
-        "F8: Castle Game Engine inspector",
+        "F7: map editor   F8: Castle Game Engine inspector",
         "H: hide this help   Esc: menu (pauses; Esc again resumes)",
         "Gamepad: sticks move / look, RT fire, A use, LB / RB weapons,",
         "  View automap, Menu menu (D-pad, A, B in menus)"

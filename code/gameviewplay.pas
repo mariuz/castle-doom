@@ -174,6 +174,9 @@ type
       they are, so shots and flashes win the slots). }
     procedure ConsiderLight(const Eye: TVector3; const X, Y, Z, Radius, Penalty: Single; const Color: TVector3);
     procedure SetDynamicLightsOn(const On: Boolean);
+    { The map editor (gaEditor, demo command EDIT): back to it from its
+      play-test, else on this map. }
+    procedure OpenEditor;
     { Photo mode on / off (gaPhoto, demo command PHOTO). }
     procedure SetPhotoMode(const On: Boolean);
     procedure UpdatePhoto(const SecondsPassed: Single);
@@ -265,7 +268,7 @@ uses Math, JsonParser,
   CastleDownload, DoomActors, CastleInternalInspector,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleRenderContext,
   DoomGeometry, DoomMap, DoomThings,
-  GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs, DoomMapInfo;
+  GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs, DoomMapInfo, GameViewEdit;
 
 type
   { Opens TCastleNavigation.Move (protected) to push the player. }
@@ -501,6 +504,35 @@ begin
   StartMap(StartMapName, false);
 end;
 
+procedure TViewPlay.OpenEditor;
+var
+  I: Integer;
+begin
+  WritelnLog('Editor', 'Opened from the game on %s', [FMapName]);
+  { A demo script goes on in the editor after this step. }
+  if FDemoSteps <> nil then
+  begin
+    AutoTestDemo := '';
+    for I := FDemoStep + 1 to FDemoSteps.Count - 1 do
+    begin
+      if AutoTestDemo <> '' then AutoTestDemo := AutoTestDemo + ',';
+      AutoTestDemo := AutoTestDemo + FDemoSteps[I];
+    end;
+    if AutoTestDemo = '' then AutoTestDemo := 'Q';
+  end;
+  if not ViewEdit.PlayTesting then
+  begin
+    ViewEdit.Wad := Wad;
+    ViewEdit.Graphics := Graphics;
+    ViewEdit.Sounds := Sounds;
+    ViewEdit.Music := Music;
+    ViewEdit.MapName := FMapName;
+    ViewEdit.Skill := Skill;
+    ViewEdit.Fresh := true;
+  end;
+  Container.View := ViewEdit;
+end;
+
 procedure TViewPlay.Stop;
 begin
   SetPhotoMode(false);
@@ -702,6 +734,11 @@ begin
     SetDynamicLightsOn(not Settings.DynamicLights)
   else if Cmd = 'PHOTO' then
     SetPhotoMode(not FPhoto)
+  else if Cmd = 'EDIT' then
+  begin
+    OpenEditor;
+    Exit;
+  end
   else if Cmd = 'CAPTIONS' then
     SetCaptions(not Settings.Captions)
   else if Cmd = 'DIM' then
@@ -1025,6 +1062,7 @@ begin
     begin
       FHelpLabel.Text[8] := Trim(Hot(gaScreenshot, 'screenshot   ') + Hot(gaPhoto, 'photo mode   ') +
         'F1: Read This! (title menu)');
+      FHelpLabel.Text[9] := Hot(gaEditor, 'map editor   ') + 'F8: Castle Game Engine inspector';
       FHelpLabel.Text[10] := Hot(gaHelp, 'hide this help   ') + 'Esc: menu (pauses; Esc again resumes)';
     end;
   end;
@@ -3066,6 +3104,11 @@ begin
   if EventIs(Event, gaPhoto) then
   begin
     SetPhotoMode(true);
+    Exit(true);
+  end;
+  if EventIs(Event, gaEditor) then
+  begin
+    OpenEditor;
     Exit(true);
   end;
   if EventIs(Event, gaUse) then

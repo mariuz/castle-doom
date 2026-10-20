@@ -1,7 +1,9 @@
 { --autotest MAPCOMPONENT prefix: shows data/mapcomponent.castle-user-interface,
   a design whose viewport holds a TDoomMapTransform (a Freedoom level
   built from the WAD by the component itself, as the CGE editor would
-  show it), puts the camera at the player start, screenshots and quits.
+  show it), puts the camera at the player start, screenshots, then sets
+  its skill, monsters and extra light, screenshots again, exports the
+  level as glTF through the component and quits.
   The design is also the one to open in the editor. }
 unit GameViewDesign;
 
@@ -49,6 +51,7 @@ procedure TViewDesign.Update(const SecondsPassed: Single; var HandleInput: Boole
 var
   M: TDoomMapTransform;
   Camera: TCastleCamera;
+  Error: String;
 begin
   inherited;
   M := DesignedComponent('DoomMap') as TDoomMapTransform;
@@ -75,6 +78,19 @@ begin
   begin
     Application.MainWindow.SaveScreen(Format('%s_design.png', [AutoTestPrefix]));
     WritelnLog('AutoTest', 'Design screenshot saved');
+    { The component's other properties, as the editor's inspector would
+      set them: the level rebuilds in its next Update. }
+    M.Skill := 5;
+    M.Monsters := false;
+    M.ExtraLight := 96;
+  end;
+  if FPlaced and (FTics = 80) then
+  begin
+    Application.MainWindow.SaveScreen(Format('%s_design_light.png', [AutoTestPrefix]));
+    if M.ExportGltf(AutoTestPrefix + '_component.gltf', Error) then
+      WritelnLog('AutoTest', 'Design exported: %d sectors, %d lines, %d things', [M.SectorCount, M.LineCount, M.ThingCount])
+    else
+      WritelnWarning('AutoTest', 'Design export failed: %s', [Error]);
     Application.Terminate;
   end;
 end;
