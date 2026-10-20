@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.44.0 (2026-10-20)
 
 - Dynamic lights: lamps, torches and candles glow too, explosions fade,
   up to eight lights at once, and a switch on the title screen's Options.

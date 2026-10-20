@@ -23,7 +23,7 @@ uses CastleApplicationProperties, CastleWindow, CastleLog;
 initialization
   ApplicationProperties.ApplicationName := 'castle-doom';
   ApplicationProperties.Caption := 'Castle DOOM';
-  ApplicationProperties.Version := '0.43.0';
+  ApplicationProperties.Version := '0.44.0';
 
   if not IsLibrary then
     Application.ParseStandardParameters;
