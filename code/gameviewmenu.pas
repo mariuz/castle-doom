@@ -95,6 +95,8 @@ type
     procedure StartEditor;
     procedure SetupDoomMenu;
     procedure RefreshSlots;
+    { A menu starts or stops typing: the on-screen keyboard (GameTouch). }
+    procedure MenuEditingChange(Sender: TObject);
     procedure DoomMenuAction(const Action: TDoomMenuAction);
     procedure StartRandomGame;
     { The custom game page (DoomMenu mpCustom): its requests, its values. }
@@ -282,6 +284,7 @@ begin
     the run-time texts are set here. }
   FDoomMenu := DesignedComponent('DoomMenu') as TDoomMenuScreen;
   FDoomMenu.OnAction := {$ifdef FPC}@{$endif} DoomMenuAction;
+  FDoomMenu.OnEditingChange := {$ifdef FPC}@{$endif} MenuEditingChange;
   FOptions := DesignedComponent('OptionsPanel') as TCastleRectangleControl;
   FButtons := DesignedComponent('OptionsButtons') as TCastleVerticalGroup;
   Click('ButtonPhase1', {$ifdef FPC}@{$endif} ClickPhase1);
@@ -464,8 +467,17 @@ begin
   end;
 end;
 
+procedure TViewMenu.MenuEditingChange(Sender: TObject);
+begin
+  if FDoomMenu.Editing then
+    ShowTextKeyboard(FDoomMenu.EditText)
+  else
+    HideTextKeyboard;
+end;
+
 procedure TViewMenu.Stop;
 begin
+  HideTextKeyboard;
   { A download still running would replace the WAD under the game: drop
     it (choosing Phase 2 again starts it anew). }
   FreeAndNil(FFetch);

@@ -21,6 +21,13 @@
   <dependencies>
     <dependency name="Sound" />
   </dependencies>
+  <!-- Android: the on-screen keyboard for save names (GameTouch's
+       ShowTextKeyboard asks for it while the Doom menu types). -->
+  <android>
+    <services>
+      <service name="keyboard" />
+    </services>
+  </android>
   <compiler_options>
     <search_paths>
       <path value="code/" />

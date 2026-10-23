@@ -152,7 +152,7 @@ jobs:
   build-android:
     name: Package Android
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       IMAGE: kambi/castle-engine-cloud-builds-tools:cge-unstable
     steps:
@@ -200,11 +200,23 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" .
           ls -l *.apk
 
+      # The same as an Android App Bundle (.aab), what app stores take
+      # (Google Play wants it signed with the upload key: the secrets above).
+      - name: Package Android (App Bundle)
+        timeout-minutes: 35
+        run: |
+          docker run --rm -v "$PWD:/project" -w /project "$IMAGE" \
+            bash -c 'git config --global --add safe.directory /project && castle-engine package --os=android --cpu=aarch64 --mode=release --package-format=android-app-bundle --verbose'
+          sudo chown -R "$(id -u):$(id -g)" .
+          ls -l *.apk *.aab
+
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
           name: castle-doom-android
-          path: "*.apk"
+          path: |
+            *.apk
+            *.aab
           if-no-files-found: error
 
   # A Windows Installer package from the Windows zip: WiX 5 (pinned) on a
@@ -330,4 +342,5 @@ jobs:
             packages/*.tar.gz
             packages/*.msi
             packages/*.apk
+            packages/*.aab
           generate_release_notes: true

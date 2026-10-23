@@ -1824,7 +1824,14 @@ touch controls on for good when `ApplicationProperties.TouchDevice` (CGE
 reports real finger indexes, so `TDoomTouchControls` gets multi-touch
 through its `Press` / `Motion` / `Release`), Freedoom Phase 2 is in the
 APK (no download), file dialogs are not available, and Nuked OPL3 is not
-packaged (the FM synthesizer plays). The manifest declares the `Sound`
+packaged (the FM synthesizer plays). Typing a save name (or the custom
+page's seed) asks for the on-screen keyboard: `TDoomMenuScreen` calls
+`OnEditingChange` when it starts or stops typing (and on a tap while
+typing, since Android's Back closes the keyboard), the views pass that
+to `GameTouch.ShowTextKeyboard` / `HideTextKeyboard`, which in touch mode
+send CGE's `castle-show-keyboard` / `castle-hide-keyboard` messages to
+its Android `keyboard` service (declared in the manifest); the keys it
+sends arrive as ordinary key presses (`castle-key-down`). The manifest declares the `Sound`
 dependency: CGE adds Android's sound service (OpenAL) only when it sees
 sound files in `data/`, and the game's sounds come from the WAD. Only
 64-bit ARM is built: FPC 3.2.2's 32-bit ARM code generator emits VFP
@@ -1832,7 +1839,7 @@ immediates (e.g. 1/2048) its assembler rejects.
 
 `.github/workflows/build.yml` packages Windows, Linux and macOS on
 GitHub's runners (FPC and CGE from castle-build-ci), the MSI with WiX and
-the Android APK inside the CGE Docker image
+the Android APK and App Bundle (`--package-format=android-app-bundle`) inside the CGE Docker image
 (`kambi/castle-engine-cloud-builds-tools:cge-unstable`), and attaches
 them to a GitHub Release on `v*` tags (or `release_tag`). `.github/workflows/web.yml` builds FPC's
 main branch with the `wasm32-wasip1` cross-compiler and Pas2js from source

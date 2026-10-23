@@ -67,7 +67,8 @@ through `JAVA_TOOL_OPTIONS` (`-Djavax.net.ssl.trustStore=...
 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=PORT`); keep `/root/.gradle`
 on a mounted directory, because Maven Central answers 429 to the first
 burst and a second run finishes. Without `AndroidSigningProperties.txt`
-the APK is debug-signed (`castle-doom-X-android-debug.apk`). Inspect it
+the APK is debug-signed (`castle-doom-X-android-debug.apk`);
+`--package-format=android-app-bundle` makes the `.aab` (CI builds both). Inspect it
 with the image's `aapt2 dump badging` and `apksigner verify`; there is no
 emulator here (no KVM), so it is only run on real devices.
 
@@ -348,7 +349,9 @@ top right) and scale them; at left / 125% FIRE is at `0.12:0.44`
 `TOUCHPOS:button:x:y` (`fire`, `use`, `prevWeapon`, `nextWeapon`,
 `automap`, `menu`; fractions, y up; `TOUCHPOS:fire:reset`) places a
 button and `TOUCHOPACITY:25..100` fades them (`settings.json`'s
-`touchButtons`, `touchOpacity`; autotest `touch-places`). The layout
+`touchButtons`, `touchOpacity`; autotest `touch-places`). In touch mode
+typing a save name logs `Keyboard: On-screen keyboard shown for "..."`
+and `... hidden` (Android's keyboard service; autotest `touch-keyboard`). The layout
 editor (Controls -> Touch -> Edit..., `TViewMenu.ShowTouchEditor`) is a
 `TDoomTouchControls` with `Editing` on: `MENUTOUCHEDIT` drags FIRE to
 the middle (autotest `touch-edit`, log `Settings: Touch: ..., fire at

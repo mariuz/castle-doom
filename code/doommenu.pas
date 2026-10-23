@@ -55,6 +55,7 @@ type
     { M_SaveSelect: typing the name of save slot Slot. }
     FEditing: Boolean;
     FEditText: String;
+    FOnEditingChange: TNotifyEvent;
     FDirty: Boolean;
     FLastSkull: Integer;
     { Main menu items (M_RDTHIS only in Doom 1, like m_menu.c). }
@@ -86,6 +87,7 @@ type
     procedure SetupEpisodes(const VanillaCount: Integer);
     function DoomPoint(const ScreenPos: TVector2; out DX, DY: Single): Boolean;
     function ItemAt(const DX, DY: Single): Integer;
+    procedure SetEditing(const Value: Boolean);
   public
     { Results of the last action. }
     Episode: Integer; { 1.., 0 when there is no episode menu (Doom 2) }
@@ -164,8 +166,12 @@ type
     function Motion(const Event: TInputMotion): Boolean; override;
     property Page: TDoomMenuPage read FPage;
     property Prompting: Boolean read FPrompt;
-    { A save name is being typed (keys go to it). }
+    { A save name (or the custom page's seed) is being typed (keys go to it). }
     property Editing: Boolean read FEditing;
+    { The text being typed. }
+    property EditText: String read FEditText;
+    { Typing starts or ends (the views show a phone's on-screen keyboard). }
+    property OnEditingChange: TNotifyEvent read FOnEditingChange write FOnEditingChange;
   end;
 
 const
@@ -569,11 +575,18 @@ begin
   end;
 end;
 
+procedure TDoomMenuScreen.SetEditing(const Value: Boolean);
+begin
+  if FEditing = Value then Exit;
+  FEditing := Value;
+  if Assigned(FOnEditingChange) then FOnEditingChange(Self);
+end;
+
 procedure TDoomMenuScreen.OpenPage(const Page: TDoomMenuPage);
 begin
   FPage := Page;
   FPrompt := false;
-  FEditing := false;
+  SetEditing(false);
   { The skill page starts at the current skill (Hurt me plenty by default). }
   if Page = mpSkill then FItemOn[Page] := Skill;
   FItemOn[Page] := Clamped(FItemOn[Page], 0, ItemCount(Page) - 1);
@@ -699,8 +712,8 @@ begin
       else if ItemName = 'T:RANDOM SEED' then
       begin
         { Type the seed's digits, Enter keeps them (none: no seed). }
-        FEditing := true;
         FEditText := CustomSeed;
+        SetEditing(true);
         FDirty := true;
         Compose;
       end else
@@ -728,9 +741,9 @@ begin
         { M_SaveSelect: edit the slot's name (a new save starts with the
           map, kills and time), Enter saves. }
         Slot := Item + 1;
-        FEditing := true;
         if FSlots[Slot] <> '' then FEditText := FSlotNames[Slot] else FEditText := DefaultSaveName;
         FEditText := Copy(UpperCase(FEditText), 1, SaveNameLength);
+        SetEditing(true);
         FDirty := true;
         Compose;
       end;
@@ -803,11 +816,11 @@ begin
     { The custom game page's random seed: digits only. }
     if Event.IsKey(keyEnter) then
     begin
-      FEditing := false;
+      SetEditing(false);
       CustomSeed := FEditText;
     end else
     if Event.IsKey(keyEscape) then
-      FEditing := false
+      SetEditing(false)
     else if Event.IsKey(keyBackSpace) then
     begin
       if FEditText <> '' then SetLength(FEditText, Length(FEditText) - 1);
@@ -826,7 +839,7 @@ begin
     begin
       if FEditText <> '' then
       begin
-        FEditing := false;
+        SetEditing(false);
         SaveName := FEditText;
         FDirty := true;
         if Assigned(OnAction) then OnAction(maSaveSlot);
@@ -834,7 +847,7 @@ begin
     end else
     if Event.IsKey(keyEscape) then
     begin
-      FEditing := false;
+      SetEditing(false);
       FDirty := true;
       Compose;
     end else
@@ -965,8 +978,14 @@ var
 begin
   Result := inherited;
   if Result or not MouseEnabled then Exit;
-  { Typing a save name: the mouse waits (Enter / Esc end it). }
-  if FEditing then Exit(true);
+  { Typing a save name: the mouse waits (Enter / Esc end it); a tap
+    asks for the phone's keyboard again (Back may have closed it). }
+  if FEditing then
+  begin
+    if Event.IsMouseButton(buttonLeft) and Assigned(FOnEditingChange) then
+      FOnEditingChange(Self);
+    Exit(true);
+  end;
   if not FMenuActive then
   begin
     if Event.IsMouseButton(buttonLeft) then

@@ -132,9 +132,18 @@ procedure PollTouches(const Controls: TDoomTouchControls);
   (the last pointer was a finger), then ";id,x,y" for each finger. }
 procedure ApplyTouchState(const S: String; const Controls: TDoomTouchControls);
 
+{ A phone's on-screen keyboard while a menu is typing (a save name, the
+  custom page's seed): shown in touch mode through CGE's Android
+  "keyboard" service (CastleEngineManifest.xml), whose keys arrive as
+  ordinary key presses; logged as "Keyboard:" on every platform. }
+procedure ShowTextKeyboard(const Text: String);
+procedure HideTextKeyboard;
+{ Is the on-screen keyboard up (asked for by ShowTextKeyboard)? }
+function TextKeyboardShown: Boolean;
+
 implementation
 
-uses SysUtils, Math,
+uses SysUtils, Math, CastleMessaging,
   {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
   CastleColors, CastleImages, CastleGLUtils, CastleLog, CastleComponentSerialize,
   DoomFont;
@@ -655,6 +664,33 @@ begin
   S := JSWindow.InvokeJSUtf8StringResult('castleDoomTouches', [Ord(Controls <> nil)]);
   ApplyTouchState(S, Controls);
   {$endif}
+end;
+
+var
+  KeyboardShown: Boolean;
+
+procedure ShowTextKeyboard(const Text: String);
+begin
+  { Asked again while shown: the keyboard may have been closed by Back. }
+  if not TouchMode then Exit;
+  KeyboardShown := true;
+  { CGE's keyboard service (ServiceKeyboard.java): the text to start
+    from, not a password. Nothing listens on the desktop. }
+  Messaging.Send(['castle-show-keyboard', Text, 'false']);
+  WritelnLog('Keyboard', 'On-screen keyboard shown for "%s"', [Text]);
+end;
+
+procedure HideTextKeyboard;
+begin
+  if not KeyboardShown then Exit;
+  KeyboardShown := false;
+  Messaging.Send(['castle-hide-keyboard']);
+  WritelnLog('Keyboard', 'On-screen keyboard hidden');
+end;
+
+function TextKeyboardShown: Boolean;
+begin
+  Result := KeyboardShown;
 end;
 
 initialization

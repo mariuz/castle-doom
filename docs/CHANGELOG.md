@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Android: naming a save brings up the phone's on-screen keyboard (tap the name to bring it
+  back after closing it); the release also has an Android App Bundle (.aab) for app stores.
+
 ## v0.49.0 (2026-10-23)
 
 - Demos in the browser: Options -> Record demo... records the next game in the browser,

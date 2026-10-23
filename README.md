@@ -213,7 +213,8 @@ weapon changes (two buttons each, the triggers too).
 Android: the Releases page has an APK for 64-bit ARM phones and tablets (Android 5.0 or
 newer; allow installing from your browser or file manager). It carries both Freedoom WADs,
 the touch controls are always on (a gamepad works too) and the back button opens Doom's
-menu; music plays on the built-in FM synthesizer. Until the project has release signing
+menu; naming a save opens the on-screen keyboard (tap the name if it was closed); music
+plays on the built-in FM synthesizer. Until the project has release signing
 keys the APK is signed with a build's debug key: uninstall the old version before
 installing a newer one (your saves go with it).
 
@@ -244,7 +245,8 @@ castle-doom --autotest E1M1 shots/e1m1 --demo "S,F:3,S,T:90,U,W:2,S,X,S,Q"
   (64-bit ARM) in CGE's Docker image, which has the Android SDK, NDK and FPC's Android
   cross-compilers; it is release-signed when the repository has the secrets
   `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD` and
-  `ANDROID_KEY_PASSWORD`, else debug-signed.
+  `ANDROID_KEY_PASSWORD`, else debug-signed, and the same as an Android App Bundle
+  (`.aab`, for app stores).
 - The `Autotests` job runs the FPCUnit unit tests (`tests/castle_doom_tests.lpr`: WADs, map
   BSP, music rendering, DeHackEd) and then `tools/run_autotests.py` under Xvfb.
 - `.github/workflows/web.yml`: builds the WebAssembly version (FPC main branch with the

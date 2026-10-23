@@ -6,6 +6,15 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Mobile, the on-screen keyboard and the App Bundle: on Android the
+  Doom menu's save names (and the custom page's seed) bring up the
+  phone's keyboard through CGE's `keyboard` service
+  (`GameTouch.ShowTextKeyboard`, called from the menu's
+  `OnEditingChange`; a tap asks again after Back closed it), and CI's
+  `build-android` job also packages an Android App Bundle (`.aab`, a
+  release asset) for stores. Autotest `touch-keyboard` (the log's
+  `Keyboard:` lines in touch mode and the typed name in the save).
+
 - Demos, cheats and the browser: the demo script's world cheats (`K`,
   `Y`, `P`, `CORPSE`, `D`, `V`, `INVIS`, `INVUL`, `AMP`, `LINE`) go
   through `TDoomWorld.Cheat` and are recorded as `X` lines, so a
@@ -1115,7 +1124,7 @@ L = several days). Items inside a section are in suggested order.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **More unit tests**: `DoomGeometry`'s sector chunks (needs the graphics cache without a window), the automap and HUD composition, the save file's round trip through `doomworld_save.inc` on a world without a viewport. | Faster, finer regression checks. | `tests/castle_doom_tests.lpr` | S |
-| **Mobile, the rest**: Android builds are done (see above); left are testing on devices (pause / resume and the GL context, the soft keyboard for save names, performance), release signing keys in the repository's secrets, 32-bit ARM (needs an FPC with a fixed ARM code generator), an Android App Bundle for stores, and iOS (`castle-engine package --target=ios` on a macOS runner, needs Apple signing). | CGE's mobile support is a selling point. | `CastleEngineManifest.xml`, `.github/workflows/build.yml` | M |
+| **Mobile, the rest**: Android builds, the on-screen keyboard and the App Bundle are done (see above); left are testing on devices (pause / resume and the GL context, the keyboard, performance), release signing keys in the repository's secrets (CI already uses them when they exist: `ANDROID_KEYSTORE_BASE64`...), 32-bit ARM (needs an FPC with a fixed ARM code generator), the browser's on-screen keyboard on phones (a focused `<input>` from the page script), and iOS (`castle-engine package --target=ios` on a macOS runner, needs Apple signing). | CGE's mobile support is a selling point. | `CastleEngineManifest.xml`, `.github/workflows/build.yml` | M |
 | **Web gamepads in CGE itself**: the game's `GameGamepad` polls the Gamepad API through JOB (done, see above); a real `CastleInternalGameControllersWeb` backend inside CGE (`gamepadconnected` events, `mapping` other than `standard`) would serve every CGE web game. Best contributed upstream. | One less game-side workaround. | CGE `castlegamecontrollers`, `castlewindow_webassembly.inc` | M |
 | **Performance**: `TicActors` on Phase 2's MAP11 (325 monsters, 835 actors, all awake) was profiled (see above): the actor-vs-actor loop of `TryMove2D` is 0.2 ms of the tic and sight 0.05 ms, so a thing grid waits until a map needs it; left are the sprite changes themselves (`AnimateTic` -> `ApplySprite`: the collision quad's coordinates, 0.3 ms, and the batch's dictionary lookup per frame change) and merging per-sector dynamic chunks that never actually move. | Headroom on big maps. | `DoomActors`, `DoomGeometry` | S-M |
 
@@ -1149,12 +1158,12 @@ play.
 
 ## Suggested next three
 
-1. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
-   then signing keys and the soft keyboard for save names.
-2. Map editor, the rest (M, see New features): typed values (offsets,
+1. Map editor, the rest (M, see New features): typed values (offsets,
    heights, light), flipping lines, copying geometry, a 3D preview.
-3. Custom game page, the rest (S-M, see New features): the browser's
+2. Custom game page, the rest (S-M, see New features): the browser's
    files kept across page reloads (IndexedDB), forgetting a recent set.
+3. Mobile, the rest (M, see Engine and tooling): try the APK and the
+   keyboard on devices, the release signing keys (repository secrets).
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

@@ -67,6 +67,12 @@ def check_typed_name(config):
     assert d == 'MY BASE 1', 'description %r' % d
 
 
+def check_keyboard_name(config):
+    """A save name typed after the on-screen keyboard came up (touch mode)."""
+    d = save_json(config, 2)['description']
+    assert d == 'E1M1  0/29  0:XY', 'description %r' % d
+
+
 def check_dehacked(config):
     """tools/testdata/test.deh: Misc initial health / bullets, Ammo 0 max ammo."""
     s = save_json(config, 1)
@@ -218,6 +224,14 @@ TESTS = [
      'TDOWN:3:0.904:0.388,W:0.3,TUP:3,TDOWN:4:0.955:0.92,TUP:4,W:0.3,S,Q',
      [r'Touch: Finger 1 down', r'Shot: ', r'Touch: Button MENU'], ['--touch', '--fixed-step'],
      lambda config: check_touch(config)),
+    # In touch mode (Android) the save page's name asks for the on-screen
+    # keyboard (GameTouch.ShowTextKeyboard, CGE's keyboard service), which
+    # goes away when the name is saved.
+    ('touch-keyboard', 'E1M1',
+     'TOUCH,W:0.5,KEY:F2,KEY:DOWN,KEY:ENTER,W:0.2,KEY:BACKSPACE,KEY:BACKSPACE,TYPE:XY,KEY:ENTER,W:0.5,Q',
+     [r'Keyboard: On-screen keyboard shown for "E1M1  0/29  0:00"', r'Keyboard: On-screen keyboard hidden',
+      r'Save: Saved E1M1 to castle-config:/save2\.json'], [],
+     lambda config: check_keyboard_name(config)),
     # The left-handed touch layout at 125%: the stick takes the right side
     # (a finger at 80% of the width walks east), FIRE is on the left (at
     # 0.12:0.44 in a 16:9 window), MENU stays at the top right (0.944:0.9).

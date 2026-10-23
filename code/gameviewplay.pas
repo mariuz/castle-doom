@@ -126,6 +126,8 @@ type
       intermission on by itself. }
     FDemoNextLevel: Boolean;
     FDemoAdvance: Single;
+    { A menu starts or stops typing: the on-screen keyboard (GameTouch). }
+    procedure MenuEditingChange(Sender: TObject);
     procedure SlotScreenAction(const Action: TDoomMenuAction);
     { Description: shown on the load page ('' = the map, kills
       and time). }
@@ -472,6 +474,7 @@ begin
   FSlotScreen := DesignedComponent('SlotMenu') as TDoomMenuScreen;
   FSlotScreen.Overlay := true;
   FSlotScreen.OnAction := {$ifdef FPC}@{$endif} SlotScreenAction;
+  FSlotScreen.OnEditingChange := {$ifdef FPC}@{$endif} MenuEditingChange;
   FSlotScreen.MouseEnabled := AutoTestPrefix = '';
   { The screen melt, above everything. }
   FWipe := DesignedComponent('Wipe') as TDoomWipe;
@@ -593,8 +596,17 @@ begin
   Container.View := ViewEdit;
 end;
 
+procedure TViewPlay.MenuEditingChange(Sender: TObject);
+begin
+  if FSlotScreen.Editing then
+    ShowTextKeyboard(FSlotScreen.EditText)
+  else
+    HideTextKeyboard;
+end;
+
 procedure TViewPlay.Stop;
 begin
+  HideTextKeyboard;
   SetPhotoMode(false);
   DoomLightingInstance.SetDynamicLights([], TMatrix4.Identity);
   FDynLogged := 0;
