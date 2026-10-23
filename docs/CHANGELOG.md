@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.48.0 (2026-10-23)
 
 - Map editor: a path drawn from wall to wall across a sector (N, the points, Enter) cuts it
   in two; Delete removes lines, sectors (neighbours keep the wall) and vertices (two lines
