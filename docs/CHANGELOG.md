@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.46.0 (2026-10-23)
 
 - Map editor: Space opens a picker with pictures of the wall textures or flats (type to
   filter); Shift+click and box selection (drag on nothing, or Ctrl+drag) select several
