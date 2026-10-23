@@ -17,14 +17,16 @@ uses Classes,
 
 type
   TDoomMenuPage = (mpMain, mpEpisode, mpSkill, mpLoad, mpReadThis1, mpReadThis2, mpSave,
-    mpOptions, mpSound, mpVideo, mpCustom);
+    mpOptions, mpSound, mpVideo, mpCustom, mpPwads);
   { maClose: an overlay's page was left with Esc (the game takes over).
     maEndGame: Options -> End Game, confirmed. maSettings: a slider or
     toggle changed (SfxVolume, MusicVolume, MouseSensitivity, MessagesOn,
     the Video page's VideoFieldOfView, VideoUiScale, VideoFullscreen,
     VideoRenderScale). }
   { maCustom: the custom game page wants CustomItem done (OPEN, GAME,
-    PWADS, CLEAR, MAP, START; CustomDelta -1 / 1 for the arrows). }
+    OPENIWAD, PWADS, CLEAR, RECENT, MAP, START, EDIT; CustomDelta -1 / 1
+    for the arrows), or its PWADs page (PWADMOVE, PWADREMOVE of the
+    PWAD CustomIndex, PWADADD). }
   TDoomMenuAction = (maNone, maNewGame, maLoadSlot, maOptions, maQuit, maSaveSlot, maClose,
     maEndGame, maSettings, maCustom);
 
@@ -125,11 +127,18 @@ type
     CustomGame, CustomPwads, CustomMap, CustomSeed: String;
     CustomItem: String;
     CustomDelta: Integer;
+    { The custom game page's recent WAD sets row, and the PWADs page:
+      the PWADs' names in load order (the view fills them) and the one a
+      request is about. }
+    CustomRecent: String;
+    CustomPwadNames: TStringList;
+    CustomIndex: Integer;
     { The save page: the name a new save starts with, and the one typed
       (read it on maSaveSlot). }
     DefaultSaveName: String;
     SaveName: String;
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     { Show changed Custom* values. }
     procedure Refresh;
     { Set up for a WAD: graphics, sounds, how many episodes (0 = Doom 2). }
@@ -196,6 +205,13 @@ begin
   MouseEnabled := true;
   Skill := 2;
   FDirty := true;
+  CustomPwadNames := TStringList.Create;
+end;
+
+destructor TDoomMenuScreen.Destroy;
+begin
+  FreeAndNil(CustomPwadNames);
+  inherited;
 end;
 
 { Vanilla's episodes (ExM1 with M_EPIn), then UMAPINFO's: "episode =
@@ -330,7 +346,9 @@ begin
     { Right adds one (a file dialog), left takes them all off. }
     if Delta < 0 then CustomRequest('CLEAR', 0) else CustomRequest('PWADS', 0);
   end else
-  if Item = 'T:MAP' then
+  if Item = 'T:RECENT' then
+    CustomRequest('RECENT', Delta)
+  else if Item = 'T:MAP' then
     CustomRequest('MAP', Delta)
   else if Item = 'T:SKILL' then
   begin
@@ -386,6 +404,16 @@ begin
   if FPage = mpCustom then
   begin
     CustomChange(Item, Delta);
+    Exit;
+  end;
+  if FPage = mpPwads then
+  begin
+    { Left / right: the PWAD earlier or later in the load order. }
+    if FItemOn[mpPwads] < CustomPwadNames.Count then
+    begin
+      CustomIndex := FItemOn[mpPwads];
+      CustomRequest('PWADMOVE', Delta);
+    end;
     Exit;
   end;
   if Item = 'M_SFXVOL' then
@@ -479,7 +507,8 @@ begin
     mpOptions: Result := 8;
     mpSound: Result := 5;
     mpVideo: Result := {$ifdef WASI} 7 {$else} 8 {$endif};
-    mpCustom: Result := 8;
+    mpCustom: Result := 9;
+    mpPwads: Result := CustomPwadNames.Count + 1;
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
     mpLoad, mpSave: Result := 6;
@@ -503,8 +532,8 @@ const
   VideoItems: array [0..7] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN',
     'T:V-SYNC', 'T:FRAME RATE', 'T:DYNAMIC LIGHTS');
   {$endif}
-  CustomItems: array [0..7] of String = ('T:GAME', 'T:PWADS', 'T:MAP', 'T:SKILL', 'T:RANDOM SEED', '',
-    'T:START', 'T:EDIT MAP');
+  CustomItems: array [0..8] of String = ('T:GAME', 'T:PWADS', 'T:RECENT', 'T:MAP', 'T:SKILL',
+    'T:RANDOM SEED', '', 'T:START', 'T:EDIT MAP');
 begin
   case Page of
     mpMain: Result := FMainItems[Index];
@@ -514,6 +543,11 @@ begin
     mpSound: Result := SoundItems[Index];
     mpVideo: Result := VideoItems[Index];
     mpCustom: Result := CustomItems[Index];
+    mpPwads:
+      if Index < CustomPwadNames.Count then
+        Result := 'T:' + UpperCase(Copy(CustomPwadNames[Index], 1, 24))
+      else
+        Result := 'T:ADD PWAD...';
     else Result := '';
   end;
 end;
@@ -529,6 +563,7 @@ begin
     mpSound: begin X := 80; Y := 64; end;
     mpVideo: begin X := 60; Y := 40; end;
     mpCustom: begin X := 40; Y := 40; end;
+    mpPwads: begin X := 40; Y := 48; end;
     { m_menu.c puts the Read This! skull off the 320x200 screen. }
     mpReadThis1, mpReadThis2: begin X := 330; Y := 165; end;
   end;
@@ -578,6 +613,11 @@ begin
         OpenPage(mpOptions);
     mpSkill, mpCustom:
       if FEpisodes > 0 then OpenPage(mpEpisode) else OpenPage(mpMain);
+    mpPwads:
+      begin
+        OpenPage(mpCustom);
+        CustomRequest('OPEN', 0);
+      end;
     { M_ClearMenus: Esc on the main menu shows the title pages again, or
       gives the game back. }
     mpMain:
@@ -638,8 +678,21 @@ begin
         end else
           OpenPage(mpSkill);
       end;
+    mpPwads:
+      if Item < CustomPwadNames.Count then
+      begin
+        CustomIndex := Item;
+        CustomRequest('PWADREMOVE', 0);
+      end else
+        CustomRequest('PWADADD', 0);
     mpCustom:
-      if ItemName = 'T:START' then
+      if ItemName = 'T:GAME' then
+        CustomRequest('OPENIWAD', 0)
+      else if ItemName = 'T:PWADS' then
+        CustomRequest('PWADS', 0)
+      else if ItemName = 'T:RECENT' then
+        CustomRequest('RECENT', 1)
+      else if ItemName = 'T:START' then
         CustomRequest('START', 0)
       else if ItemName = 'T:EDIT MAP' then
         CustomRequest('EDIT', 0)
@@ -848,6 +901,13 @@ begin
   if Event.IsKey(keyArrowLeft) or Event.IsKey(keyArrowRight) then
   begin
     if Event.IsKey(keyArrowLeft) then ChangeSlider(-1) else ChangeSlider(1);
+    Exit;
+  end;
+  if Event.IsKey(keyDelete) and (FPage = mpPwads) and (FItemOn[mpPwads] < CustomPwadNames.Count) then
+  begin
+    CustomIndex := FItemOn[mpPwads];
+    if FSounds <> nil then FSounds.Play('DSPISTOL');
+    CustomRequest('PWADREMOVE', 0);
     Exit;
   end;
   if Event.IsKey(keyArrowUp) then Move(-1)
@@ -1119,8 +1179,9 @@ begin
     DrawPatch('M_NEWG', 96, 14);
     DrawDoomText(FGraphics, Img, X + 110, Y + 4, UpperCase(CustomGame));
     DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight + 4, UpperCase(CustomPwads));
-    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 2 + 4, UpperCase(CustomMap));
-    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 3 + 4,
+    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 2 + 4, UpperCase(CustomRecent));
+    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 3 + 4, UpperCase(CustomMap));
+    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 4 + 4,
       UpperCase(Format('%d: %s', [Skill + 1, SkillNames[Skill]])));
     if FEditing then
       Text := FEditText + '_'
@@ -1128,7 +1189,13 @@ begin
       Text := CustomSeed
     else
       Text := 'NONE';
-    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 4 + 4, Text);
+    DrawDoomText(FGraphics, Img, X + 110, Y + LineHeight * 5 + 4, Text);
+  end;
+  if FPage = mpPwads then
+  begin
+    { The PWADs in load order (later ones win), a hint line. }
+    DrawDoomText(FGraphics, Img, X, 16, 'PWADS, LOADED TOP TO BOTTOM');
+    DrawDoomText(FGraphics, Img, X, 28, 'LEFT / RIGHT: ORDER   ENTER: REMOVE');
   end;
 
   if FPage in [mpLoad, mpSave] then

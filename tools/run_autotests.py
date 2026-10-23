@@ -420,11 +420,11 @@ TESTS = [
     ('custom-game', 'MENUKEYS', 'W:1,Q',
      [r'Menu: Custom game: freedoom1\.wad, PWADs none, map E1M3, skill 2, random seed 42',
       r'Random: seed 42: E1M3', r'Skill: Skill 2', r'Load: E1M3: map parsed'],
-     ['--menukeys', 'E,D,D,D,D,D,E,S,D,D,R,R,D,L,D,E,4,2,E,S,D,E'], None),
+     ['--menukeys', 'E,D,D,D,D,D,E,S,D,D,D,R,R,D,L,D,E,4,2,E,S,D,E'], None),
     ('custom-game-doom2', 'MENUKEYS', 'W:1,Q',
      [r'Menu: Custom game: freedoom2\.wad, PWADs none, map MAP02, skill 3, random seed none',
       r'Load: MAP02: map parsed'],
-     ['--menukeys', 'E,D,D,D,D,D,E,R,S,D,D,R,D,D,D,E'], None),
+     ['--menukeys', 'E,D,D,D,D,D,E,R,S,D,D,D,R,D,D,D,E'], None),
     # The map editor (GameViewEdit): a raised platform drawn in E1M1's
     # start room, an imp added, the PWAD exported, a play-test standing on
     # the platform, back with the game's EDIT, undo.
@@ -456,10 +456,16 @@ TESTS = [
     ('editor-menu', 'MENUKEYS', 'W:0.5,S,Q',
      [r'Menu: Custom game \(map editor\): freedoom1\.wad, PWADs none, map E1M1',
       r'Editor: Imported E1M1', r'Saved editor screenshot 1 of E1M1'],
-     ['--menukeys', 'E,D,D,D,D,D,E,D,D,D,D,D,D,E'], None),
+     ['--menukeys', 'E,D,D,D,D,D,E,D,D,D,D,D,D,D,E'], None),
     ('editor-key', 'E1M1', 'W:0.5,KEY:F7,W:0.2,MODE:t,CLICK:-416:256,S,Q',
      [r'Editor: Opened from the game on E1M1', r'Editor: Imported E1M1', r'Editor: Mode Things',
       r'Saved editor screenshot 1 of E1M1'], [], None),
+    # A file the browser's picker would give (--upload keeps its bytes as
+    # upload:/NAME), loaded from memory like a PWAD.
+    ('upload', 'E1M1', 'W:0.3,Q',
+     [r'WAD: Uploaded upload:/boom\.wad', r'Loaded upload:/boom\.wad', r'Graphics: ANIMATED lump: 2 animations'],
+     ['--upload', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'boom.wad'),
+      '-file', 'upload:/boom.wad'], None),
     ('photo-controls', 'E1M1',
      'Y,P:3001:300,W:0.2,SAVE:1,PADDOWN:Y,PADUP:Y,W:0.2,KEY:Plus,KEY:Plus,KEY:Plus,KEY:[,KEY:[,W:3.5,S,SAVE:2,'
      'KEY:E,W:1.5,SAVE:3,S,PADDOWN:Y,PADUP:Y,W:0.3,SAVE:4,Q',
@@ -906,7 +912,8 @@ GOLDEN = [
     'options-dynamic-lights_menudlights.png', 'lamp-lights_1.png', 'lamp-lights_2.png',
     'custom-game_menu1.png', 'custom-game_menu2.png', 'custom-game-doom2_menu1.png',
     'editor_edit_1.png', 'editor_edit_2.png', 'editor_edit_3.png', 'editor-menu_edit_1.png',
-    'editor-key_edit_1.png', 'editor-select_edit_1.png', 'editor-select_edit_2.png', 'editor-select_edit_3.png',
+    'editor-key_edit_1.png', 'custom-wads_menu1.png', 'custom-wads_menu2.png', 'custom-wads_menu3.png',
+    'custom-wads_menu4.png', 'editor-select_edit_1.png', 'editor-select_edit_2.png', 'editor-select_edit_3.png',
 ]
 
 
@@ -1077,6 +1084,30 @@ def demo_test(exe, out):
     return problems, time.time() - start
 
 
+def custom_wads_test(exe, out):
+    """The custom game page's recent WAD sets and PWADs page: a game with
+    boom.wad is remembered, the next run's RECENT row loads it again, the
+    PWADs page lists and removes it."""
+    config = os.path.join(out, 'config-custom-wads')
+    shutil.rmtree(config, ignore_errors=True)
+    os.makedirs(config)
+    start = time.time()
+    boom = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'boom.wad')
+    run_game(exe, out, 'custom-wads-1', 'E1M1', 'W:0.3,Q', ['-file', boom], config)
+    log, code, _ = run_game(exe, out, 'custom-wads', 'MENUKEYS', None,
+                            ['--menukeys', 'E,D,D,D,D,D,E,D,D,R,S,U,E,S,E,S,X,S,Q'], config)
+    problems = []
+    if code != 0:
+        problems.append('exit code %d' % code)
+    for rx in (r'Menu: Recent WADs 1/1: freedoom1\.wad \+ boom\.wad', r'Loaded file:.*boom\.wad',
+               r'Menu: PWADs: boom\.wad removed', r'Menu: PWADs: none'):
+        if not re.search(rx, log):
+            problems.append('missing log line /%s/' % rx)
+    if re.search(r'Exception', log):
+        problems.append(re.search(r'.*Exception.*', log).group(0))
+    return problems, time.time() - start
+
+
 def settings_test(exe, out):
     """Volumes set in one run are loaded by the next."""
     config = os.path.join(out, 'config-settings')
@@ -1195,6 +1226,11 @@ def main():
         problems, secs = export_test(exe, out)
         results.append(('export', problems, secs))
         print('%-16s %s (%.0f s)%s' % ('export', 'FAIL' if problems else 'ok', secs,
+                                        ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'custom-wads' in only:
+        problems, secs = custom_wads_test(exe, out)
+        results.append(('custom-wads', problems, secs))
+        print('%-16s %s (%.0f s)%s' % ('custom-wads', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)

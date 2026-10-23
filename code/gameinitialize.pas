@@ -140,6 +140,7 @@ var
   I: Integer;
   ExportSaves, ImportSaves, RandomWadFile, ExportMapName, ExportMapFile, SceneMap, SceneFile: String;
   SceneGltf: Boolean;
+  Upload: TMemoryStream;
   RandomSeed: Cardinal;
 begin
   ExportSaves := '';
@@ -255,6 +256,19 @@ begin
       SceneMap := UpperCase(Parameters[I + 1]);
       SceneFile := Parameters[I + 2];
       Inc(I, 2);
+    end else
+    if (Parameters[I] = '--upload') and (I + 1 <= Parameters.High) then
+    begin
+      { --upload FILE: what the browser's file picker does (the bytes kept
+        as upload:/NAME), for testing that path: -file upload:/NAME. }
+      Upload := TMemoryStream.Create;
+      try
+        Upload.LoadFromFile(Parameters[I + 1]);
+        RegisterUpload(Parameters[I + 1], Upload);
+      finally
+        FreeAndNil(Upload);
+      end;
+      Inc(I);
     end else
     if Parameters[I] = '--edit' then
     begin

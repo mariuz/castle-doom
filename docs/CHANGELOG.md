@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Custom game page: Enter on GAME opens an IWAD file, PWADS opens a page to add, reorder
+  and remove PWADs, and a RECENT row brings back the last sets of WADs you played. In the
+  browser, IWADs and PWADs can be opened from your computer.
+
 ## v0.46.0 (2026-10-23)
 
 - Map editor: Space opens a picker with pictures of the wall textures or flats (type to

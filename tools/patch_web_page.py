@@ -10,6 +10,8 @@ program stops (any exception does: FPC's wasm32 target cannot catch
 them), e.g. after the CRASH demo command (play/?map=E1M1&demo=W:2,CRASH),
 for the map editor's export (GameViewEdit): window.castleDoomDownload(name,
 bytes, type) saves a "binary string" (one character per byte) as a file,
+and window.castleDoomOpenFile(kind) / castleDoomTakeFile() /
+castleDoomTakeFileBytes() let the custom game page open WAD files,
 and for the touch controls (GameTouch): CGE's web backend reports every
 pointer as finger 0, so the page tracks the fingers itself. While the game
 is played (it calls window.castleDoomTouches(1) every frame) touch
@@ -204,6 +206,45 @@ DOWNLOAD_NEW = """
       a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
     };
+    /* Opening files (the custom game page's IWAD and PWADs): a hidden
+       <input type=file>; the chosen file waits until the game takes it,
+       first "kind|name", then its bytes as a binary string. The browser
+       allows the click shortly after the key press that asked for it. */
+    (function () {
+      let input = null, kind = '', picked = [];
+      window.castleDoomOpenFile = function (k) {
+        kind = k;
+        if (!input) {
+          input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.wad,.WAD';
+          input.style.display = 'none';
+          input.addEventListener('change', function () {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            const thisKind = kind;
+            file.arrayBuffer().then(function (buffer) {
+              const bytes = new Uint8Array(buffer);
+              let s = '';
+              for (let i = 0; i < bytes.length; i += 8192)
+                s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+              picked.push({head: thisKind + '|' + file.name, bytes: s});
+              console.log('Castle DOOM: picked ' + file.name + ' (' + bytes.length + ' bytes)');
+            });
+            input.value = '';
+          });
+          document.body.appendChild(input);
+        }
+        input.click();
+      };
+      window.castleDoomTakeFile = function () {
+        return picked.length ? picked[0].head : null;
+      };
+      window.castleDoomTakeFileBytes = function () {
+        const f = picked.shift();
+        return f ? f.bytes : null;
+      };
+    })();
   </script>"""
 
 

@@ -1378,13 +1378,28 @@ digits are typed like a save name); the rest it asks of the view with
 `maCustom` and `CustomItem` / `CustomDelta` (`GAME` cycles Freedoom
 Phase 1, Phase 2 and the last IWAD opened, `PWADS` adds one through the
 file dialog, `CLEAR` drops them, `MAP` steps through the WAD's maps,
-`START`). `TViewMenu.CustomGameAction` does them with the Options
+`START`; `OPENIWAD` (Enter on GAME) opens an IWAD file, `RECENT`
+steps through the recent WAD sets, the user config's `wads/recent0..7`
+kept newest first by `RememberWads`, and `PWADS` opens the PWADs page,
+`mpPwads`: the PWADs in load order with `PWADMOVE` (left / right),
+`PWADREMOVE` (Enter, Delete) and `PWADADD`, reopened like the custom
+page after each reload, `ShowPwadsPage`). `TViewMenu.CustomGameAction` does them with the Options
 panel's own code (`LoadWads`, `ClickAddPwad`, `ClickPrevMap`...) and
 `ShowCustomPage` writes the rows back (`CustomGame`, `CustomPwads`,
 `CustomMap`) and reopens the page, since loading WADs sets the menu up
 anew (after a Phase 2 download too). Start adds `random:/SEED` to the
 PWADs when a seed is set and starts the chosen map (log `Menu: Custom
 game: freedoom1.wad, PWADs none, map E1M3, skill 2, random seed 42`).
+In the browser Open IWAD / Add PWAD call the page's `castleDoomOpenFile`
+(`tools/patch_web_page.py`: a hidden `<input type=file>`); the chosen
+file waits in the page until `PollPickedFile` (each menu `Update`)
+takes its name and its bytes as a binary string and `RegisterUpload`
+keeps them as `upload:/NAME`, which `TDoomWad.AddFile` reads from
+memory. After a page reload those bytes are gone, so `LoadWads` checks
+`WadUrlAvailable` first and leaves such files out with a message
+instead of raising (an exception would stop the WebAssembly program);
+the recent sets never keep them. `--upload FILE` does the same on the
+desktop for tests.
 
 "Options" shows the CGE part: buttons (`TCastleButton` in
 `TCastleHorizontalGroup`/`TCastleVerticalGroup` on a `TCastleRectangleControl`)

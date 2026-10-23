@@ -96,7 +96,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 47 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 49 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -656,11 +656,21 @@ FILE -warp 1 1` under `xvfb-run`). New Game's last episode is
 "CAMPAIGN" first; autotests `random-menu`, `random-menu-doom2`, the
 `MENU*` autotests honour `-iwad`). After "Random maps" comes "Custom
 game" (title screen only): `--menukeys` also takes `L` / `R` (arrows),
-`B` (Backspace) and digits; `E,D,D,D,D,D,E` opens the page on Phase 1,
-then `D,D,R,R` picks E1M3, `D,L` skill 2, `D,E,4,2,E` the seed 42 and
+`B` (Backspace), digits and `Q` (quit, when no game starts); `E,D,D,D,D,D,E` opens the page on Phase 1,
+then `D,D,D,R,R` picks E1M3, `D,L` skill 2, `D,E,4,2,E` the seed 42 and
 `D,E` starts (log `Menu: Custom game: freedoom1.wad, PWADs none, map
 E1M3, skill 2, random seed 42`; autotests `custom-game`,
 `custom-game-doom2` with goldens, unit test `TestCustomGamePage`).
+Its rows are GAME (Enter: an IWAD file), PWADS (Enter: the PWADs page,
+left / right order, Enter removes; log `Menu: PWADs: a.wad removed`),
+RECENT (the user config's last WAD sets; log `Menu: Recent WADs 1/2:
+...`), MAP, SKILL, RANDOM SEED, START, EDIT MAP; the harness's
+`custom-wads` plays a game with `-file boom.wad`, then in a second run
+on the same config brings it back through RECENT and removes it on the
+PWADs page. Browser files: `--upload FILE` keeps a file's bytes as
+`upload:/NAME` like the page's picker (`-file upload:/boom.wad`;
+autotest `upload`); the page's `castleDoomOpenFile` is tested with
+Playwright's `filechooser` event on a patched CGE template page.
 Map editor (`GameViewEdit` over `DoomEditMap`, docs in ARCHITECTURE):
 `--autotest E1M1 p --edit --demo "..."` opens it (`--edit [MAP]` alone
 for a user; `KEY:F7` or `EDIT` in a game demo opens it on that map and

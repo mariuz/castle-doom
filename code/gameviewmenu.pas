@@ -79,6 +79,7 @@ type
     { The Doom menu's custom game page is open (reopened after the WADs
       reload, which sets the menu up anew). }
     FCustomOpen: Boolean;
+    FPwadsOpen: Boolean;
     FNewGameEpisode, FNewGameSkill: Integer;
     { Load the IWAD and PWADs (title music, menus follow). False when they
       did not load, or when Freedoom Phase 2 is being downloaded first. }
@@ -99,6 +100,17 @@ type
     { The custom game page (DoomMenu mpCustom): its requests, its values. }
     procedure CustomGameAction;
     procedure ShowCustomPage;
+    { The custom page's PWADs page (DoomMenu mpPwads), reopened like the
+      custom page after the WADs reload. }
+    procedure ShowPwadsPage;
+    { Load these PWADs on the current IWAD (the PWADs page's changes). }
+    procedure LoadPwads(const Pwads: TStrings);
+    procedure CycleRecent(const Delta: Integer);
+    { The browser's file picker for an IWAD or a PWAD (OPENIWAD,
+      PWADADD); the file arrives in a later Update (PollPickedFile). }
+    procedure PickBrowserFile(const Iwad: Boolean);
+    procedure PollPickedFile;
+    procedure UseFile(const Url: String; const Iwad: Boolean);
     procedure AutoPlayDemo(Sender: TObject);
     procedure ClickRecordDemo(Sender: TObject);
     procedure ClickPlayDemo(Sender: TObject);
@@ -226,6 +238,7 @@ var
 implementation
 
 uses Math, CastleLog, CastleColors, CastleUtils, CastleWindow, CastleConfig, CastleUriUtils, CastleRectangles,
+  {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
   CastleStringUtils,
   CastleFilesUtils,
   GameViewPlay, GameSaveBundle, GameSaveStorage, GameGamepad, GameViewDesign, GameViewEdit;
@@ -562,6 +575,20 @@ begin
   try
     if Pwads <> nil then NewPwads.Assign(Pwads);
     if (FWad <> nil) and (FIwadUrl = Iwad) and (NewPwads.Text = FPwads.Text) then Exit(true);
+    { Files picked in the browser are gone after a reload: say so instead
+      of an exception (which would stop the web build). }
+    if not WadUrlAvailable(Iwad) then
+    begin
+      FWadsLabel.Caption := Format('%s: choose the file again', [ExtractUriName(Iwad)]);
+      WritelnWarning('WAD', '%s is not loaded any more', [Iwad]);
+      Exit;
+    end;
+    for I := NewPwads.Count - 1 downto 0 do
+      if not WadUrlAvailable(NewPwads[I]) then
+      begin
+        WritelnWarning('WAD', '%s is not loaded any more, left out', [NewPwads[I]]);
+        NewPwads.Delete(I);
+      end;
     { The play view may still reference the old objects; it is stopped when
       this view is active, so it is safe to replace them. }
     FreeAndNil(FMusic);
@@ -698,13 +725,78 @@ begin
     Result.Add(Last);
 end;
 
+const
+  MaxRecentWads = 8;
+
+{ A WAD set as one line: the IWAD and the PWADs, '|' between them. }
+function WadSetText(const Iwad: String; const Pwads: TStrings): String;
+var
+  I: Integer;
+begin
+  Result := Iwad;
+  for I := 0 to Pwads.Count - 1 do
+    Result := Result + '|' + Pwads[I];
+end;
+
+{ The recent WAD sets (the user config's wads/recent0...), newest first. }
+function RecentWadSets: TStringList;
+var
+  I: Integer;
+  S: String;
+begin
+  Result := TStringList.Create;
+  for I := 0 to MaxRecentWads - 1 do
+  begin
+    S := UserConfig.GetValue(Format('wads/recent%d', [I]), '');
+    if S <> '' then Result.Add(S);
+  end;
+end;
+
+procedure SaveRecentWadSets(const Sets: TStrings);
+var
+  I: Integer;
+begin
+  for I := 0 to MaxRecentWads - 1 do
+    if I < Sets.Count then
+      UserConfig.SetValue(Format('wads/recent%d', [I]), Sets[I])
+    else
+      UserConfig.DeleteValue(Format('wads/recent%d', [I]));
+end;
+
+{ "freedoom1.wad + a.wad + b.wad" of a WadSetText. }
+function WadSetDescription(const SetText: String): String;
+var
+  Parts: TStringList;
+  I: Integer;
+begin
+  Parts := TStringList.Create;
+  try
+    Parts.Delimiter := '|';
+    Parts.StrictDelimiter := true;
+    Parts.DelimitedText := SetText;
+    Result := '';
+    for I := 0 to Parts.Count - 1 do
+    begin
+      if I > 0 then Result := Result + ' + ';
+      Result := Result + ExtractUriName(Parts[I]);
+    end;
+  finally
+    FreeAndNil(Parts);
+  end;
+end;
+
 procedure TViewMenu.ShowCustomPage;
 var
-  Pwads: TStringList;
+  Pwads, Recent: TStringList;
   I: Integer;
   S: String;
 begin
   if (FDoomMenu = nil) or (FWad = nil) then Exit;
+  if FPwadsOpen then
+  begin
+    ShowPwadsPage;
+    Exit;
+  end;
   FCustomOpen := true;
   if FDoomMenu.Page <> mpCustom then
   begin
@@ -731,6 +823,23 @@ begin
   if S = '' then S := 'none';
   if Length(S) > 22 then S := Copy(S, 1, 19) + '...';
   FDoomMenu.CustomPwads := S;
+  Recent := RecentWadSets;
+  try
+    Pwads := WithoutRandomPwads(FPwads);
+    try
+      I := Recent.IndexOf(WadSetText(FIwadUrl, Pwads));
+    finally
+      FreeAndNil(Pwads);
+    end;
+    if Recent.Count = 0 then
+      FDoomMenu.CustomRecent := 'none'
+    else if I < 0 then
+      FDoomMenu.CustomRecent := Format('-/%d', [Recent.Count])
+    else
+      FDoomMenu.CustomRecent := Format('%d/%d', [I + 1, Recent.Count]);
+  finally
+    FreeAndNil(Recent);
+  end;
   if FWad.MapNames.Count > 0 then
   begin
     FMapIndex := Clamped(FMapIndex, 0, FWad.MapNames.Count - 1);
@@ -738,6 +847,82 @@ begin
   end else
     FDoomMenu.CustomMap := 'no maps';
   FDoomMenu.Refresh;
+end;
+
+procedure TViewMenu.ShowPwadsPage;
+var
+  Pwads: TStringList;
+  I: Integer;
+begin
+  if (FDoomMenu = nil) or (FWad = nil) then Exit;
+  FCustomOpen := true;
+  FPwadsOpen := true;
+  FDoomMenu.CustomPwadNames.Clear;
+  Pwads := WithoutRandomPwads(FPwads);
+  try
+    for I := 0 to Pwads.Count - 1 do
+      FDoomMenu.CustomPwadNames.Add(ExtractUriName(Pwads[I]));
+  finally
+    FreeAndNil(Pwads);
+  end;
+  FDoomMenu.SetMenuActive(true);
+  FDoomMenu.OpenPage(mpPwads);
+  FDoomMenu.Refresh;
+end;
+
+procedure TViewMenu.LoadPwads(const Pwads: TStrings);
+var
+  Names: String;
+  I: Integer;
+begin
+  Names := '';
+  for I := 0 to Pwads.Count - 1 do
+  begin
+    if Names <> '' then Names := Names + ', ';
+    Names := Names + ExtractUriName(Pwads[I]);
+  end;
+  if Names = '' then Names := 'none';
+  WritelnLog('Menu', 'PWADs: %s', [Names]);
+  LoadWads(FIwadUrl, Pwads);
+end;
+
+procedure TViewMenu.CycleRecent(const Delta: Integer);
+var
+  Recent, Pwads, Parts: TStringList;
+  I: Integer;
+begin
+  Recent := RecentWadSets;
+  Parts := TStringList.Create;
+  Pwads := WithoutRandomPwads(FPwads);
+  try
+    if Recent.Count = 0 then
+    begin
+      FWadsLabel.Caption := 'No recent WADs yet (PWADs or your own IWAD are remembered)';
+      Exit;
+    end;
+    I := Recent.IndexOf(WadSetText(FIwadUrl, Pwads));
+    if I < 0 then
+    begin
+      if Delta > 0 then I := 0 else I := Recent.Count - 1;
+    end else
+      I := (I + Delta + Recent.Count) mod Recent.Count;
+    Parts.Delimiter := '|';
+    Parts.StrictDelimiter := true;
+    Parts.DelimitedText := Recent[I];
+    WritelnLog('Menu', 'Recent WADs %d/%d: %s', [I + 1, Recent.Count, WadSetDescription(Recent[I])]);
+    Pwads.Clear;
+    while Parts.Count > 1 do
+    begin
+      Pwads.Add(Parts[1]);
+      Parts.Delete(1);
+    end;
+    FMapIndex := 0;
+    LoadWads(Parts[0], Pwads);
+  finally
+    FreeAndNil(Parts);
+    FreeAndNil(Pwads);
+    FreeAndNil(Recent);
+  end;
 end;
 
 procedure TViewMenu.CustomGameAction;
@@ -765,7 +950,38 @@ begin
       FreeAndNil(Iwads);
     end;
   end else
-  if Item = 'PWADS' then
+  if Item = 'OPEN' then
+    FPwadsOpen := false
+  else if Item = 'OPENIWAD' then
+    ClickOpenIwad(nil)
+  else if Item = 'PWADS' then
+  begin
+    ShowPwadsPage;
+    Exit;
+  end else
+  if Item = 'RECENT' then
+    CycleRecent(FDoomMenu.CustomDelta)
+  else if (Item = 'PWADMOVE') or (Item = 'PWADREMOVE') then
+  begin
+    Pwads := WithoutRandomPwads(FPwads);
+    try
+      I := FDoomMenu.CustomIndex;
+      if (I >= 0) and (I < Pwads.Count) then
+      begin
+        if Item = 'PWADREMOVE' then
+        begin
+          WritelnLog('Menu', 'PWADs: %s removed', [ExtractUriName(Pwads[I])]);
+          Pwads.Delete(I);
+        end else
+        if (I + FDoomMenu.CustomDelta >= 0) and (I + FDoomMenu.CustomDelta < Pwads.Count) then
+          Pwads.Exchange(I, I + FDoomMenu.CustomDelta);
+        LoadPwads(Pwads);
+      end;
+    finally
+      FreeAndNil(Pwads);
+    end;
+  end else
+  if Item = 'PWADADD' then
     ClickAddPwad(nil)
   else if Item = 'CLEAR' then
     LoadWads(FIwadUrl, nil)
@@ -806,7 +1022,10 @@ var
   Plain: TStringList;
 begin
   if Action <> maCustom then
+  begin
     FCustomOpen := false;
+    FPwadsOpen := false;
+  end;
   case Action of
     maNewGame:
       begin
@@ -868,12 +1087,37 @@ begin
 end;
 
 procedure TViewMenu.RememberWads;
+var
+  Pwads, Recent: TStringList;
+  SetText: String;
+  I: Integer;
 begin
   { Only remember user files, not the bundled Freedoom. }
   if (FIwadUrl <> Freedoom1) and (FIwadUrl <> Freedoom2) or (FPwads.Count > 0) then
   begin
     UserConfig.SetValue('wads/iwad', FIwadUrl);
     UserConfig.SetValue('wads/pwads', FPwads.DelimitedText);
+    { The recent sets (the custom page's RECENT): newest first, without
+      random maps; files picked in the browser are gone after a reload. }
+    Pwads := WithoutRandomPwads(FPwads);
+    Recent := RecentWadSets;
+    try
+      if ((FIwadUrl <> Freedoom1) and (FIwadUrl <> Freedoom2) or (Pwads.Count > 0)) and
+         not IsUploadUrl(FIwadUrl) then
+      begin
+        for I := Pwads.Count - 1 downto 0 do
+          if IsUploadUrl(Pwads[I]) then Pwads.Delete(I);
+        SetText := WadSetText(FIwadUrl, Pwads);
+        I := Recent.IndexOf(SetText);
+        if I >= 0 then Recent.Delete(I);
+        Recent.Insert(0, SetText);
+        while Recent.Count > MaxRecentWads do Recent.Delete(Recent.Count - 1);
+        SaveRecentWadSets(Recent);
+      end;
+    finally
+      FreeAndNil(Recent);
+      FreeAndNil(Pwads);
+    end;
     UserConfig.Save;
   end;
 end;
@@ -961,11 +1205,15 @@ var
   Url: String;
 begin
   Url := UserConfig.GetValue('wads/iwad', '');
+  {$ifdef WASI}
+  PickBrowserFile(true);
+  Exit;
+  {$endif}
   if Application.MainWindow.FileDialog('Open Doom IWAD', Url, true,
       'Doom WAD files (*.wad)|*.wad|All files (*)|*') then
-    LoadWads(Url, nil)
+    UseFile(Url, true)
   else
-    FWadsLabel.Caption := 'No file chosen (file dialogs are not available in the browser)';
+    FWadsLabel.Caption := 'No file chosen';
 end;
 
 procedure TViewMenu.ClickAddPwad(Sender: TObject);
@@ -973,11 +1221,33 @@ var
   Url: String;
   Pwads: TStringList;
 begin
+  {$ifdef WASI}
+  PickBrowserFile(false);
+  Exit;
+  {$endif}
   Url := UserConfig.GetValue('wads/lastpwad', '');
   if Application.MainWindow.FileDialog('Add Doom PWAD (-file)', Url, true,
       'Doom WAD files (*.wad)|*.wad|All files (*)|*') then
   begin
     UserConfig.SetValue('wads/lastpwad', Url);
+    UseFile(Url, false);
+  end else
+    FWadsLabel.Caption := 'No file chosen';
+end;
+
+{ An IWAD (another game: its PWADs would not fit) or one more PWAD from a
+  file the user chose; the custom page shows the result. }
+procedure TViewMenu.UseFile(const Url: String; const Iwad: Boolean);
+var
+  Pwads: TStringList;
+begin
+  WritelnLog('Menu', 'Chosen %s: %s', [Iff(Iwad, 'IWAD', 'PWAD'), Url]);
+  if Iwad then
+  begin
+    FMapIndex := 0;
+    LoadWads(Url, nil);
+  end else
+  begin
     Pwads := TStringList.Create;
     try
       Pwads.Assign(FPwads);
@@ -986,8 +1256,83 @@ begin
     finally
       FreeAndNil(Pwads);
     end;
-  end else
-    FWadsLabel.Caption := 'No file chosen (file dialogs are not available in the browser)';
+  end;
+  if FCustomOpen then ShowCustomPage;
+end;
+
+{$ifdef WASI}
+{ A JavaScript function of this name exists on the window (the patched
+  page's, tools/patch_web_page.py). }
+function PageHasFunction(const Name: String): Boolean;
+var
+  V: TJOB_JSValue;
+begin
+  V := JSWindow.ReadJSPropertyValue(Name);
+  Result := (V is TJOB_Object) and (TJOB_Object(V).Value <> nil);
+  FreeAndNil(V);
+end;
+
+{ A string the page returns ('' for its null). }
+function PageString(const Name: String): UnicodeString;
+var
+  V: TJOB_JSValue;
+begin
+  Result := '';
+  V := JSWindow.InvokeJSValueResult(Name, []);
+  try
+    if V is TJOB_String then Result := TJOB_String(V).Value;
+  finally
+    FreeAndNil(V);
+  end;
+end;
+{$endif}
+
+procedure TViewMenu.PickBrowserFile(const Iwad: Boolean);
+begin
+  {$ifdef WASI}
+  if not PageHasFunction('castleDoomOpenFile') then
+  begin
+    FWadsLabel.Caption := 'This page cannot open files';
+    Exit;
+  end;
+  JSWindow.InvokeJSNoResult('castleDoomOpenFile', [UnicodeString(Iff(Iwad, 'iwad', 'pwad'))]);
+  FWadsLabel.Caption := 'Choose a WAD file...';
+  {$endif}
+end;
+
+{ The page's file picker gives the chosen file as its kind and name, then
+  its bytes as a "binary string" (one character per byte). }
+procedure TViewMenu.PollPickedFile;
+{$ifdef WASI}
+var
+  Head, Bytes: UnicodeString;
+  Kind, PickedName: String;
+  P: Integer;
+  Data: TMemoryStream;
+  B: Byte;
+{$endif}
+begin
+  {$ifdef WASI}
+  if not PageHasFunction('castleDoomTakeFile') then Exit;
+  Head := PageString('castleDoomTakeFile');
+  if Head = '' then Exit;
+  P := Pos('|', Head);
+  Kind := UTF8Encode(Copy(Head, 1, P - 1));
+  PickedName := UTF8Encode(Copy(Head, P + 1, MaxInt));
+  Bytes := PageString('castleDoomTakeFileBytes');
+  Data := TMemoryStream.Create;
+  try
+    Data.Size := Length(Bytes);
+    for P := 1 to Length(Bytes) do
+    begin
+      B := Ord(Bytes[P]) and $FF;
+      PByte(Data.Memory)[P - 1] := B;
+    end;
+    UseFile(RegisterUpload(PickedName, Data), Kind = 'iwad');
+  finally
+    FreeAndNil(Data);
+  end;
+  {$endif}
 end;
 
 procedure TViewMenu.ClickContinue(Sender: TObject);
@@ -1913,6 +2258,11 @@ begin
   FMenuKeys.Delete(0);
   FMenuKeyTics := 6;
   WritelnLog('AutoTest', 'Menu key %s', [K]);
+  if K = 'Q' then
+  begin
+    Application.Terminate;
+    Exit;
+  end;
   if K = 'S' then
   begin
     Inc(FMenuShots);
@@ -1959,6 +2309,8 @@ begin
   end;
   { The title music is rendered a slice per frame. }
   if FMusic <> nil then FMusic.Update;
+  { A file the browser's picker delivered. }
+  PollPickedFile;
   { The Controls page waiting for a gamepad button: the triggers are
     axes, without press events. }
   if (FControls <> nil) and FControls.Exists and FPadMode and (FWaitSlot >= 0) then

@@ -43,6 +43,7 @@ type
     procedure TestPhase1;
     procedure TestPhase2;
     procedure TestBoomLumps;
+    procedure TestUploads;
     procedure TestLogFilter;
     procedure TestUMapInfo;
     procedure TestZMapInfo;
@@ -132,6 +133,37 @@ type
 
 { Boom's ANIMATED and SWITCHES lumps of tools/testdata/boom.wad
   (tools/make_boom_wad.py). }
+{ Files the browser's picker gives (upload:/NAME): loaded from memory,
+  gone ones reported by WadUrlAvailable instead of raising. }
+procedure TTestWad.TestUploads;
+var
+  W: TDoomWad;
+  Data: TMemoryStream;
+  Path, Url: String;
+begin
+  Path := 'tools/testdata/boom.wad';
+  if not FileExists(Path) then Path := '../tools/testdata/boom.wad';
+  AssertFalse('not yet', WadUrlAvailable('upload:/boom.wad'));
+  AssertTrue('other URLs', WadUrlAvailable('castle-data:/x.wad'));
+  Data := TMemoryStream.Create;
+  try
+    Data.LoadFromFile(Path);
+    Url := RegisterUpload('/some/dir/boom.wad', Data);
+  finally
+    FreeAndNil(Data);
+  end;
+  AssertEquals('url', 'upload:/boom.wad', Url);
+  AssertTrue('available', WadUrlAvailable(Url));
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(Url);
+    AssertTrue('its ANIMATED lump', W.FindLump('ANIMATED') >= 0);
+    AssertTrue('described', Pos('boom.wad', W.Description) > 0);
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
 procedure TTestWad.TestBoomLumps;
 var
   W: TDoomWad;
@@ -1974,6 +2006,8 @@ begin
     Key(keyArrowLeft);                        { PWADS: clear }
     Key(keyEnter);                            { PWADS: add one }
     Key(keyArrowDown);
+    Key(keyArrowLeft);                        { RECENT: the one before }
+    Key(keyArrowDown);
     Key(keyArrowLeft);                        { MAP: the previous one }
     Key(keyArrowDown);
     Key(keyArrowLeft);                        { SKILL 3 -> 2 }
@@ -1991,7 +2025,27 @@ begin
     Key(keyEnter);
     Key(keyArrowDown);                        { EDIT MAP: the map editor }
     Key(keyEnter);
-    AssertEquals('requests', 'GAME 1;CLEAR 0;PWADS 0;MAP -1;START 0;EDIT 0;', FMenuRequests);
+    AssertEquals('requests', 'GAME 1;CLEAR 0;PWADS 0;RECENT -1;MAP -1;START 0;EDIT 0;', FMenuRequests);
+    { The PWADs page: order, remove, add, back. }
+    FMenuRequests := '';
+    FMenu.CustomPwadNames.Add('a.wad');
+    FMenu.CustomPwadNames.Add('b.wad');
+    FMenu.OpenPage(mpPwads);
+    Key(keyArrowDown);
+    Key(keyArrowLeft);                        { b.wad earlier }
+    AssertEquals('index', 1, FMenu.CustomIndex);
+    Key(keyArrowUp);
+    Key(keyEnter);                            { a.wad removed }
+    AssertEquals('index removed', 0, FMenu.CustomIndex);
+    Key(keyArrowDown);
+    Key(keyArrowDown);
+    Key(keyEnter);                            { ADD PWAD... }
+    Key(keyEscape);
+    AssertTrue('back to the custom page', FMenu.Page = mpCustom);
+    AssertEquals('PWADs page requests', 'PWADMOVE -1;PWADREMOVE 0;PWADADD 0;OPEN 0;', FMenuRequests);
+    Key(keyArrowDown);                        { from EDIT MAP round to GAME }
+    Key(keyEnter);                            { GAME: open an IWAD file }
+    AssertEquals('open IWAD', 'OPENIWAD 0;', Copy(FMenuRequests, Length(FMenuRequests) - 10, MaxInt));
     Key(keyEscape);
     { Back to the episodes, or (no WAD set up) the main page. }
     AssertTrue('back', FMenu.Page = mpMain);

@@ -92,6 +92,20 @@ type
     property MapNames: TStringList read FMapNames;
   end;
 
+const
+  { Files the user gave without a path the program can read (the
+    browser's file picker): their bytes are kept in memory under
+    upload:/NAME for TDoomWad.AddFile. }
+  UploadUrlPrefix = 'upload:/';
+
+function IsUploadUrl(const Url: String): Boolean;
+function UploadUrl(const FileName: String): String;
+{ Keep a copy of Data as upload:/FileName; returns that URL. }
+function RegisterUpload(const FileName: String; const Data: TStream): String;
+{ False only for an upload:/ URL whose bytes are gone (a reloaded page):
+  check before AddFile where an exception must not happen (the web). }
+function WadUrlAvailable(const Url: String): Boolean;
+
 { Decode an 8-byte, NUL padded Doom name. }
 function DoomName(const P: PByte): String;
 
@@ -99,6 +113,43 @@ implementation
 
 uses Math, CastleDownload, CastleLog, CastleUtils, CastleClassUtils, CastleUriUtils,
   DoomRandomMap, DoomEditMap;
+
+var
+  Uploads: TStringList;
+
+function IsUploadUrl(const Url: String): Boolean;
+begin
+  Result := SameText(Copy(Url, 1, Length(UploadUrlPrefix)), UploadUrlPrefix);
+end;
+
+function UploadUrl(const FileName: String): String;
+begin
+  Result := UploadUrlPrefix + ExtractFileName(FileName);
+end;
+
+function RegisterUpload(const FileName: String; const Data: TStream): String;
+var
+  Copied: TMemoryStream;
+  I: Integer;
+begin
+  Result := UploadUrl(FileName);
+  Copied := TMemoryStream.Create;
+  Copied.CopyFrom(Data, 0);
+  Copied.Position := 0;
+  I := Uploads.IndexOf(Result);
+  if I >= 0 then
+  begin
+    Uploads.Objects[I].Free;
+    Uploads.Objects[I] := Copied;
+  end else
+    Uploads.AddObject(Result, Copied);
+  WritelnLog('WAD', 'Uploaded %s (%d bytes)', [Result, Copied.Size]);
+end;
+
+function WadUrlAvailable(const Url: String): Boolean;
+begin
+  Result := (not IsUploadUrl(Url)) or (Uploads.IndexOf(Url) >= 0);
+end;
 
 function DoomName(const P: PByte): String;
 var
@@ -165,6 +216,14 @@ begin
         FreeAndNil(Log);
         FreeAndNil(Names);
       end;
+    end else
+    if IsUploadUrl(FileUrl) then
+    begin
+      I := Uploads.IndexOf(FileUrl);
+      if I < 0 then
+        raise Exception.CreateFmt('%s is gone; choose the file again', [FileUrl]);
+      Data := TMemoryStream.Create;
+      Data.CopyFrom(TMemoryStream(Uploads.Objects[I]), 0);
     end else
     if IsEditedWadUrl(FileUrl, EditedMap) then
     begin
@@ -522,4 +581,10 @@ begin
   end;
 end;
 
+initialization
+  Uploads := TStringList.Create;
+  Uploads.OwnsObjects := true;
+  Uploads.CaseSensitive := false;
+finalization
+  FreeAndNil(Uploads);
 end.
