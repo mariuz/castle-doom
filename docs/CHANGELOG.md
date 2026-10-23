@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.49.0 (2026-10-23)
 
 - Demos in the browser: Options -> Record demo... records the next game in the browser,
   keeps it with your saves and downloads it when the game ends; Play demo... plays a demo
