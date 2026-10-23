@@ -1660,7 +1660,19 @@ lines' ends); edits of the selection run between
 (`SplitLineAtPoint`) and adds the existing vertices that lie on new
 edges as corners (`AddVerticesOnEdge`), so a room against a wall shares
 that wall's pieces; it captures the map first and restores it when it
-refuses the room, then pushes that capture as the undo step. In an autotest the demo script drives the editor
+refuses the room, then pushes that capture as the undo step.
+`SplitSector` cuts a sector along a path whose ends lie on its walls:
+it splits the lines the ends fall on, checks the path stays inside the
+sector, then walks from the path's end along the sector's walls with
+the sector on the right (at a junction the wall turning furthest right,
+the first counter-clockwise from where it came from) back to the path's
+start; the path and that chain enclose the part on the path's right,
+which gets a new sector (the chain's sides and the pillars inside it),
+and the path becomes two-sided lines. `DeleteSector` drops the lines
+only it has and turns shared ones into the neighbour's one-sided walls
+(flipped to face it), `DissolveVertex` joins its two lines when they
+continue each other with the same sectors, and `Compact` drops the
+sides and vertices no line uses afterwards. In an autotest the demo script drives the editor
 (`RunStep`: `VIEW`, `MODE`, `CLICK`, `DRAG`, `DRAW`, `MOUSE`, `KEY`,
 `THING`, `EXPORT`, `GLTF`, `X3D`, `PLAY`, `S`, `W`, `Q`); `PLAY` hands
 the rest of the script to the game (`AutoTestDemo`) and the game's

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Map editor: a path drawn from wall to wall across a sector (N, the points, Enter) cuts it
+  in two; Delete removes lines, sectors (neighbours keep the wall) and vertices (two lines
+  through one join); number keys toggle line and thing flags, shown in a panel.
+
 ## v0.47.0 (2026-10-23)
 
 - Custom game page: Enter on GAME opens an IWAD file, PWADS opens a page to add, reorder

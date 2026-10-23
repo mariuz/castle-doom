@@ -14,7 +14,10 @@
   selects a box, Ctrl+A everything; the keys then change all of it.
   Space opens a picker with the pictures of the wall textures (lines) or
   flats (sectors; Shift: ceilings), filtered by typing. Ctrl+C / Ctrl+V
-  copy and paste things.
+  copy and paste things. A drawn path ending on two walls (Enter instead
+  of closing it) cuts the sector in two; Delete removes the selection
+  (vertices join their two lines); number keys toggle line and thing
+  flags, listed in a panel.
   F9 play-tests (the map's PWAD stacked on the WADs as edit:/MAP; the
   editor key F7 in the game comes back), F2 exports the PWAD (a file on
   the desktop, a download in the browser), F3 / F4 the level as glTF /
@@ -72,6 +75,9 @@ type
     FMouse: TVector2;
     FDrawing: Boolean;
     FDrawPoints: TEditPoints;
+    { The room was closed by a click on its first corner (else Enter: a
+      path ending on two walls cuts the sector instead). }
+    FDrawClosed: Boolean;
     FThingType: Integer;
     FTextures, FFlats: TStringList;
     FTitle, FInfo, FMessageLabel, FHelpLabel: TCastleLabel;
@@ -104,6 +110,10 @@ type
     procedure MouseUp(const P: TVector2; const Button: TCastleMouseButton);
     procedure AddDrawPoint(const Pt: TEditPoint);
     procedure FinishDrawing;
+    procedure CutSector;
+    procedure DeleteSelection;
+    procedure ToggleFlag(const Number: Integer);
+    procedure RenderFlags;
     function HandleKey(const Key: TKey; const Shift, Ctrl: Boolean): Boolean;
     function CycleName(const List: TStrings; const Current: String; const Delta: Integer): String;
     procedure ChangeWall(const Delta: Integer);
@@ -243,12 +253,15 @@ const
     'Shift+click: add to the selection' + #10 +
     'Drag on nothing / Ctrl+drag: box select' + #10 +
     'Ctrl+A all, Ctrl+C / Ctrl+V copy things' + #10 +
+    'N, a path from wall to wall, Enter: cut a sector' + #10 +
+    'Del: delete (vertices join their lines)' + #10 +
+    '1-9: flags of lines / things' + #10 +
     'Space: texture / flat picker (Shift: ceiling)' + #10 +
     'Sector: PgUp PgDn floor (Shift: ceiling)' + #10 +
     '  B light  F C flats  P special  D door' + #10 +
     'Line: W texture  P special  X split' + #10 +
     ', .  tag (things: turn)' + #10 +
-    'Things: A / Insert add  [ ]  type  Del' + #10 +
+    'Things: A / Insert add  [ ]  type' + #10 +
     'Shift: backwards / ceiling' + #10 +
     'Ctrl+Z / Ctrl+Y  undo / redo' + #10 +
     'F9  play-test (F7 in the game: back)' + #10 +
@@ -1340,6 +1353,7 @@ begin
   if (FHelpLabel <> nil) and FHelpLabel.Exists then
     DrawRectangle(FHelpLabel.RenderRect, Vector4(0.1, 0.12, 0.2, 0.9));
 
+  RenderFlags;
   if FPicker then RenderPicker;
 end;
 
@@ -1503,6 +1517,7 @@ procedure TViewEdit.AddDrawPoint(const Pt: TEditPoint);
 begin
   if (Length(FDrawPoints) >= 3) and (FDrawPoints[0].X = Pt.X) and (FDrawPoints[0].Y = Pt.Y) then
   begin
+    FDrawClosed := true;
     FinishDrawing;
     Exit;
   end;
@@ -1511,12 +1526,49 @@ begin
   UpdateLabels;
 end;
 
-procedure TViewEdit.FinishDrawing;
+procedure TViewEdit.CutSector;
 var
-  Sec: Integer;
+  Sec, Old: Integer;
   Error: String;
 begin
   FDrawing := false;
+  FDrawClosed := false;
+  Old := FEdit.SectorAt((FDrawPoints[0].X + FDrawPoints[1].X) / 2 + 0.01,
+    (FDrawPoints[0].Y + FDrawPoints[1].Y) / 2 + 0.013);
+  Sec := FEdit.SplitSector(FDrawPoints, Error);
+  if Sec < 0 then
+  begin
+    LogAction('Cannot cut: ' + Error);
+    WritelnWarning('Editor', 'Cut refused: %s', [Error]);
+  end else
+  begin
+    LogAction(Format('Sector %d cut in two: sector %d with %d points', [Old, Sec, Length(FDrawPoints)]));
+    SetMode(emSectors);
+    SelectOnly(Sec);
+  end;
+  FDrawPoints := nil;
+  UpdateLabels;
+end;
+
+procedure TViewEdit.FinishDrawing;
+var
+  Sec, N: Integer;
+  Error: String;
+begin
+  FDrawing := false;
+  N := Length(FDrawPoints);
+  { Enter on a path from wall to wall through a sector: a cut. }
+  if (not FDrawClosed) and (N >= 2) and
+     FEdit.OnWall(FDrawPoints[0].X, FDrawPoints[0].Y) and
+     FEdit.OnWall(FDrawPoints[N - 1].X, FDrawPoints[N - 1].Y) and
+     ((FDrawPoints[0].X <> FDrawPoints[N - 1].X) or (FDrawPoints[0].Y <> FDrawPoints[N - 1].Y)) and
+     (FEdit.SectorAt((FDrawPoints[0].X + FDrawPoints[1].X) / 2 + 0.01,
+       (FDrawPoints[0].Y + FDrawPoints[1].Y) / 2 + 0.013) >= 0) then
+  begin
+    CutSector;
+    Exit;
+  end;
+  FDrawClosed := false;
   Sec := FEdit.DrawSector(FDrawPoints, Error);
   if Sec < 0 then
   begin
@@ -1576,6 +1628,170 @@ begin
     Result := Format(' (and %d more)', [Length(FMore)])
   else
     Result := '';
+end;
+
+procedure TViewEdit.DeleteSelection;
+var
+  Sel: TEditIndexArray;
+  Points: TEditPoints;
+  I, J, T, Joined: Integer;
+begin
+  Sel := Selection;
+  { Highest first, so the other indices stay right. }
+  for I := 1 to High(Sel) do
+    for J := I downto 1 do
+      if Sel[J] > Sel[J - 1] then
+      begin
+        T := Sel[J]; Sel[J] := Sel[J - 1]; Sel[J - 1] := T;
+      end;
+  case FMode of
+    emThings:
+      begin
+        DeleteThings;
+        Exit;
+      end;
+    emLines:
+      begin
+        FEdit.DeleteLines(Sel);
+        LogAction(Format('Deleted %d lines', [Length(Sel)]));
+      end;
+    emSectors:
+      begin
+        FEdit.BeginChange;
+        try
+          for I := 0 to High(Sel) do
+            FEdit.DeleteSector(Sel[I]);
+        finally
+          FEdit.EndChange;
+        end;
+        LogAction(Format('Deleted %d sectors', [Length(Sel)]));
+      end;
+    emVertices:
+      begin
+        { By place: deleting one renumbers the others. }
+        SetLength(Points, Length(Sel));
+        for I := 0 to High(Sel) do
+        begin
+          Points[I].X := FEdit.Vertices[Sel[I]].X;
+          Points[I].Y := FEdit.Vertices[Sel[I]].Y;
+        end;
+        Joined := 0;
+        FEdit.BeginChange;
+        try
+          for I := 0 to High(Points) do
+          begin
+            J := FEdit.NearestVertex(Points[I].X, Points[I].Y, 0);
+            if (J >= 0) and FEdit.DissolveVertex(J) then Inc(Joined);
+          end;
+        finally
+          FEdit.EndChange;
+        end;
+        LogAction(Format('Deleted %d vertices, %d joining their lines', [Length(Points), Joined]));
+      end;
+  end;
+  ClearSelection;
+end;
+
+type
+  TFlagName = record
+    Bit: Integer;
+    Name: String;
+  end;
+
+const
+  LineFlagNames: array [0..8] of TFlagName = (
+    (Bit: 1; Name: 'Impassable'), (Bit: 2; Name: 'Blocks monsters'), (Bit: 4; Name: 'Two-sided'),
+    (Bit: 8; Name: 'Upper unpegged'), (Bit: 16; Name: 'Lower unpegged'), (Bit: 32; Name: 'Secret'),
+    (Bit: 64; Name: 'Blocks sound'), (Bit: 128; Name: 'Hidden on automap'), (Bit: 256; Name: 'Shown on automap'));
+  ThingFlagNames: array [0..4] of TFlagName = (
+    (Bit: 1; Name: 'Skills 1-2'), (Bit: 2; Name: 'Skill 3'), (Bit: 4; Name: 'Skills 4-5'),
+    (Bit: 8; Name: 'Ambush (deaf)'), (Bit: 16; Name: 'Multiplayer only'));
+
+{ Number keys toggle a flag of the selection (lines or things): the main
+  one's flag flipped, the same value for all. }
+procedure TViewEdit.ToggleFlag(const Number: Integer);
+var
+  Sel: TEditIndexArray;
+  Bit, I: Integer;
+  FlagOn: Boolean;
+  FlagName: String;
+begin
+  Sel := Selection;
+  if FMode = emLines then
+  begin
+    if Number > Length(LineFlagNames) then Exit;
+    Bit := LineFlagNames[Number - 1].Bit;
+    FlagName := LineFlagNames[Number - 1].Name;
+    FlagOn := (FEdit.Lines[FSelected].Flags and Bit) = 0;
+  end else
+  begin
+    if Number > Length(ThingFlagNames) then Exit;
+    Bit := ThingFlagNames[Number - 1].Bit;
+    FlagName := ThingFlagNames[Number - 1].Name;
+    FlagOn := (FEdit.Things[FSelected].Flags and Bit) = 0;
+  end;
+  FEdit.Snapshot;
+  for I := 0 to High(Sel) do
+    if FMode = emLines then
+    begin
+      if FlagOn then
+        FEdit.Lines[Sel[I]].Flags := FEdit.Lines[Sel[I]].Flags or Bit
+      else
+        FEdit.Lines[Sel[I]].Flags := FEdit.Lines[Sel[I]].Flags and not Bit;
+    end else
+    begin
+      if FlagOn then
+        FEdit.Things[Sel[I]].Flags := FEdit.Things[Sel[I]].Flags or Bit
+      else
+        FEdit.Things[Sel[I]].Flags := FEdit.Things[Sel[I]].Flags and not Bit;
+    end;
+  LogAction(Format('%s %d: %s %s%s', [Copy(ModeNames[FMode], 1, Length(ModeNames[FMode]) - 1), FSelected,
+    FlagName, Iff(FlagOn, 'on', 'off'), MoreText]));
+end;
+
+{ The selected line's or thing's flags, bottom right: number, box, name. }
+procedure TViewEdit.RenderFlags;
+var
+  Font: TCastleFont;
+  Flags, I, Count: Integer;
+  X, Y, LineH, W: Single;
+  Text: String;
+  Names: array of TFlagName;
+begin
+  if (FSelected < 0) or FPicker or not (FMode in [emLines, emThings]) then Exit;
+  if FMode = emLines then
+  begin
+    if FSelected > High(FEdit.Lines) then Exit;
+    Flags := FEdit.Lines[FSelected].Flags;
+    SetLength(Names, Length(LineFlagNames));
+    for I := 0 to High(LineFlagNames) do Names[I] := LineFlagNames[I];
+  end else
+  begin
+    if FSelected > High(FEdit.Things) then Exit;
+    Flags := FEdit.Things[FSelected].Flags;
+    SetLength(Names, Length(ThingFlagNames));
+    for I := 0 to High(ThingFlagNames) do Names[I] := ThingFlagNames[I];
+  end;
+  Count := Length(Names);
+  Font := FallbackFont;
+  Font.PushProperties;
+  try
+    Font.Size := Max(12, Container.PixelsHeight / 60);
+    LineH := Font.Height * 1.35;
+    W := Font.TextWidth('9 [x] Hidden on automap') + 20;
+    X := Container.PixelsWidth - W - 10;
+    Y := 10;
+    DrawRectangle(FloatRectangle(X - 8, Y - 6, W + 8, LineH * (Count + 1) + 10), Vector4(0.1, 0.12, 0.2, 0.9));
+    for I := 0 to Count - 1 do
+    begin
+      if (Flags and Names[I].Bit) <> 0 then Text := '[x]' else Text := '[ ]';
+      Font.Print(X, Y + LineH * (Count - 1 - I), Vector4(0.9, 0.9, 0.9, 1),
+        Format('%d %s %s', [I + 1, Text, Names[I].Name]));
+    end;
+    Font.Print(X, Y + LineH * Count, Vector4(1, 0.85, 0.4, 1), 'Flags (number keys)');
+  finally
+    Font.PopProperties;
+  end;
 end;
 
 procedure TViewEdit.CycleSpecial(const Delta: Integer);
@@ -1780,6 +1996,13 @@ begin
       end;
     keyLeftBracket: CycleThingType(-1);
     keyRightBracket: CycleThingType(1);
+    keyDelete:
+      if FSelected >= 0 then DeleteSelection else Exit(false);
+    key1, key2, key3, key4, key5, key6, key7, key8, key9:
+      if (FSelected >= 0) and (FMode in [emLines, emThings]) then
+        ToggleFlag(Ord(Key) - Ord(key1) + 1)
+      else
+        Exit(false);
     else
     begin
       if FSelected < 0 then Exit(false);
@@ -1869,8 +2092,7 @@ begin
                   FEdit.Things[Sel[K]].Angle := (FEdit.Things[Sel[K]].Angle + V + 360) mod 360;
                 LogAction(Format('Thing %d angle %d%s', [FSelected, FEdit.Things[FSelected].Angle, MoreText]));
               end;
-            keyDelete:
-              DeleteThings;
+
             else Exit(false);
           end;
         else Exit(false);
@@ -2195,6 +2417,18 @@ begin
       MouseMove(At(3));
       MouseUp(At(3), buttonLeft);
     end else
+    if Cmd = 'CUT' then
+    begin
+      { A path from wall to wall cutting a sector in two. }
+      SetLength(Pts, (Parts.Count - 1) div 2);
+      for I := 0 to High(Pts) do
+      begin
+        Pts[I].X := Round(Num(1 + I * 2));
+        Pts[I].Y := Round(Num(2 + I * 2));
+      end;
+      FDrawPoints := Pts;
+      CutSector;
+    end else
     if Cmd = 'DRAW' then
     begin
       SetLength(Pts, (Parts.Count - 1) div 2);
@@ -2204,6 +2438,7 @@ begin
         Pts[I].Y := Round(Num(2 + I * 2));
       end;
       FDrawPoints := Pts;
+      FDrawClosed := true;
       FinishDrawing;
     end else
     if Cmd = 'THING' then

@@ -79,6 +79,8 @@ type
     function OnLineInside(const X, Y, L: Integer): Boolean;
     procedure SplitLineAtPoint(const L, X, Y: Integer);
     procedure AddVerticesOnEdge(const A, B: TEditPoint; var Q: TEditPoints);
+    procedure MakeOneSided(const L: Integer);
+    procedure FlipLine(const L: Integer);
   public
     { The map lump name (E1M1, MAP01...). }
     Name: String;
@@ -155,6 +157,26 @@ type
       its two-sided lines a DR door (special 1) facing outwards with DOOR3
       above. False when it has no two-sided lines. }
     function MakeDoor(const Sec: Integer): Boolean;
+    { Delete lines; their sides and the vertices left alone go too. }
+    procedure DeleteLines(const Indices: array of Integer);
+    { Delete a sector: its own lines go, a line it shares with another
+      sector becomes that sector's wall (one-sided, facing it, its upper or
+      lower texture as the wall). }
+    procedure DeleteSector(const Sec: Integer);
+    { Delete a vertex: its two lines become one when it joins exactly two
+      lines going on the same way (True), else it goes with its lines. }
+    function DissolveVertex(const V: Integer): Boolean;
+    { Cut a sector in two along a path (2 or more points) from one of its
+      walls to another, through the sector: the part on the path's right
+      becomes a new sector (returned) with the old one's heights and
+      flats. Ends on a line's middle split it. -1 with Error (and the map
+      as before) when the path leaves the sector, crosses lines or does not
+      cut it in two. }
+    function SplitSector(const Path: TEditPoints; out Error: String): Integer;
+    { Drop the sides no line uses and the vertices no line uses. }
+    procedure Compact;
+    { (X, Y) is a vertex or on a line (where a cut may end). }
+    function OnWall(const X, Y: Integer): Boolean;
     { Change sector heights and light, keeping the ceiling above the
       floor and the light in 0..255. }
     procedure ChangeSector(const Sec, DFloor, DCeiling, DLight: Integer);
@@ -942,6 +964,407 @@ begin
   Sides[Result].Lower := Lower;
   Sides[Result].Middle := Middle;
   Sides[Result].Sector := Sector;
+end;
+
+function TDoomEditMap.OnWall(const X, Y: Integer): Boolean;
+var
+  L: Integer;
+begin
+  if FindVertex(X, Y) >= 0 then Exit(true);
+  for L := 0 to High(Lines) do
+    if OnLineInside(X, Y, L) then Exit(true);
+  Result := false;
+end;
+
+procedure TDoomEditMap.Compact;
+var
+  SideMap, VertexMap: array of Integer;
+  I, N, S: Integer;
+begin
+  SetLength(SideMap, Length(Sides));
+  for I := 0 to High(SideMap) do SideMap[I] := -1;
+  SetLength(VertexMap, Length(Vertices));
+  for I := 0 to High(VertexMap) do VertexMap[I] := -1;
+  for I := 0 to High(Lines) do
+  begin
+    for S := 0 to 1 do
+      if Lines[I].Side[S] >= 0 then SideMap[Lines[I].Side[S]] := 0;
+    VertexMap[Lines[I].V1] := 0;
+    VertexMap[Lines[I].V2] := 0;
+  end;
+  N := 0;
+  for I := 0 to High(Sides) do
+    if SideMap[I] = 0 then
+    begin
+      SideMap[I] := N;
+      Sides[N] := Sides[I];
+      Inc(N);
+    end;
+  SetLength(Sides, N);
+  N := 0;
+  for I := 0 to High(Vertices) do
+    if VertexMap[I] = 0 then
+    begin
+      VertexMap[I] := N;
+      Vertices[N] := Vertices[I];
+      Inc(N);
+    end;
+  SetLength(Vertices, N);
+  for I := 0 to High(Lines) do
+  begin
+    for S := 0 to 1 do
+      if Lines[I].Side[S] >= 0 then Lines[I].Side[S] := SideMap[Lines[I].Side[S]];
+    Lines[I].V1 := VertexMap[Lines[I].V1];
+    Lines[I].V2 := VertexMap[Lines[I].V2];
+  end;
+end;
+
+procedure TDoomEditMap.DeleteLines(const Indices: array of Integer);
+var
+  Gone: array of Boolean;
+  I, N: Integer;
+begin
+  Snapshot;
+  SetLength(Gone, Length(Lines));
+  for I := 0 to High(Indices) do
+    if (Indices[I] >= 0) and (Indices[I] <= High(Gone)) then Gone[Indices[I]] := true;
+  N := 0;
+  for I := 0 to High(Lines) do
+    if not Gone[I] then
+    begin
+      Lines[N] := Lines[I];
+      Inc(N);
+    end;
+  SetLength(Lines, N);
+  Compact;
+end;
+
+{ A line one-sided towards its front (the back side dropped): the wall
+  shows the texture its front had above or below. }
+procedure TDoomEditMap.MakeOneSided(const L: Integer);
+var
+  F: Integer;
+  Tex: String;
+begin
+  Lines[L].Side[1] := -1;
+  Lines[L].Flags := (Lines[L].Flags or ML_BLOCKING) and not ML_TWOSIDED;
+  F := Lines[L].Side[0];
+  if F < 0 then Exit;
+  Tex := Sides[F].Lower;
+  if (Tex = '') or (Tex = '-') then Tex := Sides[F].Upper;
+  if (Tex = '') or (Tex = '-') then Tex := Sides[F].Middle;
+  if (Tex = '') or (Tex = '-') then Tex := DefaultWall;
+  Sides[F].Middle := Tex;
+  Sides[F].Upper := '-';
+  Sides[F].Lower := '-';
+end;
+
+procedure TDoomEditMap.FlipLine(const L: Integer);
+var
+  T: Integer;
+begin
+  T := Lines[L].V1; Lines[L].V1 := Lines[L].V2; Lines[L].V2 := T;
+  T := Lines[L].Side[0]; Lines[L].Side[0] := Lines[L].Side[1]; Lines[L].Side[1] := T;
+end;
+
+procedure TDoomEditMap.DeleteSector(const Sec: Integer);
+var
+  Gone: array of Boolean;
+  I, N, S0, S1: Integer;
+begin
+  Snapshot;
+  SetLength(Gone, Length(Lines));
+  for I := 0 to High(Lines) do
+  begin
+    S0 := LineSector(I, 0);
+    S1 := LineSector(I, 1);
+    if (S0 <> Sec) and (S1 <> Sec) then Continue;
+    if ((S0 = Sec) or (S0 < 0)) and ((S1 = Sec) or (S1 < 0)) then
+      Gone[I] := true
+    else
+    begin
+      { The other sector keeps it as a wall, in front. }
+      if S0 = Sec then FlipLine(I);
+      MakeOneSided(I);
+    end;
+  end;
+  N := 0;
+  for I := 0 to High(Lines) do
+    if not Gone[I] then
+    begin
+      Lines[N] := Lines[I];
+      Inc(N);
+    end;
+  SetLength(Lines, N);
+  Compact;
+  Delete(Sectors, Sec, 1);
+  for I := 0 to High(Sides) do
+    if Sides[I].Sector > Sec then Dec(Sides[I].Sector);
+end;
+
+function TDoomEditMap.DissolveVertex(const V: Integer): Boolean;
+var
+  Found: array of Integer;
+  I, A, B: Integer;
+begin
+  Snapshot;
+  Found := nil;
+  for I := 0 to High(Lines) do
+    if (Lines[I].V1 = V) or (Lines[I].V2 = V) then
+    begin
+      SetLength(Found, Length(Found) + 1);
+      Found[High(Found)] := I;
+    end;
+  Result := false;
+  if Length(Found) = 2 then
+  begin
+    A := Found[0];
+    B := Found[1];
+    { A ends at V, B starts there. }
+    if Lines[A].V2 <> V then FlipLine(A);
+    if Lines[B].V1 <> V then FlipLine(B);
+    if (Lines[A].V1 <> Lines[B].V2) and (LineSector(A, 0) = LineSector(B, 0)) and
+       (LineSector(A, 1) = LineSector(B, 1)) then
+    begin
+      Lines[A].V2 := Lines[B].V2;
+      Delete(Lines, B, 1);
+      Result := true;
+    end;
+  end;
+  if not Result then
+    for I := High(Lines) downto 0 do
+      if (Lines[I].V1 = V) or (Lines[I].V2 = V) then
+        Delete(Lines, I, 1);
+  Compact;
+end;
+
+function TDoomEditMap.SplitSector(const Path: TEditPoints; out Error: String): Integer;
+var
+  P, Loop: TEditPoints;
+  Before: TState;
+  N, I, J, L, S, B, E, Cur, Prev, Best, Steps, Side, NewSec, K: Integer;
+  X1, Y1, X2, Y2, MX, MY, NX, NY, Len, T1, T2, RX, RY, CX, CY, Ang, BestAng: Double;
+  OnChain: array of Boolean;
+  Pt: TEditPoint;
+
+  function EndVertex(const Q: TEditPoint): Integer;
+  var
+    LL: Integer;
+  begin
+    Result := FindVertex(Q.X, Q.Y);
+    if Result >= 0 then Exit;
+    for LL := 0 to High(Lines) do
+      if OnLineInside(Q.X, Q.Y, LL) then
+      begin
+        SplitLineAtPoint(LL, Q.X, Q.Y);
+        Exit(FindVertex(Q.X, Q.Y));
+      end;
+  end;
+
+  function OnBoundary(const V, Sector: Integer): Boolean;
+  var
+    LL: Integer;
+  begin
+    for LL := 0 to High(Lines) do
+      if ((Lines[LL].V1 = V) or (Lines[LL].V2 = V)) and
+         ((LineSector(LL, 0) = Sector) or (LineSector(LL, 1) = Sector)) then
+        Exit(true);
+    Result := false;
+  end;
+
+  procedure Fail(const Msg: String);
+  begin
+    Error := Msg;
+    Restore(Before);
+  end;
+
+begin
+  Result := -1;
+  Error := '';
+  P := nil;
+  for I := 0 to High(Path) do
+    if (Length(P) = 0) or (P[High(P)].X <> Path[I].X) or (P[High(P)].Y <> Path[I].Y) then
+    begin
+      SetLength(P, Length(P) + 1);
+      P[High(P)] := Path[I];
+    end;
+  N := Length(P);
+  if N < 2 then
+  begin
+    Error := 'A cut needs two points';
+    Exit;
+  end;
+  if (P[0].X = P[N - 1].X) and (P[0].Y = P[N - 1].Y) then
+  begin
+    Error := 'A closed path draws a room, not a cut';
+    Exit;
+  end;
+  { The sector: where the first segment's middle is. }
+  S := SectorAt((P[0].X + P[1].X) / 2 + 0.01, (P[0].Y + P[1].Y) / 2 + 0.013);
+  if S < 0 then
+  begin
+    Error := 'The cut must run through a sector';
+    Exit;
+  end;
+  Before := Capture;
+  B := EndVertex(P[0]);
+  E := EndVertex(P[N - 1]);
+  if (B < 0) or (E < 0) or not OnBoundary(B, S) or not OnBoundary(E, S) then
+  begin
+    Fail('The cut must start and end on the sector''s walls');
+    Exit;
+  end;
+  { Its points between: inside the sector, off every line. }
+  for I := 1 to N - 2 do
+    if (FindVertex(P[I].X, P[I].Y) >= 0) or (SectorAt(P[I].X + 0.01, P[I].Y + 0.013) <> S) then
+    begin
+      Fail(Format('Point %d of the cut is not inside sector %d', [I + 1, S]));
+      Exit;
+    end;
+  { Its segments: touching lines only at the cut's two ends. }
+  for I := 0 to N - 2 do
+  begin
+    X1 := P[I].X; Y1 := P[I].Y;
+    X2 := P[I + 1].X; Y2 := P[I + 1].Y;
+    for L := 0 to High(Lines) do
+    begin
+      MX := Vertices[Lines[L].V1].X; MY := Vertices[Lines[L].V1].Y;
+      NX := Vertices[Lines[L].V2].X; NY := Vertices[Lines[L].V2].Y;
+      if not SegmentsTouch(X1, Y1, X2, Y2, MX, MY, NX, NY) then Continue;
+      if (Abs(Cross(X1, Y1, X2, Y2, MX, MY)) < 1e-6) and (Abs(Cross(X1, Y1, X2, Y2, NX, NY)) < 1e-6) then
+      begin
+        Len := Sqr(X2 - X1) + Sqr(Y2 - Y1);
+        T1 := ((MX - X1) * (X2 - X1) + (MY - Y1) * (Y2 - Y1)) / Len;
+        T2 := ((NX - X1) * (X2 - X1) + (NY - Y1) * (Y2 - Y1)) / Len;
+        if Min(1, Max(T1, T2)) - Max(0, Min(T1, T2)) > 1e-9 then
+        begin
+          Fail(Format('The cut runs along line %d', [L]));
+          Exit;
+        end;
+        Continue;
+      end;
+      if ((I = 0) and (SamePoint(X1, Y1, MX, MY) or SamePoint(X1, Y1, NX, NY))) or
+         ((I = N - 2) and (SamePoint(X2, Y2, MX, MY) or SamePoint(X2, Y2, NX, NY))) then
+        Continue;
+      Fail(Format('The cut crosses line %d', [L]));
+      Exit;
+    end;
+  end;
+
+  { The part on the cut's right: from E, follow the sector's wall with the
+    sector on the right (the next wall counter-clockwise from where we came
+    from) back to B. }
+  Loop := Copy(P);
+  SetLength(OnChain, Length(Lines));
+  Cur := E;
+  Prev := -1;
+  RX := P[N - 2].X - P[N - 1].X;
+  RY := P[N - 2].Y - P[N - 1].Y;
+  Steps := 0;
+  while Cur <> B do
+  begin
+    Inc(Steps);
+    if Steps > Length(Lines) + 1 then
+    begin
+      Fail('The cut does not divide the sector in two');
+      Exit;
+    end;
+    Best := -1;
+    BestAng := 10;
+    for L := 0 to High(Lines) do
+      for Side := 0 to 1 do
+      begin
+        if LineSector(L, Side) <> S then Continue;
+        { The wall's direction with the sector on its right. }
+        if Side = 0 then
+        begin
+          if Lines[L].V1 <> Cur then Continue;
+          J := Lines[L].V2;
+        end else
+        begin
+          if Lines[L].V2 <> Cur then Continue;
+          J := Lines[L].V1;
+        end;
+        if L = Prev then Continue;
+        CX := Vertices[J].X - Vertices[Cur].X;
+        CY := Vertices[J].Y - Vertices[Cur].Y;
+        Ang := ArcTan2(RX * CY - RY * CX, RX * CX + RY * CY);
+        if Ang <= 1e-9 then Ang := Ang + 2 * Pi;
+        if Ang < BestAng then
+        begin
+          BestAng := Ang;
+          Best := L * 2 + Side;
+        end;
+      end;
+    if Best < 0 then
+    begin
+      Fail('The cut does not divide the sector in two');
+      Exit;
+    end;
+    L := Best div 2;
+    OnChain[L] := true;
+    Prev := L;
+    if Best mod 2 = 0 then J := Lines[L].V2 else J := Lines[L].V1;
+    RX := Vertices[Cur].X - Vertices[J].X;
+    RY := Vertices[Cur].Y - Vertices[J].Y;
+    Cur := J;
+    if Cur = E then
+    begin
+      Fail('The cut does not divide the sector in two');
+      Exit;
+    end;
+    if Cur <> B then
+    begin
+      Pt.X := Vertices[Cur].X;
+      Pt.Y := Vertices[Cur].Y;
+      SetLength(Loop, Length(Loop) + 1);
+      Loop[High(Loop)] := Pt;
+    end;
+  end;
+
+  NewSec := Length(Sectors);
+  SetLength(Sectors, NewSec + 1);
+  Sectors[NewSec] := Sectors[S];
+  Sectors[NewSec].Special := 0;
+  Sectors[NewSec].Tag := 0;
+  { The walls on the right part (the chain, and pillars inside the loop)
+    face the new sector: copies of their sides. }
+  for L := 0 to High(Lines) do
+    for Side := 0 to 1 do
+    begin
+      if LineSector(L, Side) <> S then Continue;
+      if not OnChain[L] then
+      begin
+        { A point just off the wall on the sector's side. }
+        X1 := Vertices[Lines[L].V1].X; Y1 := Vertices[Lines[L].V1].Y;
+        X2 := Vertices[Lines[L].V2].X; Y2 := Vertices[Lines[L].V2].Y;
+        Len := Sqrt(Sqr(X2 - X1) + Sqr(Y2 - Y1));
+        if Len = 0 then Continue;
+        MX := (X1 + X2) / 2 + (Y2 - Y1) / Len * 0.5 * (1 - 2 * Side);
+        MY := (Y1 + Y2) / 2 - (X2 - X1) / Len * 0.5 * (1 - 2 * Side);
+        if not PointInPolygon(MX, MY, Loop) then Continue;
+      end;
+      K := Length(Sides);
+      SetLength(Sides, K + 1);
+      Sides[K] := Sides[Lines[L].Side[Side]];
+      Sides[K].Sector := NewSec;
+      Lines[L].Side[Side] := K;
+    end;
+  { The cut itself: two-sided, the new sector on its right. }
+  for I := 0 to N - 2 do
+  begin
+    L := Length(Lines);
+    SetLength(Lines, L + 1);
+    Lines[L].V1 := VertexAt(P[I].X, P[I].Y);
+    Lines[L].V2 := VertexAt(P[I + 1].X, P[I + 1].Y);
+    Lines[L].Special := 0;
+    Lines[L].Tag := 0;
+    Lines[L].Flags := ML_TWOSIDED;
+    Lines[L].Side[0] := AddSide(NewSec, DefaultWall, DefaultWall, '-');
+    Lines[L].Side[1] := AddSide(S, DefaultWall, DefaultWall, '-');
+  end;
+  PushUndo(Before);
+  Result := NewSec;
 end;
 
 procedure TDoomEditMap.DeleteLine(const L: Integer);

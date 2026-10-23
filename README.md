@@ -71,7 +71,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   draw new rooms (inside a sector, in the void, or against a wall: corners on a wall split
   it), select several with Shift+click or a box, set floor and ceiling heights, light,
   specials and tags, pick wall textures and flats from their pictures (Space), make doors,
-  add, turn, copy and paste things, undo / redo. `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
+  cut a sector in two along a path, delete lines, sectors and vertices, toggle line and
+  thing flags (number keys), add, turn, copy and paste things, undo / redo. `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
   as a PWAD with its nodes built (it runs in other Doom ports: `-file e1m1-edited.wad`),
   `F3` / `F4` export the level's walls and floors as glTF / X3D with their textures for
   Blender, other engines or the Castle Game Engine editor. On the command line

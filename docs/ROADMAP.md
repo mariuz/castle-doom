@@ -6,6 +6,19 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Map editor, cuts, deletion and flags: a path drawn across a sector
+  from wall to wall (N, its points, Enter; ends on a line's middle
+  split it) cuts the sector in two (`TDoomEditMap.SplitSector`: the
+  part on the path's right, found by walking the sector's walls from
+  the path's end with the sector on the right, becomes a new sector,
+  pillars inside it too); Delete removes the selected lines, sectors
+  (a wall shared with another sector stays as that sector's one-sided
+  wall) or vertices (`DissolveVertex`: two lines through it join into
+  one); number keys toggle the selected lines' flags (impassable ...
+  shown on automap) or things' (skills, ambush, multiplayer), shown in
+  a panel. Autotest `editor-cut` (goldens), unit test
+  `TestEditCutDelete`.
+
 - Custom game page, the rest: Enter on GAME opens an IWAD file; PWADS
   opens a page listing the PWADs in load order (left / right move one,
   Enter or Delete removes it, ADD PWAD... adds one); a RECENT row steps
@@ -1119,18 +1132,17 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels and the desktop menu are done (see above); left are demos in the browser (files through the save storage and the home page, like the save bundle), the demo-script cheats as recorded events, and a ghost of a recording to race. | Easier bug reports; replays. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | M |
-| **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection and rooms against walls are done (see above); left are rooms that cross lines inside a sector (cutting it in two), deleting sectors and lines, flipping lines and editing line flags and thing skill flags (a small properties panel), copying geometry (not only things), a 3D preview inside the editor, opening PWAD files in the browser (an `<input type=file>`), and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
+| **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection and rooms against walls are done (see above); left are flipping lines, texture offsets and sector light / height values typed in (a properties panel with fields), copying geometry (not only things), a 3D preview inside the editor, opening PWAD files in the browser (an `<input type=file>`), and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
 | **Custom game page, the rest**: the page, its PWADs page, recent sets and the browser's file picker are done (see above); left are keeping the browser's files across page reloads (IndexedDB, so saves and recent sets that name them work again), forgetting a recent set, and then dropping the Options panel's WAD buttons in favour of the page. | One place to choose WADs. | `GameViewMenu`, `tools/patch_web_page.py` | S-M |
 
 ## Suggested next three
 
-1. Map editor, the rest (M, see New features): a properties panel for
-   line and thing flags, deleting sectors and lines, and rooms that cut
-   a sector in two.
-2. Demos, the rest (M, see New features): demos in the browser and the
+1. Demos, the rest (M, see New features): demos in the browser and the
    cheats as recorded events.
-3. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
+2. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
+3. Map editor, the rest (M, see New features): typed values (offsets,
+   heights, light), flipping lines, copying geometry, a 3D preview.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

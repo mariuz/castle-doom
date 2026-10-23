@@ -96,7 +96,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 49 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 50 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -684,7 +684,11 @@ centre in Doom units, pixels a unit), `MODE:v|l|s|t`, `CLICK:x:y`,
 select, adding), `TYPE:text` (the picker's filter; `KEY:Space` opens
 it on the selected lines or sectors, `KEY:Enter` applies); log
 lines start with `Editor:` (autotest `editor-select` has the picker,
-box select, copy / paste and rooms against walls). A clear spot in E1M1's start room for a
+box select, copy / paste and rooms against walls). `CUT:x:y:x:y...`
+cuts a sector along a path from wall to wall (Enter on a drawn path
+whose ends lie on walls does the same; `DRAW` always closes a room),
+`KEY:Delete` deletes the selection, `KEY:1`..`KEY:9` toggle flags of
+the selected lines or things (autotest `editor-cut`). A clear spot in E1M1's start room for a
 room: `DRAW:-480:192:-352:192:-352:288:-480:288` (autotest `editor`
 raises it to 24 and play-tests standing on it; its exported WAD is
 checked with Python `struct`, `check_map_wad`). `--export-map MAP FILE`,

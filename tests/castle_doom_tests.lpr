@@ -121,6 +121,7 @@ type
     procedure TestEditOperations;
     procedure TestSceneExport;
     procedure TestEditWalls;
+    procedure TestEditCutDelete;
   end;
 
   TTestStates = class(TTestCase)
@@ -2493,6 +2494,95 @@ begin
     finally
       FreeAndNil(W);
     end;
+  finally
+    FreeAndNil(E);
+  end;
+end;
+
+{ Cutting a sector in two along a path, deleting a sector (its shared
+  walls stay with the neighbour), dissolving a vertex, deleting lines. }
+procedure TTestEditor.TestEditCutDelete;
+
+  function Pts(const C: array of Integer): TEditPoints;
+  var
+    I: Integer;
+  begin
+    SetLength(Result, Length(C) div 2);
+    for I := 0 to High(Result) do
+    begin
+      Result[I].X := C[I * 2];
+      Result[I].Y := C[I * 2 + 1];
+    end;
+  end;
+
+var
+  E: TDoomEditMap;
+  Error: String;
+  L, V: Integer;
+  Data: TMemoryStream;
+  W: TDoomWad;
+  M: TDoomMap;
+begin
+  E := TDoomEditMap.Create;
+  try
+    E.Clear('E1M1');
+    AssertEquals('room', 0, E.DrawSector(Pts([0, 0, 256, 0, 256, 256, 0, 256]), Error));
+    { North through the middle: the east half (on the cut's right) is new. }
+    AssertEquals('cut: ' + Error, 1, E.SplitSector(Pts([128, 0, 128, 256]), Error));
+    AssertEquals('east', 1, E.SectorAt(200, 128));
+    AssertEquals('west', 0, E.SectorAt(50, 128));
+    AssertEquals('4 walls, 2 split, 1 cut', 7, Length(E.Lines));
+    { An L-shaped cut takes the south-west corner. }
+    AssertEquals('corner: ' + Error, 2, E.SplitSector(Pts([0, 64, 64, 64, 64, 0]), Error));
+    AssertEquals('in the corner', 2, E.SectorAt(32, 32));
+    AssertEquals('west half', 0, E.SectorAt(32, 128));
+    { Refused: leaving the sector, starting inside it. }
+    L := Length(E.Lines);
+    AssertEquals('out of the sector', -1, E.SplitSector(Pts([200, 100, 300, 100]), Error));
+    AssertEquals('inside', -1, E.SplitSector(Pts([100, 100, 100, 256]), Error));
+    AssertEquals('unchanged', L, Length(E.Lines));
+    { Written and read back. }
+    Data := E.SaveToWad;
+    try
+      RegisterEditedWad('E1M1', Data);
+    finally
+      FreeAndNil(Data);
+    end;
+    W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+    try
+      W.AddFile(EditedWadUrl('E1M1'));
+      M := TDoomMap.Create(W, 'E1M1');
+      try
+        AssertEquals('area', 256 * 256, PolygonArea(M), 0.5);
+        AssertEquals('corner read back', 2, M.SectorAt(32, 32));
+        AssertEquals('east read back', 1, M.SectorAt(200, 200));
+      finally
+        FreeAndNil(M);
+      end;
+    finally
+      FreeAndNil(W);
+    end;
+    { The corner deleted: void, its cut lines walls of sector 0 now. }
+    E.DeleteSector(2);
+    AssertEquals('sectors', 2, Length(E.Sectors));
+    AssertEquals('corner gone', -1, E.SectorAt(32, 32));
+    AssertEquals('west half stays', 0, E.SectorAt(32, 128));
+    L := E.NearestLine(32, 64, 1);
+    AssertEquals('cut line one-sided', -1, E.Lines[L].Side[1]);
+    AssertEquals('facing sector 0', 0, E.LineSector(L, 0));
+    AssertTrue('undo', E.Undo);
+    AssertEquals('corner back', 2, E.SectorAt(32, 32));
+    { A vertex in a wall's middle dissolves into one line. }
+    E.Clear('E1M1');
+    E.DrawSector(Pts([0, 0, 256, 0, 256, 256, 0, 256]), Error);
+    V := E.SplitLine(E.NearestLine(128, 0, 1), 128, 0);
+    AssertEquals('split', 5, Length(E.Lines));
+    AssertTrue('dissolved', E.DissolveVertex(V));
+    AssertEquals('joined', 4, Length(E.Lines));
+    AssertEquals('vertices', 4, Length(E.Vertices));
+    E.DeleteLines([0, 1]);
+    AssertEquals('two lines left', 2, Length(E.Lines));
+    AssertEquals('their vertices', 3, Length(E.Vertices));
   finally
     FreeAndNil(E);
   end;
