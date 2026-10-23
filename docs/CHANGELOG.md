@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.47.0 (2026-10-23)
 
 - Custom game page: Enter on GAME opens an IWAD file, PWADS opens a page to add, reorder
   and remove PWADs, and a RECENT row brings back the last sets of WADs you played. In the
