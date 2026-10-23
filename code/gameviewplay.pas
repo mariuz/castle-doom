@@ -140,6 +140,7 @@ type
       saved state, so a playback starts alike), and end a recording or a
       playback (a level's end, another map, leaving the view). }
     procedure StartDemoRecording;
+    procedure KeepDemo(const Ends: Boolean);
     { ToNextLevel: the level ended (intermission), the demo goes on in the
       next one; otherwise it ends. }
     procedure StopDemos(const ToNextLevel: Boolean);
@@ -254,6 +255,18 @@ var
     a demo (the menu loads its WADs first). Both are used once. }
   DemoRecordFile, DemoPlayFile: String;
 
+const
+  { The browser's demo (Options -> Record demo... there, or ?record=1):
+    recorded in memory, kept in the save storage (localStorage) under
+    this URL and downloaded by the page when the recording ends. On the
+    desktop --record / --playdemo take this URL too. }
+  LastDemoUrl = 'castle-config:/last-demo.cdemo';
+
+{ A demo from a file, an upload:/ URL (the browser's file picker) or a
+  castle-config: URL (the save storage); nil and a warning when it is
+  missing or not a demo. No exceptions on the web. }
+function OpenDemo(const Url: String): TDemoPlayer;
+
 { Saved game location: slot 0 is the quick save, 1..6 the F2/F3 slots.
   castle-config: is the user config directory on desktop (next to the log);
   in the browser GameSaveStorage keeps the text in localStorage under this URL. }
@@ -284,6 +297,58 @@ const
     for a click / Enter (resume) or another Esc (title menu). }
   SlotMenuPause = 4;
   SaveSlots = 6;
+
+function IsStorageUrl(const Url: String): Boolean;
+begin
+  Result := SameText(Copy(Url, 1, Length('castle-config:')), 'castle-config:');
+end;
+
+function OpenDemo(const Url: String): TDemoPlayer;
+var
+  Text: String;
+  Found: Boolean;
+  Lines: TStringList;
+begin
+  Result := nil;
+  if IsUploadUrl(Url) then
+    Found := UploadText(Url, Text)
+  else if IsStorageUrl(Url) then
+    Found := SaveStorageRead(Url, Text)
+  else
+  begin
+    { A file (the desktop's dialog or --playdemo). }
+    Found := FileExists(Url);
+    if Found then
+    begin
+      Lines := TStringList.Create;
+      try
+        try
+          Lines.LoadFromFile(Url);
+        except
+          on E: Exception do
+          begin
+            WritelnWarning('Demo', 'Cannot read %s: %s', [Url, E.Message]);
+            Exit;
+          end;
+        end;
+        Text := Lines.Text;
+      finally
+        FreeAndNil(Lines);
+      end;
+    end;
+  end;
+  if not Found then
+  begin
+    WritelnWarning('Demo', 'Cannot play %s: no such demo', [Url]);
+    Exit;
+  end;
+  Result := TDemoPlayer.CreateFromText(Url, Text);
+  if not Result.Valid then
+  begin
+    WritelnWarning('Demo', 'Cannot play %s: %s', [Url, Result.Error]);
+    FreeAndNil(Result);
+  end;
+end;
 
 function SaveSlotUrl(const Slot: Integer): String;
 begin
@@ -490,12 +555,7 @@ begin
   end;
   if DemoPlayFile <> '' then
   begin
-    try
-      FDemoPlayer := TDemoPlayer.Create(DemoPlayFile);
-    except
-      on E: Exception do
-        WritelnWarning('Demo', 'Cannot play %s: %s', [DemoPlayFile, E.Message]);
-    end;
+    FDemoPlayer := OpenDemo(DemoPlayFile);
     DemoPlayFile := '';
     if (FDemoPlayer <> nil) and LoadGameJson(FDemoPlayer.State.Clone as TJSONObject, FDemoPlayer.FileName) then
       Exit;
@@ -583,7 +643,6 @@ var
   Arg, Arg2, LookAngle, LookPitch: Single;
   P, Sec: Integer;
   K, K2: TKey;
-  SpawnedActor: TDoomActor;
   FDemoKeys: TStringList;
 begin
   if FDemoSteps = nil then
@@ -718,18 +777,14 @@ begin
   end
   else if Cmd = 'SOUNDMENU' then
     OpenSoundMenu
-  else if Cmd = 'LINE' then
-    FWorld.DebugActivateLine(Round(Arg), Round(Arg2))
+  else if TDoomWorld.IsCheat(Cmd) then
+    { K, Y, P, CORPSE, D, V, INVIS, INVUL, AMP, LINE: through the world,
+      which records them in a demo. }
+    FWorld.Cheat(Cmd, Arg, Arg2)
   else if Cmd = 'SHOTS' then
     FWorld.DebugShots := true
   else if Cmd = 'SIGHT' then
     FWorld.DebugSight
-  else if Cmd = 'INVIS' then
-    FWorld.Player.InvisibleTics := 60 * 35
-  else if Cmd = 'INVUL' then
-    FWorld.Player.InvulnerableTics := Iff(Arg > 0, Round(Arg), 30 * 35)
-  else if Cmd = 'AMP' then
-    FWorld.Player.LightAmpTics := Iff(Arg > 0, Round(Arg), 120 * 35)
   else if Cmd = 'DLIGHTS' then
     SetDynamicLightsOn(not Settings.DynamicLights)
   else if Cmd = 'PHOTO' then
@@ -778,8 +833,6 @@ begin
     DemoPad(Cmd, Rest)
   else if Cmd = 'PALMAP' then
     DoomLightingInstance.PaletteMapped := not DoomLightingInstance.PaletteMapped
-  else if Cmd = 'K' then
-    FWorld.GiveAll
   else if Cmd = 'MENU' then
   begin
     if Round(Arg) = 0 then CloseSlotMenu else OpenSlotMenu(Round(Arg));
@@ -788,22 +841,6 @@ begin
     SaveGame(Round(Arg))
   else if Cmd = 'LOAD' then
     LoadGame(Round(Arg))
-  else if Cmd = 'Y' then
-    FWorld.DebugGod
-  else if Cmd = 'P' then
-    FWorld.DebugSpawn(Round(Arg), Arg2)
-  else if Cmd = 'CORPSE' then
-  begin
-    { CORPSE:type:dist spawns a monster and kills it in the same frame (a
-      corpse exactly there; P then D lets it walk a few tics first). }
-    SpawnedActor := FWorld.DebugSpawn(Round(Arg), Arg2);
-    if SpawnedActor <> nil then
-      FWorld.DamageActor(SpawnedActor, 100000, SpawnedActor.DoomX, SpawnedActor.DoomY, SpawnedActor.DoomZ + 32);
-  end
-  else if Cmd = 'V' then
-    FWorld.DebugInfight
-  else if Cmd = 'D' then
-    FWorld.DebugKillAll
   else if Cmd = 'C' then
   begin
     case Round(Arg) of
@@ -1890,6 +1927,9 @@ begin
     { The recording starts from this state loaded, like its playback. }
     FWorld.LoadState(J);
     RestoreViewState(J);
+    if IsStorageUrl(DemoRecordFile) then
+      FRecorder := TDemoRecorder.CreateInMemory(DemoRecordFile, 1, J)
+    else
     try
       FRecorder := TDemoRecorder.Create(DemoRecordFile, 1, J);
     except
@@ -1904,11 +1944,37 @@ begin
     FWorld.StartRecording(FRecorder);
 end;
 
+{ An in-memory recording (the browser's) goes to the save storage after
+  each level; when it ends the page also downloads it. }
+procedure TViewPlay.KeepDemo(const Ends: Boolean);
+const
+  { localStorage holds about 5 million characters per page (saves too);
+    an exception for a full one would stop the WebAssembly program. }
+  MaxStoredDemo = 3000000;
+var
+  T: String;
+begin
+  if (FRecorder = nil) or not FRecorder.InMemory then Exit;
+  T := FRecorder.Text;
+  {$ifdef WASI}
+  if Length(T) > MaxStoredDemo then
+    WritelnWarning('Demo', '%s is too long to keep in the browser (%d KB)', [FRecorder.FileName, Length(T) div 1024])
+  else
+  {$endif}
+  begin
+    SaveStorageWrite(FRecorder.FileName, T);
+    WritelnLog('Demo', 'Kept %s in %s (%d KB)', [FRecorder.FileName, SaveStorageName, (Length(T) + 1023) div 1024]);
+  end;
+  if Ends and PageDownload('castle-doom.cdemo', T, 'application/octet-stream') then
+    WritelnLog('Demo', 'Downloading %s as castle-doom.cdemo', [FRecorder.FileName]);
+end;
+
 procedure TViewPlay.StopDemos(const ToNextLevel: Boolean);
 begin
   if FRecorder <> nil then
   begin
     if (FWorld <> nil) and not FRecorder.Finished then FWorld.StopRecording;
+    KeepDemo(not ToNextLevel);
     if not ToNextLevel then FreeAndNil(FRecorder);
   end;
   if FDemoStarted then

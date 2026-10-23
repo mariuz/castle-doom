@@ -6,6 +6,18 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Demos, cheats and the browser: the demo script's world cheats (`K`,
+  `Y`, `P`, `CORPSE`, `D`, `V`, `INVIS`, `INVUL`, `AMP`, `LINE`) go
+  through `TDoomWorld.Cheat` and are recorded as `X` lines, so a
+  recording that uses them plays back in sync; in the browser Options
+  -> Record demo... records into memory, keeps the demo in the save
+  storage (`castle-config:/last-demo.cdemo`, also in the save bundle)
+  and downloads it when the game ends, Play demo... opens a `.cdemo`
+  through the page's file picker, and the home page's "Your saves"
+  plays (`play/?playdemo=last`) or downloads the last one. Harness test
+  `demo` (cheats recorded into `castle-config:`, played back from there
+  and as an upload), unit test `TestDemoFile`.
+
 - Map editor, cuts, deletion and flags: a path drawn across a sector
   from wall to wall (N, its points, Enter; ends on a line's middle
   split it) cuts the sector in two (`TDoomEditMap.SplitSector`: the
@@ -1131,18 +1143,18 @@ play.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
-| **Demos, the rest**: recording, playback, several levels and the desktop menu are done (see above); left are demos in the browser (files through the save storage and the home page, like the save bundle), the demo-script cheats as recorded events, and a ghost of a recording to race. | Easier bug reports; replays. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | M |
+| **Demos, the rest**: recording, playback, several levels, the menu, cheats and the browser are done (see above); left are a ghost of a recording to race (its recorded positions drawn as a translucent player sprite), a smaller format for long browser recordings (the update lines in binary or as deltas), and choosing between several kept demos. | Replays; races. | `DoomDemo`, `GameViewPlay`, `DoomActors` | M |
 | **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection and rooms against walls are done (see above); left are flipping lines, texture offsets and sector light / height values typed in (a properties panel with fields), copying geometry (not only things), a 3D preview inside the editor, opening PWAD files in the browser (an `<input type=file>`), and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
 | **Custom game page, the rest**: the page, its PWADs page, recent sets and the browser's file picker are done (see above); left are keeping the browser's files across page reloads (IndexedDB, so saves and recent sets that name them work again), forgetting a recent set, and then dropping the Options panel's WAD buttons in favour of the page. | One place to choose WADs. | `GameViewMenu`, `tools/patch_web_page.py` | S-M |
 
 ## Suggested next three
 
-1. Demos, the rest (M, see New features): demos in the browser and the
-   cheats as recorded events.
-2. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
+1. Mobile, the rest (M, see Engine and tooling): try the APK on devices,
    then signing keys and the soft keyboard for save names.
-3. Map editor, the rest (M, see New features): typed values (offsets,
+2. Map editor, the rest (M, see New features): typed values (offsets,
    heights, light), flipping lines, copying geometry, a 3D preview.
+3. Custom game page, the rest (S-M, see New features): the browser's
+   files kept across page reloads (IndexedDB), forgetting a recent set.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

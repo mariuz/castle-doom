@@ -342,6 +342,12 @@ begin
     UseRandomMaps(Application.PageUrlParameters['random'], RandomSeed);
   if Application.PageUrlParameters.ContainsKey('skill') then
     CmdSkill := Clamped(StrToIntDef(Application.PageUrlParameters['skill'], 3), 1, 5) - 1;
+  { ?record=1 records the next game (kept in localStorage, downloaded at
+    its end), ?playdemo=last plays that recording back. }
+  if Application.PageUrlParameters.ContainsKey('record') then
+    DemoRecordFile := LastDemoUrl;
+  if Application.PageUrlParameters.ContainsKey('playdemo') then
+    DemoPlayFile := LastDemoUrl;
   if (AutoTestMap <> '') or (CmdWarp <> '') then
     WritelnLog('Web', 'Page URL options: map "%s", demo "%s", warp "%s"', [AutoTestMap, AutoTestDemo, CmdWarp]);
   {$endif}

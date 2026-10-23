@@ -20,6 +20,9 @@
                                      position xyz, direction xyz, walk vx vy
     U | F | R | P                    use, fire, fire released, push stopped
     N -1 | W 3                       next / previous weapon, select weapon
+    X P 453B8000 437A0000            a demo-script cheat (K, Y, P, CORPSE, D,
+                                     V, INVIS, INVUL, AMP, LINE) and its two
+                                     numbers as hex bits
     C 35 1a2b3c4d                    checksum at a tic
     E 812 1a2b3c4d kills 3/17 ...    the level's end: tic, checksum, summary
     L {...save game JSON...}         the next level's start (then its lines)
@@ -28,7 +31,10 @@
   intermission), each from its own saved state. Command line: --record
   FILE (from the first level started) and --playdemo FILE, or the title
   screen's Options panel; GameViewPlay drives both, TDoomWorld records
-  and replays. }
+  and replays. In the browser a recording stays in memory (Text) and
+  is kept in the save storage and downloaded by the page; a demo plays
+  from its text (CreateFromText: no exceptions, which would stop the
+  WebAssembly program). }
 unit DoomDemo;
 
 interface
@@ -42,19 +48,20 @@ const
 
 type
   TDemoEventKind = (deUpdate, deUse, deFire, deReleaseFire, deStopPush,
-    deNextWeapon, deSelectWeapon, deCheck, deEnd);
+    deNextWeapon, deSelectWeapon, deCheck, deEnd, deCheat);
 
   TDemoEvent = record
     Kind: TDemoEventKind;
     Tics, Arg: Integer;
     Hash: Cardinal;
     Values: array [0..DemoValues - 1] of Single;
+    { deEnd: the summary; deCheat: the command (Values[0..1] its numbers). }
     Text: String;
   end;
 
   TDemoRecorder = class
   strict private
-    FStream: TFileStream;
+    FStream: TStream;
     FFileName: String;
     FFinished: Boolean;
     { A frame that ran no tics: written only when an action follows
@@ -63,9 +70,16 @@ type
     procedure Line(const S: String);
   public
     constructor Create(const AFileName: String; const Seed: Cardinal; const State: TJSONObject);
+    { Recording into memory (Text), for the browser's save storage;
+      AName is only for the log. }
+    constructor CreateInMemory(const AName: String; const Seed: Cardinal; const State: TJSONObject);
     destructor Destroy; override;
     procedure Update(const Tics: Integer; const Values: array of Single);
     procedure Event(const Kind: TDemoEventKind; const Arg: Integer = 0);
+    procedure Cheat(const Command: String; const Arg, Arg2: Single);
+    { The demo so far (an in-memory recording; '' for a file). }
+    function Text: String;
+    function InMemory: Boolean;
     procedure Check(const Tic: Integer; const Hash: Cardinal);
     { The level's end line; the file stays open for the next level
       (NextLevel) until the recorder is freed. }
@@ -84,10 +98,17 @@ type
     FSeed: Cardinal;
     FState: TJSONObject;
     FFileName: String;
+    FError: String;
+    procedure Parse;
   public
     { Raises an exception when the file is not a demo. }
     constructor Create(const AFileName: String);
+    { A demo from its text; check Valid (no exception for a wrong file). }
+    constructor CreateFromText(const AName, AText: String);
     destructor Destroy; override;
+    { The text was a demo (else Error says why). }
+    function Valid: Boolean;
+    function Error: String;
     { The next event of this level; False after the last line or at the
       next level's start. }
     function Next(out E: TDemoEvent): Boolean;
@@ -110,7 +131,7 @@ uses JsonParser;
 
 const
   Magic = 'CASTLEDOOMDEMO 1';
-  KindLetters: array [TDemoEventKind] of String = ('T', 'U', 'F', 'R', 'P', 'N', 'W', 'C', 'E');
+  KindLetters: array [TDemoEventKind] of String = ('T', 'U', 'F', 'R', 'P', 'N', 'W', 'C', 'E', 'X');
 
 function SingleToHex(const V: Single): String;
 var
@@ -139,6 +160,34 @@ begin
   Line(Magic);
   Line('seed ' + IntToStr(Seed));
   Line('state ' + State.AsJSON);
+end;
+
+constructor TDemoRecorder.CreateInMemory(const AName: String; const Seed: Cardinal; const State: TJSONObject);
+begin
+  inherited Create;
+  FFileName := AName;
+  FStream := TStringStream.Create('');
+  Line(Magic);
+  Line('seed ' + IntToStr(Seed));
+  Line('state ' + State.AsJSON);
+end;
+
+function TDemoRecorder.InMemory: Boolean;
+begin
+  Result := FStream is TStringStream;
+end;
+
+function TDemoRecorder.Text: String;
+begin
+  if InMemory then
+    Result := TStringStream(FStream).DataString
+  else
+    Result := '';
+end;
+
+procedure TDemoRecorder.Cheat(const Command: String; const Arg, Arg2: Single);
+begin
+  Line(Format('X %s %s %s', [Command, SingleToHex(Arg), SingleToHex(Arg2)]));
 end;
 
 destructor TDemoRecorder.Destroy;
@@ -207,25 +256,65 @@ end;
 { TDemoPlayer ---------------------------------------------------------------- }
 
 constructor TDemoPlayer.Create(const AFileName: String);
-var
-  Data: TJSONData;
 begin
   inherited Create;
   FFileName := AFileName;
   FLines := TStringList.Create;
   FLines.LoadFromFile(AFileName);
+  Parse;
+  if not Valid then
+    raise Exception.Create(FError);
+end;
+
+constructor TDemoPlayer.CreateFromText(const AName, AText: String);
+begin
+  inherited Create;
+  FFileName := AName;
+  FLines := TStringList.Create;
+  FLines.Text := AText;
+  Parse;
+end;
+
+procedure TDemoPlayer.Parse;
+var
+  Data: TJSONData;
+  J: String;
+begin
   if (FLines.Count < 3) or (FLines[0] <> Magic) or (Copy(FLines[1], 1, 5) <> 'seed ') or
      (Copy(FLines[2], 1, 6) <> 'state ') then
-    raise Exception.CreateFmt('%s is not a Castle DOOM demo', [AFileName]);
+  begin
+    FError := Format('%s is not a Castle DOOM demo', [FFileName]);
+    Exit;
+  end;
   FSeed := Cardinal(StrToInt64Def(Copy(FLines[1], 6, MaxInt), 1));
-  Data := GetJSON(Copy(FLines[2], 7, MaxInt));
+  { The recorder writes the state as one JSON object: anything else is
+    refused before the parser (whose exceptions the web cannot catch)
+    sees it. }
+  J := Trim(Copy(FLines[2], 7, MaxInt));
+  if (J = '') or (J[1] <> '{') or (J[Length(J)] <> '}') then
+  begin
+    FError := Format('%s has no saved state', [FFileName]);
+    Exit;
+  end;
+  Data := GetJSON(J);
   if not (Data is TJSONObject) then
   begin
     FreeAndNil(Data);
-    raise Exception.CreateFmt('%s has no saved state', [AFileName]);
+    FError := Format('%s has no saved state', [FFileName]);
+    Exit;
   end;
   FState := TJSONObject(Data);
   FPos := 3;
+end;
+
+function TDemoPlayer.Valid: Boolean;
+begin
+  Result := FState <> nil;
+end;
+
+function TDemoPlayer.Error: String;
+begin
+  Result := FError;
 end;
 
 destructor TDemoPlayer.Destroy;
@@ -243,6 +332,7 @@ begin
   while (FPos < FLines.Count) and (Copy(FLines[FPos], 1, 2) <> 'L ') do
     Inc(FPos);
   if FPos >= FLines.Count then Exit;
+  if Copy(FLines[FPos], 3, 1) <> '{' then Exit;
   Data := GetJSON(Copy(FLines[FPos], 3, MaxInt));
   Inc(FPos);
   if Data is TJSONObject then
@@ -289,6 +379,13 @@ begin
               end;
             deNextWeapon, deSelectWeapon:
               if Words.Count > 1 then E.Arg := StrToIntDef(Words[1], 0);
+            deCheat:
+              begin
+                if Words.Count < 4 then Break;
+                E.Text := Words[1];
+                E.Values[0] := HexToSingle(Words[2]);
+                E.Values[1] := HexToSingle(Words[3]);
+              end;
             deCheck, deEnd:
               if Words.Count > 2 then
               begin

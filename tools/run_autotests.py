@@ -1053,7 +1053,9 @@ def demo_test(exe, out):
     """Demos (DoomDemo): a run on E1M1 recorded at the real frame rate
     (walking, shooting, a weapon change, the door; the zombies shoot back
     with the world's own random numbers) plays back in sync under
-    --fixed-step, and a copy with one shot taken out is caught."""
+    --fixed-step, and a copy with one shot taken out is caught; a run
+    with cheats recorded into the save storage plays back from there and
+    as an upload; two levels of random maps."""
     problems = []
     start = time.time()
     demo = os.path.join(out, 'demo-record.cdemo')
@@ -1086,6 +1088,37 @@ def demo_test(exe, out):
     log, code, _ = run_game(exe, out, 'demo-tampered', 'E1M1', 'W:14,Q', ['--playdemo', bad], config)
     if not re.search(r'Warning: Demo: Out of sync at tic \d+', log):
         problems.append('tampered: no "Out of sync" warning')
+    # Cheats are recorded (X lines): god mode, all weapons, two spawned
+    # monsters, kill all; recorded in memory and kept in the save storage
+    # like the browser does (castle-config:), played back from there and
+    # as an upload (the browser's file picker).
+    config2 = os.path.join(out, 'config-demo-cheats')
+    shutil.rmtree(config2, ignore_errors=True)
+    os.makedirs(config2)
+    log, code, _ = run_game(exe, out, 'demo-cheats-record', 'E1M1',
+                            'W:0.5,Y,K,C:5,W:1,A:0,P:3001:300,W:0.5,X,W:1.5,INVUL,P:3004:250,W:0.5,D,W:1,Q',
+                            ['--record', 'castle-config:/last-demo.cdemo'], config2)
+    m = re.search(r'Demo: Recorded .*: tic (\d+), (.*)', log)
+    kept = os.path.join(config2, 'castle-doom', 'last-demo.cdemo')
+    if not m or not re.search(r'Demo: Kept castle-config:/last-demo\.cdemo', log) or not os.path.exists(kept):
+        problems.append('cheats: not recorded and kept in castle-config:')
+    else:
+        with open(kept) as f:
+            cheats = [l.split(' ')[1] for l in f.read().split('\n') if l.startswith('X ')]
+        if cheats != ['Y', 'K', 'P', 'INVUL', 'P', 'D']:
+            problems.append('cheats: recorded %s' % cheats)
+        for name, args in (('demo-cheats-playback', ['--playdemo', 'castle-config:/last-demo.cdemo']),
+                           ('demo-cheats-upload', ['--upload', kept, '--playdemo', 'upload:/last-demo.cdemo'])):
+            log, code, _ = run_game(exe, out, name, 'E1M1', 'W:14,Q', args + ['--fixed-step'], config2)
+            if not re.search(r'Demo: Finished .* at tic %s, in sync: %s' % (m.group(1), re.escape(m.group(2))), log):
+                problems.append('%s: not "in sync" at tic %s (%s)' % (name, m.group(1), m.group(2)))
+            if len(re.findall(r'Spawn: ', log)) != 2:
+                problems.append('%s: the two spawns were not replayed' % name)
+    log, code, _ = run_game(exe, out, 'demo-not-a-demo', 'E1M1', 'W:1,Q',
+                            ['--upload', os.path.join(out, 'demo-cheats-record.log'),
+                             '--playdemo', 'upload:/demo-cheats-record.log'], config2)
+    if code != 0 or not re.search(r'Warning: Demo: Cannot play upload:/demo-cheats-record\.log: .* not a Castle DOOM demo', log):
+        problems.append('not a demo: no warning or exit code %d' % code)
     # Two levels of random maps: E1M1's exit switch, the intermission
     # (played back by itself), some of E1M2.
     demo2 = os.path.join(out, 'demo-levels.cdemo')

@@ -105,6 +105,8 @@ function RegisterUpload(const FileName: String; const Data: TStream): String;
 { False only for an upload:/ URL whose bytes are gone (a reloaded page):
   check before AddFile where an exception must not happen (the web). }
 function WadUrlAvailable(const Url: String): Boolean;
+{ The bytes of an upload:/ URL as a string; False when there are none. }
+function UploadText(const Url: String; out Text: String): Boolean;
 
 { Decode an 8-byte, NUL padded Doom name. }
 function DoomName(const P: PByte): String;
@@ -149,6 +151,21 @@ end;
 function WadUrlAvailable(const Url: String): Boolean;
 begin
   Result := (not IsUploadUrl(Url)) or (Uploads.IndexOf(Url) >= 0);
+end;
+
+function UploadText(const Url: String; out Text: String): Boolean;
+var
+  I: Integer;
+  M: TMemoryStream;
+begin
+  Text := '';
+  I := Uploads.IndexOf(Url);
+  Result := I >= 0;
+  if not Result then Exit;
+  M := TMemoryStream(Uploads.Objects[I]);
+  SetLength(Text, M.Size);
+  if M.Size > 0 then
+    Move(M.Memory^, Text[1], M.Size);
 end;
 
 function DoomName(const P: PByte): String;

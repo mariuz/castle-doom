@@ -206,7 +206,8 @@ DOWNLOAD_NEW = """
       a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
     };
-    /* Opening files (the custom game page's IWAD and PWADs): a hidden
+    /* Opening files (the custom game page's IWAD and PWADs, Options ->
+       Play demo...): a hidden
        <input type=file>; the chosen file waits until the game takes it,
        first "kind|name", then its bytes as a binary string. The browser
        allows the click shortly after the key press that asked for it. */
@@ -217,7 +218,6 @@ DOWNLOAD_NEW = """
         if (!input) {
           input = document.createElement('input');
           input.type = 'file';
-          input.accept = '.wad,.WAD';
           input.style.display = 'none';
           input.addEventListener('change', function () {
             const file = input.files && input.files[0];
@@ -235,6 +235,7 @@ DOWNLOAD_NEW = """
           });
           document.body.appendChild(input);
         }
+        input.accept = k === 'demo' ? '.cdemo' : '.wad,.WAD';
         input.click();
       };
       window.castleDoomTakeFile = function () {

@@ -129,6 +129,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   its start or a loaded game) as the world received it and `--playdemo FILE` (Play demo...)
   plays it back on its own random numbers, so it plays the
   same at any frame rate; a checksum every second says where a playback went out of sync.
+  In the browser Record demo... keeps the recording with your saves and downloads it when
+  the game ends, Play demo... opens a demo file (the home page's "Your saves" plays or
+  downloads the last one).
 - Dynamic lights (Options -> Video, off by default): rockets, fireballs, plasma, BFG balls,
   explosions, muzzle flashes, lamps, torches and candles light the walls and sprites around
   them in their colour.

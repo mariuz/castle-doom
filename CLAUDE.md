@@ -715,15 +715,27 @@ first wrong checksum: one a second). A demo
 holds what the world receives (each frame's update with its tic count,
 the player's position, angle and camera, then use, fire, weapon
 changes) and runs on the world's own random numbers, so it plays back
-in sync at any frame rate; demo-script cheats (`K`, `Y`, `P`, `D`...)
-are not recorded, so a recording that uses them goes out of sync. A
+in sync at any frame rate; the demo-script cheats that change the
+world (`K`, `Y`, `P`, `CORPSE`, `D`, `V`, `INVIS`, `INVUL`, `AMP`,
+`LINE`) go through `TDoomWorld.Cheat` and are recorded too (`X`
+lines; a new one belongs in its `CheatCommands`). A
 new input from the view into the world must go through a `TDoomWorld`
 method that records it (like `ReleaseFire`, `StopPush`), and a new
-random draw in the simulation through `TDoomWorld.Random`. The harness
+random draw in the simulation through `TDoomWorld.Random`. A
+`castle-config:` URL records in memory and keeps the demo in the save
+storage like the browser does (`--record castle-config:/last-demo.cdemo`,
+log `Demo: Kept ...`; the web's Record demo... and `?record=1` use
+that URL, `?playdemo=last` plays it); `--playdemo` takes files,
+`castle-config:` and `upload:/` URLs (`--upload FILE` first, what the
+browser's Play demo... picker does). The harness
 test `demo` records E1M1 at the real frame rate, replays it under
-`--fixed-step`, checks that a copy with one shot removed is caught, and
+`--fixed-step`, checks that a copy with one shot removed is caught,
+records a run with cheats into `castle-config:` and replays it from
+there and as an upload, and
 records and replays two levels of random seed 42; unit test
-`TestDemoFile`.
+`TestDemoFile`. In the browser, test it on a `web-site` artifact with
+Playwright: `play/?map=E1M1&demo=W:2,Y,P:3001:300,W:2,E&record=1`
+keeps `castle-doom:castle-config:/last-demo.cdemo` in localStorage.
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

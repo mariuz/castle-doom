@@ -21,6 +21,11 @@ function SaveStorageName: String;
   published next to the game. Empty on other platforms. }
 function PageDirectoryUrl: String;
 
+{ In the browser: give Data (bytes, one character each) to the page's
+  castleDoomDownload (tools/patch_web_page.py), which saves it as a file.
+  False when the page has none, and on other platforms. }
+function PageDownload(const FileName, Data, Mime: String): Boolean;
+
 implementation
 
 uses Classes, SysUtils,
@@ -138,6 +143,23 @@ begin
   Result := Copy(Href, 1, P);
 end;
 
+function PageDownload(const FileName, Data, Mime: String): Boolean;
+var
+  V: TJOB_JSValue;
+  Bytes: UnicodeString;
+  I: Integer;
+begin
+  V := JSWindow.ReadJSPropertyValue('castleDoomDownload');
+  Result := (V is TJOB_Object) and (TJOB_Object(V).Value <> nil);
+  FreeAndNil(V);
+  if not Result then Exit;
+  { A "binary string": one character per byte (not UTF-8 decoded). }
+  SetLength(Bytes, Length(Data));
+  for I := 1 to Length(Data) do
+    Bytes[I] := WideChar(Ord(Data[I]));
+  JSWindow.InvokeJSNoResult('castleDoomDownload', [UTF8Decode(FileName), Bytes, UTF8Decode(Mime)]);
+end;
+
 function SaveStorageName: String;
 begin
   if LocalStorageBroken then
@@ -166,6 +188,11 @@ end;
 function PageDirectoryUrl: String;
 begin
   Result := '';
+end;
+
+function PageDownload(const FileName, Data, Mime: String): Boolean;
+begin
+  Result := false;
 end;
 
 {$endif}

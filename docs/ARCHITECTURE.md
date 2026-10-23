@@ -89,7 +89,7 @@ Sizes, for orientation (lines of Pascal):
 | `doomintermission.pas` | 500 | intermission screen |
 | `doomwiscript.pas` | 300 | intermission scripts (episode maps: animations, splats, pointer) |
 | `doomrandommap.pas` | 1280 | random maps: a PWAD of eight generated levels from a seed (`random:/SEED`) |
-| `doomdemo.pas` | 270 | demo files: recording and playing back what the world received |
+| `doomdemo.pas` | 410 | demo files: recording and playing back what the world received |
 | `doomfinale.pas` | 520 | finale text, end pictures, bunny scroller, cast call |
 | `doommapinfo.pas` | 1000 | UMAPINFO and ZDoom (Z)MAPINFO: per-map names, music, sky, par, next maps, story texts, endings |
 | `doomstates.pas` | 230 | vanilla's state table and mobjinfo rows (`doomstates_table.inc`, generated from info.c): what DeHackEd edits and the things' sequences come from |
@@ -1019,6 +1019,31 @@ through the intermission by itself and loads the next `L` state when the
 view starts the next map (`TViewPlay.ContinueDemo`). Any other map
 change (loading a game, restarting after death, a warp key) ends the
 demo.
+
+The demo script's cheats that change the world (`K`, `Y`, `P`, `CORPSE`,
+`D`, `V`, `INVIS`, `INVUL`, `AMP`, `LINE`) go through `TDoomWorld.Cheat`,
+which records an `X` line with the command and its two numbers and calls
+`DoCheat`, what playback calls too; the other script commands only
+change the view (screenshots, settings, the automap) or go through the
+recorded input methods.
+
+In the browser there is no file to write and no save dialog, so a
+recording to a `castle-config:` URL (`LastDemoUrl`,
+`castle-config:/last-demo.cdemo`; Options -> Record demo... on the web,
+`?record=1`, and `--record` with that URL on the desktop) stays in
+memory (`TDemoRecorder.CreateInMemory`, `Text`): `TViewPlay.KeepDemo`
+writes it to the save storage (localStorage, up to 3 million
+characters; an exception for a full storage would stop the
+WebAssembly program) after each level and, when the recording ends,
+hands it to the page's `castleDoomDownload` (`PageDownload` in
+`GameSaveStorage`). `OpenDemo` reads a demo from a file, an `upload:/`
+URL (Play demo... in the browser opens the page's file picker with
+kind `demo`, `--upload FILE` on the desktop) or a `castle-config:` URL
+(`?playdemo=last`), and `TDemoPlayer.CreateFromText` refuses a text
+that is not a demo through `Valid` / `Error` instead of an exception.
+The save bundle and the home page's "Your saves" carry
+`last-demo.cdemo` too (the page plays it with `play/?playdemo=last` and
+downloads it).
 
 ## 9. DoomSound: DMX sound effects
 

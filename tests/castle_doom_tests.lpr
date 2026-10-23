@@ -1034,7 +1034,9 @@ var
   Kinds: String;
   NextState: TJSONObject;
 const
-  Letters: array [TDemoEventKind] of Char = ('T', 'U', 'F', 'R', 'P', 'N', 'W', 'C', 'E');
+  Letters: array [TDemoEventKind] of Char = ('T', 'U', 'F', 'R', 'P', 'N', 'W', 'C', 'E', 'X');
+var
+  Text: String;
 begin
   FileName := GetTempFileName('', 'castle-doom-demo');
   State := TJSONObject.Create(['map', 'E1M1', 'skill', 3]);
@@ -1056,11 +1058,54 @@ begin
       Rec.Update(3, [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]);
       Rec.Event(deFire);
       Rec.EndLevel(40, $87654321, 'kills 2/3 health 90');
+      AssertFalse('a file recording', Rec.InMemory);
+    finally
+      FreeAndNil(Rec);
+    end;
+    { In memory (the browser's): the same lines, cheats among them. }
+    Rec := TDemoRecorder.CreateInMemory('castle-config:/last-demo.cdemo', 5, State);
+    try
+      AssertTrue('in memory', Rec.InMemory);
+      Rec.Update(1, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      Rec.Cheat('P', 3001, 250.5);
+      Rec.Cheat('K', 0, 0);
+      Rec.EndLevel(1, 1, 'kills 0/0');
+      Text := Rec.Text;
     finally
       FreeAndNil(Rec);
     end;
   finally
     FreeAndNil(State);
+  end;
+  AssertTrue('a cheat line', Pos(#10'X P ', Text) > 0);
+  Demo := TDemoPlayer.CreateFromText('memory', Text);
+  try
+    AssertTrue('valid', Demo.Valid);
+    AssertEquals('seed from text', 5, Demo.Seed);
+    Kinds := '';
+    while Demo.Next(E) do
+    begin
+      Kinds := Kinds + Letters[E.Kind];
+      if (E.Kind = deCheat) and (E.Text = 'P') then
+        AssertTrue('cheat numbers', (E.Values[0] = 3001) and (E.Values[1] = Single(250.5)));
+    end;
+    AssertEquals('cheat events', 'TXXE', Kinds);
+  finally
+    FreeAndNil(Demo);
+  end;
+  { Not demos: refused without an exception (the web cannot catch one). }
+  Demo := TDemoPlayer.CreateFromText('junk', 'junk');
+  try
+    AssertFalse('junk', Demo.Valid);
+    AssertTrue('why', Pos('not a Castle DOOM demo', Demo.Error) > 0);
+  finally
+    FreeAndNil(Demo);
+  end;
+  Demo := TDemoPlayer.CreateFromText('no state', 'CASTLEDOOMDEMO 1'#10'seed 1'#10'state [1, 2'#10);
+  try
+    AssertFalse('no state', Demo.Valid);
+  finally
+    FreeAndNil(Demo);
   end;
   Demo := TDemoPlayer.Create(FileName);
   try

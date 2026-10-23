@@ -25,9 +25,10 @@ implementation
 uses SysUtils, FpJson, JsonParser, CastleLog, GameSaveStorage;
 
 const
-  BundleFiles: array [0..7] of String = ('quicksave.json',
+  { The saves, the settings and the browser's last recorded demo. }
+  BundleFiles: array [0..8] of String = ('quicksave.json',
     'save1.json', 'save2.json', 'save3.json', 'save4.json', 'save5.json', 'save6.json',
-    'settings.json');
+    'settings.json', 'last-demo.cdemo');
 
 function ExportSaveBundle(out Count: Integer): String;
 var

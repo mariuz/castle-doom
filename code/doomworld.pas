@@ -360,6 +360,7 @@ type
       const FX, FY, FZ: Single; var VX, VY: Single);
     { The player's actions without the demo's recording and blocking. }
     procedure DoUseInFront;
+    function DoCheat(const Command: String; const Arg, Arg2: Single): Boolean;
     procedure DoFireWeapon;
     procedure DoSelectWeapon(const W: TWeapon);
     procedure DoNextWeapon(const Delta: Integer);
@@ -488,6 +489,14 @@ type
     procedure ReleaseFire;
     { The view's walls stopped the knockback. }
     procedure StopPush;
+    { A demo-script cheat that changes the world, recorded in a demo:
+      K (all weapons, ammo, keys), Y (god mode), P (spawn a monster of
+      type Arg Arg2 units ahead), CORPSE (the same, killed), D (kill all),
+      V (infighting), INVIS, INVUL / AMP (Arg tics, 0 the default), LINE
+      (activate line Arg as special Arg2). False for another command. }
+    function Cheat(const Command: String; const Arg: Single = 0; const Arg2: Single = 0): Boolean;
+    { Is this command one of Cheat's? }
+    class function IsCheat(const Command: String): Boolean;
     { Demos: record from now on (Rec stays the caller's), or play one
       back (from its state, already loaded); FinishReplay reads the rest
       of a demo when its level ended, StopRecording writes the end. }
@@ -1660,6 +1669,64 @@ begin
   PlayerPushVY := 0;
 end;
 
+const
+  CheatCommands: array [0..9] of String = ('K', 'Y', 'P', 'CORPSE', 'D', 'V', 'INVIS', 'INVUL', 'AMP', 'LINE');
+
+class function TDoomWorld.IsCheat(const Command: String): Boolean;
+var
+  C: String;
+begin
+  for C in CheatCommands do
+    if C = Command then Exit(true);
+  Result := false;
+end;
+
+function TDoomWorld.Cheat(const Command: String; const Arg, Arg2: Single): Boolean;
+begin
+  Result := IsCheat(Command);
+  if (not Result) or LiveInputBlocked then Exit;
+  if FDemoRec <> nil then FDemoRec.Cheat(Command, Arg, Arg2);
+  DoCheat(Command, Arg, Arg2);
+end;
+
+function TDoomWorld.DoCheat(const Command: String; const Arg, Arg2: Single): Boolean;
+var
+  A: TDoomActor;
+begin
+  Result := true;
+  if Command = 'K' then
+    GiveAll
+  else if Command = 'Y' then
+    DebugGod
+  else if Command = 'P' then
+    DebugSpawn(Round(Arg), Arg2)
+  else if Command = 'CORPSE' then
+  begin
+    { A monster killed in the frame it appears (a corpse exactly there). }
+    A := DebugSpawn(Round(Arg), Arg2);
+    if A <> nil then
+      DamageActor(A, 100000, A.DoomX, A.DoomY, A.DoomZ + 32);
+  end
+  else if Command = 'D' then
+    DebugKillAll
+  else if Command = 'V' then
+    DebugInfight
+  else if Command = 'INVIS' then
+    Player.InvisibleTics := 60 * TicRate
+  else if Command = 'INVUL' then
+  begin
+    if Arg > 0 then Player.InvulnerableTics := Round(Arg) else Player.InvulnerableTics := 30 * TicRate;
+  end
+  else if Command = 'AMP' then
+  begin
+    if Arg > 0 then Player.LightAmpTics := Round(Arg) else Player.LightAmpTics := 120 * TicRate;
+  end
+  else if Command = 'LINE' then
+    DebugActivateLine(Round(Arg), Round(Arg2))
+  else
+    Result := false;
+end;
+
 procedure TDoomWorld.StartRecording(const Rec: TDemoRecorder);
 begin
   FDemoRec := Rec;
@@ -1782,6 +1849,7 @@ begin
       deSelectWeapon:
         if (E.Arg >= Ord(Low(TWeapon))) and (E.Arg <= Ord(High(TWeapon))) then
           DoSelectWeapon(TWeapon(E.Arg));
+      deCheat: DoCheat(E.Text, E.Values[0], E.Values[1]);
       deCheck: ReplayCheck(E);
       deEnd:
         begin

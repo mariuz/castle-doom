@@ -108,7 +108,7 @@ type
     procedure CycleRecent(const Delta: Integer);
     { The browser's file picker for an IWAD or a PWAD (OPENIWAD,
       PWADADD); the file arrives in a later Update (PollPickedFile). }
-    procedure PickBrowserFile(const Iwad: Boolean);
+    procedure PickBrowserFile(const Kind: String);
     procedure PollPickedFile;
     procedure UseFile(const Url: String; const Iwad: Boolean);
     procedure AutoPlayDemo(Sender: TObject);
@@ -1151,6 +1151,13 @@ procedure TViewMenu.ClickRecordDemo(Sender: TObject);
 var
   Url: String;
 begin
+  {$ifdef WASI}
+  { No save dialog: the recording stays in the browser (Play demo... ->
+    the last one) and downloads when the game ends. }
+  DemoRecordFile := LastDemoUrl;
+  FWadsLabel.Caption := 'The next game is recorded; it downloads when the game ends';
+  Exit;
+  {$endif}
   Url := 'castle-doom.cdemo';
   if Application.MainWindow.FileDialog('Record a demo of the next game', Url, false,
       'Castle DOOM demos (*.cdemo)|*.cdemo|All files (*)|*') then
@@ -1165,6 +1172,10 @@ procedure TViewMenu.ClickPlayDemo(Sender: TObject);
 var
   Url: String;
 begin
+  {$ifdef WASI}
+  PickBrowserFile('demo');
+  Exit;
+  {$endif}
   Url := '';
   if Application.MainWindow.FileDialog('Play a demo', Url, true,
       'Castle DOOM demos (*.cdemo)|*.cdemo|All files (*)|*') then
@@ -1206,7 +1217,7 @@ var
 begin
   Url := UserConfig.GetValue('wads/iwad', '');
   {$ifdef WASI}
-  PickBrowserFile(true);
+  PickBrowserFile('iwad');
   Exit;
   {$endif}
   if Application.MainWindow.FileDialog('Open Doom IWAD', Url, true,
@@ -1222,7 +1233,7 @@ var
   Pwads: TStringList;
 begin
   {$ifdef WASI}
-  PickBrowserFile(false);
+  PickBrowserFile('pwad');
   Exit;
   {$endif}
   Url := UserConfig.GetValue('wads/lastpwad', '');
@@ -1287,7 +1298,7 @@ begin
 end;
 {$endif}
 
-procedure TViewMenu.PickBrowserFile(const Iwad: Boolean);
+procedure TViewMenu.PickBrowserFile(const Kind: String);
 begin
   {$ifdef WASI}
   if not PageHasFunction('castleDoomOpenFile') then
@@ -1295,8 +1306,11 @@ begin
     FWadsLabel.Caption := 'This page cannot open files';
     Exit;
   end;
-  JSWindow.InvokeJSNoResult('castleDoomOpenFile', [UnicodeString(Iff(Iwad, 'iwad', 'pwad'))]);
-  FWadsLabel.Caption := 'Choose a WAD file...';
+  JSWindow.InvokeJSNoResult('castleDoomOpenFile', [UTF8Decode(Kind)]);
+  if Kind = 'demo' then
+    FWadsLabel.Caption := 'Choose a demo (.cdemo)...'
+  else
+    FWadsLabel.Caption := 'Choose a WAD file...';
   {$endif}
 end;
 
@@ -1328,7 +1342,12 @@ begin
       B := Ord(Bytes[P]) and $FF;
       PByte(Data.Memory)[P - 1] := B;
     end;
-    UseFile(RegisterUpload(PickedName, Data), Kind = 'iwad');
+    if Kind = 'demo' then
+    begin
+      DemoPlayFile := RegisterUpload(PickedName, Data);
+      AutoPlayDemo(nil);
+    end else
+      UseFile(RegisterUpload(PickedName, Data), Kind = 'iwad');
   finally
     FreeAndNil(Data);
   end;
@@ -2106,15 +2125,17 @@ var
   Pwads: TStringList;
   I: Integer;
 begin
-  try
-    Demo := TDemoPlayer.Create(DemoPlayFile);
-  except
-    on E: Exception do
-    begin
-      WritelnWarning('Demo', 'Cannot play %s: %s', [DemoPlayFile, E.Message]);
-      DemoPlayFile := '';
-      Exit;
-    end;
+  Demo := OpenDemo(DemoPlayFile);
+  if Demo = nil then
+  begin
+    if FWadsLabel <> nil then
+      FWadsLabel.Caption := 'Not a Castle DOOM demo: ' + UriDisplay(DemoPlayFile);
+    DemoPlayFile := '';
+    {$ifndef WASI}
+    { An autotest would wait on the title screen for ever. }
+    if AutoTestMap <> '' then Application.Terminate;
+    {$endif}
+    Exit;
   end;
   Pwads := TStringList.Create;
   try

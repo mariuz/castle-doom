@@ -94,7 +94,8 @@
 
   <section id="saves">
     <h2>Your saves</h2>
-    <p>The browser keeps your saves (and volume settings) in this site's local storage. Export them to a file
+    <p>The browser keeps your saves (and volume settings, and the last demo recorded with Options &rarr;
+      <em>Record demo...</em>) in this site's local storage. Export them to a file
       to move them to another browser or computer; the desktop build imports the same file
       (Options &rarr; <em>Import saves...</em>, or <code>--import-saves FILE</code>) and exports one with <em>Export saves...</em>.</p>
     <table id="saves-table"><tr><th>Slot</th><th>Game</th></tr></table>
@@ -132,20 +133,39 @@
 (function () {
   const PREFIX = 'castle-doom:castle-config:/';
   const FILES = ['quicksave.json', 'save1.json', 'save2.json', 'save3.json',
-    'save4.json', 'save5.json', 'save6.json', 'settings.json'];
+    'save4.json', 'save5.json', 'save6.json', 'settings.json', 'last-demo.cdemo'];
   const status = document.getElementById('saves-status');
 
   function storage() {
     try { return window.localStorage; } catch (e) { return null; }
   }
 
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
   function slotName(file) {
     if (file === 'quicksave.json') return 'Quick save';
     if (file === 'settings.json') return 'Settings';
+    if (file === 'last-demo.cdemo') return 'Last demo';
     return 'Slot ' + file.replace(/\D/g, '');
   }
 
   function describe(file, text) {
+    if (file === 'last-demo.cdemo') {
+      // CASTLEDOOMDEMO 1, seed, "state {save JSON}", then a line per frame.
+      const lines = text.split('\n');
+      let what = 'a recording';
+      try { what = JSON.parse(lines[2].slice(6)).map || what; } catch (e) { }
+      const levels = lines.filter(function (l) { return l.startsWith('E '); }).length;
+      return what + ', ' + Math.max(1, levels) + ' level(s), ' + Math.ceil(text.length / 1024) + ' KB';
+    }
     try {
       const j = JSON.parse(text);
       if (file === 'settings.json')
@@ -164,7 +184,23 @@
       if (text === null) continue;
       const row = table.insertRow();
       row.insertCell().textContent = slotName(f);
-      row.insertCell().textContent = describe(f, text);
+      const cell = row.insertCell();
+      cell.textContent = describe(f, text);
+      if (f === 'last-demo.cdemo') {
+        // Play it back (play/?playdemo=last) or save it as a file.
+        const play = document.createElement('a');
+        play.href = 'play/?playdemo=last';
+        play.textContent = 'Play';
+        const save = document.createElement('a');
+        save.href = '#';
+        save.id = 'demo-download';
+        save.textContent = 'Download';
+        save.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          download(new Blob([text], { type: 'application/octet-stream' }), 'castle-doom.cdemo');
+        });
+        cell.append(' (', play, ', ', save, ')');
+      }
       count++;
     }
     if (count === 0) {
@@ -185,15 +221,8 @@
       if (text !== null) { files[f] = text; count++; }
     }
     if (count === 0) { status.textContent = 'Nothing to export yet.'; return; }
-    const blob = new Blob([JSON.stringify({ format: 'castle-doom-saves', version: 1, files: files }, null, 1)],
-      { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'castle-doom-saves.json';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    download(new Blob([JSON.stringify({ format: 'castle-doom-saves', version: 1, files: files }, null, 1)],
+      { type: 'application/json' }), 'castle-doom-saves.json');
     status.textContent = 'Exported ' + count + ' file(s).';
   });
 

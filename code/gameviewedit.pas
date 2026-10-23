@@ -193,7 +193,7 @@ implementation
 uses Math, StrUtils,
   CastleGLUtils, CastleLog, CastleWindow, CastleApplicationProperties, CastleUriUtils, CastleUtils,
   CastleFilesUtils, CastleRectangles, CastleRenderOptions, CastleFonts,
-  {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
+  {$ifdef WASI} Job.Js, CastleInternalJobWeb, GameSaveStorage, {$endif}
   DoomThings, DoomMap, GameViewPlay, GameViewMenu, DoomExport;
 
 type
@@ -2209,30 +2209,17 @@ begin
 end;
 
 {$ifdef WASI}
-{ The page's castleDoomDownload (tools/patch_web_page.py) saves bytes as
-  a file; the plain CGE page has none. }
+{ The page's castleDoomDownload saves bytes as a file (GameSaveStorage);
+  the plain CGE page has none. }
 procedure BrowserDownload(const FileName: String; const Data: TMemoryStream; const Mime: String);
 var
-  V: TJOB_JSValue;
-  Bytes: UnicodeString;
-  I: Integer;
-  P: PByte;
-  HasIt: Boolean;
+  Bytes: String;
 begin
-  V := JSWindow.ReadJSPropertyValue('castleDoomDownload');
-  HasIt := (V is TJOB_Object) and (TJOB_Object(V).Value <> nil);
-  FreeAndNil(V);
-  if not HasIt then
-  begin
-    WritelnWarning('Editor', 'The page cannot save files');
-    Exit;
-  end;
-  { The bytes as a "binary string": one character per byte. }
   SetLength(Bytes, Data.Size);
-  P := PByte(Data.Memory);
-  for I := 1 to Data.Size do
-    Bytes[I] := WideChar(P[I - 1]);
-  JSWindow.InvokeJSNoResult('castleDoomDownload', [UTF8Decode(FileName), Bytes, UTF8Decode(Mime)]);
+  if Data.Size > 0 then
+    Move(Data.Memory^, Bytes[1], Data.Size);
+  if not PageDownload(FileName, Bytes, Mime) then
+    WritelnWarning('Editor', 'The page cannot save files');
 end;
 {$endif}
 

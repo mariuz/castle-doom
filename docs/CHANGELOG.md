@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Demos in the browser: Options -> Record demo... records the next game in the browser,
+  keeps it with your saves and downloads it when the game ends; Play demo... plays a demo
+  file from your computer, and the home page's "Your saves" plays or downloads the last one.
+- Demo-script cheats (god mode, all weapons, spawned monsters, kill all...) are recorded in
+  demos, so such a recording plays back in sync.
+
 ## v0.48.0 (2026-10-23)
 
 - Map editor: a path drawn from wall to wall across a sector (N, the points, Enter) cuts it
