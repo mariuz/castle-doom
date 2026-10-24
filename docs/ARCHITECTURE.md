@@ -1721,7 +1721,24 @@ in front changes. Copying sectors keeps each one's `SectorOutline` (its
 walls as edges with the sector on the right, chained into loops; the
 loop with the largest area, so holes are left out) and values; a paste
 draws the outlines again with `DrawSector` at the mouse and gives the new
-sectors those values. In an autotest the demo script drives the editor
+sectors those values. The 3D preview (`F5`, `TogglePreview`) is a
+`TCastleViewport` over the right of the view (a camera at the mouse,
+or the selected thing, at eye height, and a flying walk navigation)
+holding a `TDoomMapTransform`; `BuildPreview` writes the map's PWAD
+(`RegisterEditedWad`), stacks `edit:/MAP` on the editor's own `Wad`
+and has the component build from that `Wad` and `Graphics`
+(`UseLoadedWads`: a second `TDoomGraphics` cannot register `doomgfx:`
+again), then takes the PWAD off; `LogAction`, which every edit calls,
+marks it dirty and `Update` rebuilds it half a second after the last
+edit. Clicks and the wheel over it belong to its navigation
+(`InPreview`). `Ctrl+O` (`OpenWadFile`) opens a PWAD: the desktop's file
+dialog, or in the browser the page's picker (`PageOpenFile('editwad')`,
+taken by `PollEditFile` through `PageTakeFile`, both in
+`GameSaveStorage` now and shared with the menu); `UseWadFile` finds its
+maps from its directory alone (`DoomWad.WadFileMapNames`: a PWAD cannot
+be a `TDoomWad` by itself, it has no palette), stacks it on the
+editor's `Wad` (it stays there until the WADs are loaded again) and
+loads its first map. In an autotest the demo script drives the editor
 (`RunStep`: `VIEW`, `MODE`, `CLICK`, `DRAG`, `DRAW`, `MOUSE`, `KEY`, `TYPE`,
 `THING`, `EXPORT`, `GLTF`, `X3D`, `PLAY`, `S`, `W`, `Q`); `PLAY` hands
 the rest of the script to the game (`AutoTestDemo`) and the game's

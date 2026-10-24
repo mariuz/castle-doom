@@ -20,6 +20,10 @@
   of closing it) cuts the sector in two; Delete removes the selection
   (vertices join their two lines); number keys toggle line and thing
   flags, listed in a panel.
+  F5 shows a 3D preview of the map (the "Doom Map" component in a
+  viewport over the right of the window, rebuilt after each edit);
+  Ctrl+O opens a PWAD (in the browser through the page's file picker)
+  and edits its first map.
   F9 play-tests (the map's PWAD stacked on the WADs as edit:/MAP; the
   editor key F7 in the game comes back), F2 exports the PWAD (a file on
   the desktop, a download in the browser), F3 / F4 the level as glTF /
@@ -35,6 +39,7 @@ interface
 
 uses Classes, SysUtils,
   CastleVectors, CastleUIControls, CastleControls, CastleKeysMouse, CastleColors, CastleGLImages,
+  CastleViewport, CastleTransform,
   DoomWad, DoomGraphics, DoomSound, DoomMusic, DoomEditMap;
 
 type
@@ -66,6 +71,13 @@ type
     FProps: Boolean;
     FPropField: Integer;
     FPropText: String;
+    { The 3D preview (F5): a viewport over the right of the window with
+      the "Doom Map" component showing the edited map (its PWAD as
+      edit:/MAP on the WADs); rebuilt half a second after the last edit. }
+    FPreview: TCastleViewport;
+    FPreviewMap: TCastleTransform;
+    FPreviewDirty: Boolean;
+    FPreviewIdle: Single;
     { The texture / flat picker: its kind (0 wall, 1 floor, 2 ceiling),
       the typed filter, the names it shows, the highlighted one and the
       first row shown; thumbnails made as they are first shown. }
@@ -164,6 +176,14 @@ type
     procedure PropKey(const Key: TKey; const Ch: String);
     procedure ApplyProp;
     procedure RenderProps;
+    procedure TogglePreview;
+    procedure BuildPreview(const PlaceCamera: Boolean);
+    function InPreview(const P: TVector2): Boolean;
+    { Ctrl+O: a PWAD file's first map (the desktop's dialog, the page's
+      picker in the browser, whose file PollEditFile takes). }
+    procedure OpenWadFile;
+    procedure UseWadFile(const Url: String);
+    procedure PollEditFile;
     procedure DeleteThings;
     procedure SetLineTexture(const L: Integer; const Tex: String);
     procedure OpenPicker(const Kind: Integer);
@@ -216,8 +236,9 @@ implementation
 uses Math, StrUtils,
   CastleGLUtils, CastleLog, CastleWindow, CastleApplicationProperties, CastleUriUtils, CastleUtils,
   CastleFilesUtils, CastleRectangles, CastleRenderOptions, CastleFonts,
-  {$ifdef WASI} Job.Js, CastleInternalJobWeb, GameSaveStorage, {$endif}
-  DoomThings, DoomMap, GameViewPlay, GameViewMenu, DoomExport;
+  {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
+  CastleCameras, CastleTimeUtils,
+  DoomThings, DoomMap, DoomMapTransform, GameViewPlay, GameViewMenu, GameSaveStorage, DoomExport;
 
 type
   TThingChoice = record
@@ -289,6 +310,8 @@ const
     'Shift: backwards / ceiling' + #10 +
     'Ctrl+Z / Ctrl+Y  undo / redo' + #10 +
     'F9  play-test (F7 in the game: back)' + #10 +
+    'F5  3D preview (fly over it: arrows, WASD, mouse)' + #10 +
+    'Ctrl+O  open a PWAD (its first map)' + #10 +
     'F2  export PWAD   F3 glTF   F4 X3D' + #10 +
     'Ctrl+PgUp / PgDn  other map    Esc  leave';
 
@@ -436,6 +459,9 @@ procedure TViewEdit.Stop;
 begin
   FDragging := false;
   FPanning := false;
+  { Owned by FreeAtStop. }
+  FPreview := nil;
+  FPreviewMap := nil;
   inherited;
 end;
 
@@ -544,6 +570,9 @@ procedure TViewEdit.LogAction(const Text: String);
 begin
   Message(Text);
   WritelnLog('Editor', Text);
+  { Every edit logs: the 3D preview follows a moment later. }
+  FPreviewDirty := FPreview <> nil;
+  FPreviewIdle := 0;
 end;
 
 procedure TViewEdit.SetMode(const Mode: TEditMode);
@@ -1024,7 +1053,8 @@ end;
 
 const
   SectorProps: array [0..4] of String = ('Floor height', 'Ceiling height', 'Light', 'Special', 'Tag');
-  LineProps: array [0..3] of String = ('Special', 'Tag', 'Front X offset', 'Front Y offset');
+  LineProps: array [0..5] of String = ('Special', 'Tag', 'Front X offset', 'Front Y offset',
+    'Back X offset', 'Back Y offset');
   ThingProps: array [0..3] of String = ('Angle', 'Type', 'X', 'Y');
   VertexProps: array [0..1] of String = ('X', 'Y');
 
@@ -1066,12 +1096,13 @@ begin
       case Field of
         0: Result := FEdit.Lines[Index].Special;
         1: Result := FEdit.Lines[Index].Tag;
-        2, 3:
+        2..5:
           begin
-            S := FEdit.Lines[Index].Side[0];
+            { Front (2, 3) or back (4, 5) side; 0 when it has none. }
+            S := FEdit.Lines[Index].Side[(Field - 2) div 2];
             if S >= 0 then
             begin
-              if Field = 2 then Result := FEdit.Sides[S].XOffset else Result := FEdit.Sides[S].YOffset;
+              if Field mod 2 = 0 then Result := FEdit.Sides[S].XOffset else Result := FEdit.Sides[S].YOffset;
             end;
           end;
       end;
@@ -1114,12 +1145,12 @@ begin
       case Field of
         0: FEdit.Lines[Index].Special := Max(0, Value);
         1: FEdit.Lines[Index].Tag := Max(0, Value);
-        2, 3:
+        2..5:
           begin
-            S := FEdit.Lines[Index].Side[0];
+            S := FEdit.Lines[Index].Side[(Field - 2) div 2];
             if S >= 0 then
             begin
-              if Field = 2 then FEdit.Sides[S].XOffset := Value else FEdit.Sides[S].YOffset := Value;
+              if Field mod 2 = 0 then FEdit.Sides[S].XOffset := Value else FEdit.Sides[S].YOffset := Value;
             end;
           end;
       end;
@@ -1251,6 +1282,201 @@ begin
   finally
     Font.PopProperties;
   end;
+end;
+
+{ The 3D preview ------------------------------------------------------------------ }
+
+function TViewEdit.InPreview(const P: TVector2): Boolean;
+begin
+  Result := (FPreview <> nil) and FPreview.RenderRect.Contains(P);
+end;
+
+procedure TViewEdit.TogglePreview;
+var
+  Camera: TCastleCamera;
+  Nav: TCastleWalkNavigation;
+begin
+  if FPreview <> nil then
+  begin
+    RemoveControl(FPreview);
+    FPreview := nil;
+    FPreviewMap := nil;
+    FPreviewDirty := false;
+    LogAction('3D preview closed');
+    Exit;
+  end;
+  FPreview := TCastleViewport.Create(FreeAtStop);
+  FPreview.Name := 'Preview3D';
+  FPreview.FullSize := false;
+  FPreview.WidthFraction := 0.45;
+  FPreview.HeightFraction := 0.55;
+  FPreview.Anchor(hpRight, -10);
+  FPreview.Anchor(vpTop, -34);
+  FPreview.BackgroundColor := Vector4(0, 0, 0, 1);
+  Camera := TCastleCamera.Create(FreeAtStop);
+  Camera.Name := 'PreviewCamera';
+  Camera.ProjectionNear := 4;
+  FPreview.Items.Add(Camera);
+  FPreview.Camera := Camera;
+  { Fly: arrows / WASD and the mouse while the pointer is over it. }
+  Nav := TCastleWalkNavigation.Create(FreeAtStop);
+  Nav.Gravity := false;
+  Nav.MoveSpeed := 290;
+  FPreview.InsertFront(Nav);
+  FPreviewMap := TDoomMapTransform.Create(FreeAtStop);
+  FPreviewMap.Name := 'PreviewMap';
+  FPreview.Items.Add(FPreviewMap);
+  InsertFront(FPreview);
+  BuildPreview(true);
+end;
+
+{ The edited map as a PWAD (edit:/MAP) on the editor's WADs, built by
+  the component; PlaceCamera puts the eye at the mouse (the selected
+  thing in things mode, looking its way), else it stays. }
+procedure TViewEdit.BuildPreview(const PlaceCamera: Boolean);
+var
+  Data: TMemoryStream;
+  M: TDoomMapTransform;
+  Sec, Angle: Integer;
+  P: TVector2;
+  Z: Single;
+  T: TTimerResult;
+begin
+  FPreviewDirty := false;
+  if FPreviewMap = nil then Exit;
+  M := FPreviewMap as TDoomMapTransform;
+  T := Timer;
+  try
+    Data := FEdit.SaveToWad;
+  except
+    on E: Exception do
+    begin
+      Message('No 3D preview: ' + E.Message);
+      Exit;
+    end;
+  end;
+  try
+    RegisterEditedWad(FEdit.Name, Data);
+  finally
+    FreeAndNil(Data);
+  end;
+  { The game's WADs and graphics (one TDoomGraphics serves doomgfx:),
+    the map's PWAD stacked on them while the component builds. }
+  M.UseLoadedWads(Wad, Graphics);
+  M.MapName := FEdit.Name;
+  Wad.AddFile(EditedWadUrl(FEdit.Name));
+  try
+    M.Rebuild;
+  finally
+    Wad.RemoveLastFile;
+  end;
+  if not M.Built then
+  begin
+    Message('No 3D preview of ' + FEdit.Name);
+    Exit;
+  end;
+  if PlaceCamera then
+  begin
+    P := DoomOf(FMouse);
+    Angle := 90;
+    if (FMode = emThings) and (FSelected >= 0) and (FSelected <= High(FEdit.Things)) then
+    begin
+      P := Vector2(FEdit.Things[FSelected].X, FEdit.Things[FSelected].Y);
+      Angle := FEdit.Things[FSelected].Angle;
+    end;
+    Sec := FEdit.SectorAt(P.X, P.Y);
+    Z := 0;
+    if Sec >= 0 then Z := FEdit.Sectors[Sec].Floor;
+    { Doom (x, y, z) is CGE (x, z, -y). }
+    FPreview.Camera.SetWorldView(Vector3(P.X, Z + 41, -P.Y),
+      Vector3(Cos(DegToRad(Angle)), 0, -Sin(DegToRad(Angle))), Vector3(0, 1, 0));
+    WritelnLog('Editor', Format('3D preview of %s from %d, %d facing %d (built in %d ms)', [FEdit.Name,
+      Round(P.X), Round(P.Y), Angle, Round(TimerSeconds(Timer, T) * 1000)]));
+    Message('3D preview (F5 closes; arrows / WASD and the mouse over it fly)');
+  end else
+    WritelnLog('Editor', Format('3D preview of %s rebuilt (%d ms)', [FEdit.Name, Round(TimerSeconds(Timer, T) * 1000)]));
+end;
+
+{ Opening a PWAD ------------------------------------------------------------------ }
+
+procedure TViewEdit.OpenWadFile;
+var
+  Url: String;
+begin
+  {$ifdef WASI}
+  if PageOpenFile('editwad') then
+    Message('Choose a PWAD...')
+  else
+    Message('This page cannot open files');
+  Exit;
+  {$endif}
+  Url := '';
+  if Application.MainWindow.FileDialog('Open a PWAD to edit', Url, true,
+      'Doom WAD files (*.wad)|*.wad|All files (*)|*') then
+    UseWadFile(Url)
+  else
+    Message('No file chosen');
+end;
+
+procedure TViewEdit.PollEditFile;
+var
+  Kind, PickedName: String;
+  Data: TMemoryStream;
+begin
+  if not PageTakeFile(Kind, PickedName, Data) then Exit;
+  try
+    UseWadFile(RegisterUpload(PickedName, Data));
+  finally
+    FreeAndNil(Data);
+  end;
+end;
+
+{ The PWAD goes on the WADs (its textures and flats with them) and its
+  first map is edited. }
+procedure TViewEdit.UseWadFile(const Url: String);
+
+  procedure Warn(const Text: String);
+  begin
+    Message(Text);
+    WritelnWarning('Editor', Text);
+  end;
+
+var
+  Maps: TStringList;
+  First: String;
+begin
+  if not WadUrlReadable(Url) then
+  begin
+    Warn('Cannot read ' + Url);
+    Exit;
+  end;
+  { Its maps from its directory (no exception for a wrong file, which
+    would stop the web build). }
+  Maps := WadFileMapNames(Url);
+  try
+    if Maps = nil then
+    begin
+      Warn('Not a WAD: ' + ExtractUriName(Url));
+      Exit;
+    end;
+    if Maps.Count = 0 then
+    begin
+      Warn('No map in ' + ExtractUriName(Url));
+      Exit;
+    end;
+    First := UpperCase(Maps[0]);
+  finally
+    FreeAndNil(Maps);
+  end;
+  if Wad.FileUrls.IndexOf(Url) < 0 then
+    Wad.AddFile(Url);
+  FreeAndNil(FTextures);
+  FreeAndNil(FFlats);
+  FTextures := Wad.TextureNames;
+  FFlats := Wad.FlatNames;
+  LoadMap(First);
+  LogAction(Format('Opened %s: editing %s', [ExtractUriName(Url), FEdit.Summary]));
+  if FPreview <> nil then BuildPreview(true);
 end;
 
 procedure TViewEdit.DeleteThings;
@@ -2290,6 +2516,11 @@ begin
       keyY: if FEdit.Redo then LogAction('Redone') else Message('Nothing to redo');
       keyPageDown: NextMap(1);
       keyPageUp: NextMap(-1);
+      keyO:
+        begin
+          OpenWadFile;
+          Exit;
+        end;
       keyA:
         begin
           SelectAll;
@@ -2342,6 +2573,7 @@ begin
         Message('Drawing a room: click its corners');
       end;
     keyF9: PlayTest;
+    keyF5: TogglePreview;
     keyF2: ExportWad('');
     keyF3: ExportScene(true, '');
     keyF4: ExportScene(false, '');
@@ -2484,11 +2716,14 @@ begin
   case Event.EventType of
     itMouseButton:
       begin
+        { The 3D preview's own (its navigation looks around). }
+        if InPreview(Event.Position) then Exit(true);
         MouseDown(Event.Position, Event.MouseButton, mkShift in Event.ModifiersDown, mkCtrl in Event.ModifiersDown);
         Exit(true);
       end;
     itMouseWheel:
       begin
+        if InPreview(Event.Position) then Exit(true);
         if FPicker then
         begin
           if Event.MouseWheelScroll > 0 then PickerKey(keyArrowUp, '') else PickerKey(keyArrowDown, '');
@@ -2773,6 +3008,10 @@ begin
       MouseMove(At(3));
       MouseUp(At(3), buttonLeft);
     end else
+    if Cmd = 'OPEN' then
+      { OPEN:url opens a PWAD like Ctrl+O (upload:/NAME after --upload). }
+      UseWadFile(Copy(Step, 6, MaxInt))
+    else
     if Cmd = 'TYPE' then
     begin
       { The picker's filter, or a value in the properties panel. }
@@ -2874,6 +3113,12 @@ begin
     FMessageTime := FMessageTime - SecondsPassed;
     if FMessageTime <= 0 then FMessageLabel.Caption := '';
   end;
+  if FPreviewDirty then
+  begin
+    FPreviewIdle := FPreviewIdle + SecondsPassed;
+    if FPreviewIdle >= 0.5 then BuildPreview(false);
+  end;
+  PollEditFile;
   RunScript(SecondsPassed);
 end;
 

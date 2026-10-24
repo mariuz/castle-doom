@@ -107,6 +107,14 @@ function RegisterUpload(const FileName: String; const Data: TStream): String;
 function WadUrlAvailable(const Url: String): Boolean;
 { The bytes of an upload:/ URL as a string; False when there are none. }
 function UploadText(const Url: String; out Text: String): Boolean;
+{ A WAD URL AddFile can read: an existing file, an upload:/ the memory
+  or the store has, the map editor's edit:/ PWADs and random:/ maps
+  (made on demand). }
+function WadUrlReadable(const Url: String): Boolean;
+{ The maps a WAD file holds (markers followed by THINGS), read from its
+  directory alone (a PWAD needs no IWAD for this); nil when it is not a
+  WAD. The caller frees the list. }
+function WadFileMapNames(const Url: String): TStringList;
 { Drop an upload:/ URL's bytes, here and in the store (OnForgetUpload). }
 procedure ForgetUpload(const Url: String);
 
@@ -189,6 +197,66 @@ end;
 function WadUrlAvailable(const Url: String): Boolean;
 begin
   Result := (not IsUploadUrl(Url)) or (FindUpload(Url) >= 0);
+end;
+
+function WadUrlReadable(const Url: String): Boolean;
+var
+  EditedMap: String;
+  Seed: Cardinal;
+  Data: TMemoryStream;
+begin
+  if IsUploadUrl(Url) then Exit(FindUpload(Url) >= 0);
+  if IsRandomWadUrl(Url, Seed) then Exit(true);
+  if IsEditedWadUrl(Url, EditedMap) then
+  begin
+    Data := EditedWadData(EditedMap);
+    Result := Data <> nil;
+    FreeAndNil(Data);
+    Exit;
+  end;
+  Result := UriFileExists(Url);
+end;
+
+function WadFileMapNames(const Url: String): TStringList;
+var
+  Text, Name, Prev: String;
+  S: TStream;
+  Count, DirPos, I: Integer;
+
+  function Int32At(const P: Integer): Integer;
+  begin
+    Result := PLongInt(@Text[P + 1])^;
+  end;
+
+begin
+  Result := nil;
+  if IsUploadUrl(Url) then
+  begin
+    if not UploadText(Url, Text) then Exit;
+  end else
+  begin
+    if not UriFileExists(Url) then Exit;
+    S := Download(Url);
+    try
+      SetLength(Text, S.Size);
+      if S.Size > 0 then S.ReadBuffer(Text[1], S.Size);
+    finally
+      FreeAndNil(S);
+    end;
+  end;
+  if (Length(Text) < 12) or ((Copy(Text, 1, 4) <> 'PWAD') and (Copy(Text, 1, 4) <> 'IWAD')) then Exit;
+  Count := Int32At(4);
+  DirPos := Int32At(8);
+  if (Count < 0) or (DirPos < 12) or (Int64(DirPos) + Int64(Count) * 16 > Length(Text)) then Exit;
+  Result := TStringList.Create;
+  Prev := '';
+  for I := 0 to Count - 1 do
+  begin
+    Name := DoomName(PByte(@Text[DirPos + I * 16 + 9]));
+    if (Name = 'THINGS') and (Prev <> '') then
+      Result.Add(Prev);
+    Prev := Name;
+  end;
 end;
 
 function UploadText(const Url: String; out Text: String): Boolean;

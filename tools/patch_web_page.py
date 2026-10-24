@@ -236,7 +236,7 @@ DOWNLOAD_NEW = """
           });
           document.body.appendChild(input);
         }
-        input.accept = k === 'demo' ? '.cdemo' : '.wad,.WAD';
+        input.accept = k === 'demo' ? '.cdemo' : '.wad,.WAD';  /* iwad, pwad, editwad */
         input.click();
       };
       /* The picked files outlive the page in IndexedDB (database

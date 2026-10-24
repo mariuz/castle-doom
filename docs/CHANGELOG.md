@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Map editor: `F5` shows a 3D preview of the map beside the 2D view (fly through it with the
+  arrows, WASD and the mouse; it follows your edits); `Ctrl+O` opens a PWAD file and edits
+  its first map (in the browser too, from your computer); the properties panel (`E`) types
+  the back side's texture offsets as well.
+
+## Unreleased
+
 - Custom game page: WAD files opened in the browser stay there after the page is reloaded,
   so recent WAD sets, saves and demos that use them work again; Delete on RECENT forgets
   the set shown (and the browser's copy of files only it used).

@@ -700,7 +700,13 @@ the selected lines or things (autotest `editor-cut`). `KEY:E` opens the
 properties panel (`KEY:Down` picks a value, `TYPE:24,KEY:Enter` sets
 it on the selection), `KEY:F` flips two-sided lines, `KEY:Ctrl+C` /
 `KEY:Ctrl+V` in sectors mode copy sectors to the mouse (autotest
-`editor-props`, which reads the exported WAD back). A clear spot in E1M1's start room for a
+`editor-props`, which reads the exported WAD back). `KEY:F5` toggles the
+3D preview from the mouse's spot (log `Editor: 3D preview of E1M1 from
+-416, 256 facing 90`, then `... rebuilt` half a second after an edit;
+`DoomMap:` names the WADs `freedoom1.wad + edited E1M1`), the panel's
+fields 5 and 6 on a line are the back side's offsets, and
+`OPEN:upload:/NAME` (after `--upload FILE`) opens a PWAD like `Ctrl+O`
+(autotest `editor-preview`). A clear spot in E1M1's start room for a
 room: `DRAW:-480:192:-352:192:-352:288:-480:288` (autotest `editor`
 raises it to 24 and play-tests standing on it; its exported WAD is
 checked with Python `struct`, `check_map_wad`). `--export-map MAP FILE`,

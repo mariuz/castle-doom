@@ -9,6 +9,8 @@ unit GameSaveStorage;
 
 interface
 
+uses Classes;
+
 { Read the text stored for this castle-config: URL. False when there is none. }
 function SaveStorageRead(const Url: String; out Text: String): Boolean;
 { Store the text for this castle-config: URL. }
@@ -33,6 +35,14 @@ function PageDownload(const FileName, Data, Mime: String): Boolean;
   castle-config:/uploads/. }
 procedure InstallUploadStore;
 
+{ The page's file picker (tools/patch_web_page.py's castleDoomOpenFile):
+  open it for files of Kind ('iwad', 'pwad', 'demo', 'editwad'); False
+  when the page has none (and on other platforms). The chosen file
+  arrives later: PageTakeFile gives its kind, name and bytes (the caller
+  frees Data), False while nothing waits. }
+function PageOpenFile(const Kind: String): Boolean;
+function PageTakeFile(out Kind, FileName: String; out Data: TMemoryStream): Boolean;
+
 { CGE's UserConfig (castle-config:/castle-doom.conf: the last and recent
   WADs) through the save storage, so in the browser it outlives the page
   too (localStorage). }
@@ -41,7 +51,7 @@ procedure SaveUserConfig;
 
 implementation
 
-uses Classes, SysUtils,
+uses SysUtils,
   {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
   CastleLog, CastleDownload, CastleUriUtils, CastleConfig, DoomWad;
 
@@ -338,6 +348,72 @@ begin
   {$ifdef WASI}
   if FileRead(UserConfigUrl, Text) then
     SaveStorageWrite(UserConfigUrl, Text);
+  {$endif}
+end;
+
+{ The page's file picker ------------------------------------------------------- }
+
+{$ifdef WASI}
+{ A JavaScript function of this name exists on the window. }
+function PageHasFunction(const Name: String): Boolean;
+var
+  V: TJOB_JSValue;
+begin
+  V := JSWindow.ReadJSPropertyValue(Name);
+  Result := (V is TJOB_Object) and (TJOB_Object(V).Value <> nil);
+  FreeAndNil(V);
+end;
+
+{ A string the page returns ('' for its null). }
+function PageString(const Name: String): UnicodeString;
+var
+  V: TJOB_JSValue;
+begin
+  Result := '';
+  V := JSWindow.InvokeJSValueResult(Name, []);
+  try
+    if V is TJOB_String then Result := TJOB_String(V).Value;
+  finally
+    FreeAndNil(V);
+  end;
+end;
+{$endif}
+
+function PageOpenFile(const Kind: String): Boolean;
+begin
+  Result := false;
+  {$ifdef WASI}
+  if not PageHasFunction('castleDoomOpenFile') then Exit;
+  JSWindow.InvokeJSNoResult('castleDoomOpenFile', [UTF8Decode(Kind)]);
+  Result := true;
+  {$endif}
+end;
+
+function PageTakeFile(out Kind, FileName: String; out Data: TMemoryStream): Boolean;
+{$ifdef WASI}
+var
+  Head, Bytes: UnicodeString;
+  P: Integer;
+{$endif}
+begin
+  Result := false;
+  Kind := '';
+  FileName := '';
+  Data := nil;
+  {$ifdef WASI}
+  if not PageHasFunction('castleDoomTakeFile') then Exit;
+  { First "kind|name", then the bytes as a binary string. }
+  Head := PageString('castleDoomTakeFile');
+  if Head = '' then Exit;
+  P := Pos('|', Head);
+  Kind := UTF8Encode(Copy(Head, 1, P - 1));
+  FileName := UTF8Encode(Copy(Head, P + 1, MaxInt));
+  Bytes := PageString('castleDoomTakeFileBytes');
+  Data := TMemoryStream.Create;
+  Data.Size := Length(Bytes);
+  for P := 1 to Length(Bytes) do
+    PByte(Data.Memory)[P - 1] := Ord(Bytes[P]) and $FF;
+  Result := true;
   {$endif}
 end;
 

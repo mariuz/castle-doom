@@ -1327,42 +1327,14 @@ begin
   if FCustomOpen then ShowCustomPage;
 end;
 
-{$ifdef WASI}
-{ A JavaScript function of this name exists on the window (the patched
-  page's, tools/patch_web_page.py). }
-function PageHasFunction(const Name: String): Boolean;
-var
-  V: TJOB_JSValue;
-begin
-  V := JSWindow.ReadJSPropertyValue(Name);
-  Result := (V is TJOB_Object) and (TJOB_Object(V).Value <> nil);
-  FreeAndNil(V);
-end;
-
-{ A string the page returns ('' for its null). }
-function PageString(const Name: String): UnicodeString;
-var
-  V: TJOB_JSValue;
-begin
-  Result := '';
-  V := JSWindow.InvokeJSValueResult(Name, []);
-  try
-    if V is TJOB_String then Result := TJOB_String(V).Value;
-  finally
-    FreeAndNil(V);
-  end;
-end;
-{$endif}
-
 procedure TViewMenu.PickBrowserFile(const Kind: String);
 begin
   {$ifdef WASI}
-  if not PageHasFunction('castleDoomOpenFile') then
+  if not PageOpenFile(Kind) then
   begin
     FWadsLabel.Caption := 'This page cannot open files';
     Exit;
   end;
-  JSWindow.InvokeJSNoResult('castleDoomOpenFile', [UTF8Decode(Kind)]);
   if Kind = 'demo' then
     FWadsLabel.Caption := 'Choose a demo (.cdemo)...'
   else
@@ -1370,34 +1342,14 @@ begin
   {$endif}
 end;
 
-{ The page's file picker gives the chosen file as its kind and name, then
-  its bytes as a "binary string" (one character per byte). }
+{ The page's file picker gives the chosen file (GameSaveStorage). }
 procedure TViewMenu.PollPickedFile;
-{$ifdef WASI}
 var
-  Head, Bytes: UnicodeString;
   Kind, PickedName: String;
-  P: Integer;
   Data: TMemoryStream;
-  B: Byte;
-{$endif}
 begin
-  {$ifdef WASI}
-  if not PageHasFunction('castleDoomTakeFile') then Exit;
-  Head := PageString('castleDoomTakeFile');
-  if Head = '' then Exit;
-  P := Pos('|', Head);
-  Kind := UTF8Encode(Copy(Head, 1, P - 1));
-  PickedName := UTF8Encode(Copy(Head, P + 1, MaxInt));
-  Bytes := PageString('castleDoomTakeFileBytes');
-  Data := TMemoryStream.Create;
+  if not PageTakeFile(Kind, PickedName, Data) then Exit;
   try
-    Data.Size := Length(Bytes);
-    for P := 1 to Length(Bytes) do
-    begin
-      B := Ord(Bytes[P]) and $FF;
-      PByte(Data.Memory)[P - 1] := B;
-    end;
     if Kind = 'demo' then
     begin
       DemoPlayFile := RegisterUpload(PickedName, Data);
@@ -1407,7 +1359,6 @@ begin
   finally
     FreeAndNil(Data);
   end;
-  {$endif}
 end;
 
 procedure TViewMenu.ClickContinue(Sender: TObject);

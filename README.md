@@ -74,8 +74,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   specials and tags, pick wall textures and flats from their pictures (Space), make doors,
   cut a sector in two along a path, delete lines, sectors and vertices, toggle line and
   thing flags (number keys), type exact values in a properties panel (`E`: heights, light,
-  texture offsets, angles, positions), flip lines (`F`), add, turn, copy and paste things and
-  sectors, undo / redo. `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
+  both sides' texture offsets, angles, positions), flip lines (`F`), add, turn, copy and paste
+  things and sectors, undo / redo, look at the map in 3D beside the 2D view (`F5`) and open
+  PWAD files (`Ctrl+O`, in the browser too). `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
   as a PWAD with its nodes built (it runs in other Doom ports: `-file e1m1-edited.wad`),
   `F3` / `F4` export the level's walls and floors as glTF / X3D with their textures for
   Blender, other engines or the Castle Game Engine editor. On the command line

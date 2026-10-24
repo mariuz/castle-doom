@@ -172,6 +172,7 @@ var
   W: TDoomWad;
   Data: TMemoryStream;
   Path, Url, Text: String;
+  Maps: TStringList;
 begin
   Path := 'tools/testdata/boom.wad';
   if not FileExists(Path) then Path := '../tools/testdata/boom.wad';
@@ -194,6 +195,24 @@ begin
   finally
     FreeAndNil(W);
   end;
+  { A PWAD's maps from its directory alone (the map editor's Ctrl+O). }
+  Maps := WadFileMapNames(FilenameToUriSafe(ExpandFileName(
+    StringReplace(Path, 'boom.wad', 'generalized.wad', []))));
+  try
+    AssertTrue('a WAD', Maps <> nil);
+    AssertEquals('its map', 'E1M1', Maps.CommaText);
+  finally
+    FreeAndNil(Maps);
+  end;
+  Maps := WadFileMapNames(Url);
+  try
+    AssertTrue('boom.wad has no map', (Maps <> nil) and (Maps.Count = 0));
+  finally
+    FreeAndNil(Maps);
+  end;
+  AssertTrue('readable upload', WadUrlReadable(Url));
+  AssertFalse('a missing file', WadUrlReadable('file:///no/such.wad'));
+  AssertTrue('random maps', WadUrlReadable('random:/42'));
   { The store keeps a new upload and gives it back after the memory lost
     it (a reloaded page); forgetting drops it from both. }
   TestStore := TStringList.Create;

@@ -31,6 +31,10 @@ type
     FDirty: Boolean;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
+    { The game's WADs and graphics, used instead of loading its own
+      (UseLoadedWads; only one TDoomGraphics may serve doomgfx:). }
+    FLoadedWad: TDoomWad;
+    FLoadedGraphics: TDoomGraphics;
     FMap: TDoomMap;
     FGeometry: TDoomGeometry;
     FBatch: TSpriteBatch;
@@ -59,6 +63,10 @@ type
     procedure Update(const SecondsPassed: Single; var RemoveMe: TRemoveType); override;
     { Build now (Update does it on the next frame otherwise). }
     procedure Rebuild;
+    { Show maps of WADs the program already loaded, with their graphics
+      (the map editor's 3D preview), instead of the Wad and Pwads
+      properties; nil goes back to those. Not owned. }
+    procedure UseLoadedWads(const AWad: TDoomWad; const AGraphics: TDoomGraphics);
     { The level is built (a WAD and a map were found). }
     function Built: Boolean;
     { The map's player 1 start, Doom coordinates (the first vertex when
@@ -216,8 +224,15 @@ begin
   FreeAndNil(FBatch);
   FreeAndNil(FGeometry);
   FreeAndNil(FMap);
-  FreeAndNil(FGraphics);
-  FreeAndNil(FWad);
+  if FLoadedWad <> nil then
+  begin
+    FGraphics := nil;
+    FWad := nil;
+  end else
+  begin
+    FreeAndNil(FGraphics);
+    FreeAndNil(FWad);
+  end;
   FreeAndNil(FSpritesGroup);
   FreeAndNil(FThingsGroup);
   FreeAndNil(FMapGroup);
@@ -229,11 +244,20 @@ begin
   Result := FGeometry <> nil;
 end;
 
+procedure TDoomMapTransform.UseLoadedWads(const AWad: TDoomWad; const AGraphics: TDoomGraphics);
+begin
+  Clear;
+  FLoadedWad := AWad;
+  FLoadedGraphics := AGraphics;
+  FDirty := true;
+end;
+
 procedure TDoomMapTransform.Rebuild;
 begin
   FDirty := false;
   Clear;
-  if (FWadUrl = '') or (FMapName = '') then Exit;
+  if FMapName = '' then Exit;
+  if (FLoadedWad = nil) and (FWadUrl = '') then Exit;
   Build;
 end;
 
@@ -244,30 +268,42 @@ var
   Lump: String;
   I: Integer;
 begin
-  if not UriFileExists(FWadUrl) then
-  begin
-    WritelnWarning('DoomMap', 'WAD not found: %s', [FWadUrl]);
-    Exit;
-  end;
   Lump := UpperCase(Trim(FMapName));
-  FWad := TDoomWad.Create(FWadUrl);
-  for I := 0 to FPwads.Count - 1 do
-    if Trim(FPwads[I]) <> '' then
-    begin
-      if not UriFileExists(Trim(FPwads[I])) then
-      begin
-        WritelnWarning('DoomMap', 'PWAD not found: %s', [Trim(FPwads[I])]);
-        Continue;
-      end;
-      FWad.AddFile(Trim(FPwads[I]));
-    end;
-  if FWad.MapNames.IndexOf(Lump) < 0 then
+  if FLoadedWad <> nil then
   begin
-    WritelnWarning('DoomMap', 'Map %s not in %s', [Lump, FWadUrl]);
-    FreeAndNil(FWad);
-    Exit;
+    if FLoadedWad.MapNames.IndexOf(Lump) < 0 then
+    begin
+      WritelnWarning('DoomMap', 'Map %s not in %s', [Lump, FLoadedWad.Description]);
+      Exit;
+    end;
+    FWad := FLoadedWad;
+    FGraphics := FLoadedGraphics;
+  end else
+  begin
+    if not WadUrlReadable(FWadUrl) then
+    begin
+      WritelnWarning('DoomMap', 'WAD not found: %s', [FWadUrl]);
+      Exit;
+    end;
+    FWad := TDoomWad.Create(FWadUrl);
+    for I := 0 to FPwads.Count - 1 do
+      if Trim(FPwads[I]) <> '' then
+      begin
+        if not WadUrlReadable(Trim(FPwads[I])) then
+        begin
+          WritelnWarning('DoomMap', 'PWAD not found: %s', [Trim(FPwads[I])]);
+          Continue;
+        end;
+        FWad.AddFile(Trim(FPwads[I]));
+      end;
+    if FWad.MapNames.IndexOf(Lump) < 0 then
+    begin
+      WritelnWarning('DoomMap', 'Map %s not in %s', [Lump, FWadUrl]);
+      FreeAndNil(FWad);
+      Exit;
+    end;
+    FGraphics := TDoomGraphics.Create(FWad);
   end;
-  FGraphics := TDoomGraphics.Create(FWad);
   FMap := TDoomMap.Create(FWad, Lump);
   if FExtraLight > 0 then
     for I := 0 to High(FMap.Sectors) do
@@ -292,7 +328,7 @@ begin
   FGeometry.AddToWorld(FMapGroup);
   FBatch := TSpriteBatch.Create(FSpritesGroup);
   SpawnThings;
-  WritelnLog('DoomMap', '%s from %s: %d sectors, %d things shown (skill %d%s%s)', [Lump, FWadUrl,
+  WritelnLog('DoomMap', '%s from %s: %d sectors, %d things shown (skill %d%s%s)', [Lump, Iff(FLoadedWad <> nil, FWad.Description, FWadUrl),
     Length(FMap.Sectors), FActors.Count, FSkill, Iff(FMonsters, '', ', no monsters'),
     Iff(FExtraLight > 0, Format(', extra light %d', [FExtraLight]), '')]);
 end;

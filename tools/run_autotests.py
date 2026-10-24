@@ -491,6 +491,19 @@ TESTS = [
       r'Editor: Pasted 1 sectors at -416, -288', r'Editor: Pasted 1 sectors at -896, 256',
       r'Editor: Flipped 1 lines: line 1176 front sector 140', r'Editor: Line 1176: Front X offset 16'],
      ['--edit'], lambda config: check_editor_props(config)),
+    # The 3D preview (F5: the "Doom Map" component on the editor's WADs,
+    # rebuilt after an edit), a back side's offset typed in the
+    # properties panel, and a PWAD opened (Ctrl+O; OPEN with --upload).
+    ('editor-preview', 'E1M1',
+     'VIEW:-300:256:0.6,MOUSE:-416:256,KEY:F5,W:1,S,MODE:s,CLICK:-300:200,KEY:PageUp,KEY:PageUp,KEY:PageUp,W:1.5,S,'
+     'KEY:F5,DRAW:-480:192:-352:192:-352:288:-480:288,MODE:l,CLICK:-480:240,KEY:E,KEY:Down,KEY:Down,KEY:Down,'
+     'KEY:Down,TYPE:8,KEY:Enter,S,EXPORT,OPEN:upload:/generalized.wad,S,Q',
+     [r'Editor: 3D preview of E1M1 from -416, 256 facing 90', r'DoomMap: E1M1 from freedoom1\.wad \+ edited E1M1: 182 sectors',
+      r'Editor: Sector 140 floor 24', r'Editor: 3D preview of E1M1 rebuilt', r'Editor: 3D preview closed',
+      r'Editor: Line 1178: Back X offset 8',
+      r'Editor: Opened generalized\.wad: editing E1M1: 985 vertices'],
+     ['--edit', '--upload', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'generalized.wad')],
+     lambda config: check_editor_preview(config)),
     ('editor-menu', 'MENUKEYS', 'W:0.5,S,Q',
      [r'Menu: Custom game \(map editor\): freedoom1\.wad, PWADs none, map E1M1',
       r'Editor: Imported E1M1', r'Saved editor screenshot 1 of E1M1'],
@@ -873,6 +886,17 @@ def check_editor_props(config):
     assert (sector, xoff) == (140, 16), 'line 1176 front: sector %d, x offset %d' % (sector, xoff)
 
 
+def check_editor_preview(config):
+    """The exported WAD before the PWAD was opened: line 1178's back side
+    with the typed X offset 8."""
+    import struct
+    d = check_map_wad(os.path.join(os.path.dirname(config), 'editor-preview_e1m1.wad'), 'E1M1', 183, 292)
+    v1, v2, flags, special, tag, front, back = struct.unpack_from('<HHHHHHH', d['LINEDEFS'], 1178 * 14)
+    assert back != 0xFFFF, 'line 1178 is one-sided'
+    xoff, = struct.unpack_from('<h', d['SIDEDEFS'], back * 30)
+    assert xoff == 8, 'line 1178 back X offset %d' % xoff
+
+
 def export_test(exe, out):
     """--export-map, --export-gltf and --export-x3d: E1M1 as a PWAD with
     its BSP built anew, and its geometry as glTF and X3D with textures."""
@@ -979,6 +1003,7 @@ GOLDEN = [
     'custom-wads_menu4.png', 'editor-select_edit_1.png', 'editor-select_edit_2.png', 'editor-select_edit_3.png',
     'editor-props_edit_1.png', 'editor-props_edit_2.png', 'editor-props_edit_3.png',
     'stored-uploads_menu1.png', 'stored-uploads_menu2.png',
+    'editor-preview_edit_1.png', 'editor-preview_edit_2.png', 'editor-preview_edit_3.png', 'editor-preview_edit_4.png',
 ]
 
 
