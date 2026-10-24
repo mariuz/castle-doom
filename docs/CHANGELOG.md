@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.51.0 (2026-10-24)
 
 - Map editor: `E` opens a properties panel to type values (sector heights, light, special,
   tag; line special, tag and texture offsets; thing angle, type and position; vertex
