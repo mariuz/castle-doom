@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.50.0 (2026-10-24)
 
 - Android: naming a save brings up the phone's on-screen keyboard (tap the name to bring it
   back after closing it); the release also has an Android App Bundle (.aab) for app stores.
