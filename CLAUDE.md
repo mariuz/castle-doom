@@ -706,7 +706,10 @@ it on the selection), `KEY:F` flips two-sided lines, `KEY:Ctrl+C` /
 `DoomMap:` names the WADs `freedoom1.wad + edited E1M1`), the panel's
 fields 5 and 6 on a line are the back side's offsets, and
 `OPEN:upload:/NAME` (after `--upload FILE`) opens a PWAD like `Ctrl+O`
-(autotest `editor-preview`). A clear spot in E1M1's start room for a
+(autotest `editor-preview`). In the browser `play/?map=E1M1&demo=W:2,EDIT,MOUSE:-416:256,KEY:F5,W:600`
+opens the editor with the preview; a script's `KEY:Ctrl+O` is no user
+gesture, so the page's picker stays shut: in Playwright press
+`Control+O` after `canvas.focus()` and answer the `filechooser` event. A clear spot in E1M1's start room for a
 room: `DRAW:-480:192:-352:192:-352:288:-480:288` (autotest `editor`
 raises it to 24 and play-tests standing on it; its exported WAD is
 checked with Python `struct`, `check_map_wad`). `--export-map MAP FILE`,
