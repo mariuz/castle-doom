@@ -107,6 +107,17 @@ function RegisterUpload(const FileName: String; const Data: TStream): String;
 function WadUrlAvailable(const Url: String): Boolean;
 { The bytes of an upload:/ URL as a string; False when there are none. }
 function UploadText(const Url: String; out Text: String): Boolean;
+{ Drop an upload:/ URL's bytes, here and in the store (OnForgetUpload). }
+procedure ForgetUpload(const Url: String);
+
+var
+  { Where uploads outlive the program (GameSaveStorage installs them: the
+    browser's IndexedDB, through the page script, or castle-config:
+    files): RegisterUpload keeps each new one, an upload:/ URL not in
+    memory is restored from there (nil: none), ForgetUpload drops it. }
+  OnKeepUpload: procedure(const Url: String; const Data: TMemoryStream);
+  OnRestoreUpload: function(const Url: String): TMemoryStream;
+  OnForgetUpload: procedure(const Url: String);
 
 { Decode an 8-byte, NUL padded Doom name. }
 function DoomName(const P: PByte): String;
@@ -129,6 +140,32 @@ begin
   Result := UploadUrlPrefix + ExtractFileName(FileName);
 end;
 
+{ The upload's index in Uploads, restored from the store when it is
+  not in memory (a reloaded page); -1 when it is nowhere. }
+function FindUpload(const Url: String): Integer;
+var
+  Restored: TMemoryStream;
+begin
+  Result := Uploads.IndexOf(Url);
+  if (Result >= 0) or not Assigned(OnRestoreUpload) then Exit;
+  Restored := OnRestoreUpload(Url);
+  if Restored = nil then Exit;
+  Restored.Position := 0;
+  Result := Uploads.AddObject(Url, Restored);
+  WritelnLog('WAD', 'Restored %s (%d bytes) from the stored uploads', [Url, Restored.Size]);
+end;
+
+procedure ForgetUpload(const Url: String);
+var
+  I: Integer;
+begin
+  I := Uploads.IndexOf(Url);
+  { The list owns the streams. }
+  if I >= 0 then Uploads.Delete(I);
+  if Assigned(OnForgetUpload) then OnForgetUpload(Url);
+  WritelnLog('WAD', 'Forgot %s', [Url]);
+end;
+
 function RegisterUpload(const FileName: String; const Data: TStream): String;
 var
   Copied: TMemoryStream;
@@ -146,11 +183,12 @@ begin
   end else
     Uploads.AddObject(Result, Copied);
   WritelnLog('WAD', 'Uploaded %s (%d bytes)', [Result, Copied.Size]);
+  if Assigned(OnKeepUpload) then OnKeepUpload(Result, Copied);
 end;
 
 function WadUrlAvailable(const Url: String): Boolean;
 begin
-  Result := (not IsUploadUrl(Url)) or (Uploads.IndexOf(Url) >= 0);
+  Result := (not IsUploadUrl(Url)) or (FindUpload(Url) >= 0);
 end;
 
 function UploadText(const Url: String; out Text: String): Boolean;
@@ -159,7 +197,7 @@ var
   M: TMemoryStream;
 begin
   Text := '';
-  I := Uploads.IndexOf(Url);
+  I := FindUpload(Url);
   Result := I >= 0;
   if not Result then Exit;
   M := TMemoryStream(Uploads.Objects[I]);
@@ -236,7 +274,7 @@ begin
     end else
     if IsUploadUrl(FileUrl) then
     begin
-      I := Uploads.IndexOf(FileUrl);
+      I := FindUpload(FileUrl);
       if I < 0 then
         raise Exception.CreateFmt('%s is gone; choose the file again', [FileUrl]);
       Data := TMemoryStream.Create;

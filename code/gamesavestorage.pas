@@ -26,11 +26,23 @@ function PageDirectoryUrl: String;
   False when the page has none, and on other platforms. }
 function PageDownload(const FileName, Data, Mime: String): Boolean;
 
+{ Make files given as upload:/NAME (the browser's file picker, --upload)
+  outlive the program (DoomWad's OnKeepUpload...): in the browser the
+  page script keeps each picked file in IndexedDB and gives it back by
+  name (castleDoomStoredFile), on the desktop they are copied to
+  castle-config:/uploads/. }
+procedure InstallUploadStore;
+
 implementation
 
 uses Classes, SysUtils,
   {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
-  CastleLog, CastleDownload;
+  CastleLog, CastleDownload, CastleUriUtils, DoomWad;
+
+function UploadName(const Url: String): String;
+begin
+  Result := Copy(Url, Length(UploadUrlPrefix) + 1, MaxInt);
+end;
 
 function FileRead(const Url: String; out Text: String): Boolean;
 var
@@ -196,5 +208,99 @@ begin
 end;
 
 {$endif}
+
+{ The upload store ------------------------------------------------------------ }
+
+{$ifdef WASI}
+
+procedure KeepUpload(const Url: String; const Data: TMemoryStream);
+begin
+  { The page script already keeps what its picker read. }
+end;
+
+function RestoreUpload(const Url: String): TMemoryStream;
+var
+  V: TJOB_JSValue;
+  Bytes: UnicodeString;
+  I: Integer;
+begin
+  Result := nil;
+  V := JSWindow.ReadJSPropertyValue('castleDoomStoredFile');
+  if not ((V is TJOB_Object) and (TJOB_Object(V).Value <> nil)) then
+  begin
+    FreeAndNil(V);
+    Exit;
+  end;
+  FreeAndNil(V);
+  { A binary string (one character per byte), null when not stored. }
+  V := JSWindow.InvokeJSValueResult('castleDoomStoredFile', [UTF8Decode(UploadName(Url))]);
+  try
+    if not (V is TJOB_String) then Exit;
+    Bytes := TJOB_String(V).Value;
+  finally
+    FreeAndNil(V);
+  end;
+  Result := TMemoryStream.Create;
+  Result.Size := Length(Bytes);
+  for I := 1 to Length(Bytes) do
+    PByte(Result.Memory)[I - 1] := Ord(Bytes[I]) and $FF;
+end;
+
+procedure ForgetStoredUpload(const Url: String);
+var
+  V: TJOB_JSValue;
+  HasIt: Boolean;
+begin
+  V := JSWindow.ReadJSPropertyValue('castleDoomForgetFile');
+  HasIt := (V is TJOB_Object) and (TJOB_Object(V).Value <> nil);
+  FreeAndNil(V);
+  if HasIt then
+    JSWindow.InvokeJSNoResult('castleDoomForgetFile', [UTF8Decode(UploadName(Url))]);
+end;
+
+{$else}
+
+function UploadFileName(const Url: String): String;
+begin
+  Result := UriToFilenameSafe(ResolveCastleConfigUrl('castle-config:/uploads/' + UploadName(Url)));
+end;
+
+procedure KeepUpload(const Url: String; const Data: TMemoryStream);
+begin
+  try
+    ForceDirectories(ExtractFilePath(UploadFileName(Url)));
+    Data.SaveToFile(UploadFileName(Url));
+  except
+    on E: Exception do
+      WritelnWarning('WAD', 'Cannot keep %s: %s', [Url, E.Message]);
+  end;
+end;
+
+function RestoreUpload(const Url: String): TMemoryStream;
+begin
+  Result := nil;
+  if (UploadName(Url) = '') or not FileExists(UploadFileName(Url)) then Exit;
+  Result := TMemoryStream.Create;
+  try
+    Result.LoadFromFile(UploadFileName(Url));
+  except
+    FreeAndNil(Result);
+  end;
+end;
+
+procedure ForgetStoredUpload(const Url: String);
+begin
+  if FileExists(UploadFileName(Url)) then
+    DeleteFile(UploadFileName(Url));
+end;
+
+{$endif}
+
+procedure InstallUploadStore;
+begin
+  OnKeepUpload := @KeepUpload;
+  OnRestoreUpload := @RestoreUpload;
+  OnForgetUpload := @ForgetStoredUpload;
+end;
 
 end.

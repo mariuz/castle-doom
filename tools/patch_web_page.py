@@ -225,6 +225,7 @@ DOWNLOAD_NEW = """
             const thisKind = kind;
             file.arrayBuffer().then(function (buffer) {
               const bytes = new Uint8Array(buffer);
+              keep(file.name, buffer);
               let s = '';
               for (let i = 0; i < bytes.length; i += 8192)
                 s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
@@ -237,6 +238,43 @@ DOWNLOAD_NEW = """
         }
         input.accept = k === 'demo' ? '.cdemo' : '.wad,.WAD';
         input.click();
+      };
+      /* The picked files outlive the page in IndexedDB (database
+         castle-doom-files, store files, key the name): read at load,
+         given back by name (castleDoomStoredFile, a binary string or
+         null) when a recent set, save or demo names upload:/NAME. */
+      const stored = {};
+      let db = null;
+      try {
+        const open = indexedDB.open('castle-doom-files', 1);
+        open.onupgradeneeded = function () { open.result.createObjectStore('files'); };
+        open.onsuccess = function () {
+          db = open.result;
+          const cursor = db.transaction('files').objectStore('files').openCursor();
+          cursor.onsuccess = function () {
+            const c = cursor.result;
+            if (!c) return;
+            if (!(c.key in stored)) stored[c.key] = c.value;
+            c.continue();
+          };
+        };
+      } catch (e) { console.log('Castle DOOM: no IndexedDB, picked files last until a reload'); }
+      function keep(name, buffer) {
+        stored[name] = buffer;
+        if (db) db.transaction('files', 'readwrite').objectStore('files').put(buffer, name);
+      }
+      window.castleDoomStoredFile = function (name) {
+        const buffer = stored[name];
+        if (!buffer) return null;
+        const bytes = new Uint8Array(buffer);
+        let s = '';
+        for (let i = 0; i < bytes.length; i += 8192)
+          s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+        return s;
+      };
+      window.castleDoomForgetFile = function (name) {
+        delete stored[name];
+        if (db) db.transaction('files', 'readwrite').objectStore('files').delete(name);
       };
       window.castleDoomTakeFile = function () {
         return picked.length ? picked[0].head : null;

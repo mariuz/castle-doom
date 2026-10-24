@@ -24,7 +24,7 @@ type
     the Video page's VideoFieldOfView, VideoUiScale, VideoFullscreen,
     VideoRenderScale). }
   { maCustom: the custom game page wants CustomItem done (OPEN, GAME,
-    OPENIWAD, PWADS, CLEAR, RECENT, MAP, START, EDIT; CustomDelta -1 / 1
+    OPENIWAD, PWADS, CLEAR, RECENT, RECENTFORGET (Delete), MAP, START, EDIT; CustomDelta -1 / 1
     for the arrows), or its PWADs page (PWADMOVE, PWADREMOVE of the
     PWAD CustomIndex, PWADADD). }
   TDoomMenuAction = (maNone, maNewGame, maLoadSlot, maOptions, maQuit, maSaveSlot, maClose,
@@ -914,6 +914,13 @@ begin
   if Event.IsKey(keyArrowLeft) or Event.IsKey(keyArrowRight) then
   begin
     if Event.IsKey(keyArrowLeft) then ChangeSlider(-1) else ChangeSlider(1);
+    Exit;
+  end;
+  if Event.IsKey(keyDelete) and (FPage = mpCustom) and (ItemName = 'T:RECENT') then
+  begin
+    { Forget the recent WAD set shown. }
+    if FSounds <> nil then FSounds.Play('DSPISTOL');
+    CustomRequest('RECENTFORGET', 0);
     Exit;
   end;
   if Event.IsKey(keyDelete) and (FPage = mpPwads) and (FItemOn[mpPwads] < CustomPwadNames.Count) then

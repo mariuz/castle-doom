@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Custom game page: WAD files opened in the browser stay there after the page is reloaded,
+  so recent WAD sets, saves and demos that use them work again; Delete on RECENT forgets
+  the set shown (and the browser's copy of files only it used).
+
 ## v0.51.0 (2026-10-24)
 
 - Map editor: `E` opens a properties panel to type values (sector heights, light, special,

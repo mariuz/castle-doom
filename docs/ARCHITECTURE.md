@@ -1420,11 +1420,20 @@ In the browser Open IWAD / Add PWAD call the page's `castleDoomOpenFile`
 file waits in the page until `PollPickedFile` (each menu `Update`)
 takes its name and its bytes as a binary string and `RegisterUpload`
 keeps them as `upload:/NAME`, which `TDoomWad.AddFile` reads from
-memory. After a page reload those bytes are gone, so `LoadWads` checks
-`WadUrlAvailable` first and leaves such files out with a message
-instead of raising (an exception would stop the WebAssembly program);
-the recent sets never keep them. `--upload FILE` does the same on the
-desktop for tests.
+memory. Those bytes outlive the page through an upload store
+(`GameSaveStorage.InstallUploadStore` sets DoomWad's `OnKeepUpload`,
+`OnRestoreUpload`, `OnForgetUpload`): the page script keeps each picked
+file in IndexedDB (database `castle-doom-files`, read when the page
+loads) and `castleDoomStoredFile(name)` gives it back as a binary
+string, so an `upload:/NAME` missing from memory (`FindUpload`, behind
+`WadUrlAvailable`, `UploadText` and `AddFile`) is restored before it is
+used; on the desktop the store is `castle-config:/uploads/`, which
+`--upload FILE` fills for tests. `LoadWads` still checks
+`WadUrlAvailable` first and leaves out a file the store lost with a
+message instead of raising (an exception would stop the WebAssembly
+program). The recent sets keep uploads now; Delete on RECENT
+(`RECENTFORGET`, `TViewMenu.ForgetRecent`) drops the set shown and,
+through `ForgetUpload`, the stored files no other recent set names.
 
 "Options" shows the CGE part: buttons (`TCastleButton` in
 `TCastleHorizontalGroup`/`TCastleVerticalGroup` on a `TCastleRectangleControl`)

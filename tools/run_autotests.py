@@ -978,6 +978,7 @@ GOLDEN = [
     'editor-cut_edit_4.png', 'custom-wads_menu1.png', 'custom-wads_menu2.png', 'custom-wads_menu3.png',
     'custom-wads_menu4.png', 'editor-select_edit_1.png', 'editor-select_edit_2.png', 'editor-select_edit_3.png',
     'editor-props_edit_1.png', 'editor-props_edit_2.png', 'editor-props_edit_3.png',
+    'stored-uploads_menu1.png', 'stored-uploads_menu2.png',
 ]
 
 
@@ -1205,6 +1206,39 @@ def custom_wads_test(exe, out):
     return problems, time.time() - start
 
 
+def stored_uploads_test(exe, out):
+    """Files picked in the browser outlive the page (the upload store; on
+    the desktop --upload keeps them in castle-config:/uploads/): a game
+    with an uploaded boom.wad is remembered, the next run brings it back
+    through RECENT without --upload (restored from the store), and Delete
+    on RECENT forgets the set and the stored file."""
+    config = os.path.join(out, 'config-stored-uploads')
+    shutil.rmtree(config, ignore_errors=True)
+    os.makedirs(config)
+    start = time.time()
+    problems = []
+    boom = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'boom.wad')
+    kept = os.path.join(config, 'castle-doom', 'uploads', 'boom.wad')
+    run_game(exe, out, 'stored-uploads-1', 'E1M1', 'W:0.3,Q', ['--upload', boom, '-file', 'upload:/boom.wad'], config)
+    if not os.path.exists(kept):
+        problems.append('upload:/boom.wad not kept in castle-config:/uploads/')
+    log, code, _ = run_game(exe, out, 'stored-uploads', 'MENUKEYS', None,
+                            ['--menukeys', 'E,D,D,D,D,D,E,D,D,R,S,DEL,S,Q'], config)
+    if code != 0:
+        problems.append('exit code %d' % code)
+    for rx in (r'Menu: Recent WADs 1/1: freedoom1\.wad \+ boom\.wad',
+               r'WAD: Restored upload:/boom\.wad \(\d+ bytes\) from the stored uploads',
+               r'WAD: Loaded upload:/boom\.wad', r'Menu: Recent WADs: forgot freedoom1\.wad \+ boom\.wad, 0 left',
+               r'WAD: Forgot upload:/boom\.wad'):
+        if not re.search(rx, log):
+            problems.append('missing log line /%s/' % rx)
+    if os.path.exists(kept):
+        problems.append('the forgotten upload is still stored')
+    if re.search(r'Exception', log):
+        problems.append(re.search(r'.*Exception.*', log).group(0))
+    return problems, time.time() - start
+
+
 def settings_test(exe, out):
     """Volumes set in one run are loaded by the next."""
     config = os.path.join(out, 'config-settings')
@@ -1328,6 +1362,11 @@ def main():
         problems, secs = custom_wads_test(exe, out)
         results.append(('custom-wads', problems, secs))
         print('%-16s %s (%.0f s)%s' % ('custom-wads', 'FAIL' if problems else 'ok', secs,
+                                        ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'stored-uploads' in only:
+        problems, secs = stored_uploads_test(exe, out)
+        results.append(('stored-uploads', problems, secs))
+        print('%-16s %s (%.0f s)%s' % ('stored-uploads', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)

@@ -58,8 +58,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - Freedoom Phase 1 (36 ExMy maps) and Phase 2 (32 MAPxx maps), map selection in the menu.
 - Custom game: New Game -> "Custom game" picks the game (Freedoom Phase 1 / 2, or Enter to
   open your IWAD), PWADs (their own page: add, reorder, remove), a recently used set of WADs,
-  map, skill and a random seed on one page of Doom's menu; in the browser the page opens WAD
-  files from your computer too.
+  map, skill and a random seed on one page of Doom's menu (Delete on RECENT forgets a set);
+  in the browser the page opens WAD files from your computer too, and the browser keeps
+  them for the next visit.
 - Random maps: New Game -> "Random maps" (or `-random [SEED]`, `?random=SEED` in the browser)
   generates eight levels from a seed: rooms split from a rectangle (the splits are the BSP),
   connected by openings, doors and stairs (a locked door guards the exit from the second map

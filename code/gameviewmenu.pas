@@ -108,6 +108,7 @@ type
     { Load these PWADs on the current IWAD (the PWADs page's changes). }
     procedure LoadPwads(const Pwads: TStrings);
     procedure CycleRecent(const Delta: Integer);
+    procedure ForgetRecent;
     { The browser's file picker for an IWAD or a PWAD (OPENIWAD,
       PWADADD); the file arrives in a later Update (PollPickedFile). }
     procedure PickBrowserFile(const Kind: String);
@@ -898,6 +899,49 @@ begin
   LoadWads(FIwadUrl, Pwads);
 end;
 
+{ Delete on RECENT: the set shown (the WADs loaded) leaves the list, and
+  the browser's files only it named leave the upload store. }
+procedure TViewMenu.ForgetRecent;
+var
+  Recent, Pwads, Parts: TStringList;
+  I, J: Integer;
+  SetText: String;
+  Used: Boolean;
+begin
+  Recent := RecentWadSets;
+  Pwads := WithoutRandomPwads(FPwads);
+  Parts := TStringList.Create;
+  try
+    SetText := WadSetText(FIwadUrl, Pwads);
+    I := Recent.IndexOf(SetText);
+    if I < 0 then
+    begin
+      FWadsLabel.Caption := 'These WADs are not among the recent ones';
+      Exit;
+    end;
+    Recent.Delete(I);
+    SaveRecentWadSets(Recent);
+    UserConfig.Save;
+    WritelnLog('Menu', 'Recent WADs: forgot %s, %d left', [WadSetDescription(SetText), Recent.Count]);
+    FWadsLabel.Caption := 'Forgot ' + WadSetDescription(SetText);
+    Parts.Delimiter := '|';
+    Parts.StrictDelimiter := true;
+    Parts.DelimitedText := SetText;
+    for J := 0 to Parts.Count - 1 do
+      if IsUploadUrl(Parts[J]) then
+      begin
+        Used := false;
+        for I := 0 to Recent.Count - 1 do
+          if Pos(Parts[J], Recent[I]) > 0 then Used := true;
+        if not Used then ForgetUpload(Parts[J]);
+      end;
+  finally
+    FreeAndNil(Parts);
+    FreeAndNil(Pwads);
+    FreeAndNil(Recent);
+  end;
+end;
+
 procedure TViewMenu.CycleRecent(const Delta: Integer);
 var
   Recent, Pwads, Parts: TStringList;
@@ -973,6 +1017,8 @@ begin
   end else
   if Item = 'RECENT' then
     CycleRecent(FDoomMenu.CustomDelta)
+  else if Item = 'RECENTFORGET' then
+    ForgetRecent
   else if (Item = 'PWADMOVE') or (Item = 'PWADREMOVE') then
   begin
     Pwads := WithoutRandomPwads(FPwads);
@@ -1110,15 +1156,13 @@ begin
     UserConfig.SetValue('wads/iwad', FIwadUrl);
     UserConfig.SetValue('wads/pwads', FPwads.DelimitedText);
     { The recent sets (the custom page's RECENT): newest first, without
-      random maps; files picked in the browser are gone after a reload. }
+      random maps; files picked in the browser are kept by the upload
+      store (GameSaveStorage), so they come back after a reload. }
     Pwads := WithoutRandomPwads(FPwads);
     Recent := RecentWadSets;
     try
-      if ((FIwadUrl <> Freedoom1) and (FIwadUrl <> Freedoom2) or (Pwads.Count > 0)) and
-         not IsUploadUrl(FIwadUrl) then
+      if (FIwadUrl <> Freedoom1) and (FIwadUrl <> Freedoom2) or (Pwads.Count > 0) then
       begin
-        for I := Pwads.Count - 1 downto 0 do
-          if IsUploadUrl(Pwads[I]) then Pwads.Delete(I);
         SetText := WadSetText(FIwadUrl, Pwads);
         I := Recent.IndexOf(SetText);
         if I >= 0 then Recent.Delete(I);
@@ -2311,6 +2355,7 @@ begin
   else if K = 'L' then Key := keyArrowLeft
   else if K = 'R' then Key := keyArrowRight
   else if K = 'B' then Key := keyBackSpace
+  else if K = 'DEL' then Key := keyDelete
   else if (Length(K) = 1) and (K[1] in ['0'..'9']) then
   begin
     { A digit typed (the custom game page's random seed). }

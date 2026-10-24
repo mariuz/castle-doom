@@ -137,11 +137,41 @@ type
   (tools/make_boom_wad.py). }
 { Files the browser's picker gives (upload:/NAME): loaded from memory,
   gone ones reported by WadUrlAvailable instead of raising. }
+{ A stand-in for the upload store (the browser's IndexedDB). }
+var
+  TestStore: TStringList;
+
+procedure TestKeep(const Url: String; const Data: TMemoryStream);
+var
+  S: String;
+begin
+  SetLength(S, Data.Size);
+  if Data.Size > 0 then Move(Data.Memory^, S[1], Data.Size);
+  TestStore.Values[Url] := S;
+end;
+
+function TestRestore(const Url: String): TMemoryStream;
+var
+  S: String;
+begin
+  Result := nil;
+  if TestStore.IndexOfName(Url) < 0 then Exit;
+  S := TestStore.Values[Url];
+  Result := TMemoryStream.Create;
+  if S <> '' then Result.WriteBuffer(S[1], Length(S));
+end;
+
+procedure TestForget(const Url: String);
+begin
+  if TestStore.IndexOfName(Url) >= 0 then
+    TestStore.Delete(TestStore.IndexOfName(Url));
+end;
+
 procedure TTestWad.TestUploads;
 var
   W: TDoomWad;
   Data: TMemoryStream;
-  Path, Url: String;
+  Path, Url, Text: String;
 begin
   Path := 'tools/testdata/boom.wad';
   if not FileExists(Path) then Path := '../tools/testdata/boom.wad';
@@ -163,6 +193,36 @@ begin
     AssertTrue('described', Pos('boom.wad', W.Description) > 0);
   finally
     FreeAndNil(W);
+  end;
+  { The store keeps a new upload and gives it back after the memory lost
+    it (a reloaded page); forgetting drops it from both. }
+  TestStore := TStringList.Create;
+  try
+    OnKeepUpload := @TestKeep;
+    OnRestoreUpload := @TestRestore;
+    OnForgetUpload := @TestForget;
+    Data := TMemoryStream.Create;
+    try
+      Data.WriteBuffer(PChar('PWAD')^, 4);
+      Url := RegisterUpload('kept.wad', Data);
+    finally
+      FreeAndNil(Data);
+    end;
+    AssertEquals('kept', 1, TestStore.Count);
+    OnForgetUpload := nil;
+    ForgetUpload(Url);                 { the memory only }
+    OnForgetUpload := @TestForget;
+    AssertEquals('still stored', 1, TestStore.Count);
+    AssertTrue('restored', UploadText(Url, Text));
+    AssertEquals('its bytes', 'PWAD', Text);
+    ForgetUpload(Url);
+    AssertEquals('forgotten', 0, TestStore.Count);
+    AssertFalse('gone', WadUrlAvailable(Url));
+  finally
+    OnKeepUpload := nil;
+    OnRestoreUpload := nil;
+    OnForgetUpload := nil;
+    FreeAndNil(TestStore);
   end;
 end;
 

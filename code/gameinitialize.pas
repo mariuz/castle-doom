@@ -10,7 +10,7 @@ uses SysUtils, Classes,
   CastleKeysMouse,
   CastleUtils, CastleTimeUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
-  DoomLighting, DoomDehacked, DoomEditMap, DoomMusic, DoomGeometry, DoomRandomMap, DoomWad, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameViewEdit, DoomExport, DoomGraphics, GameSettings, GameSaveBundle, GameLogFilter, GameCrash, GameTouch;
+  DoomLighting, DoomDehacked, DoomEditMap, DoomMusic, DoomGeometry, DoomRandomMap, DoomWad, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameViewEdit, DoomExport, DoomGraphics, GameSettings, GameSaveBundle, GameSaveStorage, GameLogFilter, GameCrash, GameTouch;
 
 var
   Window: TCastleWindow;
@@ -152,6 +152,8 @@ begin
   SceneFile := '';
   SceneGltf := true;
   RandomSeed := 0;
+  { Files picked in the browser (and --upload's) outlive the page. }
+  InstallUploadStore;
   { --autotest MAPNAME OUTPUT_PREFIX : load the map, save screenshots, quit. }
   { Doom-style options: -iwad FILE, -file PWAD [PWAD...], -deh PATCH [PATCH...],
     -warp MAP. }
