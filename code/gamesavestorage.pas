@@ -33,11 +33,17 @@ function PageDownload(const FileName, Data, Mime: String): Boolean;
   castle-config:/uploads/. }
 procedure InstallUploadStore;
 
+{ CGE's UserConfig (castle-config:/castle-doom.conf: the last and recent
+  WADs) through the save storage, so in the browser it outlives the page
+  too (localStorage). }
+procedure LoadUserConfig;
+procedure SaveUserConfig;
+
 implementation
 
 uses Classes, SysUtils,
   {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
-  CastleLog, CastleDownload, CastleUriUtils, DoomWad;
+  CastleLog, CastleDownload, CastleUriUtils, CastleConfig, DoomWad;
 
 function UploadName(const Url: String): String;
 begin
@@ -301,6 +307,38 @@ begin
   OnKeepUpload := @KeepUpload;
   OnRestoreUpload := @RestoreUpload;
   OnForgetUpload := @ForgetStoredUpload;
+end;
+
+{ The user config ------------------------------------------------------------- }
+
+const
+  UserConfigUrl = 'castle-config:/castle-doom.conf';
+
+procedure LoadUserConfig;
+{$ifdef WASI}
+var
+  Text: String;
+{$endif}
+begin
+  {$ifdef WASI}
+  { localStorage's copy into the in-memory castle-config: first. }
+  if SaveStorageRead(UserConfigUrl, Text) and (Text <> '') then
+    FileWrite(UserConfigUrl, Text);
+  {$endif}
+  UserConfig.Load;
+end;
+
+procedure SaveUserConfig;
+{$ifdef WASI}
+var
+  Text: String;
+{$endif}
+begin
+  UserConfig.Save;
+  {$ifdef WASI}
+  if FileRead(UserConfigUrl, Text) then
+    SaveStorageWrite(UserConfigUrl, Text);
+  {$endif}
 end;
 
 end.

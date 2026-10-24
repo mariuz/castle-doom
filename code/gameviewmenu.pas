@@ -921,7 +921,7 @@ begin
     end;
     Recent.Delete(I);
     SaveRecentWadSets(Recent);
-    UserConfig.Save;
+    SaveUserConfig;
     WritelnLog('Menu', 'Recent WADs: forgot %s, %d left', [WadSetDescription(SetText), Recent.Count]);
     FWadsLabel.Caption := 'Forgot ' + WadSetDescription(SetText);
     Parts.Delimiter := '|';
@@ -1174,7 +1174,7 @@ begin
       FreeAndNil(Recent);
       FreeAndNil(Pwads);
     end;
-    UserConfig.Save;
+    SaveUserConfig;
   end;
 end;
 

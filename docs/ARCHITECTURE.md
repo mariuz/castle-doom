@@ -1434,6 +1434,10 @@ message instead of raising (an exception would stop the WebAssembly
 program). The recent sets keep uploads now; Delete on RECENT
 (`RECENTFORGET`, `TViewMenu.ForgetRecent`) drops the set shown and,
 through `ForgetUpload`, the stored files no other recent set names.
+CGE's `UserConfig` (the last and recent WADs) lives in `castle-config:`,
+which the browser only keeps in memory, so `LoadUserConfig` /
+`SaveUserConfig` (`GameSaveStorage`) copy its file from / to
+localStorage around `UserConfig.Load` / `Save`.
 
 "Options" shows the CGE part: buttons (`TCastleButton` in
 `TCastleHorizontalGroup`/`TCastleVerticalGroup` on a `TCastleRectangleControl`)

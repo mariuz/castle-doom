@@ -389,7 +389,7 @@ begin
     WritelnLog('Touch', 'Touch device: touch controls on');
   end;
   { Remembered WAD paths live in the user config (castle-config:/). }
-  UserConfig.Load;
+  LoadUserConfig;
   if (ExportSaves <> '') or (ImportSaves <> '') then
   begin
     TransferSaves(ExportSaves, ImportSaves);
