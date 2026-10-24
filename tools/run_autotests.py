@@ -1004,6 +1004,7 @@ GOLDEN = [
     'editor-props_edit_1.png', 'editor-props_edit_2.png', 'editor-props_edit_3.png',
     'stored-uploads_menu1.png', 'stored-uploads_menu2.png',
     'editor-preview_edit_1.png', 'editor-preview_edit_2.png', 'editor-preview_edit_3.png', 'editor-preview_edit_4.png',
+    'stored-files_menu1.png', 'stored-files_menu2.png', 'stored-files_menu3.png',
 ]
 
 
@@ -1264,6 +1265,32 @@ def stored_uploads_test(exe, out):
     return problems, time.time() - start
 
 
+def stored_files_test(exe, out):
+    """The stored files page (custom game -> PWADS -> STORED FILES...):
+    a file kept by --upload is listed, Enter adds it as a PWAD, Delete
+    forgets it."""
+    config = os.path.join(out, 'config-stored-files')
+    shutil.rmtree(config, ignore_errors=True)
+    os.makedirs(config)
+    start = time.time()
+    problems = []
+    boom = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'boom.wad')
+    run_game(exe, out, 'stored-files-1', 'E1M1', 'W:0.3,Q', ['--upload', boom], config)
+    log, code, _ = run_game(exe, out, 'stored-files', 'MENUKEYS', None,
+                            ['--menukeys', 'E,D,D,D,D,D,E,D,E,D,E,S,E,S,D,E,DEL,S,Q'], config)
+    if code != 0:
+        problems.append('exit code %d' % code)
+    for rx in (r'Menu: Stored files: boom\.wad', r'WAD: Restored upload:/boom\.wad',
+               r'WAD: Loaded upload:/boom\.wad', r'WAD: Forgot upload:/boom\.wad', r'Menu: Stored files: none'):
+        if not re.search(rx, log):
+            problems.append('missing log line /%s/' % rx)
+    if os.path.exists(os.path.join(config, 'castle-doom', 'uploads', 'boom.wad')):
+        problems.append('the forgotten file is still stored')
+    if re.search(r'Exception', log):
+        problems.append(re.search(r'.*Exception.*', log).group(0))
+    return problems, time.time() - start
+
+
 def settings_test(exe, out):
     """Volumes set in one run are loaded by the next."""
     config = os.path.join(out, 'config-settings')
@@ -1392,6 +1419,11 @@ def main():
         problems, secs = stored_uploads_test(exe, out)
         results.append(('stored-uploads', problems, secs))
         print('%-16s %s (%.0f s)%s' % ('stored-uploads', 'FAIL' if problems else 'ok', secs,
+                                        ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'stored-files' in only:
+        problems, secs = stored_files_test(exe, out)
+        results.append(('stored-files', problems, secs))
+        print('%-16s %s (%.0f s)%s' % ('stored-files', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)

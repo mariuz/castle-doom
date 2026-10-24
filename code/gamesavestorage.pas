@@ -35,6 +35,10 @@ function PageDownload(const FileName, Data, Mime: String): Boolean;
   castle-config:/uploads/. }
 procedure InstallUploadStore;
 
+{ The files the upload store keeps, as NAME=BYTES lines (the caller
+  frees the list). }
+function StoredUploads: TStringList;
+
 { The page's file picker (tools/patch_web_page.py's castleDoomOpenFile):
   open it for files of Kind ('iwad', 'pwad', 'demo', 'editwad'); False
   when the page has none (and on other platforms). The chosen file
@@ -310,6 +314,50 @@ begin
     DeleteFile(UploadFileName(Url));
 end;
 
+{$endif}
+
+{$ifdef WASI}
+function StoredUploads: TStringList;
+var
+  V: TJOB_JSValue;
+  Text: String;
+begin
+  Result := TStringList.Create;
+  V := JSWindow.ReadJSPropertyValue('castleDoomStoredFiles');
+  if not ((V is TJOB_Object) and (TJOB_Object(V).Value <> nil)) then
+  begin
+    FreeAndNil(V);
+    Exit;
+  end;
+  FreeAndNil(V);
+  { "name=bytes" lines. }
+  V := JSWindow.InvokeJSValueResult('castleDoomStoredFiles', []);
+  try
+    if V is TJOB_String then Text := UTF8Encode(TJOB_String(V).Value) else Text := '';
+  finally
+    FreeAndNil(V);
+  end;
+  Result.Text := Text;
+end;
+{$else}
+function StoredUploads: TStringList;
+var
+  Dir: String;
+  Info: TSearchRec;
+begin
+  Result := TStringList.Create;
+  Dir := ExtractFilePath(UploadFileName(UploadUrlPrefix + 'x'));
+  if FindFirst(Dir + '*', faAnyFile and not faDirectory, Info) = 0 then
+  try
+    repeat
+      if (Info.Attr and faDirectory) = 0 then
+        Result.Add(Info.Name + '=' + IntToStr(Info.Size));
+    until FindNext(Info) <> 0;
+  finally
+    FindClose(Info);
+  end;
+  Result.Sort;
+end;
 {$endif}
 
 procedure InstallUploadStore;

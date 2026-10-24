@@ -68,82 +68,8 @@
               "$Children": [
                 {
                   "$$ClassName": "TCastleButton",
-                  "Name": "ButtonPhase1",
-                  "Caption": "Freedoom Phase 1 (Doom 1 episodes)",
-                  "FontSize": 22.0
-                },
-                {
-                  "$$ClassName": "TCastleButton",
-                  "Name": "ButtonPhase2",
-                  "Caption": "Freedoom Phase 2 (Doom 2 maps)",
-                  "FontSize": 22.0
-                }
-              ]
-            },
-            {
-              "$$ClassName": "TCastleHorizontalGroup",
-              "Name": "RowMap",
-              "Spacing": 10.0,
-              "$Children": [
-                {
-                  "$$ClassName": "TCastleButton",
-                  "Name": "ButtonPrevMap",
-                  "Caption": "<",
-                  "FontSize": 22.0
-                },
-                {
-                  "$$ClassName": "TCastleLabel",
-                  "Name": "MapLabel",
-                  "Text": [
-                    "E1M1"
-                  ],
-                  "FontSize": 22.0,
-                  "ColorPersistent": {
-                    "$$ClassName": "TCastleColorPersistent",
-                    "Red": 1.0,
-                    "Green": 1.0,
-                    "Blue": 1.0,
-                    "Alpha": 1.0
-                  }
-                },
-                {
-                  "$$ClassName": "TCastleButton",
-                  "Name": "ButtonNextMap",
-                  "Caption": ">",
-                  "FontSize": 22.0
-                }
-              ]
-            },
-            {
-              "$$ClassName": "TCastleHorizontalGroup",
-              "Name": "RowSkill",
-              "Spacing": 10.0,
-              "$Children": [
-                {
-                  "$$ClassName": "TCastleButton",
-                  "Name": "ButtonPrevSkill",
-                  "Caption": "<",
-                  "FontSize": 22.0
-                },
-                {
-                  "$$ClassName": "TCastleLabel",
-                  "Name": "SkillLabel",
-                  "Text": [
-                    ""
-                  ],
-                  "FontSize": 22.0,
-                  "ColorPersistent": {
-                    "$$ClassName": "TCastleColorPersistent",
-                    "Red": 1.0,
-                    "Green": 1.0,
-                    "Blue": 1.0,
-                    "Alpha": 1.0
-                  }
-                },
-                {
-                  "$$ClassName": "TCastleButton",
-                  "Name": "ButtonNextSkill",
-                  "Caption": ">",
+                  "Name": "ButtonCustomGame",
+                  "Caption": "Custom game...  (WADs, map, skill)",
                   "FontSize": 22.0
                 }
               ]
@@ -378,37 +304,12 @@
                   "Name": "ButtonBack",
                   "Caption": "Back  (Esc)",
                   "FontSize": 26.0
-                }
-              ]
-            },
-            {
-              "$$ClassName": "TCastleHorizontalGroup",
-              "Name": "RowOwnWads",
-              "Spacing": 10.0,
-              "$Children": [
-                {
-                  "$$ClassName": "TCastleButton",
-                  "Name": "ButtonOpenIwad",
-                  "Caption": "Open IWAD...",
-                  "FontSize": 18.0
-                },
-                {
-                  "$$ClassName": "TCastleButton",
-                  "Name": "ButtonAddPwad",
-                  "Caption": "Add PWAD...",
-                  "FontSize": 18.0
-                },
-                {
-                  "$$ClassName": "TCastleButton",
-                  "Name": "ButtonLastWads",
-                  "Caption": "Last WADs",
-                  "FontSize": 18.0
                 },
                 {
                   "$$ClassName": "TCastleButton",
                   "Name": "ButtonContinue",
                   "Caption": "Continue (quick save)",
-                  "FontSize": 18.0
+                  "FontSize": 22.0
                 }
               ]
             },

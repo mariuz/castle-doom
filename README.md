@@ -11,7 +11,7 @@ Doom levels, rendered and played with [Castle Game Engine](https://castle-engine
 (Object Pascal). It reads the original WAD format directly: Freedoom Phase 1 and
 Phase 2 (BSD licensed, bundled in `data/wads/`) work out of the box, and your own
 vanilla-format Doom 1 / Doom 2 IWADs and PWADs can be loaded from the menu
-("Open IWAD...", "Add PWAD...") or the command line:
+(New Game -> Custom game, or Options -> Custom game...) or the command line:
 
 ```bash
 castle-doom -iwad DOOM2.WAD -file mymap.wad -deh mymap.deh -warp MAP01
@@ -60,7 +60,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   open your IWAD), PWADs (their own page: add, reorder, remove), a recently used set of WADs,
   map, skill and a random seed on one page of Doom's menu (Delete on RECENT forgets a set);
   in the browser the page opens WAD files from your computer too, and the browser keeps
-  them for the next visit.
+  them for the next visit (PWADS -> STORED FILES... lists them: Enter adds one, Delete
+  forgets it). The title screen's Options panel leads there with "Custom game...".
 - Random maps: New Game -> "Random maps" (or `-random [SEED]`, `?random=SEED` in the browser)
   generates eight levels from a seed: rooms split from a rectangle (the splits are the BSP),
   connected by openings, doors and stairs (a locked door guards the exit from the second map

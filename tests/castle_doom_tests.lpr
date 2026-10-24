@@ -2166,9 +2166,26 @@ begin
     Key(keyArrowDown);
     Key(keyArrowDown);
     Key(keyEnter);                            { ADD PWAD... }
+    Key(keyArrowDown);
+    Key(keyEnter);                            { STORED FILES... }
+    { The stored files page (the view fills it): add, forget, back. }
+    FMenu.StoredNames.Add('boom.wad  1 KB');
+    FMenu.StoredNames.Add('x.wad  9 KB');
+    FMenu.OpenPage(mpStored);
+    Key(keyArrowDown);
+    Key(keyEnter);                            { x.wad added as a PWAD }
+    AssertEquals('stored index', 1, FMenu.CustomIndex);
+    Key(keyArrowUp);
+    Key(keyDelete);                           { boom.wad forgotten }
+    AssertEquals('stored index forgotten', 0, FMenu.CustomIndex);
+    Key(keyEscape);                           { back: the view reopens the PWADs page }
+    AssertEquals('PWADs and stored pages requests',
+      'PWADMOVE -1;PWADREMOVE 0;PWADADD 0;STORED 0;STOREDADD 0;STOREDFORGET 0;PWADS 0;', FMenuRequests);
+    FMenuRequests := '';
+    FMenu.OpenPage(mpPwads);
     Key(keyEscape);
     AssertTrue('back to the custom page', FMenu.Page = mpCustom);
-    AssertEquals('PWADs page requests', 'PWADMOVE -1;PWADREMOVE 0;PWADADD 0;OPEN 0;', FMenuRequests);
+    AssertEquals('PWADs page back', 'OPEN 0;', FMenuRequests);
     Key(keyArrowDown);                        { from EDIT MAP round to GAME }
     Key(keyEnter);                            { GAME: open an IWAD file }
     AssertEquals('open IWAD', 'OPENIWAD 0;', Copy(FMenuRequests, Length(FMenuRequests) - 10, MaxInt));

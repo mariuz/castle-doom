@@ -676,7 +676,11 @@ autotest `upload`) and copies it to `castle-config:/uploads/`, the
 desktop's stand-in for the page's IndexedDB store: a later run restores
 `upload:/NAME` from there (log `WAD: Restored upload:/boom.wad`), and
 Delete on RECENT (`--menukeys` `DEL`) forgets the set and the stored
-file (harness `stored-uploads`; in the browser check
+file (harness `stored-uploads`); the PWADs page's STORED FILES...
+lists the store (`--menukeys` `E,D,D,D,D,D,E,D,E,D,E` reaches it; log
+`Menu: Stored files: boom.wad`; Enter adds, `DEL` forgets; harness
+`stored-files`). The Options panel has no WAD / map / skill buttons any
+more: "Custom game..." opens the page (in the browser check
 `castleDoomStoredFile('boom.wad')` after a reload with Playwright); the page's `castleDoomOpenFile` is tested with
 Playwright's `filechooser` event on a patched CGE template page.
 Map editor (`GameViewEdit` over `DoomEditMap`, docs in ARCHITECTURE):

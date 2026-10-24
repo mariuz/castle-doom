@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The title screen's Options panel leads to the custom game page ("Custom game...")
+  instead of its own game, map, skill and WAD buttons; the custom game page's PWADS page
+  has STORED FILES..., the WAD files the browser keeps for you (Enter adds one as a PWAD,
+  Delete forgets it).
+
 ## v0.52.0 (2026-10-24)
 
 ![The map editor with its 3D preview, in the browser](https://github.com/mariuz/castle-doom/raw/main/docs/screenshot-editor-preview.png)

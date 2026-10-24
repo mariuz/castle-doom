@@ -1441,11 +1441,16 @@ localStorage around `UserConfig.Load` / `Save`.
 
 "Options" shows the CGE part: buttons (`TCastleButton` in
 `TCastleHorizontalGroup`/`TCastleVerticalGroup` on a `TCastleRectangleControl`)
-to pick Freedoom Phase 1 or 2, the map and the skill (also on the custom game
-page above), "Open IWAD..." and "Add
-PWAD..." using the window's native `FileDialog` (desktop only), a "Last WADs"
-shortcut backed by `UserConfig` (`castle-config:`) and "Continue (quick
-save)". The command line accepts Doom's `-iwad FILE`, `-file PWAD...`,
+for the volumes, video, controls, saves and demos, "Continue (quick
+save)" and "Custom game..." (`ClickCustomGame`), which opens the custom
+game page above: the game, WADs, map and skill are chosen only there
+now (its handlers are the old buttons' `ClickPhase1`, `ClickOpenIwad`,
+`ClickPrevMap`...). The PWADs page's last row, STORED FILES..., opens
+`mpStored`: the upload store's files with their sizes
+(`GameSaveStorage.StoredUploads`: the page script's
+`castleDoomStoredFiles` in the browser, `castle-config:/uploads/` on
+the desktop); Enter adds one as a PWAD (`STOREDADD`, restored through
+`FindUpload`), Delete forgets it (`STOREDFORGET`, `ForgetUpload`). The command line accepts Doom's `-iwad FILE`, `-file PWAD...`,
 `-warp MAP` and `-skill 1..5`.
 
 The skill reaches `TDoomWorld.Skill` (0..4 like `gameskill`) through

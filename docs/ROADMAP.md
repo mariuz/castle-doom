@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Custom game page, the Options panel and stored files: the Options
+  panel's game, map, skill and WAD buttons gave way to one "Custom
+  game..." button that opens the custom game page; the PWADs page's
+  STORED FILES... lists the upload store's files with their sizes
+  (`GameSaveStorage.StoredUploads`, `castleDoomStoredFiles` in the
+  page script), Enter adds one as a PWAD, Delete forgets it. Harness
+  test `stored-files` (goldens), unit test `TestCustomGamePage`.
+
 - Map editor, 3D preview, back sides and opening PWADs: `F5` shows the
   map in a viewport beside the 2D view (the "Doom Map" component built
   from the editor's WADs and graphics with the map's PWAD stacked on
@@ -1183,16 +1191,15 @@ play.
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels, the menu, cheats and the browser are done (see above); left are a ghost of a recording to race (its recorded positions drawn as a translucent player sprite), a smaller format for long browser recordings (the update lines in binary or as deltas), and choosing between several kept demos. | Replays; races. | `DoomDemo`, `GameViewPlay`, `DoomActors` | M |
 | **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors, the 3D preview and opening PWADs are done (see above); left are picking textures by clicking walls in the 3D preview, copying sectors with their holes and inner lines, editing a map of a PWAD among several (a map list), and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
-| **Custom game page, the rest**: the page, its PWADs page, recent sets, the browser's file picker, stored files and forgetting sets are done (see above); left are dropping the Options panel's WAD buttons in favour of the page, and a page in the menu listing the stored browser files (their sizes, a forget button for each). | One place to choose WADs. | `GameViewMenu`, `tools/patch_web_page.py` | S |
 
 ## Suggested next three
 
 1. Mobile, the rest (M, see Engine and tooling): try the APK and the
    keyboard on devices, the release signing keys (repository secrets).
-2. Custom game page, the rest (S, see New features): the Options
-   panel's WAD buttons replaced by the page, a list of stored files.
-3. Map editor, the rest (M, see New features): textures picked in the
+2. Map editor, the rest (M, see New features): textures picked in the
    3D preview, a map list for PWADs with several maps.
+3. Demos, the rest (M, see New features): a ghost of a recording to
+   race, a smaller format for long browser recordings.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

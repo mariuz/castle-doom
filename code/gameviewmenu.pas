@@ -80,6 +80,8 @@ type
       reload, which sets the menu up anew). }
     FCustomOpen: Boolean;
     FPwadsOpen: Boolean;
+    FStoredOpen: Boolean;
+    FStoredUrls: TStringList;
     FNewGameEpisode, FNewGameSkill: Integer;
     { Load the IWAD and PWADs (title music, menus follow). False when they
       did not load, or when Freedoom Phase 2 is being downloaded first. }
@@ -105,6 +107,9 @@ type
     { The custom page's PWADs page (DoomMenu mpPwads), reopened like the
       custom page after the WADs reload. }
     procedure ShowPwadsPage;
+    { The stored files page (GameSaveStorage.StoredUploads): FStoredUrls
+      holds the upload:/ URL of each row. }
+    procedure ShowStoredPage;
     { Load these PWADs on the current IWAD (the PWADs page's changes). }
     procedure LoadPwads(const Pwads: TStrings);
     procedure CycleRecent(const Delta: Integer);
@@ -120,11 +125,11 @@ type
     procedure ShowOptions(const Value: Boolean);
     procedure ClickOpenIwad(Sender: TObject);
     procedure ClickAddPwad(Sender: TObject);
-    procedure ClickLastWads(Sender: TObject);
     procedure ClickContinue(Sender: TObject);
     procedure ClickExportSaves(Sender: TObject);
     procedure ClickImportSaves(Sender: TObject);
     procedure ClickBack(Sender: TObject);
+    procedure ClickCustomGame(Sender: TObject);
     procedure ContinueFromSlot(const Slot: Integer);
     procedure AutoContinue(Sender: TObject);
     procedure AutoDesign(Sender: TObject);
@@ -288,14 +293,10 @@ begin
   FDoomMenu.OnEditingChange := {$ifdef FPC}@{$endif} MenuEditingChange;
   FOptions := DesignedComponent('OptionsPanel') as TCastleRectangleControl;
   FButtons := DesignedComponent('OptionsButtons') as TCastleVerticalGroup;
-  Click('ButtonPhase1', {$ifdef FPC}@{$endif} ClickPhase1);
-  Click('ButtonPhase2', {$ifdef FPC}@{$endif} ClickPhase2);
-  Click('ButtonPrevMap', {$ifdef FPC}@{$endif} ClickPrevMap);
-  Click('ButtonNextMap', {$ifdef FPC}@{$endif} ClickNextMap);
-  FMapLabel := DesignedComponent('MapLabel') as TCastleLabel;
-  Click('ButtonPrevSkill', {$ifdef FPC}@{$endif} ClickPrevSkill);
-  Click('ButtonNextSkill', {$ifdef FPC}@{$endif} ClickNextSkill);
-  FSkillLabel := DesignedComponent('SkillLabel') as TCastleLabel;
+  { The game, WADs, map and skill are chosen on the custom game page. }
+  Click('ButtonCustomGame', {$ifdef FPC}@{$endif} ClickCustomGame);
+  FMapLabel := nil;
+  FSkillLabel := nil;
   { Volumes, the same settings as the F4 menu in the game. }
   Click('ButtonSfxDown', {$ifdef FPC}@{$endif} ClickSfxDown);
   Click('ButtonSfxUp', {$ifdef FPC}@{$endif} ClickSfxUp);
@@ -346,11 +347,6 @@ begin
   BuildControlsRows;
   Click('ButtonStart', {$ifdef FPC}@{$endif} ClickStart);
   Click('ButtonBack', {$ifdef FPC}@{$endif} ClickBack);
-  { Your own WADs (desktop only: needs a native file dialog). }
-  Click('ButtonOpenIwad', {$ifdef FPC}@{$endif} ClickOpenIwad);
-  Click('ButtonAddPwad', {$ifdef FPC}@{$endif} ClickAddPwad);
-  Click('ButtonLastWads', {$ifdef FPC}@{$endif} ClickLastWads);
-  (DesignedComponent('ButtonLastWads') as TCastleButton).Exists := UserConfig.GetValue('wads/iwad', '') <> '';
   FContinueButton := DesignedComponent('ButtonContinue') as TCastleButton;
   FContinueButton.OnClick := {$ifdef FPC}@{$endif} ClickContinue;
   { Moving saves between computers / the web build (GameSaveBundle). }
@@ -494,6 +490,7 @@ begin
   FreeAndNil(FFetchPwads);
   FreeAndNil(FPwads);
   FreeAndNil(FMenuKeys);
+  FreeAndNil(FStoredUrls);
   FreeAndNil(FStrings);
   inherited;
 end;
@@ -805,6 +802,11 @@ var
   S: String;
 begin
   if (FDoomMenu = nil) or (FWad = nil) then Exit;
+  if FStoredOpen then
+  begin
+    ShowStoredPage;
+    Exit;
+  end;
   if FPwadsOpen then
   begin
     ShowPwadsPage;
@@ -880,6 +882,39 @@ begin
   end;
   FDoomMenu.SetMenuActive(true);
   FDoomMenu.OpenPage(mpPwads);
+  FDoomMenu.Refresh;
+end;
+
+procedure TViewMenu.ShowStoredPage;
+var
+  Stored: TStringList;
+  I, Bytes: Integer;
+  S: String;
+begin
+  if FDoomMenu = nil then Exit;
+  FCustomOpen := true;
+  FStoredOpen := true;
+  if FStoredUrls = nil then FStoredUrls := TStringList.Create;
+  FStoredUrls.Clear;
+  FDoomMenu.StoredNames.Clear;
+  Stored := StoredUploads;
+  try
+    S := '';
+    for I := 0 to Stored.Count - 1 do
+    begin
+      Bytes := StrToIntDef(Stored.ValueFromIndex[I], 0);
+      FStoredUrls.Add(UploadUrl(Stored.Names[I]));
+      FDoomMenu.StoredNames.Add(Format('%s  %d KB', [Stored.Names[I], (Bytes + 1023) div 1024]));
+      if S <> '' then S := S + ', ';
+      S := S + Stored.Names[I];
+    end;
+    if S = '' then S := 'none';
+    WritelnLog('Menu', 'Stored files: %s', [S]);
+  finally
+    FreeAndNil(Stored);
+  end;
+  FDoomMenu.SetMenuActive(true);
+  FDoomMenu.OpenPage(mpStored);
   FDoomMenu.Refresh;
 end;
 
@@ -1007,12 +1042,38 @@ begin
     end;
   end else
   if Item = 'OPEN' then
-    FPwadsOpen := false
+  begin
+    FPwadsOpen := false;
+    FStoredOpen := false;
+  end
   else if Item = 'OPENIWAD' then
     ClickOpenIwad(nil)
   else if Item = 'PWADS' then
   begin
+    FStoredOpen := false;
     ShowPwadsPage;
+    Exit;
+  end else
+  if Item = 'STORED' then
+  begin
+    ShowStoredPage;
+    Exit;
+  end else
+  if (Item = 'STOREDADD') or (Item = 'STOREDFORGET') then
+  begin
+    I := FDoomMenu.CustomIndex;
+    if (FStoredUrls <> nil) and (I >= 0) and (I < FStoredUrls.Count) then
+    begin
+      if Item = 'STOREDFORGET' then
+      begin
+        ForgetUpload(FStoredUrls[I]);
+        ShowStoredPage;
+        Exit;
+      end;
+      { Added as a PWAD: back on the PWADs page with it. }
+      FStoredOpen := false;
+      UseFile(FStoredUrls[I], false);
+    end;
     Exit;
   end else
   if Item = 'RECENT' then
@@ -1133,6 +1194,14 @@ end;
 procedure TViewMenu.ClickBack(Sender: TObject);
 begin
   ShowOptions(false);
+end;
+
+{ The Options panel's way to the custom game page (Doom's menu). }
+procedure TViewMenu.ClickCustomGame(Sender: TObject);
+begin
+  ShowOptions(false);
+  ShowCustomPage;
+  WritelnLog('Menu', 'Custom game page from the Options panel');
 end;
 
 procedure TViewMenu.UpdateWadsLabel;
@@ -1413,19 +1482,6 @@ begin
   if FWad = nil then Exit;
   ViewPlay.PendingSaveUrl := SaveSlotUrl(Slot);
   StartGame;
-end;
-
-procedure TViewMenu.ClickLastWads(Sender: TObject);
-var
-  Pwads: TStringList;
-begin
-  Pwads := TStringList.Create;
-  try
-    Pwads.DelimitedText := UserConfig.GetValue('wads/pwads', '');
-    LoadWads(UserConfig.GetValue('wads/iwad', Freedoom1), Pwads);
-  finally
-    FreeAndNil(Pwads);
-  end;
 end;
 
 procedure TViewMenu.UpdateMapLabel;

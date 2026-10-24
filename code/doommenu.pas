@@ -17,7 +17,7 @@ uses Classes,
 
 type
   TDoomMenuPage = (mpMain, mpEpisode, mpSkill, mpLoad, mpReadThis1, mpReadThis2, mpSave,
-    mpOptions, mpSound, mpVideo, mpCustom, mpPwads);
+    mpOptions, mpSound, mpVideo, mpCustom, mpPwads, mpStored);
   { maClose: an overlay's page was left with Esc (the game takes over).
     maEndGame: Options -> End Game, confirmed. maSettings: a slider or
     toggle changed (SfxVolume, MusicVolume, MouseSensitivity, MessagesOn,
@@ -26,7 +26,8 @@ type
   { maCustom: the custom game page wants CustomItem done (OPEN, GAME,
     OPENIWAD, PWADS, CLEAR, RECENT, RECENTFORGET (Delete), MAP, START, EDIT; CustomDelta -1 / 1
     for the arrows), or its PWADs page (PWADMOVE, PWADREMOVE of the
-    PWAD CustomIndex, PWADADD). }
+    PWAD CustomIndex, PWADADD, STORED: the stored files page), or that
+    page (STOREDADD, STOREDFORGET of the file CustomIndex). }
   TDoomMenuAction = (maNone, maNewGame, maLoadSlot, maOptions, maQuit, maSaveSlot, maClose,
     maEndGame, maSettings, maCustom);
 
@@ -134,6 +135,9 @@ type
       request is about. }
     CustomRecent: String;
     CustomPwadNames: TStringList;
+    { The stored files page: the files the browser (the desktop's
+      castle-config:/uploads/) keeps, as shown ("BOOM.WAD  1 KB"). }
+    StoredNames: TStringList;
     CustomIndex: Integer;
     { The save page: the name a new save starts with, and the one typed
       (read it on maSaveSlot). }
@@ -212,11 +216,13 @@ begin
   Skill := 2;
   FDirty := true;
   CustomPwadNames := TStringList.Create;
+  StoredNames := TStringList.Create;
 end;
 
 destructor TDoomMenuScreen.Destroy;
 begin
   FreeAndNil(CustomPwadNames);
+  FreeAndNil(StoredNames);
   inherited;
 end;
 
@@ -514,7 +520,8 @@ begin
     mpSound: Result := 5;
     mpVideo: Result := {$ifdef WASI} 7 {$else} 8 {$endif};
     mpCustom: Result := 9;
-    mpPwads: Result := CustomPwadNames.Count + 1;
+    mpPwads: Result := CustomPwadNames.Count + 2;
+    mpStored: Result := Max(1, StoredNames.Count);
     mpEpisode: Result := Max(1, FEpisodes);
     mpSkill: Result := 5;
     mpLoad, mpSave: Result := 6;
@@ -552,8 +559,15 @@ begin
     mpPwads:
       if Index < CustomPwadNames.Count then
         Result := 'T:' + UpperCase(Copy(CustomPwadNames[Index], 1, 24))
+      else if Index = CustomPwadNames.Count then
+        Result := 'T:ADD PWAD...'
       else
-        Result := 'T:ADD PWAD...';
+        Result := 'T:STORED FILES...';
+    mpStored:
+      if Index < StoredNames.Count then
+        Result := 'T:' + UpperCase(Copy(StoredNames[Index], 1, 30))
+      else
+        Result := 'T:NO FILES STORED';
     else Result := '';
   end;
 end;
@@ -570,6 +584,7 @@ begin
     mpVideo: begin X := 60; Y := 40; end;
     mpCustom: begin X := 40; Y := 40; end;
     mpPwads: begin X := 40; Y := 48; end;
+    mpStored: begin X := 40; Y := 48; end;
     { m_menu.c puts the Read This! skull off the 320x200 screen. }
     mpReadThis1, mpReadThis2: begin X := 330; Y := 165; end;
   end;
@@ -631,6 +646,8 @@ begin
         OpenPage(mpCustom);
         CustomRequest('OPEN', 0);
       end;
+    mpStored:
+      CustomRequest('PWADS', 0);
     { M_ClearMenus: Esc on the main menu shows the title pages again, or
       gives the game back. }
     mpMain:
@@ -697,7 +714,16 @@ begin
         CustomIndex := Item;
         CustomRequest('PWADREMOVE', 0);
       end else
-        CustomRequest('PWADADD', 0);
+      if Item = CustomPwadNames.Count then
+        CustomRequest('PWADADD', 0)
+      else
+        CustomRequest('STORED', 0);
+    mpStored:
+      if Item < StoredNames.Count then
+      begin
+        CustomIndex := Item;
+        CustomRequest('STOREDADD', 0);
+      end;
     mpCustom:
       if ItemName = 'T:GAME' then
         CustomRequest('OPENIWAD', 0)
@@ -921,6 +947,13 @@ begin
     { Forget the recent WAD set shown. }
     if FSounds <> nil then FSounds.Play('DSPISTOL');
     CustomRequest('RECENTFORGET', 0);
+    Exit;
+  end;
+  if Event.IsKey(keyDelete) and (FPage = mpStored) and (FItemOn[mpStored] < StoredNames.Count) then
+  begin
+    CustomIndex := FItemOn[mpStored];
+    if FSounds <> nil then FSounds.Play('DSPISTOL');
+    CustomRequest('STOREDFORGET', 0);
     Exit;
   end;
   if Event.IsKey(keyDelete) and (FPage = mpPwads) and (FItemOn[mpPwads] < CustomPwadNames.Count) then
@@ -1222,6 +1255,12 @@ begin
     { The PWADs in load order (later ones win), a hint line. }
     DrawDoomText(FGraphics, Img, X, 16, 'PWADS, LOADED TOP TO BOTTOM');
     DrawDoomText(FGraphics, Img, X, 28, 'LEFT / RIGHT: ORDER   ENTER: REMOVE');
+  end;
+  if FPage = mpStored then
+  begin
+    { The files kept for the next visit (IndexedDB in the browser). }
+    DrawDoomText(FGraphics, Img, X, 16, 'FILES KEPT FOR THE NEXT VISIT');
+    DrawDoomText(FGraphics, Img, X, 28, 'ENTER: ADD AS PWAD   DELETE: FORGET');
   end;
 
   if FPage in [mpLoad, mpSave] then

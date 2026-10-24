@@ -272,6 +272,11 @@ DOWNLOAD_NEW = """
           s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
         return s;
       };
+      window.castleDoomStoredFiles = function () {
+        return Object.keys(stored).sort().map(function (name) {
+          return name + '=' + stored[name].byteLength;
+        }).join('\\n');
+      };
       window.castleDoomForgetFile = function (name) {
         delete stored[name];
         if (db) db.transaction('files', 'readwrite').objectStore('files').delete(name);
