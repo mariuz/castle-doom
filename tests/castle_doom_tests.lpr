@@ -122,6 +122,7 @@ type
     procedure TestSceneExport;
     procedure TestEditWalls;
     procedure TestEditCutDelete;
+    procedure TestEditFlipOutline;
   end;
 
   TTestStates = class(TTestCase)
@@ -2546,6 +2547,68 @@ end;
 
 { Cutting a sector in two along a path, deleting a sector (its shared
   walls stay with the neighbour), dissolving a vertex, deleting lines. }
+{ Flipping lines (two-sided only) and a sector's outline (what copying
+  sectors draws again): the outer walls, clockwise, without the hole. }
+procedure TTestEditor.TestEditFlipOutline;
+
+  function Pts(const C: array of Integer): TEditPoints;
+  var
+    I: Integer;
+  begin
+    SetLength(Result, Length(C) div 2);
+    for I := 0 to High(Result) do
+    begin
+      Result[I].X := C[I * 2];
+      Result[I].Y := C[I * 2 + 1];
+    end;
+  end;
+
+  function Area(const P: TEditPoints): Integer;
+  var
+    I, J: Integer;
+  begin
+    Result := 0;
+    for I := 0 to High(P) do
+    begin
+      J := (I + 1) mod Length(P);
+      Result := Result + P[I].X * P[J].Y - P[J].X * P[I].Y;
+    end;
+    Result := Result div 2;
+  end;
+
+var
+  E: TDoomEditMap;
+  Error: String;
+  All: array of Integer;
+  I: Integer;
+  O: TEditPoints;
+begin
+  E := TDoomEditMap.Create;
+  try
+    E.Clear('E1M1');
+    AssertEquals('room', 0, E.DrawSector(Pts([0, 0, 256, 0, 256, 256, 0, 256]), Error));
+    AssertEquals('pillar room', 1, E.DrawSector(Pts([64, 64, 128, 64, 128, 128, 64, 128]), Error));
+    O := E.SectorOutline(0);
+    AssertEquals('outer corners', 4, Length(O));
+    AssertEquals('clockwise, no hole', -256 * 256, Area(O));
+    O := E.SectorOutline(1);
+    AssertEquals('inner room', -64 * 64, Area(O));
+    SetLength(All, Length(E.Lines));
+    for I := 0 to High(All) do All[I] := I;
+    AssertEquals('only the two-sided ones flip', 4, E.FlipLines(All));
+    for I := 0 to High(E.Lines) do
+      if E.LineSector(I, 1) >= 0 then
+        AssertEquals('the outer room in front', 0, E.LineSector(I, 0));
+    { Still the same rooms: the outline does not depend on the line's way. }
+    AssertEquals('inner room after the flip', -64 * 64, Area(E.SectorOutline(1)));
+    AssertEquals('room 1 at its place', 1, E.SectorAt(96, 96));
+    AssertTrue('undo', E.Undo);
+    AssertEquals('the inner room in front again', 1, E.LineSector(4, 0));
+  finally
+    FreeAndNil(E);
+  end;
+end;
+
 procedure TTestEditor.TestEditCutDelete;
 
   function Pts(const C: array of Integer): TEditPoints;

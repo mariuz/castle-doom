@@ -6,6 +6,16 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Map editor, typed values, flipping and copying sectors: `E` opens a
+  properties panel (sector floor / ceiling height, light, special, tag;
+  line special, tag, front X / Y offset; thing angle, type, X, Y; vertex
+  X, Y) where Up / Down choose a value and a typed number is set on the
+  whole selection; `F` flips the selected two-sided lines
+  (`TDoomEditMap.FlipLines`); Ctrl+C / Ctrl+V in sectors mode copy the
+  selected sectors' outlines (`SectorOutline`) and values and draw them
+  again at the mouse. Autotest `editor-props` (goldens, the exported
+  WAD read back), unit test `TestEditFlipOutline`.
+
 - Mobile, the on-screen keyboard and the App Bundle: on Android the
   Doom menu's save names (and the custom page's seed) bring up the
   phone's keyboard through CGE's `keyboard` service
@@ -1153,15 +1163,15 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels, the menu, cheats and the browser are done (see above); left are a ghost of a recording to race (its recorded positions drawn as a translucent player sprite), a smaller format for long browser recordings (the update lines in binary or as deltas), and choosing between several kept demos. | Replays; races. | `DoomDemo`, `GameViewPlay`, `DoomActors` | M |
-| **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection and rooms against walls are done (see above); left are flipping lines, texture offsets and sector light / height values typed in (a properties panel with fields), copying geometry (not only things), a 3D preview inside the editor, opening PWAD files in the browser (an `<input type=file>`), and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
+| **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping and copying sectors are done (see above); left are a 3D preview inside the editor, the back side's offsets and textures in the properties panel, copying sectors with their holes and inner lines, opening PWAD files in the browser (an `<input type=file>`), and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
 | **Custom game page, the rest**: the page, its PWADs page, recent sets and the browser's file picker are done (see above); left are keeping the browser's files across page reloads (IndexedDB, so saves and recent sets that name them work again), forgetting a recent set, and then dropping the Options panel's WAD buttons in favour of the page. | One place to choose WADs. | `GameViewMenu`, `tools/patch_web_page.py` | S-M |
 
 ## Suggested next three
 
-1. Map editor, the rest (M, see New features): typed values (offsets,
-   heights, light), flipping lines, copying geometry, a 3D preview.
-2. Custom game page, the rest (S-M, see New features): the browser's
+1. Custom game page, the rest (S-M, see New features): the browser's
    files kept across page reloads (IndexedDB), forgetting a recent set.
+2. Map editor, the rest (M, see New features): a 3D preview, the back
+   side in the properties panel, opening PWADs in the browser.
 3. Mobile, the rest (M, see Engine and tooling): try the APK and the
    keyboard on devices, the release signing keys (repository secrets).
 

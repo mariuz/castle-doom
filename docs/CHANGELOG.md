@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Map editor: `E` opens a properties panel to type values (sector heights, light, special,
+  tag; line special, tag and texture offsets; thing angle, type and position; vertex
+  position) for the whole selection; `F` flips two-sided lines; Ctrl+C / Ctrl+V copy and
+  paste sectors too.
+
 ## v0.50.0 (2026-10-24)
 
 - Android: naming a save brings up the phone's on-screen keyboard (tap the name to bring it

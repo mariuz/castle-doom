@@ -14,7 +14,9 @@
   selects a box, Ctrl+A everything; the keys then change all of it.
   Space opens a picker with the pictures of the wall textures (lines) or
   flats (sectors; Shift: ceilings), filtered by typing. Ctrl+C / Ctrl+V
-  copy and paste things. A drawn path ending on two walls (Enter instead
+  copy and paste things (sectors in sectors mode: their outlines drawn
+  again at the mouse). E opens a properties panel to type values (Up /
+  Down, digits, Enter); F flips two-sided lines. A drawn path ending on two walls (Enter instead
   of closing it) cuts the sector in two; Delete removes the selection
   (vertices join their two lines); number keys toggle line and thing
   flags, listed in a panel.
@@ -55,6 +57,15 @@ type
     FDragThings: array of Integer;
     { Copied things, relative to their middle (Ctrl+C / Ctrl+V). }
     FClipboard: TEditThingArray;
+    { Copied sectors (Ctrl+C in sectors mode): outlines relative to their
+      middle and the sectors' values. }
+    FSectorClip: array of TEditPoints;
+    FSectorClipValues: TEditSectorArray;
+    { The properties panel (E): typed values of the selection; the field
+      being typed and its text. }
+    FProps: Boolean;
+    FPropField: Integer;
+    FPropText: String;
     { The texture / flat picker: its kind (0 wall, 1 floor, 2 ceiling),
       the typed filter, the names it shows, the highlighted one and the
       first row shown; thumbnails made as they are first shown. }
@@ -141,6 +152,18 @@ type
     procedure StartDrag(const P: TVector2);
     procedure CopyThings;
     procedure PasteThings;
+    procedure CopySectors;
+    procedure PasteSectors;
+    procedure FlipSelectedLines;
+    { The properties panel. }
+    function PropCount: Integer;
+    function PropName(const Field: Integer): String;
+    function PropValue(const Index, Field: Integer): Integer;
+    procedure SetPropValue(const Index, Field, Value: Integer);
+    procedure OpenProps;
+    procedure PropKey(const Key: TKey; const Ch: String);
+    procedure ApplyProp;
+    procedure RenderProps;
     procedure DeleteThings;
     procedure SetLineTexture(const L: Integer; const Tex: String);
     procedure OpenPicker(const Kind: Integer);
@@ -252,14 +275,15 @@ const
     'N  draw a room (click corners, Enter)' + #10 +
     'Shift+click: add to the selection' + #10 +
     'Drag on nothing / Ctrl+drag: box select' + #10 +
-    'Ctrl+A all, Ctrl+C / Ctrl+V copy things' + #10 +
+    'Ctrl+A all, Ctrl+C / Ctrl+V copy things, sectors' + #10 +
+    'E: type values (heights, light, offsets...)' + #10 +
     'N, a path from wall to wall, Enter: cut a sector' + #10 +
     'Del: delete (vertices join their lines)' + #10 +
     '1-9: flags of lines / things' + #10 +
     'Space: texture / flat picker (Shift: ceiling)' + #10 +
     'Sector: PgUp PgDn floor (Shift: ceiling)' + #10 +
     '  B light  F C flats  P special  D door' + #10 +
-    'Line: W texture  P special  X split' + #10 +
+    'Line: W texture  P special  X split  F flip' + #10 +
     ', .  tag (things: turn)' + #10 +
     'Things: A / Insert add  [ ]  type' + #10 +
     'Shift: backwards / ceiling' + #10 +
@@ -888,6 +912,347 @@ begin
   LogAction(Format('Pasted %d things at %d, %d', [Length(FClipboard), Pt.X, Pt.Y]));
 end;
 
+{ Copying sectors: their outer walls (holes left out) and values; a
+  paste draws them as new rooms (DrawSector) at the mouse. }
+procedure TViewEdit.CopySectors;
+var
+  Sel: TEditIndexArray;
+  I, J, N: Integer;
+  CX, CY: Double;
+  Outline: TEditPoints;
+begin
+  Sel := Selection;
+  FSectorClip := nil;
+  FSectorClipValues := nil;
+  CX := 0;
+  CY := 0;
+  N := 0;
+  for I := 0 to High(Sel) do
+  begin
+    Outline := FEdit.SectorOutline(Sel[I]);
+    if Length(Outline) < 3 then Continue;
+    SetLength(FSectorClip, Length(FSectorClip) + 1);
+    FSectorClip[High(FSectorClip)] := Outline;
+    SetLength(FSectorClipValues, Length(FSectorClipValues) + 1);
+    FSectorClipValues[High(FSectorClipValues)] := FEdit.Sectors[Sel[I]];
+    for J := 0 to High(Outline) do
+    begin
+      CX := CX + Outline[J].X;
+      CY := CY + Outline[J].Y;
+      Inc(N);
+    end;
+  end;
+  if N = 0 then
+  begin
+    Message('Select sectors to copy');
+    Exit;
+  end;
+  for I := 0 to High(FSectorClip) do
+    for J := 0 to High(FSectorClip[I]) do
+    begin
+      FSectorClip[I][J].X := FSectorClip[I][J].X - Round(CX / N);
+      FSectorClip[I][J].Y := FSectorClip[I][J].Y - Round(CY / N);
+    end;
+  LogAction(Format('Copied %d sectors', [Length(FSectorClip)]));
+end;
+
+procedure TViewEdit.PasteSectors;
+var
+  Pt: TEditPoint;
+  I, J, Sec, Pasted: Integer;
+  Points: TEditPoints;
+  Error, Errors: String;
+  V: TEditSector;
+begin
+  if Length(FSectorClip) = 0 then
+  begin
+    Message('No sectors copied');
+    Exit;
+  end;
+  Pt := Snap(FMouse);
+  ClearSelection;
+  Pasted := 0;
+  Errors := '';
+  FEdit.BeginChange;
+  try
+    for I := 0 to High(FSectorClip) do
+    begin
+      Points := Copy(FSectorClip[I]);
+      for J := 0 to High(Points) do
+      begin
+        Points[J].X := Points[J].X + Pt.X;
+        Points[J].Y := Points[J].Y + Pt.Y;
+      end;
+      Sec := FEdit.DrawSector(Points, Error);
+      if Sec < 0 then
+      begin
+        Errors := Error;
+        Continue;
+      end;
+      V := FSectorClipValues[I];
+      FEdit.Sectors[Sec].Floor := V.Floor;
+      FEdit.Sectors[Sec].Ceiling := V.Ceiling;
+      FEdit.Sectors[Sec].FloorTex := V.FloorTex;
+      FEdit.Sectors[Sec].CeilingTex := V.CeilingTex;
+      FEdit.Sectors[Sec].Light := V.Light;
+      FEdit.Sectors[Sec].Special := V.Special;
+      FEdit.Sectors[Sec].Tag := V.Tag;
+      ToggleSelect(Sec);
+      Inc(Pasted);
+    end;
+  finally
+    FEdit.EndChange;
+  end;
+  if Pasted > 0 then
+    LogAction(Format('Pasted %d sectors at %d, %d', [Pasted, Pt.X, Pt.Y]))
+  else
+    Message('Cannot paste here: ' + Errors);
+end;
+
+procedure TViewEdit.FlipSelectedLines;
+var
+  N: Integer;
+begin
+  N := FEdit.FlipLines(Selection);
+  if N = 0 then
+    Message('Only two-sided lines flip (a wall has only its front)')
+  else
+    LogAction(Format('Flipped %d lines: line %d front sector %d', [N, FSelected, FEdit.LineSector(FSelected, 0)]));
+end;
+
+{ The properties panel ---------------------------------------------------------- }
+
+const
+  SectorProps: array [0..4] of String = ('Floor height', 'Ceiling height', 'Light', 'Special', 'Tag');
+  LineProps: array [0..3] of String = ('Special', 'Tag', 'Front X offset', 'Front Y offset');
+  ThingProps: array [0..3] of String = ('Angle', 'Type', 'X', 'Y');
+  VertexProps: array [0..1] of String = ('X', 'Y');
+
+function TViewEdit.PropCount: Integer;
+begin
+  case FMode of
+    emSectors: Result := Length(SectorProps);
+    emLines: Result := Length(LineProps);
+    emThings: Result := Length(ThingProps);
+    else Result := Length(VertexProps);
+  end;
+end;
+
+function TViewEdit.PropName(const Field: Integer): String;
+begin
+  case FMode of
+    emSectors: Result := SectorProps[Field];
+    emLines: Result := LineProps[Field];
+    emThings: Result := ThingProps[Field];
+    else Result := VertexProps[Field];
+  end;
+end;
+
+function TViewEdit.PropValue(const Index, Field: Integer): Integer;
+var
+  S: Integer;
+begin
+  Result := 0;
+  case FMode of
+    emSectors:
+      case Field of
+        0: Result := FEdit.Sectors[Index].Floor;
+        1: Result := FEdit.Sectors[Index].Ceiling;
+        2: Result := FEdit.Sectors[Index].Light;
+        3: Result := FEdit.Sectors[Index].Special;
+        4: Result := FEdit.Sectors[Index].Tag;
+      end;
+    emLines:
+      case Field of
+        0: Result := FEdit.Lines[Index].Special;
+        1: Result := FEdit.Lines[Index].Tag;
+        2, 3:
+          begin
+            S := FEdit.Lines[Index].Side[0];
+            if S >= 0 then
+            begin
+              if Field = 2 then Result := FEdit.Sides[S].XOffset else Result := FEdit.Sides[S].YOffset;
+            end;
+          end;
+      end;
+    emThings:
+      case Field of
+        0: Result := FEdit.Things[Index].Angle;
+        1: Result := FEdit.Things[Index].TypeNum;
+        2: Result := FEdit.Things[Index].X;
+        3: Result := FEdit.Things[Index].Y;
+      end;
+    emVertices:
+      if Field = 0 then Result := FEdit.Vertices[Index].X else Result := FEdit.Vertices[Index].Y;
+  end;
+end;
+
+{ No Snapshot here: ApplyProp takes one for the whole selection. }
+procedure TViewEdit.SetPropValue(const Index, Field, Value: Integer);
+var
+  S: Integer;
+begin
+  case FMode of
+    emSectors:
+      case Field of
+        0:
+          begin
+            { A floor above the ceiling closes the sector (a door). }
+            FEdit.Sectors[Index].Floor := Value;
+            if FEdit.Sectors[Index].Ceiling < Value then FEdit.Sectors[Index].Ceiling := Value;
+          end;
+        1:
+          begin
+            FEdit.Sectors[Index].Ceiling := Value;
+            if FEdit.Sectors[Index].Floor > Value then FEdit.Sectors[Index].Floor := Value;
+          end;
+        2: FEdit.Sectors[Index].Light := EnsureRange(Value, 0, 255);
+        3: FEdit.Sectors[Index].Special := Max(0, Value);
+        4: FEdit.Sectors[Index].Tag := Max(0, Value);
+      end;
+    emLines:
+      case Field of
+        0: FEdit.Lines[Index].Special := Max(0, Value);
+        1: FEdit.Lines[Index].Tag := Max(0, Value);
+        2, 3:
+          begin
+            S := FEdit.Lines[Index].Side[0];
+            if S >= 0 then
+            begin
+              if Field = 2 then FEdit.Sides[S].XOffset := Value else FEdit.Sides[S].YOffset := Value;
+            end;
+          end;
+      end;
+    emThings:
+      case Field of
+        0: FEdit.Things[Index].Angle := ((Value mod 360) + 360) mod 360;
+        1: FEdit.Things[Index].TypeNum := Max(1, Value);
+        2: FEdit.Things[Index].X := Value;
+        3: FEdit.Things[Index].Y := Value;
+      end;
+    emVertices:
+      if Field = 0 then
+        FEdit.Vertices[Index].X := Value
+      else
+        FEdit.Vertices[Index].Y := Value;
+  end;
+end;
+
+procedure TViewEdit.OpenProps;
+begin
+  if FSelected < 0 then
+  begin
+    Message('Select something first');
+    Exit;
+  end;
+  FProps := true;
+  FPropField := 0;
+  FPropText := '';
+  Message('Properties: Up / Down a value, type a number, Enter sets it');
+end;
+
+procedure TViewEdit.ApplyProp;
+var
+  Value, I: Integer;
+  Sel: TEditIndexArray;
+begin
+  if not TryStrToInt(FPropText, Value) then
+  begin
+    Message('Type a number');
+    Exit;
+  end;
+  Sel := Selection;
+  FEdit.Snapshot;
+  for I := 0 to High(Sel) do
+    SetPropValue(Sel[I], FPropField, Value);
+  { A vertex typed onto another one joins it, like a drag. }
+  if FMode = emVertices then
+    for I := 0 to High(Sel) do
+      if (Sel[I] <= High(FEdit.Vertices)) and FEdit.MergeVertex(Sel[I]) then
+      begin
+        ClearSelection;
+        Break;
+      end;
+  if FSelected >= 0 then
+    LogAction(Format('%s %d: %s %d%s', [Copy(ModeNames[FMode], 1, Length(ModeNames[FMode]) - 1), FSelected,
+      PropName(FPropField), PropValue(FSelected, FPropField), MoreText]))
+  else
+    LogAction(Format('%s %d', [PropName(FPropField), Value]));
+  FPropText := '';
+end;
+
+{ Keys while the panel is open: Up / Down choose the value, digits and
+  minus type it, Backspace, Enter sets it on the selection, Esc or E
+  closes. }
+procedure TViewEdit.PropKey(const Key: TKey; const Ch: String);
+var
+  C: Char;
+begin
+  C := #0;
+  if Length(Ch) = 1 then C := Ch[1]
+  else if Key in [key0..key9] then C := Chr(Ord('0') + Ord(Key) - Ord(key0))
+  else if Key in [keyNumpad0..keyNumpad9] then C := Chr(Ord('0') + Ord(Key) - Ord(keyNumpad0))
+  else if Key in [keyMinus, keyNumpadMinus] then C := '-';
+  if (C in ['0'..'9']) or ((C = '-') and (FPropText = '')) then
+  begin
+    if Length(FPropText) < 7 then FPropText := FPropText + C;
+    Exit;
+  end;
+  case Key of
+    keyArrowUp: FPropField := (FPropField + PropCount - 1) mod PropCount;
+    keyArrowDown, keyTab: FPropField := (FPropField + 1) mod PropCount;
+    keyBackSpace: if FPropText <> '' then SetLength(FPropText, Length(FPropText) - 1);
+    keyEnter: ApplyProp;
+    keyEscape, keyE:
+      begin
+        FProps := false;
+        FPropText := '';
+      end;
+    else ;
+  end;
+  if Key in [keyArrowUp, keyArrowDown, keyTab] then FPropText := '';
+end;
+
+{ The selection's values, bottom right (the flags panel's place). }
+procedure TViewEdit.RenderProps;
+var
+  Font: TCastleFont;
+  I, Count: Integer;
+  X, Y, LineH, W: Single;
+  Text: String;
+  Color: TCastleColor;
+begin
+  if (not FProps) or (FSelected < 0) or FPicker then Exit;
+  Count := PropCount;
+  Font := FallbackFont;
+  Font.PushProperties;
+  try
+    Font.Size := Max(12, Container.PixelsHeight / 60);
+    LineH := Font.Height * 1.35;
+    W := Font.TextWidth('> Front Y offset   -000000_') + 20;
+    X := Container.PixelsWidth - W - 10;
+    Y := 10;
+    DrawRectangle(FloatRectangle(X - 8, Y - 6, W + 8, LineH * (Count + 1) + 10), Vector4(0.1, 0.12, 0.2, 0.95));
+    for I := 0 to Count - 1 do
+    begin
+      if I = FPropField then
+      begin
+        Color := Vector4(1, 1, 0.5, 1);
+        if FPropText <> '' then Text := FPropText + '_' else Text := IntToStr(PropValue(FSelected, I)) + '_';
+        Text := '> ' + PropName(I) + '   ' + Text;
+      end else
+      begin
+        Color := Vector4(0.9, 0.9, 0.9, 1);
+        Text := '  ' + PropName(I) + '   ' + IntToStr(PropValue(FSelected, I));
+      end;
+      Font.Print(X, Y + LineH * (Count - 1 - I), Color, Text);
+    end;
+    Font.Print(X, Y + LineH * Count, Vector4(1, 0.85, 0.4, 1), 'Properties (E: close)');
+  finally
+    Font.PopProperties;
+  end;
+end;
+
 procedure TViewEdit.DeleteThings;
 var
   Sel: TEditIndexArray;
@@ -1354,6 +1719,7 @@ begin
     DrawRectangle(FHelpLabel.RenderRect, Vector4(0.1, 0.12, 0.2, 0.9));
 
   RenderFlags;
+  RenderProps;
   if FPicker then RenderPicker;
 end;
 
@@ -1758,7 +2124,7 @@ var
   Text: String;
   Names: array of TFlagName;
 begin
-  if (FSelected < 0) or FPicker or not (FMode in [emLines, emThings]) then Exit;
+  if (FSelected < 0) or FPicker or FProps or not (FMode in [emLines, emThings]) then Exit;
   if FMode = emLines then
   begin
     if FSelected > High(FEdit.Lines) then Exit;
@@ -1878,6 +2244,13 @@ begin
     UpdateLabels;
     Exit;
   end;
+  if FProps then
+  begin
+    { The selection went (Delete in the panel cannot happen): close. }
+    if FSelected < 0 then FProps := false else PropKey(Key, '');
+    UpdateLabels;
+    Exit;
+  end;
   Dir := 1;
   if Shift then Dir := -1;
   if FDrawing then
@@ -1925,12 +2298,12 @@ begin
         end;
       keyC:
         begin
-          CopyThings;
+          if FMode = emSectors then CopySectors else CopyThings;
           Exit;
         end;
       keyV:
         begin
-          PasteThings;
+          if FMode = emSectors then PasteSectors else PasteThings;
           UpdateLabels;
           Exit;
         end;
@@ -1994,6 +2367,7 @@ begin
         SelectOnly(FEdit.AddThing(Pt.X, Pt.Y, ThingChoices[FThingType].Num, 90));
         LogAction(Format('Added %s at %d, %d', [ThingChoices[FThingType].Name, Pt.X, Pt.Y]));
       end;
+    keyE: OpenProps;
     keyLeftBracket: CycleThingType(-1);
     keyRightBracket: CycleThingType(1);
     keyDelete:
@@ -2066,6 +2440,7 @@ begin
         emLines:
           case Key of
             keyW: ChangeWall(Dir);
+            keyF: FlipSelectedLines;
             keyP: CycleSpecial(Dir);
             keyComma: ChangeTag(-1);
             keyPeriod: ChangeTag(1);
@@ -2128,6 +2503,12 @@ begin
       if FPicker then
       begin
         PickerKey(Event.Key, Event.KeyString);
+        UpdateLabels;
+        Exit(true);
+      end else
+      if FProps and (FSelected >= 0) then
+      begin
+        PropKey(Event.Key, Event.KeyString);
         UpdateLabels;
         Exit(true);
       end else
@@ -2394,8 +2775,12 @@ begin
     end else
     if Cmd = 'TYPE' then
     begin
+      { The picker's filter, or a value in the properties panel. }
       for I := 1 to Length(Step) - 5 do
-        PickerKey(keyNone, Step[I + 5]);
+        if FProps then
+          PropKey(keyNone, Step[I + 5])
+        else
+          PickerKey(keyNone, Step[I + 5]);
     end else
     if Cmd = 'DRAG' then
     begin

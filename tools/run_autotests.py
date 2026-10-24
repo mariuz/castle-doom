@@ -480,6 +480,17 @@ TESTS = [
       r'Editor: Thing 157: Ambush \(deaf\) on', r'Editor: Deleted 1 vertices, 1 joining their lines',
       r'Editor: Exported E1M1: 992 vertices, 1183 lines, 1838 sides, 184 sectors, 292 things'],
      ['--edit'], lambda config: check_editor_cut(config)),
+    # The properties panel (E: typed floor and light), sectors copied and
+    # pasted twice (Ctrl+C / Ctrl+V in sectors mode), two-sided lines
+    # flipped (F) and a typed texture offset.
+    ('editor-props', 'E1M1',
+     'VIEW:-416:256:0.5,DRAW:-480:192:-352:192:-352:288:-480:288,MODE:s,CLICK:-416:240,KEY:E,TYPE:24,KEY:Enter,'
+     'KEY:Down,KEY:Down,TYPE:255,KEY:Enter,S,KEY:E,KEY:Ctrl+C,MOUSE:-416:-300,KEY:Ctrl+V,MOUSE:-900:256,KEY:Ctrl+V,S,'
+     'MODE:l,CLICK:-480:240,KEY:F,CLICK:-352:240,KEY:F,KEY:E,KEY:Down,KEY:Down,TYPE:16,KEY:Enter,S,EXPORT,Q',
+     [r'Editor: Sector 182: Floor height 24', r'Editor: Sector 182: Light 255', r'Editor: Copied 1 sectors',
+      r'Editor: Pasted 1 sectors at -416, -288', r'Editor: Pasted 1 sectors at -896, 256',
+      r'Editor: Flipped 1 lines: line 1176 front sector 140', r'Editor: Line 1176: Front X offset 16'],
+     ['--edit'], lambda config: check_editor_props(config)),
     ('editor-menu', 'MENUKEYS', 'W:0.5,S,Q',
      [r'Menu: Custom game \(map editor\): freedoom1\.wad, PWADs none, map E1M1',
       r'Editor: Imported E1M1', r'Saved editor screenshot 1 of E1M1'],
@@ -846,6 +857,22 @@ def check_editor_cut(config):
     assert (kind, flags & 8) == (1, 8), 'thing 157: type %d flags %d' % (kind, flags)
 
 
+def check_editor_props(config):
+    """Typed values, pasted sectors and a flipped line in the exported PWAD:
+    sector 182 (floor 24, light 255) and its two copies, line 1176 turned
+    to face sector 140 with an X offset of 16."""
+    import struct
+    d = check_map_wad(os.path.join(os.path.dirname(config), 'editor-props_e1m1.wad'), 'E1M1', 185, 292)
+    for sec in (182, 183, 184):
+        floor, ceil = struct.unpack_from('<hh', d['SECTORS'], sec * 26)
+        light, = struct.unpack_from('<h', d['SECTORS'], sec * 26 + 20)
+        assert (floor, ceil, light) == (24, 128, 255), 'sector %d: %d %d %d' % (sec, floor, ceil, light)
+    v1, v2, flags, special, tag, front, back = struct.unpack_from('<HHHHHHH', d['LINEDEFS'], 1176 * 14)
+    xoff, = struct.unpack_from('<h', d['SIDEDEFS'], front * 30)
+    sector, = struct.unpack_from('<H', d['SIDEDEFS'], front * 30 + 28)
+    assert (sector, xoff) == (140, 16), 'line 1176 front: sector %d, x offset %d' % (sector, xoff)
+
+
 def export_test(exe, out):
     """--export-map, --export-gltf and --export-x3d: E1M1 as a PWAD with
     its BSP built anew, and its geometry as glTF and X3D with textures."""
@@ -950,6 +977,7 @@ GOLDEN = [
     'editor-key_edit_1.png', 'editor-cut_edit_1.png', 'editor-cut_edit_2.png', 'editor-cut_edit_3.png',
     'editor-cut_edit_4.png', 'custom-wads_menu1.png', 'custom-wads_menu2.png', 'custom-wads_menu3.png',
     'custom-wads_menu4.png', 'editor-select_edit_1.png', 'editor-select_edit_2.png', 'editor-select_edit_3.png',
+    'editor-props_edit_1.png', 'editor-props_edit_2.png', 'editor-props_edit_3.png',
 ]
 
 

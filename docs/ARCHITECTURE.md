@@ -1697,8 +1697,19 @@ and the path becomes two-sided lines. `DeleteSector` drops the lines
 only it has and turns shared ones into the neighbour's one-sided walls
 (flipped to face it), `DissolveVertex` joins its two lines when they
 continue each other with the same sectors, and `Compact` drops the
-sides and vertices no line uses afterwards. In an autotest the demo script drives the editor
-(`RunStep`: `VIEW`, `MODE`, `CLICK`, `DRAG`, `DRAW`, `MOUSE`, `KEY`,
+sides and vertices no line uses afterwards. The properties panel
+(`FProps`, `E`) lists the mode's typed values (`PropName` /
+`PropValue` / `SetPropValue`: sector heights keep the ceiling at or
+above the floor, light stays in 0..255, a vertex typed onto another
+joins it like a drag) and `ApplyProp` sets the typed number on the
+whole selection as one undo step. `FlipLines` swaps a two-sided line's
+ends and sides together, so the geometry stays and only which sector is
+in front changes. Copying sectors keeps each one's `SectorOutline` (its
+walls as edges with the sector on the right, chained into loops; the
+loop with the largest area, so holes are left out) and values; a paste
+draws the outlines again with `DrawSector` at the mouse and gives the new
+sectors those values. In an autotest the demo script drives the editor
+(`RunStep`: `VIEW`, `MODE`, `CLICK`, `DRAG`, `DRAW`, `MOUSE`, `KEY`, `TYPE`,
 `THING`, `EXPORT`, `GLTF`, `X3D`, `PLAY`, `S`, `W`, `Q`); `PLAY` hands
 the rest of the script to the game (`AutoTestDemo`) and the game's
 `EDIT` (or the editor key) hands its rest back. In the browser `F2`

@@ -175,6 +175,14 @@ type
     function SplitSector(const Path: TEditPoints; out Error: String): Integer;
     { Drop the sides no line uses and the vertices no line uses. }
     procedure Compact;
+    { Turn two-sided lines around: their ends and sides swap, so the
+      other sector is in front (what a special's "front" means). A
+      one-sided line has only its front and stays. The number flipped. }
+    function FlipLines(const Indices: array of Integer): Integer;
+    { The outer boundary of sector Sec (its biggest loop of walls; holes
+      left out), the corners in order with the sector on the right
+      (clockwise); empty when its walls make no loop. }
+    function SectorOutline(const Sec: Integer): TEditPoints;
     { (X, Y) is a vertex or on a line (where a cut may end). }
     function OnWall(const X, Y: Integer): Boolean;
     { Change sector heights and light, keeping the ceiling above the
@@ -1065,6 +1073,99 @@ var
 begin
   T := Lines[L].V1; Lines[L].V1 := Lines[L].V2; Lines[L].V2 := T;
   T := Lines[L].Side[0]; Lines[L].Side[0] := Lines[L].Side[1]; Lines[L].Side[1] := T;
+end;
+
+function TDoomEditMap.FlipLines(const Indices: array of Integer): Integer;
+var
+  I: Integer;
+  Taken: Boolean;
+begin
+  Result := 0;
+  Taken := false;
+  for I := 0 to High(Indices) do
+    if (Indices[I] >= 0) and (Indices[I] <= High(Lines)) and
+       (Lines[Indices[I]].Side[0] >= 0) and (Lines[Indices[I]].Side[1] >= 0) then
+    begin
+      if not Taken then
+      begin
+        Snapshot;
+        Taken := true;
+      end;
+      FlipLine(Indices[I]);
+      Inc(Result);
+    end;
+end;
+
+function TDoomEditMap.SectorOutline(const Sec: Integer): TEditPoints;
+var
+  From, Upto: array of Integer;
+  Used: array of Boolean;
+  Loop: array of Integer;
+  I, J, N, Start, Cur, Count: Integer;
+  Area, BestArea: Double;
+  Found: Boolean;
+begin
+  Result := nil;
+  { The walls as edges with the sector on their right. }
+  N := 0;
+  for I := 0 to High(Lines) do
+  begin
+    if (LineSector(I, 0) = Sec) and (LineSector(I, 1) = Sec) then Continue;
+    if LineSector(I, 0) = Sec then
+    begin
+      SetLength(From, N + 1); SetLength(Upto, N + 1);
+      From[N] := Lines[I].V1; Upto[N] := Lines[I].V2;
+      Inc(N);
+    end else
+    if LineSector(I, 1) = Sec then
+    begin
+      SetLength(From, N + 1); SetLength(Upto, N + 1);
+      From[N] := Lines[I].V2; Upto[N] := Lines[I].V1;
+      Inc(N);
+    end;
+  end;
+  SetLength(Used, N);
+  BestArea := 0;
+  for Start := 0 to N - 1 do
+  begin
+    if Used[Start] then Continue;
+    { Follow the edges from Start until they come back to it. }
+    Loop := nil;
+    Count := 0;
+    Cur := Start;
+    repeat
+      Used[Cur] := true;
+      SetLength(Loop, Count + 1);
+      Loop[Count] := From[Cur];
+      Inc(Count);
+      if Upto[Cur] = From[Start] then Break;
+      Found := false;
+      for J := 0 to N - 1 do
+        if (not Used[J]) and (From[J] = Upto[Cur]) then
+        begin
+          Cur := J;
+          Found := true;
+          Break;
+        end;
+    until not Found;
+    if (Upto[Cur] <> From[Start]) or (Count < 3) then Continue;
+    Area := 0;
+    for I := 0 to Count - 1 do
+    begin
+      J := (I + 1) mod Count;
+      Area := Area + Vertices[Loop[I]].X * Vertices[Loop[J]].Y - Vertices[Loop[J]].X * Vertices[Loop[I]].Y;
+    end;
+    if Abs(Area) > BestArea then
+    begin
+      BestArea := Abs(Area);
+      SetLength(Result, Count);
+      for I := 0 to Count - 1 do
+      begin
+        Result[I].X := Vertices[Loop[I]].X;
+        Result[I].Y := Vertices[Loop[I]].Y;
+      end;
+    end;
+  end;
 end;
 
 procedure TDoomEditMap.DeleteSector(const Sec: Integer);
