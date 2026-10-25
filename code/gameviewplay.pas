@@ -126,6 +126,8 @@ type
       intermission on by itself. }
     FDemoNextLevel: Boolean;
     FDemoAdvance: Single;
+    FGhostTracks: TGhostTracks;
+    FGhostRead: Boolean;
     { A menu starts or stops typing: the on-screen keyboard (GameTouch). }
     procedure MenuEditingChange(Sender: TObject);
     procedure SlotScreenAction(const Action: TDoomMenuAction);
@@ -148,6 +150,10 @@ type
     procedure StopDemos(const ToNextLevel: Boolean);
     { The next level after an intermission: record on, or play its part. }
     procedure ContinueDemo;
+    { --ghost: the ghost of this level, if the demo has one. }
+    procedure StartGhost;
+    { At the level's end: the time against the ghost's. }
+    procedure LogGhostResult;
     procedure OpenSlotMenu(const Mode: Integer);
     procedure OpenSoundMenu;
     { Change the sound (Row 0) or music (Row 1) volume by Delta steps. }
@@ -256,6 +262,9 @@ var
   { --record FILE: record the next level started; --playdemo FILE: play
     a demo (the menu loads its WADs first). Both are used once. }
   DemoRecordFile, DemoPlayFile: String;
+  { --ghost FILE: a demo whose run of each level is drawn as a
+    see-through player to race (read once, at the first level). }
+  DemoGhostFile: String;
 
 const
   { The browser's demo (Options -> Record demo... there, or ?record=1):
@@ -526,6 +535,8 @@ var
   Url: String;
 begin
   inherited;
+  FGhostRead := false;
+  FGhostTracks := nil;
   CreateUi;
   Container.PointerLock.AddUserCancelledListener({$ifdef FPC}@{$endif} PointerLockUserCancelled);
   { DeHackEd patches (the WADs' DEHACKED lumps, -deh files) before any
@@ -1928,6 +1939,57 @@ begin
   end else
   if (DemoRecordFile <> '') and (FRecorder = nil) and (FDemoPlayer = nil) then
     StartDemoRecording;
+  StartGhost;
+end;
+
+procedure TViewPlay.StartGhost;
+var
+  Demo: TDemoPlayer;
+  Track: TGhostTrack;
+begin
+  if not FGhostRead then
+  begin
+    if DemoGhostFile = '' then Exit;
+    FGhostRead := true;
+    { Read whole now: a recording to the same URL replaces it later. }
+    Demo := OpenDemo(DemoGhostFile);
+    if Demo = nil then Exit;
+    try
+      FGhostTracks := ReadGhostTracks(Demo);
+      WritelnLog('Ghost', 'Ghost of %s: %d levels', [Demo.FileName, Length(FGhostTracks)]);
+    finally
+      FreeAndNil(Demo);
+    end;
+  end;
+  if Length(FGhostTracks) = 0 then Exit;
+  if FindGhostTrack(FGhostTracks, FMapName, Track) then
+    FWorld.SetGhost(Track)
+  else
+    WritelnLog('Ghost', 'The ghost has no run of %s', [FMapName]);
+end;
+
+procedure TViewPlay.LogGhostResult;
+var
+  Ghost, Mine: Integer;
+  Diff: Single;
+  Msg: String;
+begin
+  if FWorld.Ghost = nil then Exit;
+  Ghost := FWorld.GhostTrack.FinishTic;
+  Mine := FWorld.Tic;
+  if Ghost < 0 then
+    Msg := Format('you finished at tic %d, the ghost did not finish', [Mine])
+  else
+  begin
+    Diff := Abs(Mine - Ghost) / 35;
+    if Mine < Ghost then
+      Msg := Format('you finished at tic %d, the ghost at tic %d: %.2f s ahead', [Mine, Ghost, Diff])
+    else if Mine > Ghost then
+      Msg := Format('you finished at tic %d, the ghost at tic %d: %.2f s behind', [Mine, Ghost, Diff])
+    else
+      Msg := Format('you and the ghost finished at tic %d', [Mine]);
+  end;
+  WritelnLog('Ghost', '%s: %s', [FMapName, Msg]);
 end;
 
 procedure TViewPlay.StartDemoRecording;
@@ -2601,6 +2663,7 @@ var
   NewBest, Replayed: Boolean;
 begin
   Replayed := FDemoStarted;
+  LogGhostResult;
   StopDemos(true);
   { The level's best time (not from a demo's playback). }
   T := Trunc(FLevelTime);

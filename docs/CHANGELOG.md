@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Demos: `--ghost FILE` races a recording's ghost: a see-through player walks the
+  recorded run on each level it has, says when it finished, and the log gives your
+  time against it at the level's end; in the browser the home page's "Race its
+  ghost" (or `play/?ghost=last`) races the last recording.
+- Demos are about a third of their old size (the saved states written compactly,
+  unchanged values left out), so long browser recordings fit; old demos still play.
+
 ## v0.55.0 (2026-10-25)
 
 - Map editor: `O` over the 3D preview aligns the texture of the wall you point at: the

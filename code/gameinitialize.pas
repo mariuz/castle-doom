@@ -241,6 +241,11 @@ begin
       DemoPlayFile := Parameters[I + 1];
       Inc(I);
     end else
+    if (Parameters[I] = '--ghost') and (I + 1 <= Parameters.High) then
+    begin
+      DemoGhostFile := Parameters[I + 1];
+      Inc(I);
+    end else
     if (Parameters[I] = '--random-wad') and (I + 1 <= Parameters.High) then
     begin
       RandomWadFile := Parameters[I + 1];
@@ -350,6 +355,9 @@ begin
     DemoRecordFile := LastDemoUrl;
   if Application.PageUrlParameters.ContainsKey('playdemo') then
     DemoPlayFile := LastDemoUrl;
+  { ?ghost=last races that recording's ghost. }
+  if Application.PageUrlParameters.ContainsKey('ghost') then
+    DemoGhostFile := LastDemoUrl;
   if (AutoTestMap <> '') or (CmdWarp <> '') then
     WritelnLog('Web', 'Page URL options: map "%s", demo "%s", warp "%s"', [AutoTestMap, AutoTestDemo, CmdWarp]);
   {$endif}

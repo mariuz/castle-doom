@@ -1045,6 +1045,32 @@ The save bundle and the home page's "Your saves" carry
 `last-demo.cdemo` too (the page plays it with `play/?playdemo=last` and
 downloads it).
 
+Format 2 (`CASTLEDOOMDEMO 2`) keeps long recordings small: an update
+line writes `=` for a value with the same bits as the line before and
+leaves out the unchanged values at the end (a level's first update is
+whole), and the saved states (`state`, `L`) are `CompactJSON`: each
+float in the fewest digits that `Val` reads back as the same Double
+(FpJson's `AsJSON` writes `0.0000000000000000E+000`), and an array of
+objects as `{"#keys":[[...],...],"#rows":[[shape, values...],...]}`
+(the actors). `TDemoPlayer` expands states with `ExpandJSON` before
+anyone sees them, so `LoadState` gets the same JSON as the recorder
+had; format 1 still reads.
+
+Ghosts (`--ghost FILE`, `?ghost=last`): `ReadGhostTracks` reads every
+level of a demo into tracks (the feet and angle of each update, keyed by
+the world's tic when that frame began, from the state's `tic`; the
+finish is an `E` line ending in `exit`, which `StopRecording` writes
+when the level was finished, or one followed by a next level).
+`TViewPlay.StartGhost` reads them once per game (a recording to the
+same URL replaces the file later) and gives the loaded map's track to
+`TDoomWorld.SetGhost`, which makes a `TDoomActor` from a private
+`PLAY` thing info (translucent, not solid, not pickable) under
+`Things` but outside `FActors`, so saves, `SyncHash` and demos never
+see it; `TicGhost` puts it where the recording was at the current tic
+(so a loaded game or a restart finds the right place), plays `ABCD`
+while it moves and logs `Ghost:` lines. `LogGhostResult` compares the
+world's tic at the exit with the ghost's.
+
 ## 9. DoomSound: DMX sound effects
 
 Doom sound lumps (`DS*`) are DMX format: a small header (format 3, sample rate,

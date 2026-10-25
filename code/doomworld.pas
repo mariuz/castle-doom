@@ -207,6 +207,12 @@ type
     FCheckTic: Int64;
     FCheckHash: Cardinal;
     FDemoDesync: Boolean;
+    { --ghost: a recording's path through this level drawn as a
+      see-through player (not one of FActors: no save, no checksum). }
+    FGhost: TDoomActor;
+    FGhostTrack: TGhostTrack;
+    FGhostIndex: Integer;
+    FGhostMoving, FGhostFinished: Boolean;
     FReplayCameraPos, FReplayCameraDir: TVector3;
     { Icon of Sin: next spawn spot, A_BrainSpit's "easy" toggle, tics left
       until the dead brain ends the level, and where it was. }
@@ -227,6 +233,7 @@ type
     procedure RestoreDynamicState(const State: TJSONObject);
     procedure RunTic;
     procedure TicActors;
+    procedure TicGhost(const Steps: Integer);
     procedure TicMonster(const A: TDoomActor);
     { Height of a flying monster: P_ZMovement's floating towards the target,
       and its corpse falling (lost souls stay where they die). }
@@ -504,6 +511,12 @@ type
     procedure StopRecording;
     procedure StartReplay(const Demo: TDemoPlayer);
     procedure FinishReplay;
+    { A ghost to race on the loaded map (until it is unloaded): Track's
+      positions by the world's tic. }
+    procedure SetGhost(const Track: TGhostTrack);
+    procedure ClearGhost;
+    property Ghost: TDoomActor read FGhost;
+    property GhostTrack: TGhostTrack read FGhostTrack;
     function Replaying: Boolean;
     { A checksum of the player and the actors (demo sync). }
     function SyncHash: Cardinal;
@@ -1090,6 +1103,7 @@ procedure TDoomWorld.UnloadMap;
 var
   A: TDoomActor;
 begin
+  ClearGhost;
   FMovers.Clear;
   for A in FActors do
     if A.Parent <> nil then
@@ -1745,7 +1759,11 @@ end;
 procedure TDoomWorld.StopRecording;
 begin
   if FDemoRec = nil then Exit;
-  FDemoRec.EndLevel(FTic, SyncHash, DemoSummary);
+  { "exit": the level was finished (not quit, lost or left by a load). }
+  if FExitRequested then
+    FDemoRec.EndLevel(FTic, SyncHash, DemoSummary + ' exit')
+  else
+    FDemoRec.EndLevel(FTic, SyncHash, DemoSummary);
   WritelnLog('Demo', 'Recorded %s of %s: tic %d, %s', [FMap.Name, FDemoRec.FileName, FTic, DemoSummary]);
   FDemoRec := nil;
 end;
@@ -1939,6 +1957,8 @@ begin
     if (FDemoRec <> nil) or (FDemoPlay <> nil) then
       AfterDemoTic;
   end;
+  if (FGhost <> nil) and (Steps > 0) then
+    TicGhost(Steps);
   T := Timer;
   UpdateWaterView(CgeToDoom(CamPos).Z);
   FGeometry.Update(SecondsPassed, CamPos);
@@ -3321,6 +3341,100 @@ begin
   begin
     PlayerPushVX := PlayerPushVX * F;
     PlayerPushVY := PlayerPushVY * F;
+  end;
+end;
+
+var
+  GhostInfo: TThingInfo;
+
+procedure TDoomWorld.SetGhost(const Track: TGhostTrack);
+var
+  Last: TGhostPoint;
+begin
+  ClearGhost;
+  if (FMap = nil) or (Length(Track.Points) = 0) then Exit;
+  GhostInfo := Default(TThingInfo);
+  GhostInfo.Num := -1;
+  GhostInfo.Sprite := 'PLAY';
+  GhostInfo.Kind := tkDecoration;
+  GhostInfo.Radius := 16;
+  GhostInfo.Height := 56;
+  GhostInfo.IdleFrames := 'A';
+  GhostInfo.IdleTics := 1;
+  GhostInfo.MoveFrames := 'ABCD';
+  GhostInfo.Health := 100;
+  GhostInfo.Translucent := true;
+  GhostInfo.Mobj := -1;
+  FGhostTrack := Track;
+  FGhostIndex := 0;
+  FGhostMoving := false;
+  FGhostFinished := false;
+  FGhost := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @GhostInfo);
+  FGhost.Name := 'Ghost';
+  FThingsGroup.Add(FGhost);
+  Last := Track.Points[High(Track.Points)];
+  if Track.FinishTic >= 0 then
+    WritelnLog('Ghost', 'Racing a ghost on %s: %d points, it finishes at tic %d (%d:%2.2d) at %d %d', [FMap.Name,
+      Length(Track.Points), Track.FinishTic, Track.FinishTic div TicRate div 60, Track.FinishTic div TicRate mod 60,
+      Round(Last.X), Round(Last.Y)])
+  else
+    WritelnLog('Ghost', 'Racing a ghost on %s: %d points to tic %d, it does not finish', [FMap.Name,
+      Length(Track.Points), Last.Tic]);
+  TicGhost(0);
+end;
+
+procedure TDoomWorld.ClearGhost;
+begin
+  if FGhost = nil then Exit;
+  if FGhost.Parent <> nil then FGhost.Parent.Remove(FGhost);
+  FreeAndNil(FGhost);
+  FGhostTrack := Default(TGhostTrack);
+end;
+
+procedure TDoomWorld.TicGhost(const Steps: Integer);
+var
+  I, Sec: Integer;
+  P: TGhostPoint;
+  Moving: Boolean;
+begin
+  { The frame the recording was in at this tic (a point holds from its
+    tic until the next one's). }
+  if FGhostIndex > High(FGhostTrack.Points) then FGhostIndex := 0;
+  while (FGhostIndex > 0) and (FGhostTrack.Points[FGhostIndex].Tic > FTic) do
+    Dec(FGhostIndex);
+  while (FGhostIndex < High(FGhostTrack.Points)) and (FGhostTrack.Points[FGhostIndex + 1].Tic <= FTic) do
+    Inc(FGhostIndex);
+  P := FGhostTrack.Points[FGhostIndex];
+  Moving := (FGhostIndex < High(FGhostTrack.Points)) and
+    ((Abs(FGhostTrack.Points[FGhostIndex + 1].X - P.X) > 0.5) or (Abs(FGhostTrack.Points[FGhostIndex + 1].Y - P.Y) > 0.5));
+  if Moving <> FGhostMoving then
+  begin
+    FGhostMoving := Moving;
+    if Moving then
+      FGhost.PlaySequence(GhostInfo.MoveFrames, 4, true)
+    else
+      FGhost.PlaySequence(GhostInfo.IdleFrames, 1, true);
+  end;
+  for I := 1 to Steps do
+    FGhost.AnimateTic;
+  FGhost.DoomX := P.X;
+  FGhost.DoomY := P.Y;
+  FGhost.DoomZ := P.Z;
+  FGhost.Angle := P.Angle;
+  Sec := FMap.SectorAt(P.X, P.Y);
+  if Sec >= 0 then
+  begin
+    FGhost.Sector := Sec;
+    FGhost.SetLight(FMap.Sectors[Sec].LightLevel);
+  end;
+  FGhost.UpdateRotation(Player.X, Player.Y);
+  FGhost.UpdateTransform;
+  if (not FGhostFinished) and (FGhostTrack.FinishTic >= 0) and (FTic >= FGhostTrack.FinishTic) then
+  begin
+    FGhostFinished := true;
+    WritelnLog('Ghost', 'The ghost finished %s at tic %d', [FMap.Name, FGhostTrack.FinishTic]);
+    ShowMessage(Format('The ghost finished in %d:%2.2d', [FGhostTrack.FinishTic div TicRate div 60,
+      FGhostTrack.FinishTic div TicRate mod 60]));
   end;
 end;
 

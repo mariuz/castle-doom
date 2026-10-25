@@ -199,7 +199,15 @@
           ev.preventDefault();
           download(new Blob([text], { type: 'application/octet-stream' }), 'castle-doom.cdemo');
         });
-        cell.append(' (', play, ', ', save, ')');
+        // Race its ghost on the map it starts on (play/?ghost=last).
+        const race = document.createElement('a');
+        const map = /"map"\s*:\s*"([A-Za-z0-9]+)"/.exec(text);
+        const skill = /"skill"\s*:\s*(\d)/.exec(text);
+        race.href = 'play/?ghost=last' + (map ? '&warp=' + map[1] : '') +
+          (skill ? '&skill=' + (Number(skill[1]) + 1) : '');
+        race.id = 'demo-ghost';
+        race.textContent = 'Race its ghost';
+        cell.append(' (', play, ', ', race, ', ', save, ')');
       }
       count++;
     }

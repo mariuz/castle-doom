@@ -1025,6 +1025,7 @@ GOLDEN = [
     'stored-files_menu1.png', 'stored-files_menu2.png', 'stored-files_menu3.png',
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
+    'ghost-race_1.png', 'ghost-race_2.png',
 ]
 
 
@@ -1311,6 +1312,45 @@ def stored_files_test(exe, out):
     return problems, time.time() - start
 
 
+def ghost_test(exe, out):
+    """Ghosts (--ghost): a run of E1M1 recorded into the save storage
+    (like the browser's ?record=1) ends with "exit"; racing it shows the
+    see-through ghost walking ahead, logs its finish and the player's
+    time against it."""
+    config = os.path.join(out, 'config-ghost')
+    shutil.rmtree(config, ignore_errors=True)
+    os.makedirs(config)
+    start = time.time()
+    problems = []
+    url = 'castle-config:/last-demo.cdemo'
+    log, code, _ = run_game(exe, out, 'ghost-record', 'E1M1', 'W:0.3,F:2,T:-90,F:1.5,E,W:1,Q',
+                            ['--fixed-step', '--record', url], config)
+    kept = os.path.join(config, 'castle-doom', 'last-demo.cdemo')
+    if code != 0 or not os.path.exists(kept):
+        problems.append('recording: exit code %d, no %s' % (code, kept))
+        return problems, time.time() - start
+    with open(kept) as f:
+        lines = f.read().split('\n')
+    ends = [l for l in lines if l.startswith('E ')]
+    if len(ends) != 1 or not ends[0].endswith(' exit'):
+        problems.append('recording: end lines %s' % ends)
+    if lines[0] != 'CASTLEDOOMDEMO 2' or not any(l.startswith('T 1 =') or l == 'T 1' for l in lines):
+        problems.append('recording: not the compact format')
+    log, code, _ = run_game(exe, out, 'ghost-race', 'E1M1', 'W:1,S,W:0.6,S,W:2.5,E,W:1,Q',
+                            ['--fixed-step', '--ghost', url], config)
+    if code != 0:
+        problems.append('race: exit code %d' % code)
+    for rx in (r'Ghost: Ghost of castle-config:/last-demo\.cdemo: 1 levels',
+               r'Ghost: Racing a ghost on E1M1: \d+ points, it finishes at tic \d+ \(0:03\)',
+               r'Ghost: The ghost finished E1M1 at tic \d+', r'Message: The ghost finished in 0:03',
+               r'Ghost: E1M1: you finished at tic \d+, the ghost at tic \d+: [\d.]+ s behind'):
+        if not re.search(rx, log):
+            problems.append('missing log line /%s/' % rx)
+    if re.search(r'Exception', log):
+        problems.append(re.search(r'.*Exception.*', log).group(0))
+    return problems, time.time() - start
+
+
 def editor_pick_test(exe, out):
     """The map editor's picking in the 3D preview (Space / PICK3D: the
     wall part under the mouse gets the picker's texture, only that part)
@@ -1492,6 +1532,11 @@ def main():
         problems, secs = editor_pick_test(exe, out)
         results.append(('editor-pick', problems, secs))
         print('%-16s %s (%.0f s)%s' % ('editor-pick', 'FAIL' if problems else 'ok', secs,
+                                        ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'ghost' in only:
+        problems, secs = ghost_test(exe, out)
+        results.append(('ghost', problems, secs))
+        print('%-16s %s (%.0f s)%s' % ('ghost', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)

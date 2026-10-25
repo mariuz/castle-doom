@@ -19,6 +19,7 @@ castle-doom -random 42                       # eight generated maps from seed 42
 castle-doom -random 42 --random-wad r42.wad  # ...written as a PWAD for other ports
 castle-doom --record e1m1.cdemo              # record the level you play
 castle-doom --playdemo e1m1.cdemo            # play it back (it says if it stayed in sync)
+castle-doom --ghost e1m1.cdemo -warp E1M1    # race its ghost
 ```
 
 This project is deliberately written as a *tour of the engine*: every Doom subsystem
@@ -137,7 +138,9 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   same at any frame rate; a checksum every second says where a playback went out of sync.
   In the browser Record demo... keeps the recording with your saves and downloads it when
   the game ends, Play demo... opens a demo file (the home page's "Your saves" plays or
-  downloads the last one).
+  downloads the last one). `--ghost FILE` (the home page's "Race its ghost") races a
+  recording: its run is drawn as a see-through player, and the log tells your time
+  against it.
 - Dynamic lights (Options -> Video, off by default): rockets, fireballs, plasma, BFG balls,
   explosions, muzzle flashes, lamps, torches and candles light the walls and sprites around
   them in their colour.

@@ -50,6 +50,7 @@ type
     procedure TestLanguage;
     procedure TestWiScript;
     procedure TestDemoFile;
+    procedure TestDemoCompact;
   end;
 
   TTestMap = class(TTestCase)
@@ -1231,6 +1232,133 @@ begin
   finally
     FreeAndNil(Demo);
     DeleteFile(FileName);
+  end;
+end;
+
+{ Demo format 2: "=" for the values of the update before, the unchanged
+  ones at the end left out, saved states as CompactJSON (exact floats in
+  few digits, arrays of objects as key tables) expanded back exactly;
+  format 1 still reads; ReadGhostTracks gives each level's path and its
+  finish (an "exit" end or a next level). }
+procedure TTestWad.TestDemoCompact;
+const
+  V1Text = 'CASTLEDOOMDEMO 1'#10'seed 3'#10'state {"map":"E1M1","tic":0}'#10 +
+    'T 2 3F800000 40000000 40400000 40800000 40A00000 40C00000 40E00000 41000000 41100000 41200000 41300000 41400000'#10 +
+    'E 2 00000001 kills 0/0'#10;
+var
+  Rec: TDemoRecorder;
+  State, Orig: TJSONObject;
+  Expanded: TJSONData;
+  Demo: TDemoPlayer;
+  E: TDemoEvent;
+  Text, Compact: String;
+  Lines: TStringList;
+  Tracks: TGhostTracks;
+  Track: TGhostTrack;
+  I: Integer;
+begin
+  { Exact floats and key tables. }
+  Orig := TJSONObject(GetJSON('{"map":"E1M1","tic":7,"f":[0.1,-0.0,1e-7,123456789.0,0.5,1.0,3.4e38],' +
+    '"actors":[{"type":1,"x":0.25,"v":[0.0,0.0]},{"type":2,"x":-3.0,"v":[1.5,0.0]},{"type":3,"extra":true}],' +
+    '"one":[{"a":1}],"names":["A","B"],"empty":[],"o":{"k":null}}'));
+  try
+    Compact := CompactJSON(Orig);
+    AssertTrue('shorter: ' + Compact, Length(Compact) < Length(Orig.AsJSON) div 2);
+    AssertTrue('a key table', Pos('"#keys":[["type","x","v"],["type","extra"]]', Compact) > 0);
+    AssertTrue('few digits: ' + Compact, Pos('[0.1,-0.0,1E-7,', Compact) > 0);
+    Expanded := GetJSON(Compact);
+    try
+      State := TJSONObject(ExpandJSON(Expanded));
+      try
+        AssertEquals('expanded back', Orig.AsJSON, State.AsJSON);
+        AssertTrue('a float stays a float', State.Arrays['f'].Items[5] is TJSONFloatNumber);
+      finally
+        FreeAndNil(State);
+      end;
+    finally
+      FreeAndNil(Expanded);
+    end;
+  finally
+    FreeAndNil(Orig);
+  end;
+
+  { "=" and trailing values left out; a ghost of two levels. }
+  State := TJSONObject.Create(['map', 'E1M1', 'tic', 10]);
+  try
+    Rec := TDemoRecorder.CreateInMemory('memory', 1, State);
+    try
+      Rec.Update(1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      Rec.Update(2, [1, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      Rec.Update(1, [1, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      Rec.Update(1, [1, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 11, -12]);
+      Rec.EndLevel(15, 1, 'kills 0/0 exit');
+      State.Strings['map'] := 'E1M2';
+      State.Integers['tic'] := 0;
+      Rec.NextLevel(State);
+      Rec.Update(3, [1, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 11, -12]);
+      Rec.Update(3, [8, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 11, -12]);
+      Rec.EndLevel(6, 1, 'kills 0/0');
+      Text := Rec.Text;
+    finally
+      FreeAndNil(Rec);
+    end;
+  finally
+    FreeAndNil(State);
+  end;
+  Lines := TStringList.Create;
+  try
+    Lines.Text := Text;
+    AssertEquals('format 2', 'CASTLEDOOMDEMO 2', Lines[0]);
+    AssertEquals('only the change', 'T 2 = 40200000', Lines[4]);
+    AssertEquals('nothing changed', 'T 1', Lines[5]);
+    AssertEquals('the last value', 'T 1 = = = = = = = = = = = C1400000', Lines[6]);
+    AssertEquals('a level starts whole', 'T 3 3F800000 40200000 40400000 40800000 40A00000 40C00000 40E00000 ' +
+      '41000000 41100000 41200000 41300000 C1400000', Lines[9]);
+  finally
+    FreeAndNil(Lines);
+  end;
+  Demo := TDemoPlayer.CreateFromText('memory', Text);
+  try
+    AssertTrue('valid', Demo.Valid);
+    I := 0;
+    while Demo.Next(E) do
+      if E.Kind = deUpdate then
+      begin
+        Inc(I);
+        AssertTrue('filled in', (E.Values[0] = 1) and (E.Values[2] = 3) and (E.Values[10] = 11));
+        if I >= 2 then AssertTrue('y kept', E.Values[1] = 2.5);
+        if I = 3 then AssertTrue('walk kept', E.Values[11] = 12);
+        if I = 4 then AssertTrue('walk changed', E.Values[11] = -12);
+      end;
+    AssertEquals('updates', 4, I);
+  finally
+    FreeAndNil(Demo);
+  end;
+  Demo := TDemoPlayer.CreateFromText('memory', Text);
+  try
+    Tracks := ReadGhostTracks(Demo);
+  finally
+    FreeAndNil(Demo);
+  end;
+  AssertEquals('two levels', 2, Length(Tracks));
+  AssertTrue('E1M1', FindGhostTrack(Tracks, 'e1m1', Track));
+  AssertEquals('points', 4, Length(Track.Points));
+  AssertEquals('from the state''s tic', 10, Track.Points[0].Tic);
+  AssertEquals('tics add up', 14, Track.Points[3].Tic);
+  AssertEquals('finished', 15, Track.FinishTic);
+  AssertTrue('E1M2', FindGhostTrack(Tracks, 'E1M2', Track));
+  AssertEquals('not finished', -1, Track.FinishTic);
+  AssertTrue('its x', (Track.Points[1].X = 8) and (Track.Points[1].Tic = 3));
+  AssertFalse('no E1M3', FindGhostTrack(Tracks, 'E1M3', Track));
+
+  { Format 1 (every value, no "exit"). }
+  Demo := TDemoPlayer.CreateFromText('v1', V1Text);
+  try
+    AssertTrue('format 1', Demo.Valid);
+    AssertTrue('an update', Demo.Next(E) and (E.Kind = deUpdate));
+    AssertTrue('its values', (E.Values[0] = 1) and (E.Values[11] = 12));
+  finally
+    FreeAndNil(Demo);
   end;
 end;
 

@@ -64,6 +64,21 @@ L = several days). Items inside a section are in suggested order.
   release asset) for stores. Autotest `touch-keyboard` (the log's
   `Keyboard:` lines in touch mode and the typed name in the save).
 
+- Demos, ghosts and a smaller format: `--ghost FILE` (the browser's
+  `?ghost=last`, the home page's "Race its ghost") reads every level's
+  run of a demo (`ReadGhostTracks`: the feet and angle of each recorded
+  frame by tic) and `TDoomWorld.SetGhost` draws it as a translucent
+  `PLAY` sprite outside `FActors` (no save, no checksum), walking
+  frames while it moves; the log says when it finished and, at the
+  level's end, your time against it. A level's end line says `exit`
+  when it was finished. Format 2 (`CASTLEDOOMDEMO 2`, format 1 still
+  plays) writes `=` for update values equal to the line before and
+  leaves the unchanged ones at the end out, and writes the saved
+  states as `CompactJSON` (floats in the fewest digits that read back
+  exactly, arrays of objects as key tables, `ExpandJSON` on reading):
+  the harness's E1M1 demo went from 175 to 50 KB. Unit test
+  `TestDemoCompact`, harness test `ghost` (goldens).
+
 - Demos, cheats and the browser: the demo script's world cheats (`K`,
   `Y`, `P`, `CORPSE`, `D`, `V`, `INVIS`, `INVUL`, `AMP`, `LINE`) go
   through `TDoomWorld.Cheat` and are recorded as `X` lines, so a
@@ -1201,17 +1216,17 @@ play.
 | Item | Why | Where | Size |
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
-| **Demos, the rest**: recording, playback, several levels, the menu, cheats and the browser are done (see above); left are a ghost of a recording to race (its recorded positions drawn as a translucent player sprite), a smaller format for long browser recordings (the update lines in binary or as deltas), and choosing between several kept demos. | Replays; races. | `DoomDemo`, `GameViewPlay`, `DoomActors` | M |
+| **Demos, the rest**: recording, playback, several levels, the menu, cheats, the browser, ghosts and the compact format are done (see above); left are choosing between several kept demos in the browser, a ghost picked from the menu (Options -> Race ghost...), the ghost's time on the intermission screen, and ghosts of random maps and PWADs (the race loads the IWAD's map today). | Replays; races. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | S |
 | **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors, the 3D preview, opening PWADs, picking in 3D and the map list are done (see above); texture alignment is done too; left are copying sectors with their holes and inner lines, and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
 
 ## Suggested next three
 
 1. Mobile, the rest (M, see Engine and tooling): try the APK and the
    keyboard on devices, the release signing keys (repository secrets).
-2. Demos, the rest (M, see New features): a ghost of a recording to
-   race, a smaller format for long browser recordings.
-3. Map editor, the rest (M, see New features): sectors copied with
+2. Map editor, the rest (M, see New features): sectors copied with
    their holes, the things and the sky in the glTF / X3D export.
+3. Demos, the rest (S, see New features): a ghost picked in the menu
+   and its time on the intermission, several kept demos in the browser.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

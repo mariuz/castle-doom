@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 51 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 52 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -765,7 +765,16 @@ test `demo` records E1M1 at the real frame rate, replays it under
 records a run with cheats into `castle-config:` and replays it from
 there and as an upload, and
 records and replays two levels of random seed 42; unit test
-`TestDemoFile`. In the browser, test it on a `web-site` artifact with
+`TestDemoFile`. Format 2 (`=` values, `CompactJSON` states; unit
+test `TestDemoCompact`) is what is written; format 1 still plays.
+Ghosts: `--ghost FILE` (or `castle-config:` / `upload:/` URLs;
+`?ghost=last` in the browser) races a demo's run on each level it
+has; the log says `Ghost: Racing a ghost on E1M1: 136 points, it
+finishes at tic 136 (0:03) at 156 206`, `The ghost finished ...` and
+at the exit `Ghost: E1M1: you finished at tic 161, the ghost at tic
+136: 0.71 s behind` (a level's `E` line ends in `exit` when it was
+finished; harness test `ghost` records under `--fixed-step`, so its
+goldens are stable). In the browser, test it on a `web-site` artifact with
 Playwright: `play/?map=E1M1&demo=W:2,Y,P:3001:300,W:2,E&record=1`
 keeps `castle-doom:castle-config:/last-demo.cdemo` in localStorage.
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
