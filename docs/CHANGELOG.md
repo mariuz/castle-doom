@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Map editor: Space over the 3D preview opens the texture picker on the wall part (upper,
+  middle or lower, on the side you see), floor or ceiling under the mouse, and changes only
+  that; `M` lists the maps to edit another, and opening a PWAD with several maps shows its
+  own.
+
 ## v0.53.0 (2026-10-25)
 
 - The title screen's Options panel leads to the custom game page ("Custom game...")

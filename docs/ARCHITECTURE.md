@@ -1743,7 +1743,17 @@ taken by `PollEditFile` through `PageTakeFile`, both in
 maps from its directory alone (`DoomWad.WadFileMapNames`: a PWAD cannot
 be a `TDoomWad` by itself, it has no palette), stacks it on the
 editor's `Wad` (it stays there until the WADs are loaded again) and
-loads its first map. In an autotest the demo script drives the editor
+loads its first map; with several, the map list (`M`, `OpenMapList`,
+drawn by `RenderMapList`) shows the file's own maps. Space over the
+preview (`PickInPreview`) turns the mouse into a ray
+(`TCastleViewport.PositionToRay`) and asks `TDoomEditMap.RayHit`, which
+works on the edited data rather than the rendered scene: it sorts the
+ray's crossings with every line and walks them from the eye's sector,
+meeting the current sector's floor or ceiling between two crossings, a
+one-sided wall (middle) or a two-sided line where the ray passes below
+the next sector's floor (lower) or above its ceiling (upper); the hit
+line's side facing the eye and the part go to `FPickSide` /
+`FPickPart`, so `PickerApply` changes only that texture. In an autotest the demo script drives the editor
 (`RunStep`: `VIEW`, `MODE`, `CLICK`, `DRAG`, `DRAW`, `MOUSE`, `KEY`, `TYPE`,
 `THING`, `EXPORT`, `GLTF`, `X3D`, `PLAY`, `S`, `W`, `Q`); `PLAY` hands
 the rest of the script to the game (`AutoTestDemo`) and the game's

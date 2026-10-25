@@ -1005,6 +1005,7 @@ GOLDEN = [
     'stored-uploads_menu1.png', 'stored-uploads_menu2.png',
     'editor-preview_edit_1.png', 'editor-preview_edit_2.png', 'editor-preview_edit_3.png', 'editor-preview_edit_4.png',
     'stored-files_menu1.png', 'stored-files_menu2.png', 'stored-files_menu3.png',
+    'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
 ]
 
 
@@ -1291,6 +1292,49 @@ def stored_files_test(exe, out):
     return problems, time.time() - start
 
 
+def editor_pick_test(exe, out):
+    """The map editor's picking in the 3D preview (Space / PICK3D: the
+    wall part under the mouse gets the picker's texture, only that part)
+    and its map list (a PWAD with several maps: the random maps of seed
+    42, written by --random-wad, opened with OPEN)."""
+    import struct
+    config = os.path.join(out, 'config-editor-pick')
+    shutil.rmtree(config, ignore_errors=True)
+    os.makedirs(config)
+    start = time.time()
+    problems = []
+    wad = os.path.join(out, 'editor-pick-random42.wad')
+    env = dict(os.environ, XDG_CONFIG_HOME=config)
+    subprocess.run([exe, '-random', '42', '--random-wad', wad], stdout=subprocess.PIPE,
+                   stderr=subprocess.STDOUT, env=env, timeout=TIMEOUT)
+    if not os.path.exists(wad):
+        return ['--random-wad wrote nothing'], time.time() - start
+    log, code, _ = run_game(exe, out, 'editor-pick', 'E1M1',
+                            'VIEW:-300:256:0.6,MOUSE:-416:256,KEY:F5,W:1,PICK3D:0.5:0.5,S,TYPE:BROWN,KEY:Enter,'
+                            'W:1,S,EXPORT,OPEN:upload:/editor-pick-random42.wad,S,KEY:Down,KEY:Down,KEY:Enter,'
+                            'KEY:M,S,KEY:Escape,Q',
+                            ['--edit', '--upload', wad], config)
+    if code != 0:
+        problems.append('exit code %d' % code)
+    for rx in (r'Editor: Picked line 919 \(front side, middle\) in the 3D preview',
+               r'Editor: Wall texture A-BROWN1 on 1 lines', r'Editor: Map list: 8 maps',
+               r'Editor: Editing E1M3: 253 vertices', r'Editor: Map list: 36 maps'):
+        if not re.search(rx, log):
+            problems.append('missing log line /%s/' % rx)
+    if re.search(r'Exception', log):
+        problems.append(re.search(r'.*Exception.*', log).group(0))
+    try:
+        d = check_map_wad(os.path.join(out, 'editor-pick_e1m1.wad'), 'E1M1', 182, 292)
+        v1, v2, flags, special, tag, front, back = struct.unpack_from('<HHHHHHH', d['LINEDEFS'], 919 * 14)
+        upper, lower, middle = [d['SIDEDEFS'][front * 30 + o:front * 30 + o + 8].rstrip(b'\0').decode()
+                                for o in (4, 12, 20)]
+        if middle != 'A-BROWN1' or upper == 'A-BROWN1' or lower == 'A-BROWN1':
+            problems.append('line 919 front: upper %s, lower %s, middle %s' % (upper, lower, middle))
+    except Exception as e:
+        problems.append('exported WAD: %s' % e)
+    return problems, time.time() - start
+
+
 def settings_test(exe, out):
     """Volumes set in one run are loaded by the next."""
     config = os.path.join(out, 'config-settings')
@@ -1424,6 +1468,11 @@ def main():
         problems, secs = stored_files_test(exe, out)
         results.append(('stored-files', problems, secs))
         print('%-16s %s (%.0f s)%s' % ('stored-files', 'FAIL' if problems else 'ok', secs,
+                                        ''.join('\n    ' + p for p in problems)), flush=True)
+    if not only or 'editor-pick' in only:
+        problems, secs = editor_pick_test(exe, out)
+        results.append(('editor-pick', problems, secs))
+        print('%-16s %s (%.0f s)%s' % ('editor-pick', 'FAIL' if problems else 'ok', secs,
                                         ''.join('\n    ' + p for p in problems)), flush=True)
     if not only or 'settings' in only:
         problems, secs = settings_test(exe, out)

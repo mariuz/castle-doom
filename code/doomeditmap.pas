@@ -46,6 +46,20 @@ type
   end;
   TEditPoints = array of TEditPoint;
 
+  TEditHitKind = (ehNone, ehWall, ehFloor, ehCeiling);
+  { What a ray from the eye meets first (RayHit): a wall part, a floor
+    or a ceiling, and where. }
+  TEditRayHit = record
+    Kind: TEditHitKind;
+    { ehWall: the line, the side facing the eye (0 front, 1 back) and its
+      part ('U' upper, 'M' middle, 'L' lower). }
+    Line, Side: Integer;
+    Part: Char;
+    { ehFloor / ehCeiling: the sector. }
+    Sector: Integer;
+    X, Y, Z: Single;
+  end;
+
   TEditVertexArray = array of TEditVertex;
   TEditLineArray = array of TEditLine;
   TEditSideArray = array of TEditSide;
@@ -110,6 +124,10 @@ type
     function NearestVertex(const X, Y, MaxDistance: Single): Integer;
     function NearestLine(const X, Y, MaxDistance: Single): Integer;
     function NearestThing(const X, Y, MaxDistance: Single): Integer;
+    { The first wall part, floor or ceiling a ray from (OX, OY, OZ) along
+      (DX, DY, DZ) meets (Doom coordinates; the 3D preview's click).
+      False when it starts outside the map or meets nothing. }
+    function RayHit(const OX, OY, OZ, DX, DY, DZ: Single; out Hit: TEditRayHit): Boolean;
     { The sector (X, Y) is in, -1 outside the map. }
     function SectorAt(const X, Y: Single): Integer;
     { The sector of line L's side Side, -1 when that side is missing. }
@@ -789,6 +807,110 @@ end;
 
 { The nearest line crossed by a ray to the east, and which side of it the
   point is on (Doom Builder's way). }
+function TDoomEditMap.RayHit(const OX, OY, OZ, DX, DY, DZ: Single; out Hit: TEditRayHit): Boolean;
+var
+  Ts: array of Double;
+  Ls: array of Integer;
+  N, I, J, L, Cur, Other, Side: Integer;
+  T, TPrev, U, Den, AX, AY, BX, BY, Z, TT: Double;
+  TL: Integer;
+
+  { The floor or ceiling of Cur between TPrev and T1 (T1 < 0: no end). }
+  function Flat(const T1: Double): Boolean;
+  var
+    TF: Double;
+  begin
+    Result := false;
+    if Abs(DZ) < 1e-9 then Exit;
+    if DZ < 0 then TF := (Sectors[Cur].Floor - OZ) / DZ else TF := (Sectors[Cur].Ceiling - OZ) / DZ;
+    if (TF < TPrev) or ((T1 >= 0) and (TF > T1)) then Exit;
+    if DZ < 0 then Hit.Kind := ehFloor else Hit.Kind := ehCeiling;
+    Hit.Sector := Cur;
+    Hit.X := OX + DX * TF;
+    Hit.Y := OY + DY * TF;
+    Hit.Z := OZ + DZ * TF;
+    Result := true;
+  end;
+
+begin
+  Hit := Default(TEditRayHit);
+  Hit.Kind := ehNone;
+  Hit.Line := -1;
+  Hit.Sector := -1;
+  Result := false;
+  Cur := SectorAt(OX, OY);
+  if Cur < 0 then Exit;
+  { Where the ray crosses each line, in order. }
+  N := 0;
+  for I := 0 to High(Lines) do
+  begin
+    AX := Vertices[Lines[I].V1].X; AY := Vertices[Lines[I].V1].Y;
+    BX := Vertices[Lines[I].V2].X; BY := Vertices[Lines[I].V2].Y;
+    Den := DX * (BY - AY) - DY * (BX - AX);
+    if Abs(Den) < 1e-12 then Continue;
+    T := ((AX - OX) * (BY - AY) - (AY - OY) * (BX - AX)) / Den;
+    U := ((AX - OX) * DY - (AY - OY) * DX) / Den;
+    if (T <= 1e-6) or (U < 0) or (U > 1) then Continue;
+    SetLength(Ts, N + 1);
+    SetLength(Ls, N + 1);
+    Ts[N] := T;
+    Ls[N] := I;
+    Inc(N);
+  end;
+  for I := 1 to N - 1 do
+    for J := I downto 1 do
+      if Ts[J] < Ts[J - 1] then
+      begin
+        TT := Ts[J]; Ts[J] := Ts[J - 1]; Ts[J - 1] := TT;
+        TL := Ls[J]; Ls[J] := Ls[J - 1]; Ls[J - 1] := TL;
+      end;
+  TPrev := 0;
+  for I := 0 to N - 1 do
+  begin
+    if Flat(Ts[I]) then Exit(true);
+    L := Ls[I];
+    if LineSector(L, 0) = Cur then
+    begin
+      Side := 0;
+      Other := LineSector(L, 1);
+    end else
+    if LineSector(L, 1) = Cur then
+    begin
+      Side := 1;
+      Other := LineSector(L, 0);
+    end else
+      { Through a corner, past a line of another sector: go on. }
+      Continue;
+    Z := OZ + DZ * Ts[I];
+    Hit.Line := L;
+    Hit.Side := Side;
+    Hit.X := OX + DX * Ts[I];
+    Hit.Y := OY + DY * Ts[I];
+    Hit.Z := Z;
+    Hit.Kind := ehWall;
+    if Other < 0 then
+    begin
+      Hit.Part := 'M';
+      Exit(true);
+    end;
+    if Z < Sectors[Other].Floor then
+    begin
+      Hit.Part := 'L';
+      Exit(true);
+    end;
+    if Z > Sectors[Other].Ceiling then
+    begin
+      Hit.Part := 'U';
+      Exit(true);
+    end;
+    Hit.Kind := ehNone;
+    Hit.Line := -1;
+    Cur := Other;
+    TPrev := Ts[I];
+  end;
+  Result := Flat(-1);
+end;
+
 function TDoomEditMap.SectorAt(const X, Y: Single): Integer;
 var
   I, Best: Integer;

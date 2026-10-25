@@ -2678,6 +2678,7 @@ var
   All: array of Integer;
   I: Integer;
   O: TEditPoints;
+  Hit: TEditRayHit;
 begin
   E := TDoomEditMap.Create;
   try
@@ -2700,6 +2701,20 @@ begin
     AssertEquals('room 1 at its place', 1, E.SectorAt(96, 96));
     AssertTrue('undo', E.Undo);
     AssertEquals('the inner room in front again', 1, E.LineSector(4, 0));
+    { Rays from the eye (the 3D preview's picking): the inner room raised
+      to 24, rays east from (10, 96) at eye height 41. }
+    E.Sectors[1].Floor := 24;
+    AssertTrue('level ray', E.RayHit(10, 96, 41, 1, 0, 0, Hit));
+    AssertTrue('level: the east wall', (Hit.Kind = ehWall) and (Hit.Part = 'M') and (Hit.Side = 0) and
+      (Abs(Hit.X - 256) < 0.01));
+    AssertTrue('a little down', E.RayHit(10, 96, 41, 1, 0, -0.2, Hit));
+    AssertTrue('onto the raised floor', (Hit.Kind = ehFloor) and (Hit.Sector = 1) and (Abs(Hit.X - 95) < 0.01));
+    AssertTrue('steeply down', E.RayHit(10, 96, 41, 1, 0, -0.5, Hit));
+    AssertTrue('the step''s lower part, outer side',
+      (Hit.Kind = ehWall) and (Hit.Part = 'L') and (E.LineSector(Hit.Line, Hit.Side) = 0) and (Abs(Hit.X - 64) < 0.01));
+    AssertTrue('up', E.RayHit(10, 96, 41, 0, 0, 1, Hit));
+    AssertTrue('the ceiling', (Hit.Kind = ehCeiling) and (Hit.Sector = 0) and (Abs(Hit.Z - 128) < 0.01));
+    AssertFalse('outside the map', E.RayHit(-50, 96, 41, 1, 0, 0, Hit));
   finally
     FreeAndNil(E);
   end;

@@ -22,8 +22,10 @@
   flags, listed in a panel.
   F5 shows a 3D preview of the map (the "Doom Map" component in a
   viewport over the right of the window, rebuilt after each edit);
-  Ctrl+O opens a PWAD (in the browser through the page's file picker)
-  and edits its first map.
+  Space over the preview opens the picker on the wall part, floor or
+  ceiling under the mouse (only that part changes). Ctrl+O opens a PWAD
+  (in the browser through the page's file picker) and edits its first
+  map, M lists the maps (a PWAD's own after Ctrl+O) to edit another.
   F9 play-tests (the map's PWAD stacked on the WADs as edit:/MAP; the
   editor key F7 in the game comes back), F2 exports the PWAD (a file on
   the desktop, a download in the browser), F3 / F4 the level as glTF /
@@ -78,6 +80,14 @@ type
     FPreviewMap: TCastleTransform;
     FPreviewDirty: Boolean;
     FPreviewIdle: Single;
+    { A wall part picked in the 3D preview: the picker sets only that
+      side's part ('U', 'M', 'L'; #0: the whole line as before). }
+    FPickSide: Integer;
+    FPickPart: Char;
+    { The map list (M): the names shown, the highlighted one. }
+    FMapList: Boolean;
+    FMapListNames: TStringList;
+    FMapListIndex: Integer;
     { The texture / flat picker: its kind (0 wall, 1 floor, 2 ceiling),
       the typed filter, the names it shows, the highlighted one and the
       first row shown; thumbnails made as they are first shown. }
@@ -177,6 +187,12 @@ type
     procedure ApplyProp;
     procedure RenderProps;
     procedure TogglePreview;
+    { Space over the 3D preview: the wall part, floor or ceiling under P
+      (container pixels) is selected and the picker opens on it. }
+    procedure PickInPreview(const P: TVector2);
+    procedure OpenMapList(const Names: TStrings);
+    procedure MapListKey(const Key: TKey);
+    procedure RenderMapList;
     procedure BuildPreview(const PlaceCamera: Boolean);
     function InPreview(const P: TVector2): Boolean;
     { Ctrl+O: a PWAD file's first map (the desktop's dialog, the page's
@@ -311,7 +327,8 @@ const
     'Ctrl+Z / Ctrl+Y  undo / redo' + #10 +
     'F9  play-test (F7 in the game: back)' + #10 +
     'F5  3D preview (fly over it: arrows, WASD, mouse)' + #10 +
-    'Ctrl+O  open a PWAD (its first map)' + #10 +
+    '  Space over it: texture / flat of what it points at' + #10 +
+    'Ctrl+O  open a PWAD    M  map list' + #10 +
     'F2  export PWAD   F3 glTF   F4 X3D' + #10 +
     'Ctrl+PgUp / PgDn  other map    Esc  leave';
 
@@ -397,6 +414,7 @@ begin
   FreeAndNil(FSteps);
   FreeAndNil(FPickerList);
   FreeAndNil(FThumbs);
+  FreeAndNil(FMapListNames);
   inherited;
 end;
 
@@ -1322,6 +1340,10 @@ begin
   Nav := TCastleWalkNavigation.Create(FreeAtStop);
   Nav.Gravity := false;
   Nav.MoveSpeed := 290;
+  { Space picks what the mouse points at (PickInPreview), C is the
+    editor's ceiling flat key. }
+  Nav.Input_Jump.Assign(keyNone);
+  Nav.Input_Crouch.Assign(keyNone);
   FPreview.InsertFront(Nav);
   FPreviewMap := TDoomMapTransform.Create(FreeAtStop);
   FPreviewMap.Name := 'PreviewMap';
@@ -1397,6 +1419,119 @@ begin
     WritelnLog('Editor', Format('3D preview of %s rebuilt (%d ms)', [FEdit.Name, Round(TimerSeconds(Timer, T) * 1000)]));
 end;
 
+procedure TViewEdit.PickInPreview(const P: TVector2);
+
+  function PartName(const Part: Char): String;
+  begin
+    case Part of
+      'U': Result := 'upper';
+      'L': Result := 'lower';
+      else Result := 'middle';
+    end;
+  end;
+
+var
+  RayOrigin, RayDir: TVector3;
+  Hit: TEditRayHit;
+begin
+  if FPreview = nil then Exit;
+  FPreview.PositionToRay(P, true, RayOrigin, RayDir);
+  { CGE (x, y up, z) is Doom (x, -z, y). }
+  if not FEdit.RayHit(RayOrigin.X, -RayOrigin.Z, RayOrigin.Y, RayDir.X, -RayDir.Z, RayDir.Y, Hit) then
+  begin
+    Message('Nothing there to pick');
+    Exit;
+  end;
+  if Hit.Kind = ehWall then
+  begin
+    SetMode(emLines);
+    SelectOnly(Hit.Line);
+    FPickSide := Hit.Side;
+    FPickPart := Hit.Part;
+    LogAction(Format('Picked line %d (%s side, %s) in the 3D preview', [Hit.Line,
+      Iff(Hit.Side = 0, 'front', 'back'), PartName(Hit.Part)]));
+    OpenPicker(0);
+  end else
+  begin
+    SetMode(emSectors);
+    SelectOnly(Hit.Sector);
+    FPickPart := #0;
+    LogAction(Format('Picked sector %d (%s) in the 3D preview', [Hit.Sector,
+      Iff(Hit.Kind = ehFloor, 'floor', 'ceiling')]));
+    if Hit.Kind = ehFloor then OpenPicker(1) else OpenPicker(2);
+  end;
+end;
+
+{ The map list ------------------------------------------------------------------- }
+
+procedure TViewEdit.OpenMapList(const Names: TStrings);
+begin
+  if Names.Count = 0 then Exit;
+  if FMapListNames = nil then FMapListNames := TStringList.Create;
+  FMapListNames.Assign(Names);
+  FMapListIndex := Max(0, FMapListNames.IndexOf(FEdit.Name));
+  FMapList := true;
+  Message('Maps: Up / Down, Enter edits one, Esc closes');
+  WritelnLog('Editor', Format('Map list: %d maps', [FMapListNames.Count]));
+end;
+
+procedure TViewEdit.MapListKey(const Key: TKey);
+begin
+  case Key of
+    keyArrowUp: FMapListIndex := (FMapListIndex + FMapListNames.Count - 1) mod FMapListNames.Count;
+    keyArrowDown: FMapListIndex := (FMapListIndex + 1) mod FMapListNames.Count;
+    keyPageUp: FMapListIndex := Max(0, FMapListIndex - 10);
+    keyPageDown: FMapListIndex := Min(FMapListNames.Count - 1, FMapListIndex + 10);
+    keyEnter:
+      begin
+        FMapList := false;
+        if FMapListNames[FMapListIndex] <> FEdit.Name then
+          LoadMap(FMapListNames[FMapListIndex]);
+        LogAction('Editing ' + FEdit.Summary);
+        if FPreview <> nil then BuildPreview(true);
+      end;
+    keyEscape, keyM: FMapList := false;
+    else ;
+  end;
+end;
+
+{ The map names in columns over the middle, the chosen one marked. }
+procedure TViewEdit.RenderMapList;
+var
+  Font: TCastleFont;
+  I, PerColumn, Col, Row: Integer;
+  X, Y, LineH, ColW, Top: Single;
+  Color: TCastleColor;
+begin
+  if not FMapList then Exit;
+  Font := FallbackFont;
+  Font.PushProperties;
+  try
+    Font.Size := Max(14, Container.PixelsHeight / 45);
+    LineH := Font.Height * 1.4;
+    ColW := Font.TextWidth('> MAP00 ') + 30;
+    PerColumn := Max(1, Trunc((Container.PixelsHeight - 160) / LineH));
+    DrawRectangle(FloatRectangle(40, 40, Container.PixelsWidth - 80, Container.PixelsHeight - 80),
+      Vector4(0.08, 0.1, 0.18, 0.96));
+    Top := Container.PixelsHeight - 90;
+    Font.Print(60, Top, Vector4(1, 0.85, 0.4, 1),
+      Format('Maps (%d): Up / Down, Enter edits one, Esc closes', [FMapListNames.Count]));
+    for I := 0 to FMapListNames.Count - 1 do
+    begin
+      Col := I div PerColumn;
+      Row := I mod PerColumn;
+      X := 60 + Col * ColW;
+      Y := Top - LineH * (Row + 1.5);
+      if I = FMapListIndex then Color := Vector4(1, 1, 0.5, 1)
+      else if FMapListNames[I] = FEdit.Name then Color := Vector4(0.6, 1, 0.6, 1)
+      else Color := Vector4(0.9, 0.9, 0.9, 1);
+      Font.Print(X, Y, Color, Iff(I = FMapListIndex, '> ', '  ') + FMapListNames[I]);
+    end;
+  finally
+    Font.PopProperties;
+  end;
+end;
+
 { Opening a PWAD ------------------------------------------------------------------ }
 
 procedure TViewEdit.OpenWadFile;
@@ -1444,6 +1579,8 @@ procedure TViewEdit.UseWadFile(const Url: String);
 var
   Maps: TStringList;
   First: String;
+  OwnMaps: array of String;
+  I: Integer;
 begin
   if not WadUrlReadable(Url) then
   begin
@@ -1465,6 +1602,8 @@ begin
       Exit;
     end;
     First := UpperCase(Maps[0]);
+    SetLength(OwnMaps, Maps.Count);
+    for I := 0 to Maps.Count - 1 do OwnMaps[I] := UpperCase(Maps[I]);
   finally
     FreeAndNil(Maps);
   end;
@@ -1477,6 +1616,17 @@ begin
   LoadMap(First);
   LogAction(Format('Opened %s: editing %s', [ExtractUriName(Url), FEdit.Summary]));
   if FPreview <> nil then BuildPreview(true);
+  { Several maps: the list of the file's own. }
+  if Length(OwnMaps) > 1 then
+  begin
+    Maps := TStringList.Create;
+    try
+      for I := 0 to High(OwnMaps) do Maps.Add(OwnMaps[I]);
+      OpenMapList(Maps);
+    finally
+      FreeAndNil(Maps);
+    end;
+  end;
 end;
 
 procedure TViewEdit.DeleteThings;
@@ -1523,6 +1673,14 @@ begin
   FPickerFilter := '';
   FilterPicker;
   Current := '';
+  if (Kind = 0) and (FPickPart <> #0) and (FEdit.Lines[FSelected].Side[FPickSide] >= 0) then
+  begin
+    case FPickPart of
+      'U': Current := FEdit.Sides[FEdit.Lines[FSelected].Side[FPickSide]].Upper;
+      'L': Current := FEdit.Sides[FEdit.Lines[FSelected].Side[FPickSide]].Lower;
+      else Current := FEdit.Sides[FEdit.Lines[FSelected].Side[FPickSide]].Middle;
+    end;
+  end else
   if Kind = 0 then
   begin
     L := FEdit.Lines[FSelected];
@@ -1586,7 +1744,17 @@ begin
     FEdit.Snapshot;
     for I := 0 to High(Sel) do
       case FPickerKind of
-        0: SetLineTexture(Sel[I], TexName);
+        0:
+          if (FPickPart <> #0) and (FEdit.Lines[Sel[I]].Side[FPickSide] >= 0) then
+          begin
+            { The part picked in the 3D preview only. }
+            case FPickPart of
+              'U': FEdit.Sides[FEdit.Lines[Sel[I]].Side[FPickSide]].Upper := TexName;
+              'L': FEdit.Sides[FEdit.Lines[Sel[I]].Side[FPickSide]].Lower := TexName;
+              else FEdit.Sides[FEdit.Lines[Sel[I]].Side[FPickSide]].Middle := TexName;
+            end;
+          end else
+            SetLineTexture(Sel[I], TexName);
         1: FEdit.Sectors[Sel[I]].FloorTex := TexName;
         else FEdit.Sectors[Sel[I]].CeilingTex := TexName;
       end;
@@ -1594,6 +1762,7 @@ begin
     FEdit.EndChange;
   end;
   LogAction(Format('%s %s on %d %s', [PickerKindNames[FPickerKind], TexName, Length(Sel), LowerCase(ModeNames[FMode])]));
+  FPickPart := #0;
 end;
 
 function TViewEdit.PickerKey(const Key: TKey; const Ch: String): Boolean;
@@ -1608,6 +1777,7 @@ begin
     keyEscape:
       begin
         FPicker := false;
+        FPickPart := #0;
         Message('Picker closed');
       end;
     keyEnter:
@@ -1946,6 +2116,7 @@ begin
 
   RenderFlags;
   RenderProps;
+  RenderMapList;
   if FPicker then RenderPicker;
 end;
 
@@ -2470,6 +2641,12 @@ begin
     UpdateLabels;
     Exit;
   end;
+  if FMapList then
+  begin
+    MapListKey(Key);
+    UpdateLabels;
+    Exit;
+  end;
   if FProps then
   begin
     { The selection went (Delete in the panel cannot happen): close. }
@@ -2584,7 +2761,11 @@ begin
         Leave;
     keySpace:
       { The picture picker: walls of the selected lines, floors (Shift:
-        ceilings) of the selected sectors. }
+        ceilings) of the selected sectors; over the 3D preview, of what
+        the mouse points at. }
+      if InPreview(Container.MousePosition) then
+        PickInPreview(Container.MousePosition)
+      else
       if FMode = emLines then
         OpenPicker(0)
       else if FMode = emSectors then
@@ -2600,6 +2781,7 @@ begin
         LogAction(Format('Added %s at %d, %d', [ThingChoices[FThingType].Name, Pt.X, Pt.Y]));
       end;
     keyE: OpenProps;
+    keyM: OpenMapList(Wad.MapNames);
     keyLeftBracket: CycleThingType(-1);
     keyRightBracket: CycleThingType(1);
     keyDelete:
@@ -3008,6 +3190,14 @@ begin
       MouseMove(At(3));
       MouseUp(At(3), buttonLeft);
     end else
+    if Cmd = 'PICK3D' then
+    begin
+      { PICK3D:fx:fy: Space over the 3D preview at that fraction of it
+        (x from the left, y from the bottom). }
+      if FPreview <> nil then
+        PickInPreview(Vector2(FPreview.RenderRect.Left + Num(1) * FPreview.RenderRect.Width,
+          FPreview.RenderRect.Bottom + Num(2) * FPreview.RenderRect.Height));
+    end else
     if Cmd = 'OPEN' then
       { OPEN:url opens a PWAD like Ctrl+O (upload:/NAME after --upload). }
       UseWadFile(Copy(Step, 6, MaxInt))
@@ -3113,6 +3303,9 @@ begin
     FMessageTime := FMessageTime - SecondsPassed;
     if FMessageTime <= 0 then FMessageLabel.Caption := '';
   end;
+  { Over the picker and the map list the preview would hide them. }
+  if FPreview <> nil then
+    FPreview.Exists := not (FPicker or FMapList);
   if FPreviewDirty then
   begin
     FPreviewIdle := FPreviewIdle + SecondsPassed;
