@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.55.0 (2026-10-25)
 
 - Map editor: `O` over the 3D preview aligns the texture of the wall you point at: the
   arrows move it (Shift: 8 units at a time) and you see it move; Enter ends, one undo
