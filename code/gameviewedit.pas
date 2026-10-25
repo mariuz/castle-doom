@@ -23,7 +23,8 @@
   F5 shows a 3D preview of the map (the "Doom Map" component in a
   viewport over the right of the window, rebuilt after each edit);
   Space over the preview opens the picker on the wall part, floor or
-  ceiling under the mouse (only that part changes). Ctrl+O opens a PWAD
+  ceiling under the mouse (only that part changes), O aligns that wall's
+  texture (the arrows move its offsets, Enter ends). Ctrl+O opens a PWAD
   (in the browser through the page's file picker) and edits its first
   map, M lists the maps (a PWAD's own after Ctrl+O) to edit another.
   F9 play-tests (the map's PWAD stacked on the WADs as edit:/MAP; the
@@ -84,6 +85,11 @@ type
       side's part ('U', 'M', 'L'; #0: the whole line as before). }
     FPickSide: Integer;
     FPickPart: Char;
+    { Aligning a wall's texture (O over the 3D preview): the line and
+      side whose offsets the arrows move; the preview's navigation waits. }
+    FAlign: Boolean;
+    FAlignLine, FAlignSide: Integer;
+    FPreviewNav: TCastleUserInterface;
     { The map list (M): the names shown, the highlighted one. }
     FMapList: Boolean;
     FMapListNames: TStringList;
@@ -190,6 +196,9 @@ type
     { Space over the 3D preview: the wall part, floor or ceiling under P
       (container pixels) is selected and the picker opens on it. }
     procedure PickInPreview(const P: TVector2);
+    procedure StartAlign(const P: TVector2);
+    procedure AlignKey(const Key: TKey; const Shift: Boolean);
+    procedure EndAlign;
     procedure OpenMapList(const Names: TStrings);
     procedure MapListKey(const Key: TKey);
     procedure RenderMapList;
@@ -328,6 +337,7 @@ const
     'F9  play-test (F7 in the game: back)' + #10 +
     'F5  3D preview (fly over it: arrows, WASD, mouse)' + #10 +
     '  Space over it: texture / flat of what it points at' + #10 +
+    '  O over it: align that wall (arrows, Shift: 8)' + #10 +
     'Ctrl+O  open a PWAD    M  map list' + #10 +
     'F2  export PWAD   F3 glTF   F4 X3D' + #10 +
     'Ctrl+PgUp / PgDn  other map    Esc  leave';
@@ -480,6 +490,8 @@ begin
   { Owned by FreeAtStop. }
   FPreview := nil;
   FPreviewMap := nil;
+  FPreviewNav := nil;
+  FAlign := false;
   inherited;
 end;
 
@@ -1316,9 +1328,11 @@ var
 begin
   if FPreview <> nil then
   begin
+    if FAlign then EndAlign;
     RemoveControl(FPreview);
     FPreview := nil;
     FPreviewMap := nil;
+    FPreviewNav := nil;
     FPreviewDirty := false;
     LogAction('3D preview closed');
     Exit;
@@ -1345,6 +1359,7 @@ begin
   Nav.Input_Jump.Assign(keyNone);
   Nav.Input_Crouch.Assign(keyNone);
   FPreview.InsertFront(Nav);
+  FPreviewNav := Nav;
   FPreviewMap := TDoomMapTransform.Create(FreeAtStop);
   FPreviewMap.Name := 'PreviewMap';
   FPreview.Items.Add(FPreviewMap);
@@ -1460,6 +1475,69 @@ begin
       Iff(Hit.Kind = ehFloor, 'floor', 'ceiling')]));
     if Hit.Kind = ehFloor then OpenPicker(1) else OpenPicker(2);
   end;
+end;
+
+{ O over the preview: the wall under the mouse; the arrows then move its
+  texture (one undo step for the whole alignment). }
+procedure TViewEdit.StartAlign(const P: TVector2);
+var
+  RayOrigin, RayDir: TVector3;
+  Hit: TEditRayHit;
+begin
+  if FPreview = nil then Exit;
+  FPreview.PositionToRay(P, true, RayOrigin, RayDir);
+  if (not FEdit.RayHit(RayOrigin.X, -RayOrigin.Z, RayOrigin.Y, RayDir.X, -RayDir.Z, RayDir.Y, Hit)) or
+     (Hit.Kind <> ehWall) then
+  begin
+    Message('Point at a wall to align its texture');
+    Exit;
+  end;
+  FAlign := true;
+  FAlignLine := Hit.Line;
+  FAlignSide := Hit.Side;
+  FEdit.Snapshot;
+  if FPreviewNav <> nil then FPreviewNav.Exists := false;
+  SetMode(emLines);
+  SelectOnly(Hit.Line);
+  LogAction(Format('Aligning line %d %s side: arrows move the texture (Shift: 8), Enter ends', [Hit.Line,
+    Iff(Hit.Side = 0, 'front', 'back')]));
+end;
+
+procedure TViewEdit.AlignKey(const Key: TKey; const Shift: Boolean);
+var
+  S, Step: Integer;
+begin
+  S := FEdit.Lines[FAlignLine].Side[FAlignSide];
+  if S < 0 then
+  begin
+    EndAlign;
+    Exit;
+  end;
+  if Shift then Step := 8 else Step := 1;
+  case Key of
+    { Doom's offsets: a bigger X offset moves the texture left, a bigger
+      Y offset moves it up. }
+    keyArrowLeft: FEdit.Sides[S].XOffset := FEdit.Sides[S].XOffset + Step;
+    keyArrowRight: FEdit.Sides[S].XOffset := FEdit.Sides[S].XOffset - Step;
+    keyArrowUp: FEdit.Sides[S].YOffset := FEdit.Sides[S].YOffset + Step;
+    keyArrowDown: FEdit.Sides[S].YOffset := FEdit.Sides[S].YOffset - Step;
+    keyEnter, keyEscape, keyO:
+      begin
+        EndAlign;
+        Exit;
+      end;
+    else Exit;
+  end;
+  FEdit.Modified := true;
+  LogAction(Format('Line %d %s offsets %d, %d', [FAlignLine, Iff(FAlignSide = 0, 'front', 'back'),
+    FEdit.Sides[S].XOffset, FEdit.Sides[S].YOffset]));
+end;
+
+procedure TViewEdit.EndAlign;
+begin
+  FAlign := false;
+  if FPreviewNav <> nil then FPreviewNav.Exists := true;
+  LogAction('Alignment done');
 end;
 
 { The map list ------------------------------------------------------------------- }
@@ -2647,6 +2725,12 @@ begin
     UpdateLabels;
     Exit;
   end;
+  if FAlign then
+  begin
+    AlignKey(Key, Shift);
+    UpdateLabels;
+    Exit;
+  end;
   if FProps then
   begin
     { The selection went (Delete in the panel cannot happen): close. }
@@ -2782,6 +2866,11 @@ begin
       end;
     keyE: OpenProps;
     keyM: OpenMapList(Wad.MapNames);
+    keyO:
+      if InPreview(Container.MousePosition) then
+        StartAlign(Container.MousePosition)
+      else
+        Exit(false);
     keyLeftBracket: CycleThingType(-1);
     keyRightBracket: CycleThingType(1);
     keyDelete:
@@ -3189,6 +3278,13 @@ begin
       MouseDown(At(1), buttonLeft, true, true);
       MouseMove(At(3));
       MouseUp(At(3), buttonLeft);
+    end else
+    if Cmd = 'ALIGN3D' then
+    begin
+      { ALIGN3D:fx:fy: O over the 3D preview at that fraction of it. }
+      if FPreview <> nil then
+        StartAlign(Vector2(FPreview.RenderRect.Left + Num(1) * FPreview.RenderRect.Width,
+          FPreview.RenderRect.Bottom + Num(2) * FPreview.RenderRect.Height));
     end else
     if Cmd = 'PICK3D' then
     begin

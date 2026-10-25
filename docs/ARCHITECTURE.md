@@ -1753,7 +1753,13 @@ meeting the current sector's floor or ceiling between two crossings, a
 one-sided wall (middle) or a two-sided line where the ray passes below
 the next sector's floor (lower) or above its ceiling (upper); the hit
 line's side facing the eye and the part go to `FPickSide` /
-`FPickPart`, so `PickerApply` changes only that texture. In an autotest the demo script drives the editor
+`FPickPart`, so `PickerApply` changes only that texture. `O` over
+the preview (`StartAlign`) takes the wall the same way, snapshots the
+map once (the whole alignment is one undo step) and hides the
+preview's navigation (`FPreviewNav.Exists`), so the arrows reach
+`AlignKey`: left / right add to / take from the side's X offset (a
+bigger one moves the texture left, as in Doom), up / down its Y
+offset, Shift by 8; every nudge logs and so rebuilds the preview. In an autotest the demo script drives the editor
 (`RunStep`: `VIEW`, `MODE`, `CLICK`, `DRAG`, `DRAW`, `MOUSE`, `KEY`, `TYPE`,
 `THING`, `EXPORT`, `GLTF`, `X3D`, `PLAY`, `S`, `W`, `Q`); `PLAY` hands
 the rest of the script to the game (`AutoTestDemo`) and the game's

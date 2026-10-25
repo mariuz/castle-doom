@@ -77,7 +77,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   thing flags (number keys), type exact values in a properties panel (`E`: heights, light,
   both sides' texture offsets, angles, positions), flip lines (`F`), add, turn, copy and paste
   things and sectors, undo / redo, look at the map in 3D beside the 2D view (`F5`; Space over
-  it picks the texture of the wall or flat you point at) and open PWAD files (`Ctrl+O`, in the
+  it picks the texture of the wall or flat you point at, `O` aligns it with the arrows) and open PWAD files (`Ctrl+O`, in the
   browser too; `M` lists their maps). `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
   as a PWAD with its nodes built (it runs in other Doom ports: `-file e1m1-edited.wad`),
   `F3` / `F4` export the level's walls and floors as glTF / X3D with their textures for

@@ -718,7 +718,9 @@ gesture, so the page's picker stays shut: in Playwright press
 `Editor: Picked line 919 (front side, middle) in the 3D preview`, then
 the picker on that part only), `KEY:M` the map list (`Editor: Map list:
 36 maps`); a PWAD with several maps for tests is `--random-wad FILE`'s
-(harness `editor-pick`). A clear spot in E1M1's start room for a
+(harness `editor-pick`). `ALIGN3D:fx:fy` is `O` there (align that wall:
+`KEY:Left` / `KEY:Shift+Up`... log `Editor: Line 919 front offsets
+115, 8`, `KEY:Enter` ends; autotest `editor-align`). A clear spot in E1M1's start room for a
 room: `DRAW:-480:192:-352:192:-352:288:-480:288` (autotest `editor`
 raises it to 24 and play-tests standing on it; its exported WAD is
 checked with Python `struct`, `check_map_wad`). `--export-map MAP FILE`,

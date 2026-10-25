@@ -6,6 +6,11 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Map editor, texture alignment: `O` over the 3D preview takes the wall
+  under the mouse; the arrows move that side's texture offsets (Shift:
+  8 units) and the preview follows, Enter ends, one undo step. Autotest
+  `editor-align` (goldens, the exported WAD read back).
+
 - Map editor, picking in 3D and the map list: Space over the 3D
   preview selects the wall part, floor or ceiling the mouse points at
   (`TDoomEditMap.RayHit` on the edited data) and opens the picker on
@@ -1197,16 +1202,16 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels, the menu, cheats and the browser are done (see above); left are a ghost of a recording to race (its recorded positions drawn as a translucent player sprite), a smaller format for long browser recordings (the update lines in binary or as deltas), and choosing between several kept demos. | Replays; races. | `DoomDemo`, `GameViewPlay`, `DoomActors` | M |
-| **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors, the 3D preview, opening PWADs, picking in 3D and the map list are done (see above); left are copying sectors with their holes and inner lines, texture alignment (offsets dragged in the 3D preview), and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
+| **Map editor, the rest**: the 2D editor, play-test, exports, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors, the 3D preview, opening PWADs, picking in 3D and the map list are done (see above); texture alignment is done too; left are copying sectors with their holes and inner lines, and the things and the sky in the glTF / X3D export. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M each |
 
 ## Suggested next three
 
 1. Mobile, the rest (M, see Engine and tooling): try the APK and the
    keyboard on devices, the release signing keys (repository secrets).
-2. Map editor, the rest (M, see New features): texture alignment in
-   the 3D preview, sectors copied with their holes.
-3. Demos, the rest (M, see New features): a ghost of a recording to
+2. Demos, the rest (M, see New features): a ghost of a recording to
    race, a smaller format for long browser recordings.
+3. Map editor, the rest (M, see New features): sectors copied with
+   their holes, the things and the sky in the glTF / X3D export.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

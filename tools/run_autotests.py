@@ -504,6 +504,14 @@ TESTS = [
       r'Editor: Opened generalized\.wad: editing E1M1: 985 vertices'],
      ['--edit', '--upload', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'generalized.wad')],
      lambda config: check_editor_preview(config)),
+    # Aligning a wall's texture in the 3D preview (O over it, arrows,
+    # Shift: 8 units, Enter ends; one undo step).
+    ('editor-align', 'E1M1',
+     'VIEW:-300:256:0.6,MOUSE:-416:256,KEY:F5,W:1,S,ALIGN3D:0.5:0.5,KEY:Left,KEY:Left,KEY:Left,KEY:Shift+Up,'
+     'W:1,S,KEY:Enter,EXPORT,KEY:Ctrl+Z,W:1,S,Q',
+     [r'Editor: Aligning line 919 front side', r'Editor: Line 919 front offsets 115, 8',
+      r'Editor: Alignment done', r'Editor: Undone'],
+     ['--edit'], lambda config: check_editor_align(config)),
     ('editor-menu', 'MENUKEYS', 'W:0.5,S,Q',
      [r'Menu: Custom game \(map editor\): freedoom1\.wad, PWADs none, map E1M1',
       r'Editor: Imported E1M1', r'Saved editor screenshot 1 of E1M1'],
@@ -897,6 +905,16 @@ def check_editor_preview(config):
     assert xoff == 8, 'line 1178 back X offset %d' % xoff
 
 
+def check_editor_align(config):
+    """The texture aligned in the 3D preview: line 919's front side moved
+    from offsets (112, 0) to (115, 8) in the exported WAD."""
+    import struct
+    d = check_map_wad(os.path.join(os.path.dirname(config), 'editor-align_e1m1.wad'), 'E1M1', 182, 292)
+    v1, v2, flags, special, tag, front, back = struct.unpack_from('<HHHHHHH', d['LINEDEFS'], 919 * 14)
+    xoff, yoff = struct.unpack_from('<hh', d['SIDEDEFS'], front * 30)
+    assert (xoff, yoff) == (115, 8), 'line 919 front offsets %d, %d' % (xoff, yoff)
+
+
 def export_test(exe, out):
     """--export-map, --export-gltf and --export-x3d: E1M1 as a PWAD with
     its BSP built anew, and its geometry as glTF and X3D with textures."""
@@ -1006,6 +1024,7 @@ GOLDEN = [
     'editor-preview_edit_1.png', 'editor-preview_edit_2.png', 'editor-preview_edit_3.png', 'editor-preview_edit_4.png',
     'stored-files_menu1.png', 'stored-files_menu2.png', 'stored-files_menu3.png',
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
+    'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
 ]
 
 
