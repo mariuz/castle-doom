@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.54.0 (2026-10-25)
 
 - Map editor: Space over the 3D preview opens the texture picker on the wall part (upper,
   middle or lower, on the side you see), floor or ceiling under the mouse, and changes only
