@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.53.0 (2026-10-25)
 
 - The title screen's Options panel leads to the custom game page ("Custom game...")
   instead of its own game, map, skill and WAD buttons; the custom game page's PWADS page
