@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.56.0 (2026-10-26)
 
 - Demos: `--ghost FILE` races a recording's ghost: a see-through player walks the
   recorded run on each level it has, says when it finished, and the log gives your
