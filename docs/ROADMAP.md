@@ -6,6 +6,19 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Rendering stage 1 (`docs/RENDERING_ROADMAP.md` items 1-3): UDMF's
+  per-part wall offsets and scales (`TDoomSidedef.PartOffsetX` ...,
+  0 = 1 via `ScaleOr1`), floors' and ceilings' panning, scale and
+  rotation (`TDoomSector.FloorLook` / `CeilingLook`, `FlatTexCoord`),
+  side and plane light (`SideLightLevel`, `PlaneLightLevel`) and the
+  sector's `lightcolor` / `fadecolor` as two new vertex attributes
+  (`doom_color`, `doom_fade`: the colour multiplies the colormapped
+  texel, the fog mixes in by distance, denser in darker sectors);
+  binary maps keep the defaults, so every existing golden stays.
+  The log says `Map: E1M1: UDMF look: 1 coloured sectors, 1 fogged,
+  ...`; test map `udmf-look.wad` (`tools/make_udmf_wad.py`), autotest
+  `udmf-look` (goldens), unit test `TestUdmf`.
+
 - UDMF maps (`DoomUdmf`, `TDoomMap.LoadUdmf`): a map marker followed
   by `TEXTMAP` is parsed without exceptions (comments, quoted strings,
   hex numbers; `Error` names the line), its vertices, sectors, sides,
@@ -1246,9 +1259,9 @@ play.
 
 ## Suggested next three
 
-1. Rendering, stage 1 (S-M, `docs/RENDERING_ROADMAP.md` items 1, 2,
-   3 and 12): UDMF's per-part texture offsets and scaling, per-surface
-   light, coloured light and fog, brightmaps.
+1. Rendering, stage 1 left (S-M, `docs/RENDERING_ROADMAP.md` items 3
+   and 12): sprites in coloured and fogged sectors, brightmaps; then
+   GLDEFS lights (item 8).
 2. UDMF, the rest (L, see Content and formats): an ACS interpreter for
    the common script uses, the remaining Hexen actions.
 3. Map editor, the rest (M, see New features): sectors copied with

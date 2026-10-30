@@ -901,7 +901,11 @@ autotest only checks the library loads.
   raises sector 141's floor 40 and sets its light 200 (`Udmf:` lines)
   and `LINE:911` teleports to the thing with id 5 at (1000, -900)
   (autotests `udmf`, `udmf-doom` with goldens; unit test `TestUdmf`).
-  `docs/RENDERING_ROADMAP.md` is the plan for UZDoom-style rendering.
+  `docs/RENDERING_ROADMAP.md` is the plan for UZDoom-style rendering;
+  `udmf-look.wad` (same script) tests its stage 1: sector 140 lit
+  orange with its floor turned 45 degrees and scaled, 141 in blue fog
+  (log `Map: E1M1: UDMF look: 1 coloured sectors, 1 fogged, 1 placed
+  flats, 2 placed sides, 1 own lights`; autotest `udmf-look`).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

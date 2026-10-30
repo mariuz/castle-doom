@@ -100,6 +100,11 @@ type
       vertex's texture in the atlas page, as texture coordinates; (0, 0, 1,
       1) for a shape with its own texture). }
     function TileAttribute: TFloatVertexAttributeNode;
+    { New doom_color (RGB the sector's UDMF light colour) and doom_fade
+      (RGB its fog colour, W the fog density a map unit, 0 = none) vertex
+      attribute nodes. }
+    function ColorAttribute: TFloatVertexAttributeNode;
+    function FadeAttribute: TFloatVertexAttributeNode;
     { A new effect for an atlas page's ImageTexture node: the texture
       coordinates wrap inside the vertex's tile (doom_tile), so walls and
       flats repeat as they did with their own textures. }
@@ -279,6 +284,14 @@ const
     '  else' + NL +
     '    fragment_color.rgb *= 1.0 - level / 32.0;' + NL +
     '  fragment_color.rgb = min(fragment_color.rgb + doom_base * doom_tint * 0.6, vec3(1.0));' + NL +
+    { UDMF sector colours (lightcolor) on lit surfaces, and fog
+      (fadecolor): the fade colour by distance, denser in darker sectors
+      (doom_fade_info.w, per vertex). }
+    '  if (doom_fixed_colormap < -0.5) {' + NL +
+    '    if (kind < 15.0) fragment_color.rgb *= doom_color_info.rgb;' + NL +
+    '    if (doom_fade_info.w > 0.0)' + NL +
+    '      fragment_color.rgb = mix(fragment_color.rgb, doom_fade_info.rgb, 1.0 - exp(-length(doom_eye) * doom_fade_info.w));' + NL +
+    '  }' + NL +
     { Gamma correction (Doom's usegamma, F11): an exponent below 1. }
     '  if (doom_gamma < 0.999) fragment_color.rgb = pow(max(fragment_color.rgb, vec3(0.0)), vec3(doom_gamma));' + NL +
     '}';
@@ -286,12 +299,18 @@ const
   GeometryVertex =
     'attribute vec2 doom_light;' + NL +
     'attribute vec4 doom_tile;' + NL +
+    'attribute vec4 doom_color;' + NL +
+    'attribute vec4 doom_fade;' + NL +
     'varying vec3 doom_light_info;' + NL +
     'varying vec4 doom_tile_v;' + NL +
     'varying vec3 doom_eye;' + NL +
+    'varying vec4 doom_color_info;' + NL +
+    'varying vec4 doom_fade_info;' + NL +
     'void PLUG_vertex_eye_space(const in vec4 vertex_eye, const in vec3 normal_eye)' + NL +
     '{' + NL +
     '  doom_light_info = vec3(doom_light, -vertex_eye.z);' + NL +
+    '  doom_color_info = doom_color;' + NL +
+    '  doom_fade_info = doom_fade;' + NL +
     '  doom_eye = vertex_eye.xyz;' + NL +
     '  doom_tile_v = doom_tile;' + NL +
     '}';
@@ -341,7 +360,9 @@ const
     '}';
   GeometryFragmentInput =
     'varying vec3 doom_light_info;' + NL +
-    'varying vec3 doom_eye;' + NL;
+    'varying vec3 doom_eye;' + NL +
+    'varying vec4 doom_color_info;' + NL +
+    'varying vec4 doom_fade_info;' + NL;
 
   SpriteVertex =
     'varying float doom_depth;' + NL +
@@ -355,7 +376,9 @@ const
     'uniform vec2 doom_sprite;' + NL +
     'varying float doom_depth;' + NL +
     'varying vec3 doom_eye;' + NL +
-    '#define doom_light_info vec3(doom_sprite, doom_depth)' + NL;
+    '#define doom_light_info vec3(doom_sprite, doom_depth)' + NL +
+    '#define doom_color_info vec4(1.0)' + NL +
+    '#define doom_fade_info vec4(0.0)' + NL;
 
 var
   FInstance: TDoomLighting;
@@ -593,6 +616,20 @@ begin
   Result := TFloatVertexAttributeNode.Create;
   Result.NameField := 'doom_light';
   Result.NumComponents := 2;
+end;
+
+function TDoomLighting.ColorAttribute: TFloatVertexAttributeNode;
+begin
+  Result := TFloatVertexAttributeNode.Create;
+  Result.NameField := 'doom_color';
+  Result.NumComponents := 4;
+end;
+
+function TDoomLighting.FadeAttribute: TFloatVertexAttributeNode;
+begin
+  Result := TFloatVertexAttributeNode.Create;
+  Result.NameField := 'doom_fade';
+  Result.NumComponents := 4;
 end;
 
 function TDoomLighting.TileAttribute: TFloatVertexAttributeNode;

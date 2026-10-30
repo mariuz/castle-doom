@@ -960,6 +960,13 @@ end;
   (tools/make_udmf_wad.py): in the zdoom namespace without nodes (built
   here) and in the doom namespace with ZNODES, the same map as the
   vanilla one. }
+function LookWithLight(const Light: Integer; const Absolute: Boolean): TPlaneLook;
+begin
+  Result := Default(TPlaneLook);
+  Result.Light := Light;
+  Result.LightAbsolute := Absolute;
+end;
+
 procedure TTestMap.TestUdmf;
 const
   Text = 'namespace = "ZDoom"; // a comment' + LineEnding +
@@ -1077,6 +1084,29 @@ begin
       for I := 0 to High(M.Sectors) do
         if (M.Sectors[I].Special and 128) <> 0 then Inc(Specials);
       AssertEquals('secrets (ZDoom 1024)', 4, Specials);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+  { The look fields (rendering stage 1). }
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-look.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertTrue('light colour', M.Sectors[140].HasColor and
+        TVector3.Equals(M.Sectors[140].LightColor, Vector3(1, $A0 / 255, $70 / 255)));
+      AssertTrue('fog', M.Sectors[141].HasFade and not M.Sectors[140].HasFade);
+      AssertTrue('floor turned', M.Sectors[140].FloorLook.Rotation = 45);
+      AssertTrue('floor scale', M.Sectors[140].FloorLook.ScaleX = 2);
+      AssertTrue('ceiling scale 1', ScaleOr1(M.Sectors[140].CeilingLook.ScaleX) = 1);
+      AssertTrue('side scale', M.Sidedefs[M.Linedefs[829].Side[0]].PartScaleX[1] = 2);
+      AssertTrue('side offset', M.Sidedefs[M.Linedefs[1046].Side[0]].PartOffsetX[1] = 32);
+      AssertEquals('side light', 224, SideLightLevel(M.Sidedefs[M.Linedefs[1046].Side[0]], 160));
+      AssertEquals('absolute light', 40, PlaneLightLevel(LookWithLight(40, true), 200));
+      AssertEquals('light clamped', 255, PlaneLightLevel(LookWithLight(100, false), 200));
     finally
       FreeAndNil(M);
     end;

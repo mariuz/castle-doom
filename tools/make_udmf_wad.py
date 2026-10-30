@@ -23,6 +23,12 @@ east of it (141, given id 9):
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
 
+udmf-look.wad, as udmf.wad plus UZDoom's look fields (rendering stage
+1): the start room (sector 140) lit warm orange (lightcolor 0xFFA070)
+with its floor turned 45 degrees and scaled 2x, the room east of it
+(141) in blue fog (fadecolor 0x2040A0), the west wall's line 829
+texture scaled 2x and line 1046's shifted 32 units and 64 brighter.
+
 Usage: make_udmf_wad.py [OUTDIR]
 """
 import os
@@ -54,6 +60,11 @@ EXTRA_LINES = {
     1052: (80, (1,), 'u'),
 }
 SECTOR_IDS = {141: 9}
+LOOK_SECTORS = {140: {'lightcolor': '0xFFA070', 'rotationfloor': '45.0', 'xscalefloor': '2.0',
+                      'yscalefloor': '2.0'},
+                141: {'fadecolor': '0x2040A0'}}
+LOOK_FRONT_SIDES_OF_LINES = {829: {'scalex_mid': '2.0', 'scaley_mid': '2.0'},
+                             1046: {'offsetx_mid': '32.0', 'light': '64'}}
 TELEPORT_DEST = (1000, -900, 5)
 ZDOOM_SECTOR = {1: 65, 2: 66, 3: 67, 4: 68, 5: 69, 7: 71, 8: 72, 9: 1024, 10: 74, 11: 75,
                 12: 76, 13: 77, 14: 78, 16: 80, 17: 81}
@@ -73,13 +84,17 @@ def flag_names(flags):
     return names
 
 
-def textmap(hexen):
+def textmap(hexen, look=False):
     out = ['namespace = "%s";' % ('zdoom' if hexen else 'doom'), '']
     V = lump('VERTEXES')
     for k in range(len(V) // 4):
         x, y = struct.unpack('<hh', V[k * 4:k * 4 + 4])
         out.append('vertex // %d\n{\nx = %d.0;\ny = %d.0;\n}\n' % (k, x, y))
     L = lump('LINEDEFS')
+    side_extra = {}
+    if look:
+        for k, extra in LOOK_FRONT_SIDES_OF_LINES.items():
+            side_extra[struct.unpack('<H', L[k * 14 + 10:k * 14 + 12])[0]] = extra
     for k in range(len(L) // 14):
         v1, v2, fl, sp, tag, sf, sb = struct.unpack('<HHHhhHH', L[k * 14:k * 14 + 14])
         body = ['v1 = %d;' % v1, 'v2 = %d;' % v2, 'sidefront = %d;' % sf]
@@ -126,6 +141,7 @@ def textmap(hexen):
         for key, t in (('texturetop', up), ('texturebottom', lo), ('texturemiddle', mid)):
             if t and t != '-':
                 body.append('%s = "%s";' % (key, t))
+        body += ['%s = %s;' % kv for kv in side_extra.get(k, {}).items()]
         out.append('sidedef // %d\n{\n%s\n}\n' % (k, '\n'.join(body)))
     SE = lump('SECTORS')
     for k in range(len(SE) // 26):
@@ -142,6 +158,8 @@ def textmap(hexen):
             body.append('special = %d;' % sp)
         if tag:
             body.append('id = %d;' % tag)
+        if look:
+            body += ['%s = %s;' % kv for kv in LOOK_SECTORS.get(k, {}).items()]
         out.append('sector // %d\n{\n%s\n}\n' % (k, '\n'.join(body)))
     T = lump('THINGS')
     things = [struct.unpack('<hhhhh', T[k * 10:k * 10 + 10]) for k in range(len(T) // 10)]
@@ -187,6 +205,8 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     write_wad(os.path.join(outdir, 'udmf.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True)), ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-look.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, True)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-doom.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(False)), ('ZNODES', b'XGLN' + zn.gl(False, False)),
                ('ENDMAP', b'')])

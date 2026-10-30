@@ -58,6 +58,12 @@ type
     { Per vertex: the texture's rectangle in the atlas page (4 values,
       the doom_tile attribute); (0, 0, 1, 1) with an own texture. }
     Tiles: TSingleList;
+    { Per vertex (4 values each): the UDMF sector light colour and fog
+      (doom_color, doom_fade); what Add* adds is CurColor / CurFade,
+      which the emitter sets before each surface (Reset: white, no fog). }
+    Colors, Fades: TSingleList;
+    CurColor, CurFade: TVector4;
+    ColorNode, FadeNode: TFloatVertexAttributeNode;
     { The atlas page this batch draws from, -1 = its own texture (Img). }
     AtlasPage: Integer;
     Indices: TInt32List;
@@ -142,7 +148,11 @@ type
     procedure EmitFlats(const Sub: Integer);
     procedure EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
       const ZBottom, ZTop: Single; const U0, U1: Single;
-      const TexTopZ: Single; const Img: TDoomImage; const Light: TVector2);
+      const TexTopZ: Single; const Img: TDoomImage; const Light: TVector2;
+      const ScaleX: Single = 1; const ScaleY: Single = 1);
+    { B's colour and fog for what is emitted next: sector Sec's UDMF
+      lightcolor / fadecolor (fog denser in darker sectors). }
+    procedure SetLook(const B: TGeomBatch; const Sec: Integer);
   public
     Name: String;
     SceneSolid, ScenePassable: TCastleScene;
@@ -274,6 +284,10 @@ begin
   TexCoords := TVector2List.Create;
   Lights := TSingleList.Create;
   Tiles := TSingleList.Create;
+  Colors := TSingleList.Create;
+  Fades := TSingleList.Create;
+  CurColor := Vector4(1, 1, 1, 1);
+  CurFade := TVector4.Zero;
   AtlasPage := -1;
   Alpha := 1;
   Indices := TInt32List.Create;
@@ -286,6 +300,8 @@ begin
   FreeAndNil(TexCoords);
   FreeAndNil(Lights);
   FreeAndNil(Tiles);
+  FreeAndNil(Colors);
+  FreeAndNil(Fades);
   FreeAndNil(Indices);
   inherited;
 end;
@@ -299,6 +315,8 @@ begin
   TexCoordNode := nil;
   LightNode := nil;
   TileNode := nil;
+  ColorNode := nil;
+  FadeNode := nil;
   Geometry := nil;
   Shape := nil;
   TexTransform := nil;
@@ -311,7 +329,11 @@ begin
   TexCoords.Count := 0;
   Lights.Count := 0;
   Tiles.Count := 0;
+  Colors.Count := 0;
+  Fades.Count := 0;
   Indices.Count := 0;
+  CurColor := Vector4(1, 1, 1, 1);
+  CurFade := TVector4.Zero;
 end;
 
 procedure TGeomBatch.AddQuad(const A, B, C, D: TVector3; const TA, TB, TC, TD: TVector2;
@@ -327,6 +349,8 @@ begin
     Lights.Add(Light.X);
     Lights.Add(Light.Y);
     Tiles.Add(Tile.X); Tiles.Add(Tile.Y); Tiles.Add(Tile.Z); Tiles.Add(Tile.W);
+    Colors.Add(CurColor.X); Colors.Add(CurColor.Y); Colors.Add(CurColor.Z); Colors.Add(CurColor.W);
+    Fades.Add(CurFade.X); Fades.Add(CurFade.Y); Fades.Add(CurFade.Z); Fades.Add(CurFade.W);
   end;
   Indices.Add(Base); Indices.Add(Base + 1); Indices.Add(Base + 2);
   Indices.Add(Base); Indices.Add(Base + 2); Indices.Add(Base + 3);
@@ -345,6 +369,8 @@ begin
     Lights.Add(Light.X);
     Lights.Add(Light.Y);
     Tiles.Add(Tile.X); Tiles.Add(Tile.Y); Tiles.Add(Tile.Z); Tiles.Add(Tile.W);
+    Colors.Add(CurColor.X); Colors.Add(CurColor.Y); Colors.Add(CurColor.Z); Colors.Add(CurColor.W);
+    Fades.Add(CurFade.X); Fades.Add(CurFade.Y); Fades.Add(CurFade.Z); Fades.Add(CurFade.W);
   end;
   for I := 1 to High(Pts) - 1 do
   begin
@@ -367,6 +393,8 @@ begin
     Lights.Add(Light.X);
     Lights.Add(Light.Y);
     Tiles.Add(DoomPts[I].X); Tiles.Add(DoomPts[I].Y); Tiles.Add(DoomPts[I].Z); Tiles.Add(1);
+    Colors.Add(1); Colors.Add(1); Colors.Add(1); Colors.Add(1);
+    Fades.Add(0); Fades.Add(0); Fades.Add(0); Fades.Add(0);
   end;
   for I := 1 to High(Pts) - 1 do
   begin
@@ -385,10 +413,12 @@ begin
   TexCoordNode := TTextureCoordinateNode.Create;
   LightNode := DoomLightingInstance.LightAttribute;
   TileNode := DoomLightingInstance.TileAttribute;
+  ColorNode := DoomLightingInstance.ColorAttribute;
+  FadeNode := DoomLightingInstance.FadeAttribute;
   Geometry := TIndexedTriangleSetNode.Create;
   Geometry.Coord := CoordNode;
   Geometry.TexCoord := TexCoordNode;
-  Geometry.SetAttrib([LightNode, TileNode]);
+  Geometry.SetAttrib([LightNode, TileNode, ColorNode, FadeNode]);
   Geometry.Solid := true;
   Geometry.NormalPerVertex := false;
 
@@ -455,6 +485,8 @@ begin
   TexCoordNode.SetPoint(TexCoords);
   LightNode.SetValue(Lights);
   TileNode.SetValue(Tiles);
+  ColorNode.SetValue(Colors);
+  FadeNode.SetValue(Fades);
   if CommittedVertices <> Coords.Count then
     Geometry.SetIndex(Indices);
   CommittedVertices := Coords.Count;
@@ -590,21 +622,40 @@ end;
 
 procedure TMapChunk.EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
   const ZBottom, ZTop: Single; const U0, U1: Single;
-  const TexTopZ: Single; const Img: TDoomImage; const Light: TVector2);
+  const TexTopZ: Single; const Img: TDoomImage; const Light: TVector2;
+  const ScaleX, ScaleY: Single);
 var
   Top: Single;
   VBottom, VTop: Single;
 begin
   Top := Max(ZTop, ZBottom);
-  { Doom texture rows count from the top; X3D v grows upward. }
-  VBottom := 1 - (TexTopZ - ZBottom) / Img.Height;
-  VTop := 1 - (TexTopZ - Top) / Img.Height;
+  { Doom texture rows count from the top; X3D v grows upward. A UDMF
+    scale is texels a map unit (2: the texture half as big). }
+  VBottom := 1 - (TexTopZ - ZBottom) * ScaleY / Img.Height;
+  VTop := 1 - (TexTopZ - Top) * ScaleY / Img.Height;
   B.AddQuad(
     DoomToCge(AX, AY, ZBottom), DoomToCge(BX, BY, ZBottom),
     DoomToCge(BX, BY, Top), DoomToCge(AX, AY, Top),
-    Vector2(U0 / Img.Width, VBottom), Vector2(U1 / Img.Width, VBottom),
-    Vector2(U1 / Img.Width, VTop), Vector2(U0 / Img.Width, VTop),
+    Vector2(U0 * ScaleX / Img.Width, VBottom), Vector2(U1 * ScaleX / Img.Width, VBottom),
+    Vector2(U1 * ScaleX / Img.Width, VTop), Vector2(U0 * ScaleX / Img.Width, VTop),
     Light, TileOf(B, Img));
+end;
+
+procedure TMapChunk.SetLook(const B: TGeomBatch; const Sec: Integer);
+var
+  S: TDoomSector;
+begin
+  S := FOwner.Map.Sectors[Sec];
+  if S.HasColor then
+    B.CurColor := Vector4(S.LightColor, 1)
+  else
+    B.CurColor := Vector4(1, 1, 1, 1);
+  { Denser in darker sectors, like UZDoom's: at light 255 a fifth of
+    the fade colour 300 units away, at 160 two thirds 1000 units away. }
+  if S.HasFade then
+    B.CurFade := Vector4(S.FadeColor, Max(64, 255 - S.LightLevel) / 255 * 0.003)
+  else
+    B.CurFade := TVector4.Zero;
 end;
 
 procedure TMapChunk.EmitLineSide(const Line, Side: Integer);
@@ -619,9 +670,10 @@ var
   U0, U1: Single;
   SwitchLine, DynSide: Integer;
   FloorZ, CeilZ, OFloorZ, OCeilZ: Single;
-  TexTopZ, ZB, ZT, OpenBottom, OpenTop: Single;
+  TexTopZ, ZB, ZT, OpenBottom, OpenTop, MidHeight: Single;
   Passable: Boolean;
   Rate: TVector2;
+  B: TGeomBatch;
 begin
   Map := FOwner.Map;
   L := Map.Linedefs[Line];
@@ -642,7 +694,7 @@ begin
 
   { Doom's "fake contrast": north-south walls a light step brighter,
     east-west ones a step darker. }
-  Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightWall);
+  Light := Vector2(SideLightLevel(Sd, Map.Sectors[Sec].LightLevel), DoomLightWall);
   if VA.Y = VB.Y then Light.Y := DoomLightWall - 1
   else if VA.X = VB.X then Light.Y := DoomLightWall + 1;
 
@@ -666,11 +718,13 @@ begin
     Img := FOwner.Graphics.Texture(Sd.MiddleTex);
     if Img = nil then Exit;
     if (L.Flags and ML_DONTPEGBOTTOM) <> 0 then
-      TexTopZ := FloorZ + Img.Height + Sd.YOffset
+      TexTopZ := FloorZ + Img.Height / ScaleOr1(Sd.PartScaleY[1]) + Sd.YOffset + Sd.PartOffsetY[1]
     else
-      TexTopZ := CeilZ + Sd.YOffset;
-    EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine, 1, stSide, DynSide), VA.X, VA.Y, VB.X, VB.Y,
-      FloorZ, CeilZ, U0, U1, TexTopZ, Img, Light);
+      TexTopZ := CeilZ + Sd.YOffset + Sd.PartOffsetY[1];
+    B := Batch(Img, false, WallScroll(Rate, Img), SwitchLine, 1, stSide, DynSide);
+    SetLook(B, Sec);
+    EmitWall(B, VA.X, VA.Y, VB.X, VB.Y, FloorZ, CeilZ, U0 + Sd.PartOffsetX[1], U1 + Sd.PartOffsetX[1],
+      TexTopZ, Img, Light, ScaleOr1(Sd.PartScaleX[1]), ScaleOr1(Sd.PartScaleY[1]));
     Exit;
   end;
 
@@ -682,13 +736,15 @@ begin
   if Img <> nil then
   begin
     if (L.Flags and ML_DONTPEGBOTTOM) <> 0 then
-      TexTopZ := CeilZ + Sd.YOffset
+      TexTopZ := CeilZ + Sd.YOffset + Sd.PartOffsetY[2]
     else
-      TexTopZ := OFloorZ + Sd.YOffset;
+      TexTopZ := OFloorZ + Sd.YOffset + Sd.PartOffsetY[2];
     ZB := FloorZ;
     ZT := Min(OFloorZ, CeilZ);
-    EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine, 1, stSide, DynSide), VA.X, VA.Y, VB.X, VB.Y,
-      ZB, ZT, U0, U1, TexTopZ, Img, Light);
+    B := Batch(Img, false, WallScroll(Rate, Img), SwitchLine, 1, stSide, DynSide);
+    SetLook(B, Sec);
+    EmitWall(B, VA.X, VA.Y, VB.X, VB.Y, ZB, ZT, U0 + Sd.PartOffsetX[2], U1 + Sd.PartOffsetX[2],
+      TexTopZ, Img, Light, ScaleOr1(Sd.PartScaleX[2]), ScaleOr1(Sd.PartScaleY[2]));
   end;
 
   { Upper wall: from the neighbour's (lower) ceiling up to our ceiling.
@@ -699,13 +755,15 @@ begin
     if Img <> nil then
     begin
       if (L.Flags and ML_DONTPEGTOP) <> 0 then
-        TexTopZ := CeilZ + Sd.YOffset
+        TexTopZ := CeilZ + Sd.YOffset + Sd.PartOffsetY[0]
       else
-        TexTopZ := OCeilZ + Img.Height + Sd.YOffset;
+        TexTopZ := OCeilZ + Img.Height / ScaleOr1(Sd.PartScaleY[0]) + Sd.YOffset + Sd.PartOffsetY[0];
       ZB := Max(OCeilZ, FloorZ);
       ZT := CeilZ;
-      EmitWall(Batch(Img, false, WallScroll(Rate, Img), SwitchLine, 1, stSide, DynSide), VA.X, VA.Y, VB.X, VB.Y,
-        ZB, ZT, U0, U1, TexTopZ, Img, Light);
+      B := Batch(Img, false, WallScroll(Rate, Img), SwitchLine, 1, stSide, DynSide);
+      SetLook(B, Sec);
+      EmitWall(B, VA.X, VA.Y, VB.X, VB.Y, ZB, ZT, U0 + Sd.PartOffsetX[0], U1 + Sd.PartOffsetX[0],
+        TexTopZ, Img, Light, ScaleOr1(Sd.PartScaleX[0]), ScaleOr1(Sd.PartScaleY[0]));
     end;
   end;
 
@@ -716,16 +774,38 @@ begin
   begin
     OpenBottom := Max(FloorZ, OFloorZ);
     OpenTop := Min(CeilZ, OCeilZ);
+    { The texture's height in map units (UDMF scale). }
+    MidHeight := Img.Height / ScaleOr1(Sd.PartScaleY[1]);
     if (L.Flags and ML_DONTPEGBOTTOM) <> 0 then
-      TexTopZ := OpenBottom + Img.Height + Sd.YOffset
+      TexTopZ := OpenBottom + MidHeight + Sd.YOffset + Sd.PartOffsetY[1]
     else
-      TexTopZ := OpenTop + Sd.YOffset;
-    ZB := Max(OpenBottom, TexTopZ - Img.Height);
+      TexTopZ := OpenTop + Sd.YOffset + Sd.PartOffsetY[1];
+    ZB := Max(OpenBottom, TexTopZ - MidHeight);
     ZT := Min(OpenTop, TexTopZ);
     Passable := (L.Flags and ML_BLOCKING) = 0;
-    EmitWall(Batch(Img, Passable, WallScroll(Rate, Img), SwitchLine, Map.LineAlpha[Line], stSide, DynSide), VA.X, VA.Y, VB.X, VB.Y,
-      ZB, ZT, U0, U1, TexTopZ, Img, Light);
+    B := Batch(Img, Passable, WallScroll(Rate, Img), SwitchLine, Map.LineAlpha[Line], stSide, DynSide);
+    SetLook(B, Sec);
+    EmitWall(B, VA.X, VA.Y, VB.X, VB.Y, ZB, ZT, U0 + Sd.PartOffsetX[1], U1 + Sd.PartOffsetX[1],
+      TexTopZ, Img, Light, ScaleOr1(Sd.PartScaleX[1]), ScaleOr1(Sd.PartScaleY[1]));
   end;
+end;
+
+{ A flat's texture coordinates at P (64-unit tiles) with UDMF's
+  rotation (degrees, about the map's origin), panning and scale. }
+function FlatTexCoord(const P: TVector2; const Look: TPlaneLook): TVector2;
+var
+  Q: TVector2;
+  A, C, Sn: Single;
+begin
+  Q := P;
+  if Look.Rotation <> 0 then
+  begin
+    A := DegToRad(Look.Rotation);
+    C := Cos(A);
+    Sn := Sin(A);
+    Q := Vector2(P.X * C + P.Y * Sn, -P.X * Sn + P.Y * C);
+  end;
+  Result := Vector2((Q.X + Look.PanX) * ScaleOr1(Look.ScaleX) / 64, (Q.Y + Look.PanY) * ScaleOr1(Look.ScaleY) / 64);
 end;
 
 procedure TMapChunk.EmitFlats(const Sub: Integer);
@@ -759,21 +839,24 @@ begin
     Img := nil
   else
     Img := FOwner.Graphics.Flat(Map.Sectors[Sec].FloorTex);
-  { Boom's light transfers (213 floor, 261 ceiling): another sector's light. }
+  { Boom's light transfers (213 floor, 261 ceiling): another sector's
+    light; UDMF's lightfloor on top. }
   if Map.FloorLightSector[Sec] >= 0 then
     Light := Vector2(Map.Sectors[Map.FloorLightSector[Sec]].LightLevel, DoomLightPlane)
   else
     Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightPlane);
+  Light.X := PlaneLightLevel(Map.Sectors[Sec].FloorLook, Round(Light.X));
   if Img <> nil then
   begin
     Z := Map.Sectors[Sec].FloorHeight;
     for I := 0 to N - 1 do
     begin
       Pts[I] := DoomToCge(S.Poly[I].X, S.Poly[I].Y, Z);
-      Tex[I] := Vector2(S.Poly[I].X / 64, S.Poly[I].Y / 64);
+      Tex[I] := FlatTexCoord(S.Poly[I], Map.Sectors[Sec].FloorLook);
     end;
     if Map.FloorDynamic[Sec] then DynSec := Sec else DynSec := -1;
     B := Batch(Img, false, FlatScroll(Map.FloorScroll[Sec], Img), -1, 1, stFloor, DynSec);
+    SetLook(B, Sec);
     B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
   end;
 
@@ -800,16 +883,18 @@ begin
       Light := Vector2(Map.Sectors[Map.CeilingLightSector[Sec]].LightLevel, DoomLightPlane)
     else
       Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightPlane);
+    Light.X := PlaneLightLevel(Map.Sectors[Sec].CeilingLook, Round(Light.X));
     if Img <> nil then
     begin
       Z := Map.Sectors[Sec].CeilingHeight;
       for I := 0 to N - 1 do
       begin
         Pts[I] := DoomToCge(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y, Z);
-        Tex[I] := Vector2(S.Poly[N - 1 - I].X / 64, S.Poly[N - 1 - I].Y / 64);
+        Tex[I] := FlatTexCoord(S.Poly[N - 1 - I], Map.Sectors[Sec].CeilingLook);
       end;
       if Map.CeilingDynamic[Sec] then DynSec := Sec else DynSec := -1;
       B := Batch(Img, false, FlatScroll(Map.CeilingScroll[Sec], Img), -1, 1, stCeiling, DynSec);
+      SetLook(B, Sec);
       B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
     end;
   end;

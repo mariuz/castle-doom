@@ -553,6 +553,15 @@ floors get collision triangles in the invisible collision scene.
 
 ### Light diminishing (`DoomLighting`)
 
+(UDMF maps add two per-vertex attributes to the map geometry:
+`doom_color`, the sector's `lightcolor` that multiplies the
+colormapped texel of lit surfaces, and `doom_fade`, its `fadecolor`
+and a fog density from the sector light, mixed in by the eye distance.
+Sprites define them as white / no fog. Binary maps get white and no
+fog, so their pixels do not change. `TMapChunk.SetLook` sets them per
+surface; the UVs take UDMF's per-part offsets and scales and the flats'
+`FlatTexCoord` rotation, panning and scale.)
+
 Doom lights a pixel by choosing one of 32 colormaps from `COLORMAP`
 (r_main.c): the sector light gives `lightnum = light / 16` (+1 / -1 fake
 contrast on walls, + the gun flash's `extralight`), the start colormap is

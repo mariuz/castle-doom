@@ -350,6 +350,12 @@ TESTS = [
       r'Teleport: player to \(1000, -900\) by line 911', r'Things: 210 things spawned, 29 monsters'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf.wad'), '--fixed-step'],
      lambda config: check_udmf(config)),
+    # Rendering stage 1 (docs/RENDERING_ROADMAP.md): UDMF's light colour,
+    # fog, flat rotation / scale and side scale / offset / light.
+    ('udmf-look', 'E1M1', 'Y,G:-280:256,A:180,W:0.3,S,G:-416:256,LOOK:-70,W:0.2,S,LOOK:0,A:0,G:-300:256,W:0.2,S,Q',
+     [r'Map: E1M1: UDMF look: 1 coloured sectors, 1 fogged, 1 placed flats, 2 placed sides, 1 own lights'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-look.wad'), '--fixed-step'],
+     None),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -1055,7 +1061,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-doom_1.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png',
 ]
 
 

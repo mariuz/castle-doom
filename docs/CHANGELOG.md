@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- UZDoom-style looks for UDMF maps (rendering stage 1): coloured sector light (`lightcolor`)
+  and fog (`fadecolor`), texture scaling and offsets per wall part, rotated, scaled and
+  panned floors and ceilings, and light levels per wall side, floor and ceiling.
+
 ## v0.57.0 (2026-10-30)
 
 - UDMF maps, the text map format of maps made for UZDoom / GZDoom: a PWAD whose map has a

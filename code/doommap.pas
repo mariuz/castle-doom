@@ -37,10 +37,29 @@ type
     X, Y: Single;
   end;
 
+  { UDMF's per-part fields: 0 the upper texture, 1 the middle, 2 the lower. }
+  TSidePart = 0..2;
+
   TDoomSidedef = record
     XOffset, YOffset: Integer;
     UpperTex, LowerTex, MiddleTex: String;
     Sector: Integer;
+    { UDMF (UZDoom): offsets added to XOffset / YOffset per part, in map
+      units, and texture scales (texels a map unit; 0 = 1, the default). }
+    PartOffsetX, PartOffsetY, PartScaleX, PartScaleY: array [TSidePart] of Single;
+    { UDMF "light": added to the sector's light, or the light itself when
+      LightAbsolute. }
+    Light: Integer;
+    LightAbsolute: Boolean;
+  end;
+
+  { A floor or ceiling's UDMF texture placement (panning in map units,
+    scale with 0 = 1, rotation in degrees) and light ("lightfloor":
+    added to the sector's, or the light itself when absolute). }
+  TPlaneLook = record
+    PanX, PanY, ScaleX, ScaleY, Rotation: Single;
+    Light: Integer;
+    LightAbsolute: Boolean;
   end;
 
   TDoomLinedef = record
@@ -76,6 +95,12 @@ type
     { Runtime: active mover (door, lift...) owned by the world. }
     Mover: TObject;
     SecretFound: Boolean;
+    { UDMF: the floor's and ceiling's texture placement and light. }
+    FloorLook, CeilingLook: TPlaneLook;
+    { UDMF "lightcolor" (multiplies the light) and "fadecolor" (fog), as
+      0..1 RGB; HasColor / HasFade false = white light, no fog. }
+    HasColor, HasFade: Boolean;
+    LightColor, FadeColor: TVector3;
   end;
 
   TDoomThing = record
@@ -172,6 +197,7 @@ type
     FNodesStale: Boolean;
     procedure LoadUdmf(const MarkerIndex: Integer);
     procedure BuildNodes;
+    procedure LogUdmfLook;
     procedure ResolveUdmfLinks;
     procedure BuildLineGrid;
     procedure NextMark;
@@ -321,6 +347,13 @@ const
   NodeSubsector = $40000000;
   NodeIndexMask = $3FFFFFFF;
 
+{ UDMF's light on a wall side or a floor / ceiling from the sector's
+  current SectorLight (0..255). }
+function SideLightLevel(const Side: TDoomSidedef; const SectorLight: Integer): Integer;
+function PlaneLightLevel(const Look: TPlaneLook; const SectorLight: Integer): Integer;
+{ A UDMF scale: 0 (not set, e.g. a binary map) means 1. }
+function ScaleOr1(const S: Single): Single;
+
 implementation
 
 uses Math, ZStream, CastleLog, CastleUtils, DoomUdmf, DoomNodeBuilder;
@@ -384,6 +417,29 @@ begin
   for I := 0 to N - 1 do
     Result := Result + Poly[I].X * Poly[(I + 1) mod N].Y - Poly[(I + 1) mod N].X * Poly[I].Y;
   Result := Result * 0.5;
+end;
+
+function SideLightLevel(const Side: TDoomSidedef; const SectorLight: Integer): Integer;
+begin
+  if Side.LightAbsolute then
+    Result := Side.Light
+  else
+    Result := SectorLight + Side.Light;
+  Result := Max(0, Min(255, Result));
+end;
+
+function PlaneLightLevel(const Look: TPlaneLook; const SectorLight: Integer): Integer;
+begin
+  if Look.LightAbsolute then
+    Result := Look.Light
+  else
+    Result := SectorLight + Look.Light;
+  Result := Max(0, Min(255, Result));
+end;
+
+function ScaleOr1(const S: Single): Single;
+begin
+  if S = 0 then Result := 1 else Result := S;
 end;
 
 { TDoomMap ------------------------------------------------------------------- }
@@ -594,6 +650,9 @@ var
   Args: array [0..4] of Integer;
   Unsupported: TStringList;
   P: PByte;
+  Part: TSidePart;
+const
+  PartNames: array [TSidePart] of String = ('top', 'mid', 'bottom');
 
   procedure Flag(const Key: String; const Bit: Integer);
   begin
@@ -611,6 +670,23 @@ var
   begin
     Result := UpperCase(UdmfStr(B^, Key, '-'));
     if Result = '' then Result := '-';
+  end;
+
+  { "xpanningfloor", "xscalefloor", "rotationfloor", "lightfloor"... }
+  procedure Plane(var Look: TPlaneLook; const Which: String);
+  begin
+    Look.PanX := UdmfFloat(B^, 'xpanning' + Which);
+    Look.PanY := UdmfFloat(B^, 'ypanning' + Which);
+    Look.ScaleX := UdmfFloat(B^, 'xscale' + Which, 1);
+    Look.ScaleY := UdmfFloat(B^, 'yscale' + Which, 1);
+    Look.Rotation := UdmfFloat(B^, 'rotation' + Which);
+    Look.Light := UdmfInt(B^, 'light' + Which);
+    Look.LightAbsolute := UdmfBool(B^, 'light' + Which + 'absolute');
+  end;
+
+  function ColorOf(const C: Integer): TVector3;
+  begin
+    Result := Vector3(((C shr 16) and 255) / 255, ((C shr 8) and 255) / 255, (C and 255) / 255);
   end;
 
 begin
@@ -686,6 +762,18 @@ begin
         if UdmfBool(B^, 'secret') then
           Sectors[NSec].Special := Sectors[NSec].Special or 128;
         Sectors[NSec].Tag := UdmfInt(B^, 'id');
+        Plane(Sectors[NSec].FloorLook, 'floor');
+        Plane(Sectors[NSec].CeilingLook, 'ceiling');
+        if UdmfHas(B^, 'lightcolor') then
+        begin
+          Sectors[NSec].LightColor := ColorOf(UdmfInt(B^, 'lightcolor'));
+          Sectors[NSec].HasColor := not TVector3.PerfectlyEquals(Sectors[NSec].LightColor, Vector3(1, 1, 1));
+        end;
+        if UdmfHas(B^, 'fadecolor') and (UdmfInt(B^, 'fadecolor') <> 0) then
+        begin
+          Sectors[NSec].FadeColor := ColorOf(UdmfInt(B^, 'fadecolor'));
+          Sectors[NSec].HasFade := true;
+        end;
         Inc(NSec);
       end else
       if Kind = 'sidedef' then
@@ -696,6 +784,15 @@ begin
         Sidedefs[NS].LowerTex := Tex('texturebottom');
         Sidedefs[NS].MiddleTex := Tex('texturemiddle');
         Sidedefs[NS].Sector := UdmfInt(B^, 'sector');
+        for Part := Low(TSidePart) to High(TSidePart) do
+        begin
+          Sidedefs[NS].PartOffsetX[Part] := UdmfFloat(B^, 'offsetx_' + PartNames[Part]);
+          Sidedefs[NS].PartOffsetY[Part] := UdmfFloat(B^, 'offsety_' + PartNames[Part]);
+          Sidedefs[NS].PartScaleX[Part] := UdmfFloat(B^, 'scalex_' + PartNames[Part], 1);
+          Sidedefs[NS].PartScaleY[Part] := UdmfFloat(B^, 'scaley_' + PartNames[Part], 1);
+        end;
+        Sidedefs[NS].Light := UdmfInt(B^, 'light');
+        Sidedefs[NS].LightAbsolute := UdmfBool(B^, 'lightabsolute');
         Inc(NS);
       end else
       if Kind = 'thing' then
@@ -852,6 +949,7 @@ begin
   WritelnLog('Map', '%s: UDMF, namespace "%s": %d vertices, %d linedefs, %d sidedefs, %d sectors, %d things, %s nodes', [
     FName, FUdmfNamespace, Length(Vertices), Length(Linedefs), Length(Sidedefs), Length(Sectors),
     Length(Things), FNodesFormat]);
+  LogUdmfLook;
   if Hexen then
   begin
     if Unsupported.Count = 0 then
@@ -861,6 +959,47 @@ begin
         FName, Translated, Unsupported.Count, FUdmfSummary]);
   end;
   FreeAndNil(Unsupported);
+end;
+
+{ How many sectors and sides use UDMF's rendering fields, for the log. }
+procedure TDoomMap.LogUdmfLook;
+var
+  I: Integer;
+  Part: TSidePart;
+  Colored, Fogged, Flats, Sides, Lit: Integer;
+
+  function Placed(const Look: TPlaneLook): Boolean;
+  begin
+    Result := (Look.PanX <> 0) or (Look.PanY <> 0) or (ScaleOr1(Look.ScaleX) <> 1) or
+      (ScaleOr1(Look.ScaleY) <> 1) or (Look.Rotation <> 0);
+  end;
+
+begin
+  Colored := 0; Fogged := 0; Flats := 0; Sides := 0; Lit := 0;
+  for I := 0 to High(Sectors) do
+  begin
+    if Sectors[I].HasColor then Inc(Colored);
+    if Sectors[I].HasFade then Inc(Fogged);
+    if Placed(Sectors[I].FloorLook) then Inc(Flats);
+    if Placed(Sectors[I].CeilingLook) then Inc(Flats);
+    if (Sectors[I].FloorLook.Light <> 0) or Sectors[I].FloorLook.LightAbsolute or
+       (Sectors[I].CeilingLook.Light <> 0) or Sectors[I].CeilingLook.LightAbsolute then
+      Inc(Lit);
+  end;
+  for I := 0 to High(Sidedefs) do
+  begin
+    if (Sidedefs[I].Light <> 0) or Sidedefs[I].LightAbsolute then Inc(Lit);
+    for Part := Low(TSidePart) to High(TSidePart) do
+      if (Sidedefs[I].PartOffsetX[Part] <> 0) or (Sidedefs[I].PartOffsetY[Part] <> 0) or
+         (ScaleOr1(Sidedefs[I].PartScaleX[Part]) <> 1) or (ScaleOr1(Sidedefs[I].PartScaleY[Part]) <> 1) then
+      begin
+        Inc(Sides);
+        Break;
+      end;
+  end;
+  if Colored + Fogged + Flats + Sides + Lit > 0 then
+    WritelnLog('Map', '%s: UDMF look: %d coloured sectors, %d fogged, %d placed flats, %d placed sides, %d own lights', [
+      FName, Colored, Fogged, Flats, Sides, Lit]);
 end;
 
 { DoomNodeBuilder's BSP for a map that came without nodes (UDMF): the
