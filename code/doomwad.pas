@@ -253,7 +253,8 @@ begin
   for I := 0 to Count - 1 do
   begin
     Name := DoomName(PByte(@Text[DirPos + I * 16 + 9]));
-    if (Name = 'THINGS') and (Prev <> '') then
+    { THINGS after the marker, or a UDMF map's TEXTMAP. }
+    if ((Name = 'THINGS') or (Name = 'TEXTMAP')) and (Prev <> '') then
       Result.Add(Prev);
     Prev := Name;
   end;
@@ -444,8 +445,8 @@ begin
   for I := 0 to High(FLumps) - 1 do
   begin
     N := FLumps[I].Name;
-    { A map marker is immediately followed by THINGS. }
-    if (FLumps[I + 1].Name = 'THINGS') and
+    { A map marker is immediately followed by THINGS (or TEXTMAP: UDMF). }
+    if ((FLumps[I + 1].Name = 'THINGS') or (FLumps[I + 1].Name = 'TEXTMAP')) and
        ( ((Length(N) = 4) and (N[1] = 'E') and (N[3] = 'M')) or
          ((Length(N) = 5) and (Copy(N, 1, 3) = 'MAP')) ) then
     begin

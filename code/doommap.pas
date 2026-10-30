@@ -53,6 +53,12 @@ type
     Length: Single;
     { Runtime: the switch on this line was already used (for S1/W1 types). }
     Used: Boolean;
+    { UDMF: the line's id (-1 none), and for the world's UdmfSpecial*
+      types (DoomUdmf) their arguments and trigger (a TGenTrigger, + 8
+      when monsters may). }
+    Id: Integer;
+    Args: array [0..4] of Integer;
+    Trigger: Integer;
   end;
 
   TDoomSector = record
@@ -77,6 +83,9 @@ type
     Angle: Integer;
     TypeNum: Integer;
     Flags: Integer;
+    { UDMF: the thing id (TID, 0 none) and the height above the floor. }
+    Tid: Integer;
+    Z: Single;
   end;
 
   TDoomSeg = record
@@ -152,6 +161,18 @@ type
     FCellStart, FCellLines: array of Integer;
     FLineMark: array of Cardinal;
     FMarkStamp: Cardinal;
+    FUdmf: Boolean;
+    FUdmfNamespace: String;
+    FUdmfSummary: String;
+    { UDMF lines' opacity ("alpha", TranslucentLine), 1 = solid. }
+    FUdmfAlpha: array of Single;
+    { UDMF links resolved once the BSP is there: teleports to a thing id,
+      (line, TID) pairs. }
+    FTidTeleports: array of array [0..1] of Integer;
+    FNodesStale: Boolean;
+    procedure LoadUdmf(const MarkerIndex: Integer);
+    procedure BuildNodes;
+    procedure ResolveUdmfLinks;
     procedure BuildLineGrid;
     procedure NextMark;
     procedure AddCellRow(const Row, Col0, Col1: Integer; var Found: TLineList; var Count: Integer);
@@ -290,6 +311,9 @@ type
     { VANILLA, XNOD, ZNOD, XGLN, ZGLN, XGL2, ZGL2, XGL3, ZGL3, or GL_V1,
       GL_V2, GL_V3, GL_V5 (glBSP lumps). }
     property NodesFormat: String read FNodesFormat;
+    { A UDMF map (TEXTMAP), its namespace (lower case). }
+    property Udmf: Boolean read FUdmf;
+    property UdmfNamespace: String read FUdmfNamespace;
   end;
 
 const
@@ -299,7 +323,7 @@ const
 
 implementation
 
-uses Math, ZStream, CastleLog, CastleUtils;
+uses Math, ZStream, CastleLog, CastleUtils, DoomUdmf, DoomNodeBuilder;
 
 type
   TPolyD = array of TVector2Double;
@@ -374,9 +398,13 @@ begin
   Marker := FWad.FindLump(FName);
   if Marker < 0 then
     raise Exception.CreateFmt('Map %s not found in %s', [FName, FWad.Url]);
-  LoadLumps(Marker);
+  if (Marker + 1 < FWad.LumpCount) and (FWad.LumpName(Marker + 1) = 'TEXTMAP') then
+    LoadUdmf(Marker)
+  else
+    LoadLumps(Marker);
   BuildSectorLists;
   BuildSubsectorPolygons;
+  if FUdmf then ResolveUdmfLinks;
   BuildLineGrid;
   BuildScrollers;
   BuildFrictionAndPushers;
@@ -547,6 +575,419 @@ begin
       end else
         LoadVanillaNodes(NodesL, SegsL, SubsL);
     end;
+  end;
+end;
+
+{ A UDMF map (DoomUdmf): the marker, TEXTMAP, maybe ZNODES (ZDoom's GL
+  nodes for this TEXTMAP), REJECT, BLOCKMAP, BEHAVIOR (ACS, not run)...
+  and ENDMAP. Without (current) ZNODES the nodes are built here
+  (DoomNodeBuilder), as UZDoom does. Hexen-namespace specials and sector
+  types are translated to Doom's / Boom's (TranslateHexenLine). }
+procedure TDoomMap.LoadUdmf(const MarkerIndex: Integer);
+var
+  U: TUdmfMap;
+  Text, Kind, NodesMagic: String;
+  I, J, L, NV, NL, NS, NSec, NT, ZNodes, Translated, Act: Integer;
+  B: PUdmfBlock;
+  Hexen: Boolean;
+  H: THexenLine;
+  Args: array [0..4] of Integer;
+  Unsupported: TStringList;
+  P: PByte;
+
+  procedure Flag(const Key: String; const Bit: Integer);
+  begin
+    if UdmfBool(B^, Key) then
+      Linedefs[NL].Flags := Linedefs[NL].Flags or Bit;
+  end;
+
+  procedure Act1(const Key: String; const Bit: Integer);
+  begin
+    if UdmfBool(B^, Key) then
+      Act := Act or Bit;
+  end;
+
+  function Tex(const Key: String): String;
+  begin
+    Result := UpperCase(UdmfStr(B^, Key, '-'));
+    if Result = '' then Result := '-';
+  end;
+
+begin
+  FUdmf := true;
+  L := MarkerIndex + 1;
+  SetLength(Text, FWad.LumpSize(L));
+  if Length(Text) > 0 then
+    Move(FWad.LumpPointer(L)^, Text[1], Length(Text));
+  { The map's other lumps, up to ENDMAP. }
+  ZNodes := -1;
+  SetLength(Reject, 0);
+  for I := L + 1 to FWad.LumpCount - 1 do
+  begin
+    if FWad.LumpName(I) = 'ENDMAP' then Break;
+    if FWad.LumpName(I) = 'ZNODES' then ZNodes := I;
+    if FWad.LumpName(I) = 'REJECT' then J := I else J := -1;
+    if J >= 0 then Reject := FWad.LumpBytes(J);
+  end;
+
+  U := TUdmfMap.Create(Text);
+  Unsupported := TStringList.Create;
+  try
+    if U.Error <> '' then
+      raise Exception.CreateFmt('Map %s: %s', [FName, U.Error]);
+    FUdmfNamespace := U.Namespace;
+    Hexen := U.HexenSpecials;
+    NV := 0; NL := 0; NS := 0; NSec := 0; NT := 0;
+    for I := 0 to U.BlockCount - 1 do
+    begin
+      Kind := U.Blocks[I].Kind;
+      if Kind = 'vertex' then Inc(NV)
+      else if Kind = 'linedef' then Inc(NL)
+      else if Kind = 'sidedef' then Inc(NS)
+      else if Kind = 'sector' then Inc(NSec)
+      else if Kind = 'thing' then Inc(NT);
+    end;
+    SetLength(Vertices, NV);
+    SetLength(Linedefs, NL);
+    SetLength(Sidedefs, NS);
+    SetLength(Sectors, NSec);
+    SetLength(Things, NT);
+    SetLength(FUdmfAlpha, NL);
+    NV := 0; NL := 0; NS := 0; NSec := 0; NT := 0;
+    Translated := 0;
+    MinX := 1e9; MinY := 1e9; MaxX := -1e9; MaxY := -1e9;
+    for I := 0 to U.BlockCount - 1 do
+    begin
+      B := @U.Blocks[I];
+      Kind := B^.Kind;
+      if Kind = 'vertex' then
+      begin
+        Vertices[NV].X := UdmfFloat(B^, 'x');
+        Vertices[NV].Y := UdmfFloat(B^, 'y');
+        MinX := Min(MinX, Vertices[NV].X);
+        MaxX := Max(MaxX, Vertices[NV].X);
+        MinY := Min(MinY, Vertices[NV].Y);
+        MaxY := Max(MaxY, Vertices[NV].Y);
+        Inc(NV);
+      end else
+      if Kind = 'sector' then
+      begin
+        Sectors[NSec].FloorHeight := UdmfFloat(B^, 'heightfloor');
+        Sectors[NSec].CeilingHeight := UdmfFloat(B^, 'heightceiling');
+        Sectors[NSec].OrigFloor := Round(Sectors[NSec].FloorHeight);
+        Sectors[NSec].OrigCeiling := Round(Sectors[NSec].CeilingHeight);
+        Sectors[NSec].FloorTex := UpperCase(UdmfStr(B^, 'texturefloor', '-'));
+        Sectors[NSec].CeilingTex := UpperCase(UdmfStr(B^, 'textureceiling', '-'));
+        Sectors[NSec].OrigLight := UdmfInt(B^, 'lightlevel', 160);
+        Sectors[NSec].LightLevel := Sectors[NSec].OrigLight;
+        Sectors[NSec].Special := UdmfInt(B^, 'special');
+        if Hexen then
+          Sectors[NSec].Special := TranslateZDoomSectorSpecial(Sectors[NSec].Special);
+        if UdmfBool(B^, 'secret') then
+          Sectors[NSec].Special := Sectors[NSec].Special or 128;
+        Sectors[NSec].Tag := UdmfInt(B^, 'id');
+        Inc(NSec);
+      end else
+      if Kind = 'sidedef' then
+      begin
+        Sidedefs[NS].XOffset := UdmfInt(B^, 'offsetx');
+        Sidedefs[NS].YOffset := UdmfInt(B^, 'offsety');
+        Sidedefs[NS].UpperTex := Tex('texturetop');
+        Sidedefs[NS].LowerTex := Tex('texturebottom');
+        Sidedefs[NS].MiddleTex := Tex('texturemiddle');
+        Sidedefs[NS].Sector := UdmfInt(B^, 'sector');
+        Inc(NS);
+      end else
+      if Kind = 'thing' then
+      begin
+        Things[NT].X := UdmfFloat(B^, 'x');
+        Things[NT].Y := UdmfFloat(B^, 'y');
+        Things[NT].Z := UdmfFloat(B^, 'height');
+        Things[NT].Angle := UdmfInt(B^, 'angle');
+        Things[NT].TypeNum := UdmfInt(B^, 'type');
+        { ZDoom's teleport destinations with a height. }
+        if (Things[NT].TypeNum = 9043) or (Things[NT].TypeNum = 9044) then
+          Things[NT].TypeNum := 14;
+        Things[NT].Tid := UdmfInt(B^, 'id');
+        Things[NT].Flags := 0;
+        if UdmfBool(B^, 'skill1') or UdmfBool(B^, 'skill2') then
+          Things[NT].Flags := Things[NT].Flags or MTF_EASY;
+        if UdmfBool(B^, 'skill3') then
+          Things[NT].Flags := Things[NT].Flags or MTF_NORMAL;
+        if UdmfBool(B^, 'skill4') or UdmfBool(B^, 'skill5') then
+          Things[NT].Flags := Things[NT].Flags or MTF_HARD;
+        if UdmfBool(B^, 'ambush') then
+          Things[NT].Flags := Things[NT].Flags or MTF_AMBUSH;
+        if not UdmfBool(B^, 'single') then
+          Things[NT].Flags := Things[NT].Flags or MTF_NOTSINGLE;
+        Inc(NT);
+      end else
+      if Kind = 'linedef' then
+      begin
+        Linedefs[NL] := Default(TDoomLinedef);
+        Linedefs[NL].V1 := UdmfInt(B^, 'v1');
+        Linedefs[NL].V2 := UdmfInt(B^, 'v2');
+        Linedefs[NL].Side[0] := UdmfInt(B^, 'sidefront', -1);
+        Linedefs[NL].Side[1] := UdmfInt(B^, 'sideback', -1);
+        Linedefs[NL].Id := UdmfInt(B^, 'id', -1);
+        Flag('blocking', ML_BLOCKING);
+        Flag('blockmonsters', ML_BLOCKMONSTERS);
+        Flag('twosided', ML_TWOSIDED);
+        Flag('dontpegtop', ML_DONTPEGTOP);
+        Flag('dontpegbottom', ML_DONTPEGBOTTOM);
+        Flag('secret', ML_SECRET);
+        Flag('blocksound', ML_SOUNDBLOCK);
+        Flag('dontdraw', ML_DONTDRAW);
+        Flag('mapped', ML_MAPPED);
+        Flag('passuse', 512);
+        FUdmfAlpha[NL] := 1;
+        if UdmfHas(B^, 'alpha') then
+          FUdmfAlpha[NL] := Max(0.0, Min(1.0, UdmfFloat(B^, 'alpha', 1)))
+        else if UdmfBool(B^, 'translucent') then
+          FUdmfAlpha[NL] := 0.75;
+        if Hexen then
+        begin
+          for J := 0 to 4 do
+            Args[J] := UdmfInt(B^, 'arg' + IntToStr(J));
+          Act := 0;
+          Act1('playercross', UaPlayerCross);
+          Act1('playeruse', UaPlayerUse);
+          Act1('monstercross', UaMonsterCross);
+          Act1('monsteruse', UaMonsterUse);
+          Act1('impact', UaImpact);
+          Act1('playerpush', UaPlayerPush);
+          Act1('monsterpush', UaMonsterPush);
+          Act1('missilecross', UaMissileCross);
+          Act1('repeatspecial', UaRepeat);
+          H := TranslateHexenLine(UdmfInt(B^, 'special'), Args, Act);
+          Linedefs[NL].Special := H.Special;
+          Linedefs[NL].Tag := H.Tag;
+          for J := 0 to 4 do
+            Linedefs[NL].Args[J] := H.Args[J];
+          Linedefs[NL].Trigger := H.Trigger;
+          if H.Special <> 0 then Inc(Translated);
+          if H.Unsupported <> '' then
+            Unsupported.Add(H.Unsupported);
+          if H.TeleportTid <> 0 then
+          begin
+            SetLength(FTidTeleports, Length(FTidTeleports) + 1);
+            FTidTeleports[High(FTidTeleports)][0] := NL;
+            FTidTeleports[High(FTidTeleports)][1] := H.TeleportTid;
+          end;
+          if H.TranslucentId <> 0 then
+          begin
+            if H.TranslucentId < 0 then
+              FUdmfAlpha[NL] := H.Alpha
+            else
+              { Lines read so far; ResolveUdmfLinks does all of them. }
+              Linedefs[NL].Args[4] := Round(H.Alpha * 255);
+            Linedefs[NL].Args[3] := H.TranslucentId;
+          end;
+        end else
+        begin
+          { Doom's numbers; the id is the tag. }
+          Linedefs[NL].Special := UdmfInt(B^, 'special');
+          Linedefs[NL].Tag := Max(0, Linedefs[NL].Id);
+        end;
+        Inc(NL);
+      end;
+    end;
+  except
+    FreeAndNil(U);
+    FreeAndNil(Unsupported);
+    raise;
+  end;
+  FreeAndNil(U);
+
+  for I := 0 to High(Sidedefs) do
+    if (Sidedefs[I].Sector < 0) or (Sidedefs[I].Sector >= Length(Sectors)) then
+      Sidedefs[I].Sector := 0;
+  for I := 0 to High(Linedefs) do
+  begin
+    if (Linedefs[I].Side[0] < 0) or (Linedefs[I].Side[0] >= Length(Sidedefs)) then Linedefs[I].Side[0] := -1;
+    if (Linedefs[I].Side[1] < 0) or (Linedefs[I].Side[1] >= Length(Sidedefs)) then Linedefs[I].Side[1] := -1;
+    if (Linedefs[I].V1 < 0) or (Linedefs[I].V1 >= Length(Vertices)) then Linedefs[I].V1 := 0;
+    if (Linedefs[I].V2 < 0) or (Linedefs[I].V2 >= Length(Vertices)) then Linedefs[I].V2 := 0;
+    Linedefs[I].FrontSector := SideSector(I, 0);
+    Linedefs[I].BackSector := SideSector(I, 1);
+    Linedefs[I].Length := Sqrt(Sqr(Vertices[Linedefs[I].V2].X - Vertices[Linedefs[I].V1].X) +
+      Sqr(Vertices[Linedefs[I].V2].Y - Vertices[Linedefs[I].V1].Y));
+  end;
+  if Length(Reject) <> (Int64(Length(Sectors)) * Length(Sectors) + 7) div 8 then
+    SetLength(Reject, 0);
+
+  { The nodes: ZDoom's GL nodes in ZNODES, else built here. }
+  NodesMagic := '';
+  if (ZNodes >= 0) and (FWad.LumpSize(ZNodes) >= 4) then
+  begin
+    P := FWad.LumpPointer(ZNodes);
+    NodesMagic := Chr(P[0]) + Chr(P[1]) + Chr(P[2]) + Chr(P[3]);
+  end;
+  FNodesStale := false;
+  if (NodesMagic = 'XGLN') or (NodesMagic = 'ZGLN') or (NodesMagic = 'XGL2') or (NodesMagic = 'ZGL2') or
+     (NodesMagic = 'XGL3') or (NodesMagic = 'ZGL3') or (NodesMagic = 'XNOD') or (NodesMagic = 'ZNOD') then
+  begin
+    LoadExtendedNodes(FWad.LumpPointer(ZNodes), FWad.LumpSize(ZNodes), NodesMagic);
+    if FNodesStale then
+    begin
+      WritelnLog('Map', '%s: ZNODES do not match the TEXTMAP, building new nodes', [FName]);
+      SetLength(Vertices, NV);
+      BuildNodes;
+    end;
+  end else
+    BuildNodes;
+
+  Unsupported.Sort;
+  FUdmfSummary := '';
+  I := 0;
+  while I < Unsupported.Count do
+  begin
+    J := I;
+    while (J + 1 < Unsupported.Count) and (Unsupported[J + 1] = Unsupported[I]) do Inc(J);
+    if FUdmfSummary <> '' then FUdmfSummary := FUdmfSummary + ', ';
+    FUdmfSummary := FUdmfSummary + Unsupported[I];
+    if J > I then FUdmfSummary := FUdmfSummary + Format(' x%d', [J - I + 1]);
+    I := J + 1;
+  end;
+  WritelnLog('Map', '%s: UDMF, namespace "%s": %d vertices, %d linedefs, %d sidedefs, %d sectors, %d things, %s nodes', [
+    FName, FUdmfNamespace, Length(Vertices), Length(Linedefs), Length(Sidedefs), Length(Sectors),
+    Length(Things), FNodesFormat]);
+  if Hexen then
+  begin
+    if Unsupported.Count = 0 then
+      WritelnLog('Map', '%s: %d Hexen-style line specials translated', [FName, Translated])
+    else
+      WritelnLog('Map', '%s: %d Hexen-style line specials translated, %d not supported: %s', [
+        FName, Translated, Unsupported.Count, FUdmfSummary]);
+  end;
+  FreeAndNil(Unsupported);
+end;
+
+{ DoomNodeBuilder's BSP for a map that came without nodes (UDMF): the
+  vertices go in rounded (the builder's are whole units), the split
+  points are appended after the map's own. }
+procedure TDoomMap.BuildNodes;
+var
+  B: TNodeBuilder;
+  NbVerts: TNbVertexArray;
+  NbLines: TNbLineArray;
+  SideSectors: array of Integer;
+  I, K, N, Base, C: Integer;
+begin
+  SetLength(NbVerts, Length(Vertices));
+  for I := 0 to High(Vertices) do
+  begin
+    NbVerts[I].X := Round(Vertices[I].X);
+    NbVerts[I].Y := Round(Vertices[I].Y);
+  end;
+  SetLength(NbLines, Length(Linedefs));
+  for I := 0 to High(Linedefs) do
+  begin
+    NbLines[I].V1 := Linedefs[I].V1;
+    NbLines[I].V2 := Linedefs[I].V2;
+    NbLines[I].Side[0] := Linedefs[I].Side[0];
+    NbLines[I].Side[1] := Linedefs[I].Side[1];
+  end;
+  SetLength(SideSectors, Length(Sidedefs));
+  for I := 0 to High(Sidedefs) do
+    SideSectors[I] := Sidedefs[I].Sector;
+  B := TNodeBuilder.Create;
+  try
+    B.Run(NbVerts, NbLines, SideSectors);
+    Base := Length(Vertices);
+    SetLength(Vertices, Length(B.Vertices));
+    for I := Base to High(B.Vertices) do
+    begin
+      Vertices[I].X := B.Vertices[I].X;
+      Vertices[I].Y := B.Vertices[I].Y;
+    end;
+    SetLength(Segs, Length(B.Segs));
+    for I := 0 to High(B.Segs) do
+    begin
+      Segs[I].V1 := B.Segs[I].V1;
+      Segs[I].V2 := B.Segs[I].V2;
+      Segs[I].Angle := B.Segs[I].Angle;
+      Segs[I].Linedef := B.Segs[I].Line;
+      Segs[I].Side := B.Segs[I].Side;
+      Segs[I].Offset := B.Segs[I].Offset;
+    end;
+    SetLength(Subsectors, Length(B.Subsectors));
+    for I := 0 to High(B.Subsectors) do
+    begin
+      Subsectors[I].SegCount := B.Subsectors[I].Count;
+      Subsectors[I].FirstSeg := B.Subsectors[I].First;
+      Subsectors[I].Sector := -1;
+    end;
+    { The builder's root is node 0; Doom's is the last. }
+    N := Length(B.Nodes);
+    SetLength(Nodes, N);
+    for I := 0 to N - 1 do
+    begin
+      Nodes[N - 1 - I].X := B.Nodes[I].X;
+      Nodes[N - 1 - I].Y := B.Nodes[I].Y;
+      Nodes[N - 1 - I].DX := B.Nodes[I].DX;
+      Nodes[N - 1 - I].DY := B.Nodes[I].DY;
+      for K := 0 to 1 do
+      begin
+        C := B.Nodes[I].Child[K];
+        if C >= 0 then
+          Nodes[N - 1 - I].Children[K] := N - 1 - C
+        else
+          Nodes[N - 1 - I].Children[K] := (-1 - C) or NodeSubsector;
+      end;
+    end;
+    FNodesFormat := 'BUILT';
+    WritelnLog('Map', '%s: nodes built: %d segs (%d split), %d subsectors, %d nodes', [
+      FName, Length(Segs), B.SplitCount, Length(Subsectors), Length(Nodes)]);
+  finally
+    FreeAndNil(B);
+  end;
+end;
+
+{ What UDMF lines point at by id: teleport destinations by thing id
+  (their sector gets a tag the line uses), Teleport_Line's other line,
+  TranslucentLine's lines. }
+procedure TDoomMap.ResolveUdmfLinks;
+var
+  I, J, K, Line, Tid, Sec, NewTag, Id: Integer;
+begin
+  NewTag := 0;
+  for I := 0 to High(Sectors) do
+    NewTag := Max(NewTag, Sectors[I].Tag);
+  for I := 0 to High(Linedefs) do
+    NewTag := Max(NewTag, Linedefs[I].Tag);
+  for K := 0 to High(FTidTeleports) do
+  begin
+    Line := FTidTeleports[K][0];
+    Tid := FTidTeleports[K][1];
+    for J := 0 to High(Things) do
+      if (Things[J].Tid = Tid) and (Things[J].TypeNum = 14) then
+      begin
+        Sec := SectorAt(Things[J].X, Things[J].Y);
+        if Sec < 0 then Break;
+        if Sectors[Sec].Tag = 0 then
+        begin
+          Inc(NewTag);
+          Sectors[Sec].Tag := NewTag;
+        end;
+        Linedefs[Line].Tag := Sectors[Sec].Tag;
+        Break;
+      end;
+  end;
+  for I := 0 to High(Linedefs) do
+  begin
+    { Teleport_Line: the destination line carries the same tag. }
+    if ((Linedefs[I].Special = 243) or (Linedefs[I].Special = 244) or (Linedefs[I].Special = 262) or
+        (Linedefs[I].Special = 263)) and (Linedefs[I].Tag <> 0) then
+      for J := 0 to High(Linedefs) do
+        if (J <> I) and (Linedefs[J].Id = Linedefs[I].Tag) and (Linedefs[J].Tag = 0) then
+          Linedefs[J].Tag := Linedefs[I].Tag;
+    { TranslucentLine by id: Args[3] the id, Args[4] the opacity x 255. }
+    Id := Linedefs[I].Args[3];
+    if (Linedefs[I].Special = 0) and (Id > 0) and (Linedefs[I].Args[4] > 0) then
+      for J := 0 to High(Linedefs) do
+        if Linedefs[J].Id = Id then
+          FUdmfAlpha[J] := Linedefs[I].Args[4] / 255;
   end;
 end;
 
@@ -726,6 +1167,12 @@ begin
 
   { Vertices }
   OrgVerts := U32;
+  { UDMF's ZNODES made for another TEXTMAP: build new nodes instead. }
+  if FUdmf and (OrgVerts <> Length(Vertices)) then
+  begin
+    FNodesStale := true;
+    Exit;
+  end;
   NewVerts := U32;
   Base := Length(Vertices);
   SetLength(Vertices, Base + NewVerts);
@@ -1485,6 +1932,10 @@ begin
         if Linedefs[J].Tag = Linedefs[I].Tag then
           LineAlpha[J] := Alpha;
   end;
+  { UDMF's "alpha" and TranslucentLine. }
+  for I := 0 to Min(High(FUdmfAlpha), High(LineAlpha)) do
+    if FUdmfAlpha[I] < LineAlpha[I] then
+      LineAlpha[I] := FUdmfAlpha[I];
   for I := 0 to High(LineAlpha) do
     if LineAlpha[I] < 1 then Inc(TranslucentLines);
   if TranslucentLines > 0 then
@@ -1698,6 +2149,8 @@ begin
       Continue;
     case Special of
       48: AddSide(Linedefs[I].Side[0], Vector2(1, 0));
+      UdmfScrollWall:
+        AddSide(Linedefs[I].Side[0], Vector2(Linedefs[I].Args[0] / 64, Linedefs[I].Args[1] / 64));
       85: AddSide(Linedefs[I].Side[0], Vector2(-1, 0));
       250, 251, 252, 253:
         begin

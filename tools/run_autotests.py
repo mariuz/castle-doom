@@ -337,6 +337,24 @@ TESTS = [
      lambda config: check_boom_extended(config)),
     ('boom-teleport', 'MAP07', 'Y,A:30,W:0.3,LINE:941:209,W:0.5,Q',
      [r'Teleport: player silently to \(1528, 536\), angle 75'], [], None),
+    # UDMF (tools/make_udmf_wad.py): E1M1 in the zdoom namespace with
+    # Hexen actions and no nodes (built), then in the doom namespace with
+    # ZNODES; both look like the vanilla map.
+    ('udmf', 'E1M1',
+     'Y,W:0.3,S,LINE:829,LINE:1045,W:2,SAVE:1,G:480:712,A:0,U,W:1.5,S,LINE:911,W:0.3,SAVE:2,Q',
+     [r'Map: E1M1: UDMF, namespace "zdoom": 1311 vertices, 1175 linedefs, 1829 sidedefs, 182 sectors, '
+      r'293 things, BUILT nodes',
+      r'Map: E1M1: 46 Hexen-style line specials translated, 1 not supported: ACS_Execute',
+      r'Udmf: line 829: floor by value, tag 9, 8, 40', r'Udmf: line 1045: light to value, tag 9, 200',
+      r'Generalized: line 537: door open, wait, close, delay 150 tics, slow, DR, monsters too',
+      r'Teleport: player to \(1000, -900\) by line 911', r'Things: 210 things spawned, 29 monsters'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf.wad'), '--fixed-step'],
+     lambda config: check_udmf(config)),
+    ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
+     [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
+      r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-doom.wad'), '--fixed-step'],
+     None),
     ('friction', 'E1M1',
      'Y,G:-480:256,A:0,W:0.2,F:1.5,SAVE:1,W:1.5,SAVE:2,G:-224:200,A:90,W:0.2,SAVE:3,F:1,SAVE:4,Q',
      [r'Map: E1M1: 2 friction lines, 2 pushers'],
@@ -575,6 +593,17 @@ def check_generalized(config):
     assert s[5]['sectorCeiling'][77] > -128, 'W1 door 77 not opening'
     kinds = sorted((m['sector'], m['kind'], m['perpetual']) for m in s[6]['movers'] if m['sector'] in (103, 145))
     assert kinds == [(103, 4, True), (145, 1, True)], 'crusher / perpetual lift %s' % kinds
+
+
+def check_udmf(config):
+    """tools/testdata/udmf.wad: Floor_RaiseByValue(9, 8, 40) and
+    Light_ChangeToValue(9, 200) on sector 141; Teleport(5, 0) to the
+    destination with thing id 5."""
+    a, b = save_json(config, 1), save_json(config, 2)
+    assert a['sectorFloor'][141] == 40, 'floor %s' % a['sectorFloor'][141]
+    assert a['sectorLight'][141] == 200, 'light %s' % a['sectorLight'][141]
+    assert (round(b['player']['x']), round(b['player']['y'])) == (1000, -900), \
+        'not teleported: (%s, %s)' % (b['player']['x'], b['player']['y'])
 
 
 def check_carry(config):
@@ -1026,6 +1055,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-doom_1.png',
 ]
 
 

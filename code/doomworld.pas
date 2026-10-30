@@ -13,7 +13,7 @@ interface
 uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
   DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting, DoomStates,
-  DoomGeneralized, DoomDemo;
+  DoomGeneralized, DoomDemo, DoomUdmf;
 
 const
   TicRate = 35;
@@ -385,6 +385,11 @@ type
     function UseSpecialLine(const Line, Side: Integer; const ByMonster: Boolean): Boolean;
     function CrossSpecialLine(const Line, Side: Integer): Boolean;
     function ShootSpecialLine(const Line: Integer): Boolean;
+    { A line a shot sets off: vanilla's G1 / GR types, Boom's generalized
+      and UDMF's ones with a G trigger. }
+    function IsGunLine(const Line: Integer): Boolean;
+    { The UdmfSpecial* types (doomworld_udmf.inc). }
+    function ApplyUdmfSpecial(const Line: Integer; const Activation: TActivation; const ByMonster: Boolean): Boolean;
     function ApplySpecial(const Line: Integer; const Activation: TActivation; const ByMonster: Boolean): Boolean;
     { Speed 0: the vanilla speed (Blaze: 4x); a faster one plays the
       blazing door sounds. }
@@ -4355,7 +4360,7 @@ begin
           NX := A.DoomX + A.VelX * Max(0, T - 0.1);
           NY := A.DoomY + A.VelY * Max(0, T - 0.1);
           { Shooting a gun-activated line. }
-          if L.Special in [24, 46, 47, 197, 198] then ShootSpecialLine(I);
+          if IsGunLine(I) then ShootSpecialLine(I);
           Break;
         end;
     end;
@@ -5114,7 +5119,7 @@ begin
   begin
     I := Found[K];
     L := FMap.Linedefs[I];
-    if not (L.Special in [24, 46, 47, 197, 198]) then Continue;
+    if not IsGunLine(I) then Continue;
     V1 := FMap.Vertices[L.V1];
     V2 := FMap.Vertices[L.V2];
     if SegmentsIntersect(Player.X, Player.Y, EX, EY, V1.X, V1.Y, V2.X, V2.Y, T) then
@@ -5660,6 +5665,17 @@ begin
   if ((FMap.Linedefs[Line].Special in [39, 97, 207, 208, 243, 244]) or (FMap.Linedefs[Line].Special = 262) or
       (FMap.Linedefs[Line].Special = 263)) and (Side <> 0) then Exit(false);
   Result := ApplySpecial(Line, acCross, false);
+end;
+
+function TDoomWorld.IsGunLine(const Line: Integer): Boolean;
+var
+  Special: Integer;
+begin
+  Special := FMap.Linedefs[Line].Special;
+  if Special in [24, 46, 47, 197, 198] then Exit(true);
+  if IsGeneralized(Special) then
+    Exit(DecodeGeneralized(Special).Trigger in [gtG1, gtGR]);
+  Result := (Special >= UdmfSpecialBase) and ((FMap.Linedefs[Line].Trigger and 7) in [4, 5]);
 end;
 
 function TDoomWorld.ShootSpecialLine(const Line: Integer): Boolean;
@@ -6311,6 +6327,7 @@ begin
         FActors.Add(Fog);
         FThingsGroup.Add(Fog);
         FSounds.Play('DSTELEPT');
+        WritelnLog('Teleport', 'player to (%.0f, %.0f) by line %d', [Player.X, Player.Y, Line]);
         Exit;
       end;
   until false;
@@ -6457,6 +6474,8 @@ begin
   Back := FMap.Linedefs[Line].BackSector;
   Front := FMap.Linedefs[Line].FrontSector;
   if Special = 0 then Exit;
+  if Special >= UdmfSpecialBase then
+    Exit(ApplyUdmfSpecial(Line, Activation, ByMonster));
   if IsGeneralized(Special) then
     Exit(ApplyGeneralized(Line, Activation, ByMonster));
   Done := false;
@@ -6680,6 +6699,7 @@ end;
 
 {$I doomworld_save.inc}
 {$I doomworld_generalized.inc}
+{$I doomworld_udmf.inc}
 
 initialization
   InitEffectInfos;

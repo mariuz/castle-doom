@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf;
 
 function DataPath(const Name: String): String;
 begin
@@ -65,6 +65,7 @@ type
     procedure TestLineGrid;
     procedure TestGeneralized;
     procedure TestScrollers;
+    procedure TestUdmf;
     procedure TestDynScrollers;
     procedure TestDeepWater;
     procedure TestSectorSkies;
@@ -945,6 +946,152 @@ begin
       AssertEquals('carry is the floor rate times CARRYFACTOR',
         M.DynScrollers[Floor].Rate.Length * 0.1875, M.DynScrollers[Carry].Rate.Length, 1e-4);
       AssertEquals('no constant floor scroll', 0, M.FloorScroll[141].Length, 1e-6);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ DoomUdmf: the TEXTMAP parser (comments, strings, hex, a broken text
+  refused without an exception), Hexen actions and ZDoom sector types
+  translated to Doom's / Boom's, and Freedoom's E1M1 as UDMF
+  (tools/make_udmf_wad.py): in the zdoom namespace without nodes (built
+  here) and in the doom namespace with ZNODES, the same map as the
+  vanilla one. }
+procedure TTestMap.TestUdmf;
+const
+  Text = 'namespace = "ZDoom"; // a comment' + LineEnding +
+    '/* block' + LineEnding + 'comment */' + LineEnding +
+    'vertex { x = 1.5; y = -0x10; }' + LineEnding +
+    'linedef { v1 = 0; v2 = 1; blocking = true; comment = "say \"hi\""; }';
+var
+  U: TUdmfMap;
+  H: THexenLine;
+  G: TGenLine;
+  W: TDoomWad;
+  M: TDoomMap;
+  Dir: String;
+  I, Specials: Integer;
+begin
+  U := TUdmfMap.Create(Text);
+  try
+    AssertEquals('no error', '', U.Error);
+    AssertEquals('namespace', 'zdoom', U.Namespace);
+    AssertTrue('hexen specials', U.HexenSpecials);
+    AssertEquals('blocks', 2, U.BlockCount);
+    AssertEquals('kind', 'vertex', U.Blocks[0].Kind);
+    AssertTrue('float', UdmfFloat(U.Blocks[0], 'x') = 1.5);
+    AssertEquals('hex', -16, UdmfInt(U.Blocks[0], 'y'));
+    AssertTrue('bool', UdmfBool(U.Blocks[1], 'blocking'));
+    AssertEquals('escaped string', 'say "hi"', UdmfStr(U.Blocks[1], 'comment'));
+    AssertEquals('default', 7, UdmfInt(U.Blocks[1], 'sideback', 7));
+  finally
+    FreeAndNil(U);
+  end;
+  U := TUdmfMap.Create('namespace = "doom";' + LineEnding + 'vertex { x = 1 }');
+  try
+    AssertTrue('error: ' + U.Error, Pos('line 2', U.Error) > 0);
+    AssertFalse('doom specials', U.HexenSpecials);
+  finally
+    FreeAndNil(U);
+  end;
+
+  { Doors: Doom's 1 is Door_Raise(0, 16, 150), used by players and monsters. }
+  H := TranslateHexenLine(12, [0, 16, 150], UaPlayerUse or UaMonsterUse or UaRepeat);
+  G := DecodeGeneralized(H.Special);
+  AssertTrue('door', G.Kind = gkDoor);
+  AssertTrue('door DR', G.Trigger = gtDR);
+  AssertTrue('door slow', G.Speed = gsSlow);
+  AssertEquals('door delay', 150, G.DelayTics);
+  AssertTrue('door monsters', G.Monster);
+  G := DecodeGeneralized(TranslateHexenLine(13, [4, 64, 0, 2], UaPlayerUse).Special);
+  AssertTrue('locked blue door, open', (G.Kind = gkLockedDoor) and (G.Key = gkyBlueCard) and
+    (G.DoorKind = gdOpen) and (G.Trigger = gtS1) and (G.Speed = gsFast));
+  { Lifts, floors. }
+  H := TranslateHexenLine(62, [3, 32, 105], UaPlayerCross or UaMonsterCross or UaRepeat);
+  G := DecodeGeneralized(H.Special);
+  AssertTrue('lift', (G.Kind = gkLift) and (G.Trigger = gtWR) and (G.Speed = gsNormal) and
+    (G.DelayTics = 105) and G.Monster);
+  AssertEquals('lift tag', 3, H.Tag);
+  G := DecodeGeneralized(TranslateHexenLine(21, [5, 8], UaPlayerUse).Special);
+  AssertTrue('floor down to lowest', (G.Kind = gkFloor) and (not G.Up) and
+    (G.Target = gtLowestNeighbour) and (G.Speed = gsSlow));
+  G := DecodeGeneralized(TranslateHexenLine(23, [5, 8, 32], UaPlayerCross).Special);
+  AssertTrue('floor up by 32', (G.Kind = gkFloor) and G.Up and (G.Target = gtBy32));
+  H := TranslateHexenLine(23, [5, 8, 40], UaPlayerUse or UaRepeat);
+  AssertEquals('floor up by 40', UdmfFloorByValue, H.Special);
+  AssertEquals('its height', 40, H.Args[2]);
+  AssertEquals('its trigger: SR', 3, H.Trigger);
+  { Exits, teleports, lights, scripts. }
+  AssertEquals('exit switch', 11, TranslateHexenLine(243, [0], UaPlayerUse).Special);
+  AssertEquals('secret exit walk', 124, TranslateHexenLine(244, [0], UaPlayerCross).Special);
+  H := TranslateHexenLine(70, [7, 0], UaPlayerCross or UaRepeat);
+  AssertEquals('teleport WR', 97, H.Special);
+  AssertEquals('teleport by thing id', 7, H.TeleportTid);
+  AssertEquals('monster teleport', 125, TranslateHexenLine(70, [0, 4], UaMonsterCross).Special);
+  AssertEquals('light 255 switch', 171, TranslateHexenLine(112, [2, 255], UaPlayerUse).Special);
+  AssertEquals('light 200', UdmfLightToValue, TranslateHexenLine(112, [2, 200], UaPlayerUse).Special);
+  H := TranslateHexenLine(80, [1], UaPlayerUse);
+  AssertEquals('ACS: nothing', 0, H.Special);
+  AssertEquals('ACS: logged', 'ACS_Execute', H.Unsupported);
+  { Sector types: Doom's light types, secret, damage. }
+  AssertEquals('flicker', 1, TranslateZDoomSectorSpecial(65));
+  AssertEquals('secret', 128, TranslateZDoomSectorSpecial(1024));
+  AssertEquals('nukage, damage 2', 7 or 64, TranslateZDoomSectorSpecial(71 or 512));
+
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf.wad') then
+  begin
+    WriteLn('TestUdmf: no udmf.wad (python3 tools/make_udmf_wad.py), the maps skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf.wad')));
+    AssertTrue('a map name', W.MapNames.IndexOf('E1M1') >= 0);
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertTrue('udmf', M.Udmf);
+      AssertEquals('namespace', 'zdoom', M.UdmfNamespace);
+      AssertEquals('built nodes', 'BUILT', M.NodesFormat);
+      AssertEquals('lines', 1175, Length(M.Linedefs));
+      AssertEquals('sectors', 182, Length(M.Sectors));
+      AssertEquals('start room', 140, M.SectorAt(-416, 256));
+      AssertEquals('sector id', 9, M.Sectors[141].Tag);
+      AssertEquals('floor by value', UdmfFloorByValue, M.Linedefs[829].Special);
+      AssertEquals('scrolling wall', 1, M.ScrollingSides);
+      AssertTrue('translucent line', M.LineAlpha[1046] < 0.6);
+      AssertEquals('ACS: nothing', 0, M.Linedefs[1052].Special);
+      { Teleport(5, 0): the destination's sector got a tag for it. }
+      AssertEquals('teleport', 39, M.Linedefs[911].Special);
+      AssertEquals('teleport tag', M.Sectors[M.SectorAt(1000, -900)].Tag, M.Linedefs[911].Tag);
+      AssertTrue('a new tag', M.Linedefs[911].Tag > 9);
+      Specials := 0;
+      for I := 0 to High(M.Linedefs) do
+        if M.Linedefs[I].Special <> 0 then Inc(Specials);
+      AssertEquals('specials', 46, Specials);
+      Specials := 0;
+      for I := 0 to High(M.Sectors) do
+        if (M.Sectors[I].Special and 128) <> 0 then Inc(Specials);
+      AssertEquals('secrets (ZDoom 1024)', 4, Specials);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-doom.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('namespace', 'doom', M.UdmfNamespace);
+      AssertEquals('ZNODES', 'XGLN', M.NodesFormat);
+      AssertEquals('doom specials', 1, M.Linedefs[537].Special);
+      AssertEquals('start room', 140, M.SectorAt(-416, 256));
     finally
       FreeAndNil(M);
     end;

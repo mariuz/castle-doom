@@ -231,6 +231,47 @@ subsector). Node children are normalized to a `NodeSubsector` flag
 `tools/make_znodes.py` converts Freedoom's E1M1 into all six formats; each
 must log the same "682 subsector polygons, total area 6712683" as vanilla.
 
+### UDMF maps (`DoomUdmf`, `TDoomMap.LoadUdmf`)
+
+A map marker followed by `TEXTMAP` is a UDMF map (the text format of
+UZDoom / GZDoom maps; its lumps end at `ENDMAP`, so `DoomWad` takes a
+`TEXTMAP` after a marker as a map too). `TUdmfMap` tokenizes the text
+(comments, quoted strings with escapes, numbers incl. hex) into blocks
+of key / value pairs without raising (the web build cannot catch an
+exception; `Error` names the line), and `LoadUdmf` fills the same
+arrays as the binary lumps: vertices (floats), sectors (`heightfloor`,
+`texturefloor`, `lightlevel` 160 by default, `id` as the tag), sides,
+lines (the boolean flags as `ML_*` bits) and things (`skill1`..`skill5`,
+`ambush`, `single` as Doom's flags; `id` as `Tid`). The nodes come
+from `ZNODES` (`LoadExtendedNodes`; one made for another `TEXTMAP`,
+seen from its vertex count, is dropped) or `BuildNodes` runs
+`DoomNodeBuilder` on the rounded vertices (split points appended,
+the builder's root-first nodes reversed into Doom's root-last order).
+
+Namespaces `hexen`, `zdoom`, `eternity` and `vavoom` use Hexen's line
+actions: a number, five arguments and activation flags
+(`playercross`, `playeruse`, `impact`, `monstercross`, `repeatspecial`...).
+The world only knows Doom's and Boom's specials, so
+`TranslateHexenLine` rewrites each line at load time: doors, locked
+doors (ZDoom lock numbers to Boom's key bits), floors, ceilings,
+crushers, lifts and stairs as Boom generalized types (trigger from the
+flags, a used line with tag 0 as D1 / DR, speeds and delays in the
+nearest of Boom's four buckets), exits, teleports, elevators, donuts,
+stops and light changes as the Doom / Boom number for that trigger, and
+what needs exact arguments as the world's own `UdmfSpecial*` types
+(numbered from 100000, run by `ApplyUdmfSpecial` in
+`doomworld_udmf.inc` from `TDoomLinedef.Args` and `Trigger`).
+Everything downstream (dynamic sectors, scrollers, transfers, saves)
+then works unchanged. `ResolveUdmfLinks` runs once the BSP exists:
+a teleport to a thing id gives the destination's sector a fresh tag
+(or uses its tag), `Teleport_Line` copies its tag to the destination
+line, `TranslucentLine` sets the opacity of lines by id.
+`TranslateZDoomSectorSpecial` maps ZDoom's sector types (65..81 =
+Doom's 1..17, 1024 secret, 256..768 damage, 2048 friction, 4096
+pushers) to Doom's with Boom's bits. Actions without a translation
+(ACS, polyobjects, slopes, 3D floors, portals...) are counted and
+logged.
+
 Two things are derived that Doom's renderer never needed:
 
 **Subsector polygons.** Doom draws floors as screen-space spans, so a subsector

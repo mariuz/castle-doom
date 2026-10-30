@@ -6,6 +6,30 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- UDMF maps (`DoomUdmf`, `TDoomMap.LoadUdmf`): a map marker followed
+  by `TEXTMAP` is parsed without exceptions (comments, quoted strings,
+  hex numbers; `Error` names the line), its vertices, sectors, sides,
+  lines and things filled in (skill / single-player flags, thing ids,
+  ZDoom's teleport destinations 9043 / 9044), REJECT kept and the
+  nodes read from `ZNODES` (any ZDoom format, rebuilt when its vertex
+  count does not match) or built by `DoomNodeBuilder` (log `BUILT
+  nodes`). The `hexen` / `zdoom` namespaces' actions go through
+  `TranslateHexenLine`: doors, locked doors (ZDoom's lock numbers),
+  floors, ceilings, crushers, lifts, stairs and their `Generic_*`
+  forms become Boom generalized types (the speed and delay buckets
+  nearest), exits, teleports, elevators, donuts, stops and lights
+  Doom's / Boom's numbers by trigger, and the rest the world's own
+  `UdmfSpecial*` types (floor / ceiling by or to a height, light to or
+  by a value, `doomworld_udmf.inc`; scrolling walls); teleports to a
+  thing id tag the destination's sector, `Teleport_Line` and
+  `TranslucentLine` find lines by id, UDMF `alpha` makes lines
+  translucent. ZDoom sector types map to Doom's with Boom's bits. The
+  log names what is not supported (`... not supported: ACS_Execute`).
+  Also: generalized G1 / GR lines now fire when shot. Test maps from
+  `tools/make_udmf_wad.py` (Freedoom's E1M1 in both namespaces), unit
+  test `TestUdmf`, autotests `udmf` and `udmf-doom` (goldens). The
+  steps toward UZDoom's rendering are in `docs/RENDERING_ROADMAP.md`.
+
 - Map editor, texture alignment: `O` over the 3D preview takes the wall
   under the mouse; the arrows move that side's texture offsets (Shift:
   8 units) and the preview follows, Enter ends, one undo step. Autotest
@@ -1178,7 +1202,8 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **UDMF** (`TEXTMAP`) maps, and glBSP's `GL_LEVEL` markers for map names over 5 letters. | Remaining community map formats. | `DoomMap` | L (UDMF), S (`GL_LEVEL`) |
+| **UDMF, the rest**: maps load and play (done, see above); left are ACS (`BEHAVIOR`: a script interpreter for the common `ACS_Execute` uses: doors, lifts, messages, `Thing_Spawn`), the Hexen actions still logged as not supported (`Scroll_Floor`/`Ceiling`, `Sector_SetFriction` / wind / current, `Plat_UpWaitDownStay`, `Pillar_*`, polyobjects), thing specials and `Thing_*` actions, the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
+| **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
@@ -1221,12 +1246,17 @@ play.
 
 ## Suggested next three
 
-1. Mobile, the rest (M, see Engine and tooling): try the APK and the
-   keyboard on devices, the release signing keys (repository secrets).
-2. Map editor, the rest (M, see New features): sectors copied with
-   their holes, the things and the sky in the glTF / X3D export.
-3. Demos, the rest (S, see New features): a ghost picked in the menu
-   and its time on the intermission, several kept demos in the browser.
+1. Rendering, stage 1 (S-M, `docs/RENDERING_ROADMAP.md` items 1, 2,
+   3 and 12): UDMF's per-part texture offsets and scaling, per-surface
+   light, coloured light and fog, brightmaps.
+2. UDMF, the rest (L, see Content and formats): an ACS interpreter for
+   the common script uses, the remaining Hexen actions.
+3. Map editor, the rest (M, see New features): sectors copied with
+   their holes, the things and the sky in the glTF / X3D export, UDMF
+   maps in the editor.
+
+Mobile, the rest (testing on devices, the release signing keys) needs
+a device and the repository's secrets.
 
 Still worth doing but out of this repository's hands: the browser frame
 rate's remaining cost is in CGE's web renderer (vertex array objects,

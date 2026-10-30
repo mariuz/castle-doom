@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- UDMF maps, the text map format of maps made for UZDoom / GZDoom: a PWAD whose map has a
+  `TEXTMAP` loads like any other. Its nodes come from `ZNODES` or are built when the map
+  has none. Maps in the `zdoom` / `hexen` namespaces get their Hexen-style line actions
+  (doors, locked doors, lifts, floors, ceilings, crushers, stairs, exits, teleports to a
+  thing id, lights, scrolling walls, translucent lines, transfers) and ZDoom sector types
+  translated to what the game runs. What is not supported yet (ACS scripts, polyobjects,
+  slopes, 3D floors...) is listed in the log.
+- A rendering roadmap ([docs/RENDERING_ROADMAP.md](docs/RENDERING_ROADMAP.md)): the steps
+  toward UZDoom's look, from per-wall texture scaling, coloured light and fog to slopes,
+  3D floors, GLDEFS lights, shadows, materials, models, portals and post-processing.
+- Shooting a Boom generalized line with a G1 / GR trigger now sets it off.
+
 ## v0.56.0 (2026-10-26)
 
 - Demos: `--ghost FILE` races a recording's ghost: a see-through player walks the

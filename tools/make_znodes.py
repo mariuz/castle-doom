@@ -155,22 +155,27 @@ def write_pwad(path, nodes_data, segs_data, subs_data):
     open(path, 'wb').write(out)
     print('wrote', path, len(out))
 
-outdir = (sys.argv[1] if len(sys.argv) > 1 else '.') + '/'
-os.makedirs(outdir, exist_ok=True)
-x = xnod()
-write_pwad(outdir + 'e1m1_xnod.wad', b'XNOD' + x, b'', b'')
-write_pwad(outdir + 'e1m1_znod.wad', b'ZNOD' + zlib.compress(x), b'', b'')
-g16 = gl(False, False)
-write_pwad(outdir + 'e1m1_xgln.wad', b'', b'', b'XGLN' + g16)
-g2 = gl(True, False)
-write_pwad(outdir + 'e1m1_zgl2.wad', b'', b'', b'ZGL2' + zlib.compress(g2))
-g3 = gl(True, True)
-write_pwad(outdir + 'e1m1_xgl3.wad', b'', b'', b'XGL3' + g3)
-write_pwad(outdir + 'e1m1_zgl3.wad', b'', b'', b'ZGL3' + zlib.compress(g3))
-area = 0
-for poly in polys.values():
-    a = 0
-    for i in range(len(poly)):
-        a += poly[i][0]*poly[(i+1) % len(poly)][1] - poly[(i+1) % len(poly)][0]*poly[i][1]
-    area += a/2
-print('python total subsector area %.0f in %d polygons' % (area, len(polys)))
+def main():
+    outdir = (sys.argv[1] if len(sys.argv) > 1 else '.') + '/'
+    os.makedirs(outdir, exist_ok=True)
+    x = xnod()
+    write_pwad(outdir + 'e1m1_xnod.wad', b'XNOD' + x, b'', b'')
+    write_pwad(outdir + 'e1m1_znod.wad', b'ZNOD' + zlib.compress(x), b'', b'')
+    g16 = gl(False, False)
+    write_pwad(outdir + 'e1m1_xgln.wad', b'', b'', b'XGLN' + g16)
+    g2 = gl(True, False)
+    write_pwad(outdir + 'e1m1_zgl2.wad', b'', b'', b'ZGL2' + zlib.compress(g2))
+    g3 = gl(True, True)
+    write_pwad(outdir + 'e1m1_xgl3.wad', b'', b'', b'XGL3' + g3)
+    write_pwad(outdir + 'e1m1_zgl3.wad', b'', b'', b'ZGL3' + zlib.compress(g3))
+    area = 0
+    for poly in polys.values():
+        a = 0
+        for i in range(len(poly)):
+            a += poly[i][0]*poly[(i+1) % len(poly)][1] - poly[(i+1) % len(poly)][0]*poly[i][1]
+        area += a/2
+    print('python total subsector area %.0f in %d polygons' % (area, len(polys)))
+
+
+if __name__ == '__main__':
+    main()

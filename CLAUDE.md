@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 52 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 53 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -892,7 +892,16 @@ autotest only checks the library loads.
   DIR` (needs `glbsp`, apt) writes `e1m1_gl_v1/2/3/5.wad`; glBSP builds its
   own BSP, so they log 717 subsector polygons, area 6713389 (V1 6691431: its
   GL vertices are whole units); the `glbsp-nodes` autotest checks them.
-  UDMF is not supported.
+  UDMF maps (`TEXTMAP`) load: `python3 tools/make_udmf_wad.py`
+  writes `tools/testdata/udmf.wad` (E1M1 in the `zdoom` namespace,
+  Hexen actions, no nodes: log `Map: E1M1: UDMF, namespace "zdoom":
+  ... BUILT nodes` and `46 Hexen-style line specials translated, 1
+  not supported: ACS_Execute`) and `udmf-doom.wad` (`doom` namespace,
+  XGLN in `ZNODES`). On the first, `Y,LINE:829,LINE:1045,W:2,SAVE:1`
+  raises sector 141's floor 40 and sets its light 200 (`Udmf:` lines)
+  and `LINE:911` teleports to the thing with id 5 at (1000, -900)
+  (autotests `udmf`, `udmf-doom` with goldens; unit test `TestUdmf`).
+  `docs/RENDERING_ROADMAP.md` is the plan for UZDoom-style rendering.
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,
