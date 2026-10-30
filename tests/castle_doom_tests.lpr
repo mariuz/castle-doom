@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf, DoomGldefs;
 
 function DataPath(const Name: String): String;
 begin
@@ -66,6 +66,7 @@ type
     procedure TestGeneralized;
     procedure TestScrollers;
     procedure TestUdmf;
+    procedure TestGldefs;
     procedure TestDynScrollers;
     procedure TestDeepWater;
     procedure TestSectorSkies;
@@ -960,6 +961,88 @@ end;
   (tools/make_udmf_wad.py): in the zdoom namespace without nodes (built
   here) and in the doom namespace with ZNODES, the same map as the
   vanilla one. }
+type
+  TGldefsLumps = class
+    function Read(Name: String): String;
+  end;
+
+function TGldefsLumps.Read(Name: String): String;
+begin
+  if SameText(Name, 'LIGHTS2') then
+    Result := 'pulselight PULSE { color 0 0 1 size 32 secondarysize 96 interval 2.0 }'
+  else
+    Result := '';
+end;
+
+{ DoomGldefs: lights, includes, frame bindings, brightmaps, the animated
+  radii, and tools/testdata/gldefs.wad through a WAD. }
+procedure TTestMap.TestGldefs;
+const
+  Text = '// lights' + LineEnding +
+    '#include "LIGHTS2"' + LineEnding +
+    'pointlight LAMP { color 1.0 0.5 0.25 size 100 offset 4 48 2 subtractive 0 }' + LineEnding +
+    'flickerlight FLICK { color 1 1 1 size 10 secondarysize 20 chance 0.5 }' + LineEnding +
+    '/* a block */ object Column { frame COLU { light LAMP } }' + LineEnding +
+    'object DoomImp { frame TROOAB { light PULSE } frame BAL1 { light NOSUCH } }' + LineEnding +
+    'brightmap texture COMPSTA1 { map BMCOMPST iwad }' + LineEnding +
+    'glow { flats { NUKAGE1 } }';
+var
+  Lumps: TGldefsLumps;
+  Problems, Path: String;
+  L: TGlLight;
+  W: TDoomWad;
+  I: Integer;
+  Seen10, Seen20: Boolean;
+begin
+  ClearGldefs;
+  Lumps := TGldefsLumps.Create;
+  try
+    Problems := ParseGldefs(Text, @Lumps.Read);
+  finally
+    FreeAndNil(Lumps);
+  end;
+  AssertEquals('lights', 3, Length(GlLights));
+  AssertEquals('bindings', 2, Length(GlBindings));
+  AssertEquals('brightmaps', 1, Length(GlBrightmaps));
+  AssertEquals('brightmap', 'BMCOMPST', GlBrightmaps[0].Map);
+  AssertTrue('problems: ' + Problems, (Pos('unknown light NOSUCH', Problems) > 0) and (Pos('glow', Problems) > 0));
+  AssertTrue('lamp, any frame', GldefsLightFor('COLU', 'C', L));
+  AssertEquals('its name', 'LAMP', L.Name);
+  AssertTrue('colour', TVector3.Equals(L.Color, Vector3(1, 0.5, 0.25)));
+  AssertTrue('offset: height', L.Offset.Y = 48);
+  AssertTrue('imp frame A', GldefsLightFor('TROO', 'A', L) and (L.Kind = glPulse));
+  AssertFalse('imp frame C', GldefsLightFor('TROO', 'C', L));
+  AssertFalse('no binding', GldefsLightFor('BAL1', 'A', L));
+  { A pulse goes from size to secondary size and back. }
+  GldefsLightFor('TROO', 'B', L);
+  AssertTrue('pulse start', Abs(GldefsRadius(L, 0) - 32) < 0.01);
+  AssertTrue('pulse middle', Abs(GldefsRadius(L, 1) - 96) < 0.01);
+  AssertTrue('pulse end', Abs(GldefsRadius(L, 2) - 32) < 0.01);
+  { A flicker shows both sizes, the same at the same moment. }
+  Seen10 := false;
+  Seen20 := false;
+  for I := 0 to 69 do
+  begin
+    if GldefsRadius(GlLights[2], I / 35) = 10 then Seen10 := true;
+    if GldefsRadius(GlLights[2], I / 35) = 20 then Seen20 := true;
+  end;
+  AssertTrue('flicker sizes', Seen10 and Seen20);
+  AssertTrue('flicker repeatable', GldefsRadius(GlLights[2], 0.5) = GldefsRadius(GlLights[2], 0.5));
+
+  Path := 'tools/testdata/gldefs.wad';
+  if not FileExists(Path) then Path := '../tools/testdata/gldefs.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    AssertTrue('loaded', LoadGldefs(W));
+    AssertEquals('wad lights', 3, Length(GlLights));
+    AssertTrue('red lamp', GldefsLightFor('COLU', 'A', L) and (L.Name = 'REDLAMP'));
+  finally
+    FreeAndNil(W);
+    ClearGldefs;
+  end;
+end;
+
 function LookWithLight(const Light: Integer; const Absolute: Boolean): TPlaneLook;
 begin
   Result := Default(TPlaneLook);

@@ -553,6 +553,12 @@ floors get collision triangles in the invisible collision scene.
 
 ### Light diminishing (`DoomLighting`)
 
+(GLDEFS: `DoomGldefs` reads the WADs' light definitions into
+`GlLights` / `GlBindings` / `GlBrightmaps`; `TViewPlay.UpdateDynamicLights`
+takes a thing's bound light (by sprite and frame) before the built-in
+`LampDynamicLight` / `SpriteDynamicLight` tables, with pulse and
+flicker radii from `GldefsRadius` by the world's tic.)
+
 (UDMF maps add two per-vertex attributes to the map geometry:
 `doom_color`, the sector's `lightcolor` that multiplies the
 colormapped texel of lit surfaces, and `doom_fade`, its `fadecolor`

@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 53 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 54 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -907,7 +907,11 @@ autotest only checks the library loads.
   (log `Map: E1M1: UDMF look: 1 coloured sectors, 1 fogged, 1 placed
   flats, 2 placed sides, 1 own lights` and `2 sectors colour or fog
   their things`: an imp spawned in sector 140 turns orange; autotest
-  `udmf-look`).
+  `udmf-look`). GLDEFS: `tools/testdata/gldefs.wad`
+  (`tools/make_gldefs_wad.py`) makes E1M1's lamps red and gives imps a
+  blue pulse light (log `Lights: GLDEFS: 3 lights, 2 frame bindings, 1
+  brightmaps`; the `DLIGHTS` recipes above show it; autotest `gldefs`,
+  unit test `TestGldefs`).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

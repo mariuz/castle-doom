@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- GLDEFS: a PWAD's GZDoom / UZDoom light definitions (point, pulse and flicker lights,
+  bound to sprite frames with `object ... frame ... light`, `#include` lumps) give its
+  things their dynamic lights (Options -> Video -> DYNAMIC LIGHTS), replacing the
+  built-in lamp and missile lights where a mod defines its own.
 - UZDoom-style looks for UDMF maps (rendering stage 1): coloured sector light (`lightcolor`)
   and fog (`fadecolor`), texture scaling and offsets per wall part, rotated, scaled and
   panned floors and ceilings, and light levels per wall side, floor and ceiling. Monsters

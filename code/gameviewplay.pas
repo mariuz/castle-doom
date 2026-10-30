@@ -292,7 +292,7 @@ uses Math, JsonParser,
   CastleDownload, DoomActors, CastleInternalInspector,
   CastleUriUtils, X3DNodes, CastleRectangles, CastleRenderContext,
   DoomGeometry, DoomMap, DoomThings,
-  GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs, DoomMapInfo, GameViewEdit;
+  GameViewMenu, GameSaveStorage, GameGamepad, CastleInputs, DoomMapInfo, GameViewEdit, DoomGldefs;
 
 type
   { Opens TCastleNavigation.Move (protected) to push the player. }
@@ -544,6 +544,8 @@ begin
   ApplyDehacked(Wad);
   { A PWAD's UMAPINFO: level names, music, sky, par times, progression. }
   LoadMapInfo(Wad);
+  { GLDEFS: the mod's dynamic lights bound to sprite frames. }
+  LoadGldefs(Wad);
   FWorld := TDoomWorld.Create(Wad, Graphics, Sounds, FViewport.Items);
   FCaptions := TCaptionList.Create;
   if Sounds <> nil then
@@ -1672,7 +1674,8 @@ procedure TViewPlay.UpdateDynamicLights;
 var
   A: TDoomActor;
   Eye, Color, Fwd: TVector3;
-  Radius, LampHeight: Single;
+  Radius, LampHeight, Penalty: Single;
+  GL: TGlLight;
   I, Lamps: Integer;
 begin
   FDynCount := 0;
@@ -1682,6 +1685,18 @@ begin
     for A in FWorld.Actors do
     begin
       if A.Removed then Continue;
+      { GLDEFS first: a light bound to this sprite frame (lamps get the
+        lamps' lower priority, like the built-in ones). }
+      if (Length(GlBindings) > 0) and GldefsLightFor(A.SpritePrefix, A.Frame, GL) then
+      begin
+        if GL.Subtractive or (A.Info = nil) or (A.Info^.Kind in [tkTeleportDest, tkBossSpot]) then Continue;
+        Fwd := Vector3(Cos(DegToRad(A.Angle)), Sin(DegToRad(A.Angle)), 0);
+        if A.Info^.Kind = tkDecoration then Penalty := 400 else Penalty := 0;
+        ConsiderLight(Eye, A.DoomX + Fwd.X * GL.Offset.X + Fwd.Y * GL.Offset.Z,
+          A.DoomY + Fwd.Y * GL.Offset.X - Fwd.X * GL.Offset.Z, A.DoomZ + GL.Offset.Y,
+          GldefsRadius(GL, FWorld.Tic / 35), Penalty, GL.Color);
+        Continue;
+      end;
       if A.State = asMissile then
       begin
         if SpriteDynamicLight(A.SpritePrefix, Radius, Color) then

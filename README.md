@@ -167,7 +167,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   format of maps made for UZDoom / GZDoom) load as well, their nodes from `ZNODES` or built
   by the game, Hexen-style line actions and ZDoom sector types translated, with coloured
   sector light, fog, texture scaling, offsets and rotation and per-surface light (ACS scripts,
-  slopes, 3D floors and polyobjects are not supported yet). Boom's generalized linedef
+  slopes, 3D floors and polyobjects are not supported yet). A PWAD's GLDEFS lights
+  (point, pulse, flicker, bound to sprite frames) become dynamic lights. Boom's generalized linedef
   types (floors, ceilings, doors, locked doors, lifts, stairs and crushers), its numbered
   extra line types (silent teleports among them), sector types (damage and secret bits),
   ice and mud, wind, currents and point pushers, translucent middle textures and things (MBF's DeHackEd bit), elevators, line-to-line

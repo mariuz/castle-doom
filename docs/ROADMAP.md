@@ -6,6 +6,21 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- GLDEFS lights (`DoomGldefs`, rendering roadmap item 8): every `GLDEFS`
+  lump of the loaded WADs is parsed (no exceptions) into lights
+  (point, pulse, flicker, flicker2, sector; colour, size, secondary
+  size, interval, chance, offset as forward / up / sideways), frame
+  bindings (`object Class { frame TROOAB { light NAME } }`: a sprite
+  and optionally frame letters) and brightmap entries, `#include`
+  lumps read by name; `TViewPlay.UpdateDynamicLights` asks
+  `GldefsLightFor` first, so a bound light replaces the built-in lamp
+  or missile light (decorations keep the lamps' lower priority), and
+  pulse / flicker radii come from `GldefsRadius` by time, without the
+  world's random numbers (demos stay in sync). The log says `Lights:
+  GLDEFS: 3 lights, 2 frame bindings, 1 brightmaps` and what it does
+  not support. Test WAD `tools/make_gldefs_wad.py` (red lamps, a blue
+  pulse on imps), autotest `gldefs` (goldens), unit test `TestGldefs`.
+
 - Rendering stage 1 (`docs/RENDERING_ROADMAP.md` items 1-3): UDMF's
   per-part wall offsets and scales (`TDoomSidedef.PartOffsetX` ...,
   0 = 1 via `ScaleOr1`), floors' and ceilings' panning, scale and
@@ -1263,9 +1278,10 @@ play.
 
 ## Suggested next three
 
-1. Rendering, brightmaps and GLDEFS lights (M,
-   `docs/RENDERING_ROADMAP.md` items 12 and 8): a GLDEFS parser,
-   brightmap pages beside the atlas, lights bound to sprites.
+1. Rendering, brightmaps (M, `docs/RENDERING_ROADMAP.md` item 12): the
+   parsed GLDEFS brightmaps drawn (a brightmap page beside each atlas
+   page, the shader mixing toward full bright), then the light things
+   9800-9830 of UDMF maps (item 8).
 2. UDMF, the rest (L, see Content and formats): an ACS interpreter for
    the common script uses, the remaining Hexen actions.
 3. Map editor, the rest (M, see New features): sectors copied with
