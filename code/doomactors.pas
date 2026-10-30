@@ -65,6 +65,7 @@ type
     { The current frame is full bright in the state table. }
     FFrameBright: Boolean;
     FLastLight: Integer;
+    FAppliedLook: Integer;
     { Sprite and brightness of frame FSeqIndex of FSeq. }
     procedure ApplyFrameData;
     function GetThingType: Integer;
@@ -139,6 +140,10 @@ type
     Fuzz: Boolean;
     { Fullbright sprite (explosions, projectiles, some items). }
     Bright: Boolean;
+    { The UDMF colour and fog of the sector the thing is in: an index of
+      TSpriteBatch.LookFor (0 = white, no fog), used by the next
+      SetLight. }
+    Look: Integer;
 
     constructor Create(AOwner: TComponent; const AGraphics: TDoomGraphics;
       const ABatch: TSpriteBatch; const AInfo: PThingInfo); reintroduce;
@@ -243,6 +248,7 @@ type
     FGroups: TGroupDict;
     FViewAngle: Single;
     FRight: TVector3;
+    FLookColors, FLookFades: array of TVector4;
     procedure SetViewAngle(const Value: Single);
   public
     constructor Create(const AParent: TCastleTransform);
@@ -254,7 +260,11 @@ type
     property Right: TVector3 read FRight;
     { The group for a light level (0..255), kind (DoomLight*) and
       translucency. }
-    function GroupFor(const Light, Kind: Integer; const Translucent: Boolean = false): TSpriteGroup;
+    function GroupFor(const Light, Kind: Integer; const Translucent: Boolean = false;
+      const Look: Integer = 0): TSpriteGroup;
+    { The index of a UDMF sector look (light colour; fog colour, W 1 =
+      on), the same for the same values; 0 is white light without fog. }
+    function LookFor(const Color, Fade: TVector4): Integer;
     { Send the frame's vertex and index changes to the scenes (the world
       calls it once per Update, after the tics). }
     procedure Flush;
@@ -485,13 +495,38 @@ begin
   FRight := Vector3(Sin(A), 0, Cos(A));
 end;
 
-function TSpriteBatch.GroupFor(const Light, Kind: Integer; const Translucent: Boolean): TSpriteGroup;
+function TSpriteBatch.LookFor(const Color, Fade: TVector4): Integer;
+var
+  I: Integer;
+begin
+  if Length(FLookColors) = 0 then
+  begin
+    SetLength(FLookColors, 1);
+    SetLength(FLookFades, 1);
+    FLookColors[0] := Vector4(1, 1, 1, 1);
+    FLookFades[0] := TVector4.Zero;
+  end;
+  for I := 0 to High(FLookColors) do
+    if TVector4.PerfectlyEquals(FLookColors[I], Color) and TVector4.PerfectlyEquals(FLookFades[I], Fade) then
+      Exit(I);
+  Result := Length(FLookColors);
+  SetLength(FLookColors, Result + 1);
+  SetLength(FLookFades, Result + 1);
+  FLookColors[Result] := Color;
+  FLookFades[Result] := Fade;
+end;
+
+function TSpriteBatch.GroupFor(const Light, Kind: Integer; const Translucent: Boolean;
+  const Look: Integer): TSpriteGroup;
 var
   Key: Integer;
   LightField: TSFVec2f;
+  Fade: TVector4;
 begin
   Key := (Light div 16) * 100 + Kind;
   if Translucent then Key := Key + 10000;
+  if (Look > 0) and (Look <= High(FLookColors)) then
+    Key := Key + Look * 100000;
   if not FGroups.TryGetValue(Key, Result) then
   begin
     Result := TSpriteGroup.Create;
@@ -501,6 +536,13 @@ begin
     Result.Effect := DoomLightingInstance.SpriteEffect(LightField);
     Result.Effect.KeepExistingBegin;
     LightField.Value := Vector2((Light div 16) * 16, Kind);
+    if (Look > 0) and (Look <= High(FLookColors)) then
+    begin
+      { The fog's density from the group's light, like the walls'. }
+      Fade := FLookFades[Look];
+      if Fade.W > 0 then Fade.W := FogDensity((Light div 16) * 16);
+      DoomLightingInstance.SpriteLookFields(Result.Effect, FLookColors[Look], Fade);
+    end;
     Result.Root := TX3DRootNode.Create;
     Result.Scene := TCastleScene.Create(nil);
     case Kind of
@@ -510,6 +552,8 @@ begin
     end;
     if Translucent then
       Result.Scene.Name := Result.Scene.Name + '_Translucent';
+    if (Look > 0) and (Look <= High(FLookColors)) then
+      Result.Scene.Name := Result.Scene.Name + '_Look' + IntToStr(Look);
     Result.Scene.Collides := false;
     Result.Scene.Pickable := false;
     Result.Scene.CastShadows := false;
@@ -948,9 +992,10 @@ begin
     V := Vector2(Light, DoomLightFullBright)
   else
     V := Vector2(Light, DoomLightWall);
-  if TVector2.PerfectlyEquals(FLightValue, V) and (FGroup <> nil) then Exit;
+  if TVector2.PerfectlyEquals(FLightValue, V) and (FGroup <> nil) and (FAppliedLook = Look) then Exit;
   FLightValue := V;
-  NewGroup := FBatch.GroupFor(Light, Round(V.Y), (not Fuzz) and Info^.Translucent);
+  FAppliedLook := Look;
+  NewGroup := FBatch.GroupFor(Light, Round(V.Y), (not Fuzz) and Info^.Translucent, Look);
   if NewGroup <> FGroup then
   begin
     FGroup := NewGroup;

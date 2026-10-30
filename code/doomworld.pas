@@ -210,6 +210,7 @@ type
     { --ghost: a recording's path through this level drawn as a
       see-through player (not one of FActors: no save, no checksum). }
     FGhost: TDoomActor;
+    FSectorLook: array of Integer;
     FGhostTrack: TGhostTrack;
     FGhostIndex: Integer;
     FGhostMoving, FGhostFinished: Boolean;
@@ -234,6 +235,11 @@ type
     procedure RunTic;
     procedure TicActors;
     procedure TicGhost(const Steps: Integer);
+    { UDMF sectors' light colour and fog for the things in them
+      (TSpriteBatch.LookFor indices, 0 = none). }
+    procedure BuildSectorLooks;
+    { A thing's light and look from sector Sec. }
+    procedure LightActor(const A: TDoomActor; const Sec: Integer);
     procedure TicMonster(const A: TDoomActor);
     { Height of a flying monster: P_ZMovement's floating towards the target,
       and its corpse falling (lost souls stay where they die). }
@@ -1290,6 +1296,37 @@ begin
       FDynamic[I] := true;
 end;
 
+procedure TDoomWorld.BuildSectorLooks;
+var
+  I, N: Integer;
+  S: TDoomSector;
+  Color, Fade: TVector4;
+begin
+  SetLength(FSectorLook, Length(FMap.Sectors));
+  N := 0;
+  for I := 0 to High(FMap.Sectors) do
+  begin
+    S := FMap.Sectors[I];
+    FSectorLook[I] := 0;
+    if not (S.HasColor or S.HasFade) then Continue;
+    if S.HasColor then Color := Vector4(S.LightColor, 1) else Color := Vector4(1, 1, 1, 1);
+    if S.HasFade then Fade := Vector4(S.FadeColor, 1) else Fade := TVector4.Zero;
+    FSectorLook[I] := FSpriteBatch.LookFor(Color, Fade);
+    Inc(N);
+  end;
+  if N > 0 then
+    WritelnLog('Map', '%s: %d sectors colour or fog their things', [FMap.Name, N]);
+end;
+
+procedure TDoomWorld.LightActor(const A: TDoomActor; const Sec: Integer);
+begin
+  if (Sec >= 0) and (Sec <= High(FSectorLook)) then
+    A.Look := FSectorLook[Sec]
+  else
+    A.Look := 0;
+  A.SetLight(FMap.Sectors[Sec].LightLevel);
+end;
+
 procedure TDoomWorld.SpawnThings;
 var
   I, N: Integer;
@@ -1358,7 +1395,7 @@ begin
     if Info^.Num = 2035 then
       A.Health := 20; { barrel }
     A.Bright := Info^.Pickup in [pkSoulsphere, pkMegasphere, pkInvulnerability, pkInvisibility, pkBerserk, pkRadSuit, pkComputerMap, pkLightAmp];
-    A.SetLight(FMap.Sectors[Sec].LightLevel);
+    LightActor(A, Sec);
     A.UpdateTransform;
     FActors.Add(A);
     FThingsGroup.Add(A);
@@ -1419,6 +1456,7 @@ begin
     FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName), false,
       FGraphics.SkyTextureName(MapName));
   FGeometry.AddToWorld(FMapGroup);
+  BuildSectorLooks;
   { The previous level's geometry is gone: its textures can go too. }
   FGraphics.ReleaseUnused;
   WritelnLog('Load', '%s: geometry built in %d ms', [MapName, Ms]);
@@ -2490,7 +2528,7 @@ begin
           TicFloat(A)
         else
           A.DoomZ := FMap.Sectors[Sec].FloorHeight;
-        A.SetLight(FMap.Sectors[Sec].LightLevel);
+        LightActor(A, Sec);
       end;
       A.UpdateRotation(Player.X, Player.Y);
       A.UpdateTransform;
@@ -3430,7 +3468,7 @@ begin
   if Sec >= 0 then
   begin
     FGhost.Sector := Sec;
-    FGhost.SetLight(FMap.Sectors[Sec].LightLevel);
+    LightActor(FGhost, Sec);
   end;
   FGhost.UpdateRotation(Player.X, Player.Y);
   FGhost.UpdateTransform;
@@ -3461,7 +3499,7 @@ begin
   Result.SpawnY := Y;
   Result.Sector := Sec;
   Result.Awake := true;
-  Result.SetLight(FMap.Sectors[Sec].LightLevel);
+  LightActor(Result, Sec);
   Result.UpdateTransform;
   FActors.Add(Result);
   FThingsGroup.Add(Result);
@@ -4582,7 +4620,7 @@ begin
     Blood.DoomX := HitX; Blood.DoomY := HitY; Blood.DoomZ := HitZ - 8;
     Blood.Sector := A.Sector;
     Blood.Collides := false; Blood.Pickable := false;
-    Blood.SetLight(FMap.Sectors[Max(0, A.Sector)].LightLevel);
+    LightActor(Blood, Max(0, A.Sector));
     Blood.PlaySequence('CBA', 8, false);
     Blood.UpdateTransform;
     FActors.Add(Blood);
@@ -4691,7 +4729,7 @@ begin
       Drop.DoomX := A.DoomX; Drop.DoomY := A.DoomY; Drop.DoomZ := A.DoomZ;
       Drop.Sector := A.Sector;
       Drop.Dropped := true;
-      Drop.SetLight(FMap.Sectors[Max(0, A.Sector)].LightLevel);
+      LightActor(Drop, Max(0, A.Sector));
       Drop.UpdateTransform;
       FActors.Add(Drop);
       FThingsGroup.Add(Drop);

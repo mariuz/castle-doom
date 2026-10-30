@@ -4,7 +4,8 @@
 
 - UZDoom-style looks for UDMF maps (rendering stage 1): coloured sector light (`lightcolor`)
   and fog (`fadecolor`), texture scaling and offsets per wall part, rotated, scaled and
-  panned floors and ceilings, and light levels per wall side, floor and ceiling.
+  panned floors and ceilings, and light levels per wall side, floor and ceiling. Monsters
+  and items take their sector's light colour and fog too.
 
 ## v0.57.0 (2026-10-30)
 

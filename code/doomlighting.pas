@@ -94,6 +94,10 @@ type
     { A new effect for one sprite; LightField receives the doom_sprite
       uniform (x = light level, y = kind). Put it in the appearance. }
     function SpriteEffect(out LightField: TSFVec2f): TEffectNode;
+    { The sprite effect's colour and fog uniforms (doom_sprite_color,
+      doom_sprite_fade), for things in a UDMF sector with a light colour
+      or fog. }
+    procedure SpriteLookFields(const Effect: TEffectNode; const Color, Fade: TVector4);
     { A new doom_light vertex attribute node. }
     function LightAttribute: TFloatVertexAttributeNode;
     { A new doom_tile vertex attribute node (x, y, width, height of the
@@ -163,6 +167,11 @@ function SpriteDynamicLight(const Sprite: String; out Radius: Single; out Color:
   prefix): radius, the light's height above the thing's feet and colour;
   False for other things. }
 function LampDynamicLight(const Sprite: String; out Radius, Height: Single; out Color: TVector3): Boolean;
+
+{ The fog density (a map unit) of a UDMF fadecolor in a sector of this
+  light: denser in darker sectors, like UZDoom's (at 255 a fifth of the
+  fade colour 300 units away, at 160 two thirds 1000 units away). }
+function FogDensity(const Light: Integer): Single;
 
 implementation
 
@@ -374,11 +383,13 @@ const
     '}';
   SpriteFragmentInput =
     'uniform vec2 doom_sprite;' + NL +
+    'uniform vec4 doom_sprite_color;' + NL +
+    'uniform vec4 doom_sprite_fade;' + NL +
     'varying float doom_depth;' + NL +
     'varying vec3 doom_eye;' + NL +
     '#define doom_light_info vec3(doom_sprite, doom_depth)' + NL +
-    '#define doom_color_info vec4(1.0)' + NL +
-    '#define doom_fade_info vec4(0.0)' + NL;
+    '#define doom_color_info doom_sprite_color' + NL +
+    '#define doom_fade_info doom_sprite_fade' + NL;
 
 var
   FInstance: TDoomLighting;
@@ -609,6 +620,19 @@ begin
   Result := NewEffect(SpriteVertex, SpriteFragmentInput);
   LightField := TSFVec2f.Create(Result, true, 'doom_sprite', TVector2.Zero);
   Result.AddCustomField(LightField);
+  Result.AddCustomField(TSFVec4f.Create(Result, true, 'doom_sprite_color', Vector4(1, 1, 1, 1)));
+  Result.AddCustomField(TSFVec4f.Create(Result, true, 'doom_sprite_fade', TVector4.Zero));
+end;
+
+procedure TDoomLighting.SpriteLookFields(const Effect: TEffectNode; const Color, Fade: TVector4);
+begin
+  (Effect.Field('doom_sprite_color') as TSFVec4f).Value := Color;
+  (Effect.Field('doom_sprite_fade') as TSFVec4f).Value := Fade;
+end;
+
+function FogDensity(const Light: Integer): Single;
+begin
+  Result := Max(64, 255 - Light) / 255 * 0.003;
 end;
 
 function TDoomLighting.LightAttribute: TFloatVertexAttributeNode;

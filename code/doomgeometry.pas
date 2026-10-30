@@ -650,10 +650,8 @@ begin
     B.CurColor := Vector4(S.LightColor, 1)
   else
     B.CurColor := Vector4(1, 1, 1, 1);
-  { Denser in darker sectors, like UZDoom's: at light 255 a fifth of
-    the fade colour 300 units away, at 160 two thirds 1000 units away. }
   if S.HasFade then
-    B.CurFade := Vector4(S.FadeColor, Max(64, 255 - S.LightLevel) / 255 * 0.003)
+    B.CurFade := Vector4(S.FadeColor, FogDensity(S.LightLevel))
   else
     B.CurFade := TVector4.Zero;
 end;

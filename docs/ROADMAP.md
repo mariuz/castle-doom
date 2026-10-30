@@ -15,8 +15,12 @@ L = several days). Items inside a section are in suggested order.
   (`doom_color`, `doom_fade`: the colour multiplies the colormapped
   texel, the fog mixes in by distance, denser in darker sectors);
   binary maps keep the defaults, so every existing golden stays.
-  The log says `Map: E1M1: UDMF look: 1 coloured sectors, 1 fogged,
-  ...`; test map `udmf-look.wad` (`tools/make_udmf_wad.py`), autotest
+  Things in such sectors take the colour and fog as well: each actor
+  carries its sector's look (`TDoomActor.Look`, an index of
+  `TSpriteBatch.LookFor`), the sprite groups are keyed by it and their
+  effect gets `doom_sprite_color` / `doom_sprite_fade` (log `Map: E1M1:
+  2 sectors colour or fog their things`). The log says `Map: E1M1: UDMF
+  look: 1 coloured sectors, 1 fogged, ...`; test map `udmf-look.wad` (`tools/make_udmf_wad.py`), autotest
   `udmf-look` (goldens), unit test `TestUdmf`.
 
 - UDMF maps (`DoomUdmf`, `TDoomMap.LoadUdmf`): a map marker followed
@@ -1259,9 +1263,9 @@ play.
 
 ## Suggested next three
 
-1. Rendering, stage 1 left (S-M, `docs/RENDERING_ROADMAP.md` items 3
-   and 12): sprites in coloured and fogged sectors, brightmaps; then
-   GLDEFS lights (item 8).
+1. Rendering, brightmaps and GLDEFS lights (M,
+   `docs/RENDERING_ROADMAP.md` items 12 and 8): a GLDEFS parser,
+   brightmap pages beside the atlas, lights bound to sprites.
 2. UDMF, the rest (L, see Content and formats): an ACS interpreter for
    the common script uses, the remaining Hexen actions.
 3. Map editor, the rest (M, see New features): sectors copied with

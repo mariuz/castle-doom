@@ -557,7 +557,9 @@ floors get collision triangles in the invisible collision scene.
 `doom_color`, the sector's `lightcolor` that multiplies the
 colormapped texel of lit surfaces, and `doom_fade`, its `fadecolor`
 and a fog density from the sector light, mixed in by the eye distance.
-Sprites define them as white / no fog. Binary maps get white and no
+Sprites get them as uniforms of their group's effect: the world gives
+each actor its sector's look (`LightActor`, `TSpriteBatch.LookFor`)
+and the groups are keyed by light, kind and look. Binary maps get white and no
 fog, so their pixels do not change. `TMapChunk.SetLook` sets them per
 surface; the UVs take UDMF's per-part offsets and scales and the flats'
 `FlatTexCoord` rotation, panning and scale.)

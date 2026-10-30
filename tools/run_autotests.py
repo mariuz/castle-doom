@@ -352,8 +352,11 @@ TESTS = [
      lambda config: check_udmf(config)),
     # Rendering stage 1 (docs/RENDERING_ROADMAP.md): UDMF's light colour,
     # fog, flat rotation / scale and side scale / offset / light.
-    ('udmf-look', 'E1M1', 'Y,G:-280:256,A:180,W:0.3,S,G:-416:256,LOOK:-70,W:0.2,S,LOOK:0,A:0,G:-300:256,W:0.2,S,Q',
-     [r'Map: E1M1: UDMF look: 1 coloured sectors, 1 fogged, 1 placed flats, 2 placed sides, 1 own lights'],
+    ('udmf-look', 'E1M1',
+     'Y,G:-280:256,A:180,W:0.3,S,G:-416:256,LOOK:-70,W:0.2,S,LOOK:0,A:0,G:-300:256,W:0.2,S,'
+     'G:-416:256,A:0,P:3001:110,W:0.2,S,Q',
+     [r'Map: E1M1: UDMF look: 1 coloured sectors, 1 fogged, 1 placed flats, 2 placed sides, 1 own lights',
+      r'Map: E1M1: 2 sectors colour or fog their things'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-look.wad'), '--fixed-step'],
      None),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
@@ -1061,7 +1064,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
 ]
 
 

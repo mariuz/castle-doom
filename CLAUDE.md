@@ -905,7 +905,9 @@ autotest only checks the library loads.
   `udmf-look.wad` (same script) tests its stage 1: sector 140 lit
   orange with its floor turned 45 degrees and scaled, 141 in blue fog
   (log `Map: E1M1: UDMF look: 1 coloured sectors, 1 fogged, 1 placed
-  flats, 2 placed sides, 1 own lights`; autotest `udmf-look`).
+  flats, 2 placed sides, 1 own lights` and `2 sectors colour or fog
+  their things`: an imp spawned in sector 140 turns orange; autotest
+  `udmf-look`).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,
