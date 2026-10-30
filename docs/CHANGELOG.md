@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.58.0 (2026-10-30)
 
 - GLDEFS: a PWAD's GZDoom / UZDoom light definitions (point, pulse and flicker lights,
   bound to sprite frames with `object ... frame ... light`, `#include` lumps) give its
