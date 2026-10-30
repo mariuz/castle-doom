@@ -35,7 +35,7 @@ function ExportEditedLevel(const Wad: TDoomWad; const Graphics: TDoomGraphics; c
 
 implementation
 
-uses Math, Generics.Collections, FpJson,
+uses Math, Generics.Collections, FpJson, DoomLighting,
   CastleVectors, CastleImages, CastleLog, CastleUriUtils, CastleUtils, CastleStringUtils,
   X3DNodes, X3DLoad, CastleRenderOptions,
   DoomGeometry;
@@ -84,6 +84,8 @@ begin
   else
   begin
     L := Level;
+    { A brightmap's flag on the light (DoomLighting). }
+    if L >= BrightmapLightFlag then L := L - BrightmapLightFlag;
     if Kind < 10 then
       L := L + (Kind - 0) * 16;
     L := EnsureRange(L / 255, 0.05, 1);

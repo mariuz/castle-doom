@@ -168,6 +168,15 @@ function SpriteDynamicLight(const Sprite: String; out Radius: Single; out Color:
   False for other things. }
 function LampDynamicLight(const Sprite: String; out Radius, Height: Single; out Color: TVector3): Boolean;
 
+const
+  { Added to a surface's light (doom_light.x) when its texture carries a
+    brightmap in its alpha: the shader then reads it there. }
+  BrightmapLightFlag = 1000;
+
+{ The alpha coding a texel's brightmap brightness (0..1): opaque texels
+  keep 255 at 0 and go down to 130 at 1 (still above the 0.5 alpha test). }
+function BrightmapAlpha(const Bright: Single): Byte;
+
 { The fog density (a map unit) of a UDMF fadecolor in a sector of this
   light: denser in darker sectors, like UZDoom's (at 255 a fifth of the
   fade colour 300 units away, at 160 two thirds 1000 units away). }
@@ -240,6 +249,16 @@ const
     '{' + NL +
     '  float light = doom_light_info.x;' + NL +
     '  float kind = doom_light_info.y;' + NL +
+    { A GLDEFS brightmap in the texel's alpha (BrightmapAlpha): that much
+      toward full bright. }
+    '  float doom_bright = 0.0;' + NL +
+    '  if (light > 999.0) {' + NL +
+    '    light -= 1000.0;' + NL +
+    '    if (fragment_color.a > 0.5) {' + NL +
+    '      doom_bright = clamp((1.0 - fragment_color.a) * 2.04, 0.0, 1.0);' + NL +
+    '      fragment_color.a = 1.0;' + NL +
+    '    }' + NL +
+    '  }' + NL +
     '  float depth = max(doom_light_info.z, 1.0);' + NL +
     '  float level;' + NL +
     '  if (kind > 25.0) {' + NL +
@@ -286,6 +305,7 @@ const
     '    doom_dlight(doom_dlights[i], doom_dlight_colors[i], doom_boost, doom_tint);' + NL +
     '  }' + NL +
     '  level -= floor(min(doom_boost, 1.5) * 16.0);' + NL +
+    '  level = floor(level * (1.0 - doom_bright) + 0.5);' + NL +
     '  vec3 doom_base = fragment_color.rgb;' + NL +
     '  level = clamp(level, 0.0, 31.0);' + NL +
     '  if (doom_palette_mapped > 0.5)' + NL +
@@ -628,6 +648,11 @@ procedure TDoomLighting.SpriteLookFields(const Effect: TEffectNode; const Color,
 begin
   (Effect.Field('doom_sprite_color') as TSFVec4f).Value := Color;
   (Effect.Field('doom_sprite_fade') as TSFVec4f).Value := Fade;
+end;
+
+function BrightmapAlpha(const Bright: Single): Byte;
+begin
+  Result := 255 - Round(Max(0, Min(1, Bright)) * 125);
 end;
 
 function FogDensity(const Light: Integer): Single;

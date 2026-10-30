@@ -361,9 +361,11 @@ TESTS = [
      None),
     # GLDEFS (tools/make_gldefs_wad.py): red lamps instead of the built-in
     # light, a blue pulse on imps.
-    ('gldefs', 'E1M1', 'DLIGHTS,Y,G:416:864,A:180,LOOK:-15,W:0.5,S,LOOK:0,G:-416:256,A:0,P:3001:160,W:0.3,S,Q',
-     [r'Lights: GLDEFS: 3 lights, 2 frame bindings, 1 brightmaps', r'Lights: GLDEFS: not supported: glow',
-      r'Lights: 8 dynamic lights'],
+    ('gldefs', 'E1M1', 'DLIGHTS,Y,G:416:864,A:180,LOOK:-15,W:0.5,S,LOOK:0,G:-416:256,A:0,P:3001:160,W:0.3,S,'
+     'DLIGHTS,G:0:2168,A:0,W:0.3,S,Q',
+     [r'Lights: GLDEFS: 3 lights, 2 frame bindings, 3 brightmaps', r'Lights: GLDEFS: not supported: glow',
+      r'Lights: 8 dynamic lights', r'Graphics: Brightmap BMSTRIPE on texture BASE2',
+      r'Graphics: Brightmap BMCHECK on flat AQF054'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'gldefs.wad'), '--fixed-step'],
      None),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
@@ -1072,7 +1074,7 @@ GOLDEN = [
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
     'udmf_1.png', 'udmf_2.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
-    'gldefs_1.png', 'gldefs_2.png',
+    'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
 ]
 
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- GLDEFS brightmaps: the parts of a wall texture or flat a mod's brightmap marks glow at
+  full brightness in dark places (PNG or Doom patch brightmap images).
+
 ## v0.58.0 (2026-10-30)
 
 - GLDEFS: a PWAD's GZDoom / UZDoom light definitions (point, pulse and flicker lights,

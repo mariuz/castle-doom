@@ -620,6 +620,15 @@ begin
     Result := Vector2(Rate.X / Img.Width, Rate.Y / Img.Height);
 end;
 
+{ The light attribute of a surface drawing Img: flagged when the image
+  carries a GLDEFS brightmap. }
+function BrightLight(const Light: TVector2; const Img: TDoomImage): TVector2;
+begin
+  Result := Light;
+  if Img.Brightmap then
+    Result.X := Result.X + BrightmapLightFlag;
+end;
+
 procedure TMapChunk.EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
   const ZBottom, ZTop: Single; const U0, U1: Single;
   const TexTopZ: Single; const Img: TDoomImage; const Light: TVector2;
@@ -638,7 +647,7 @@ begin
     DoomToCge(BX, BY, Top), DoomToCge(AX, AY, Top),
     Vector2(U0 * ScaleX / Img.Width, VBottom), Vector2(U1 * ScaleX / Img.Width, VBottom),
     Vector2(U1 * ScaleX / Img.Width, VTop), Vector2(U0 * ScaleX / Img.Width, VTop),
-    Light, TileOf(B, Img));
+    BrightLight(Light, Img), TileOf(B, Img));
 end;
 
 procedure TMapChunk.SetLook(const B: TGeomBatch; const Sec: Integer);
@@ -855,7 +864,7 @@ begin
     if Map.FloorDynamic[Sec] then DynSec := Sec else DynSec := -1;
     B := Batch(Img, false, FlatScroll(Map.FloorScroll[Sec], Img), -1, 1, stFloor, DynSec);
     SetLook(B, Sec);
-    B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
+    B.AddPolygon(Pts, Tex, BrightLight(Light, Img), TileOf(B, Img));
   end;
 
   { A sky ceiling with a sky of its own (per-sector skies): drawn with
@@ -893,7 +902,7 @@ begin
       if Map.CeilingDynamic[Sec] then DynSec := Sec else DynSec := -1;
       B := Batch(Img, false, FlatScroll(Map.CeilingScroll[Sec], Img), -1, 1, stCeiling, DynSec);
       SetLook(B, Sec);
-      B.AddPolygon(Pts, Tex, Light, TileOf(B, Img));
+      B.AddPolygon(Pts, Tex, BrightLight(Light, Img), TileOf(B, Img));
     end;
   end;
 end;

@@ -991,7 +991,9 @@ var
   Problems, Path: String;
   L: TGlLight;
   W: TDoomWad;
-  I: Integer;
+  G: TDoomGraphics;
+  Img: TDoomImage;
+  I, X, Y, Bright, Dark: Integer;
   Seen10, Seen20: Boolean;
 begin
   ClearGldefs;
@@ -1037,10 +1039,38 @@ begin
     AssertTrue('loaded', LoadGldefs(W));
     AssertEquals('wad lights', 3, Length(GlLights));
     AssertTrue('red lamp', GldefsLightFor('COLU', 'A', L) and (L.Name = 'REDLAMP'));
+    AssertEquals('wad brightmaps', 3, Length(GlBrightmaps));
+    { The brightmaps coded into the texels' alpha: a patch's stripes on
+      a texture, a PNG's checkerboard on a flat. }
+    G := TDoomGraphics.Create(W);
+    try
+      Img := G.Texture('BASE2');
+      AssertTrue('texture brightmap', Img.Brightmap and not Img.HasAlpha);
+      Bright := 0;
+      Dark := 0;
+      for Y := 0 to Img.Height - 1 do
+        for X := 0 to Img.Width - 1 do
+          if Img.Image.PixelPtr(X, Y)^.W = BrightmapAlpha(1) then Inc(Bright)
+          else if Img.Image.PixelPtr(X, Y)^.W = 255 then Inc(Dark);
+      AssertTrue(Format('stripes: %d bright, %d dark', [Bright, Dark]),
+        (Bright > 0) and (Dark > 0) and (Bright + Dark = Img.Width * Img.Height));
+      Img := G.Flat('AQF054');
+      AssertTrue('flat brightmap', Img.Brightmap);
+      { CGE's rows grow upwards: the PNG's top-left (white) square is at
+        the top here, so the bottom row starts black. }
+      AssertEquals('checker top left', BrightmapAlpha(1), Img.Image.PixelPtr(0, 63)^.W);
+      AssertEquals('checker bottom left', 255, Img.Image.PixelPtr(0, 0)^.W);
+      AssertEquals('checker next square', BrightmapAlpha(1), Img.Image.PixelPtr(8, 0)^.W);
+      AssertFalse('no brightmap', G.Texture('STARTAN3').Brightmap);
+    finally
+      FreeAndNil(G);
+    end;
   finally
     FreeAndNil(W);
     ClearGldefs;
   end;
+  AssertEquals('alpha, none', 255, BrightmapAlpha(0));
+  AssertEquals('alpha, full', 130, BrightmapAlpha(1));
 end;
 
 function LookWithLight(const Light: Integer; const Absolute: Boolean): TPlaneLook;

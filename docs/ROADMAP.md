@@ -6,6 +6,19 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- GLDEFS brightmaps (rendering roadmap item 12): `TDoomGraphics`
+  codes a texture's or flat's brightmap (a PNG or Doom patch lump,
+  scaled to the image, brightness from its brightest channel) into
+  the alpha of its opaque texels (255 dark .. 130 full, `BrightmapAlpha`,
+  still above the 0.5 alpha test), so the atlas pages and the own
+  textures carry it; `DoomGeometry` adds `BrightmapLightFlag` (1000)
+  to the light of surfaces drawing such an image, and only there the
+  shader reads the alpha back and moves the colormap row toward 0.
+  Log `Graphics: Brightmap BMSTRIPE on texture BASE2`; `gldefs.wad`
+  brightmaps BASE2 (patch stripes) and AQF054 (PNG checkerboard),
+  autotest `gldefs` (third golden: sector 74 at light 128), unit test
+  `TestGldefs`. Sprite brightmaps are left.
+
 - GLDEFS lights (`DoomGldefs`, rendering roadmap item 8): every `GLDEFS`
   lump of the loaded WADs is parsed (no exceptions) into lights
   (point, pulse, flicker, flicker2, sector; colour, size, secondary
@@ -1278,10 +1291,9 @@ play.
 
 ## Suggested next three
 
-1. Rendering, brightmaps (M, `docs/RENDERING_ROADMAP.md` item 12): the
-   parsed GLDEFS brightmaps drawn (a brightmap page beside each atlas
-   page, the shader mixing toward full bright), then the light things
-   9800-9830 of UDMF maps (item 8).
+1. Rendering, lights (S-M, `docs/RENDERING_ROADMAP.md` items 8 and 9):
+   UDMF's light things 9800-9830, spot lights, a smooth "Doom" light
+   mode beside the banded one.
 2. UDMF, the rest (L, see Content and formats): an ACS interpreter for
    the common script uses, the remaining Hexen actions.
 3. Map editor, the rest (M, see New features): sectors copied with

@@ -557,7 +557,10 @@ floors get collision triangles in the invisible collision scene.
 `GlLights` / `GlBindings` / `GlBrightmaps`; `TViewPlay.UpdateDynamicLights`
 takes a thing's bound light (by sprite and frame) before the built-in
 `LampDynamicLight` / `SpriteDynamicLight` tables, with pulse and
-flicker radii from `GldefsRadius` by the world's tic.)
+flicker radii from `GldefsRadius` by the world's tic. Its brightmaps
+are coded into the texels' alpha by `TDoomGraphics.ApplyBrightmap`;
+a surface drawing such an image has `BrightmapLightFlag` added to its
+light, which tells the shader to read the alpha as brightness.)
 
 (UDMF maps add two per-vertex attributes to the map geometry:
 `doom_color`, the sector's `lightcolor` that multiplies the

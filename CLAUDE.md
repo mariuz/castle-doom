@@ -909,9 +909,11 @@ autotest only checks the library loads.
   their things`: an imp spawned in sector 140 turns orange; autotest
   `udmf-look`). GLDEFS: `tools/testdata/gldefs.wad`
   (`tools/make_gldefs_wad.py`) makes E1M1's lamps red and gives imps a
-  blue pulse light (log `Lights: GLDEFS: 3 lights, 2 frame bindings, 1
+  blue pulse light (log `Lights: GLDEFS: 3 lights, 2 frame bindings, 3
   brightmaps`; the `DLIGHTS` recipes above show it; autotest `gldefs`,
-  unit test `TestGldefs`).
+  unit test `TestGldefs`); its brightmaps show only in dark places:
+  `G:0:2168,A:0` (sector 74, light 128) sees BASE2's bright stripes
+  (log `Graphics: Brightmap BMSTRIPE on texture BASE2`).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

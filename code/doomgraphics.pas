@@ -38,6 +38,10 @@ type
       border. }
     AtlasPage: Integer;
     AtlasRect: TVector4;
+    { A GLDEFS brightmap is coded in the alpha of the opaque texels
+      (BrightmapAlpha): the surfaces drawing it tell the shader so
+      (DoomLighting's light + BrightmapLightFlag). }
+    Brightmap: Boolean;
     constructor Create;
     destructor Destroy; override;
     { A new ImageTexture node showing this image. Repeating (walls, flats)
@@ -136,6 +140,9 @@ type
     function ReadGfx(const Url: String; out MimeType: String): TStream;
     procedure ResolveAnim(const Img: TDoomImage; const IsFlat: Boolean);
     procedure ResetAtlasPlacement;
+    { The GLDEFS brightmap of a texture or flat (Kind 'texture' / 'flat'),
+      coded into its alpha. }
+    procedure ApplyBrightmap(const Img: TDoomImage; const Kind: String);
   public
     constructor Create(const AWad: TDoomWad);
     destructor Destroy; override;
@@ -197,7 +204,7 @@ function ParseSwitchesLump(const Data: TBytes; const MaxEpisode: Integer): TSwit
 
 implementation
 
-uses Math, CastleLog, CastleStringUtils, CastleUtils, CastleDownload, DoomLighting, DoomMapInfo;
+uses Math, CastleLog, CastleStringUtils, CastleUtils, CastleDownload, DoomLighting, DoomMapInfo, DoomGldefs;
 
 var
   LutCounter: Integer;
@@ -1180,9 +1187,74 @@ begin
     DrawPatchInto(FWad, Result.Image, FWad.LumpPointer(LumpIdx), FWad.LumpSize(LumpIdx), OriginX, OriginY);
   end;
   Result.HasAlpha := ImageHasAlpha(Result.Image);
+  ApplyBrightmap(Result, 'texture');
   Result.LastLevel := FLevel;
   FTextures.Add(Def.Name, Result);
   ResolveAnim(Result, false);
+end;
+
+procedure TDoomGraphics.ApplyBrightmap(const Img: TDoomImage; const Kind: String);
+var
+  I, Lump, X, Y, SX, SY: Integer;
+  Map: TCastleImage;
+  Bright: TRGBAlphaImage;
+  Stream: TMemoryStream;
+  P: PByte;
+  Pix: PVector4Byte;
+  C: TVector4;
+  Lum: Single;
+begin
+  for I := High(GlBrightmaps) downto 0 do
+    if (GlBrightmaps[I].Kind = Kind) and (GlBrightmaps[I].Name = Img.Name) then
+    begin
+      Lump := FWad.FindLump(GlBrightmaps[I].Map);
+      if (Lump < 0) or (FWad.LumpSize(Lump) < 8) then
+      begin
+        WritelnWarning('Graphics', 'Brightmap %s of %s not found', [GlBrightmaps[I].Map, Img.Name]);
+        Exit;
+      end;
+      P := FWad.LumpPointer(Lump);
+      Map := nil;
+      { A PNG, else a Doom patch. }
+      if (P[0] = $89) and (P[1] = Ord('P')) and (P[2] = Ord('N')) and (P[3] = Ord('G')) then
+      begin
+        Stream := TMemoryStream.Create;
+        try
+          Stream.WriteBuffer(P^, FWad.LumpSize(Lump));
+          Stream.Position := 0;
+          Map := LoadImage(Stream, 'image/png', []);
+        finally
+          FreeAndNil(Stream);
+        end;
+      end else
+      begin
+        Bright := TRGBAlphaImage.Create(PInt16(P)^, PInt16(P + 2)^);
+        Bright.Clear(Vector4Byte(0, 0, 0, 0));
+        DrawPatchInto(FWad, Bright, P, FWad.LumpSize(Lump), 0, 0);
+        Map := Bright;
+      end;
+      try
+        if (Map = nil) or (Map.Width <= 0) or (Map.Height <= 0) then Exit;
+        { Scaled to the texture by nearest texels; brightness from the
+          brightest channel. }
+        for Y := 0 to Img.Height - 1 do
+          for X := 0 to Img.Width - 1 do
+          begin
+            Pix := PVector4Byte(Img.Image.PixelPtr(X, Y));
+            if Pix^.W < 255 then Continue;
+            SX := X * Map.Width div Img.Width;
+            SY := Y * Map.Height div Img.Height;
+            C := Map.Colors[SX, SY, 0];
+            Lum := Max(C.X, Max(C.Y, C.Z)) * C.W;
+            Pix^.W := BrightmapAlpha(Lum);
+          end;
+        Img.Brightmap := true;
+        WritelnLog('Graphics', 'Brightmap %s on %s %s', [GlBrightmaps[I].Map, Kind, Img.Name]);
+      finally
+        FreeAndNil(Map);
+      end;
+      Exit;
+    end;
 end;
 
 function TDoomGraphics.HasTexture(const Name: String): Boolean;
@@ -1242,6 +1314,7 @@ begin
   for Y := 0 to 63 do
     for X := 0 to 63 do
       PVector4Byte(Result.Image.PixelPtr(X, 63 - Y))^ := FWad.PaletteColor(P[Y * 64 + X]);
+  ApplyBrightmap(Result, 'flat');
   Result.LastLevel := FLevel;
   FFlats.Add(U, Result);
   ResolveAnim(Result, true);
