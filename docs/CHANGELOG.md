@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.57.0 (2026-10-30)
 
 - UDMF maps, the text map format of maps made for UZDoom / GZDoom: a PWAD whose map has a
   `TEXTMAP` loads like any other. Its nodes come from `ZNODES` or are built when the map
