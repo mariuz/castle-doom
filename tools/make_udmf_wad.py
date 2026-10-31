@@ -26,6 +26,15 @@ room (sector 140) given id 10 for its open script to raise, and line
 1052 an ACS_Execute(2, 0, 7) (script 2 with x = 7: sector 141's light
 200 and floor FLOOR7_2, "Seven").
 
+udmf-slopes.wad, as udmf.wad with slopes: sector 141 (the corridor east
+of the start room, x -256..-192, y 128..384) gets floorplane fields that
+raise its floor from 0 at y 128 to 64 at y 384, and line 836 a
+Plane_Align(0, 1) that slopes the ceiling of sector 99 (east of it) from
+141's 128 at the line down to 99's own 92 at its far side; the walls
+around them get lower and upper textures where they had none; the
+triangular sector 165 (floor 16) slopes down to 0 at its corner
+(-384, 64) by that vertex's zfloor.
+
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
 
@@ -70,6 +79,13 @@ EXTRA_LINES = {
 SECTOR_IDS = {141: 9}
 ACS_SECTOR_IDS = {141: 9, 140: 10}
 ACS_LINES = {1052: (80, (2, 0, 7), 'u')}
+SLOPE_SECTORS = {141: {'floorplane_a': '0.0', 'floorplane_b': '-0.25', 'floorplane_c': '1.0',
+                       'floorplane_d': '32.0'}}
+SLOPE_LINES = {836: (181, (0, 1), '')}
+SLOPE_FILL = (99, 141)
+# Vertex heights: the triangular sector 165 (floor 16) gets its corner
+# (-384, 64) at 0.
+SLOPE_VERTEX_Z = {(-384, 64): 0}
 LOOK_SECTORS = {140: {'lightcolor': '0xFFA070', 'rotationfloor': '45.0', 'xscalefloor': '2.0',
                       'yscalefloor': '2.0'},
                 141: {'fadecolor': '0x2040A0'}}
@@ -101,12 +117,13 @@ def flag_names(flags):
     return names
 
 
-def textmap(hexen, look=False, acs=False):
+def textmap(hexen, look=False, acs=False, slopes=False):
     out = ['namespace = "%s";' % ('zdoom' if hexen else 'doom'), '']
     V = lump('VERTEXES')
     for k in range(len(V) // 4):
         x, y = struct.unpack('<hh', V[k * 4:k * 4 + 4])
-        out.append('vertex // %d\n{\nx = %d.0;\ny = %d.0;\n}\n' % (k, x, y))
+        z = ('zfloor = %d.0;\n' % SLOPE_VERTEX_Z[(x, y)]) if slopes and (x, y) in SLOPE_VERTEX_Z else ''
+        out.append('vertex // %d\n{\nx = %d.0;\ny = %d.0;\n%s}\n' % (k, x, y, z))
     L = lump('LINEDEFS')
     side_extra = {}
     if look:
@@ -124,6 +141,8 @@ def textmap(hexen, look=False, acs=False):
                 act = EXTRA_LINES[k]
             if acs and k in ACS_LINES:
                 act = ACS_LINES[k]
+            if slopes and k in SLOPE_LINES:
+                act = SLOPE_LINES[k]
             if act:
                 special, args, how = act
                 body.append('special = %d;' % special)
@@ -148,6 +167,15 @@ def textmap(hexen, look=False, acs=False):
                 body.append('id = %d;' % tag)
         out.append('linedef // %d\n{\n%s\n}\n' % (k, '\n'.join(body)))
     S = lump('SIDEDEFS')
+    fill = set()
+    if slopes:
+        for k in range(len(L) // 14):
+            v1, v2, fl, sp, tag, sf, sb = struct.unpack('<HHHhhHH', L[k * 14:k * 14 + 14])
+            if sb == 0xFFFF:
+                continue
+            secs = {struct.unpack('<H', S[sd * 30 + 28:sd * 30 + 30])[0] for sd in (sf, sb)}
+            if secs & set(SLOPE_FILL):
+                fill |= {sf, sb}
     for k in range(len(S) // 30):
         xo, yo = struct.unpack('<hh', S[k * 30:k * 30 + 4])
         up, lo, mid = (S[k * 30 + o:k * 30 + o + 8].rstrip(b'\0').decode() for o in (4, 12, 20))
@@ -157,6 +185,9 @@ def textmap(hexen, look=False, acs=False):
             body.append('offsetx = %d;' % xo)
         if yo:
             body.append('offsety = %d;' % yo)
+        if k in fill:
+            up = up if up and up != '-' else 'STARTAN3'
+            lo = lo if lo and lo != '-' else 'STARTAN3'
         for key, t in (('texturetop', up), ('texturebottom', lo), ('texturemiddle', mid)):
             if t and t != '-':
                 body.append('%s = "%s";' % (key, t))
@@ -179,6 +210,8 @@ def textmap(hexen, look=False, acs=False):
             body.append('id = %d;' % tag)
         if look:
             body += ['%s = %s;' % kv for kv in LOOK_SECTORS.get(k, {}).items()]
+        if slopes:
+            body += ['%s = %s;' % kv for kv in SLOPE_SECTORS.get(k, {}).items()]
         out.append('sector // %d\n{\n%s\n}\n' % (k, '\n'.join(body)))
     T = lump('THINGS')
     things = [struct.unpack('<hhhhh', T[k * 10:k * 10 + 10]) for k in range(len(T) // 10)]
@@ -235,6 +268,8 @@ def main():
     write_wad(os.path.join(outdir, 'udmf-acs.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, acs=True)), ('BEHAVIOR', make_acs.behavior('compat')),
                ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-slopes.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, slopes=True)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-doom.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(False)), ('ZNODES', b'XGLN' + zn.gl(False, False)),
                ('ENDMAP', b'')])

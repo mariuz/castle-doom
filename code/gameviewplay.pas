@@ -736,7 +736,7 @@ begin
   begin
     Sec := FWorld.Map.SectorAt(Arg, Arg2);
     if Sec >= 0 then
-      PlacePlayer(Arg, Arg2, FWorld.Map.Sectors[Sec].FloorHeight, DoomAngleFromCamera);
+      PlacePlayer(Arg, Arg2, FWorld.Map.FloorAt(Sec, Arg, Arg2), DoomAngleFromCamera);
     { A scripted jump lands exactly: no momentum (knockback, a line
       teleport's kept speed) carries over. }
     FWorld.StopPush;
@@ -3020,9 +3020,9 @@ begin
     logged a Z of -1e23 and NaN transforms). Put the feet back on the
     floor and stop the fall. }
   Sec := FWorld.Map.SectorAt(Feet.X, Feet.Y);
-  if (Sec >= 0) and (Feet.Z < FWorld.Map.Sectors[Sec].FloorHeight - 4) then
+  if (Sec >= 0) and (Feet.Z < FWorld.Map.FloorAt(Sec, Feet.X, Feet.Y) - 4) then
   begin
-    Feet.Z := FWorld.Map.Sectors[Sec].FloorHeight;
+    Feet.Z := FWorld.Map.FloorAt(Sec, Feet.X, Feet.Y);
     CamPos := DoomToCge(Feet.X, Feet.Y, Feet.Z + PlayerViewHeight);
     FViewport.Camera.Translation := CamPos;
     FNavigation.CancelFalling;
@@ -3094,7 +3094,7 @@ begin
     Sec := FWorld.Map.SectorAt(FWorld.Player.X, FWorld.Player.Y);
     MaxEye := CamPos.Y + Lift;
     if Sec >= 0 then
-      MaxEye := Min(MaxEye, FWorld.Map.Sectors[Sec].CeilingHeight - (PlayerHeight - PlayerViewHeight) - 1);
+      MaxEye := Min(MaxEye, FWorld.Map.CeilingAt(Sec, FWorld.Player.X, FWorld.Player.Y) - (PlayerHeight - PlayerViewHeight) - 1);
     if MaxEye > CamPos.Y then
       FViewport.Camera.Translation := Vector3(CamPos.X, MaxEye, CamPos.Z)
     else

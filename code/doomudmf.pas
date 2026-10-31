@@ -73,6 +73,9 @@ const
   { Static: the line's front side scrolls by Args[0], Args[1] / 64 texels
     a tic (x: left, y: up, like Boom's 255). }
   UdmfScrollWall = UdmfSpecialBase + 50;
+  { Static: Plane_Align (Args[0] the floor, Args[1] the ceiling: 1 the
+    front sector slopes, 2 the back one); DoomMap builds the slopes. }
+  UdmfPlaneAlign = UdmfSpecialBase + 51;
   { ACS scripts (DoomAcs). Args as Hexen's: script, map (0 = this one),
     the script's arguments; ACS_ExecuteWithResult: script and four
     arguments; the locked ones: the lock in Args[4]. }
@@ -416,6 +419,7 @@ begin
     UdmfLightToValue: Result := 'light to value';
     UdmfLightByValue: Result := 'light by value';
     UdmfScrollWall: Result := 'scrolling wall';
+    UdmfPlaneAlign: Result := 'Plane_Align';
     UdmfAcsExecute: Result := 'ACS_Execute';
     UdmfAcsExecuteAlways: Result := 'ACS_ExecuteAlways';
     UdmfAcsExecuteWithResult: Result := 'ACS_ExecuteWithResult';
@@ -786,7 +790,7 @@ begin
   Trig := GenTrigger;
   Result.Trigger := Trig;
   if Monster then Result.Trigger := Result.Trigger + 8;
-  if not (Cross or Use or Impact) and not (Special in [100..103, 121, 208..211]) then
+  if not (Cross or Use or Impact) and not (Special in [100..103, 121, 181, 208..211]) then
   begin
     { No activation (only scripts could trigger it). }
     if Special <> 0 then
@@ -950,6 +954,13 @@ begin
         if A[0] = 0 then Result.TranslucentId := -1;
       end;
     121: Result.Tag := 0;
+    181:
+      begin
+        Result.Special := UdmfPlaneAlign;
+        Result.Tag := 0;
+        Result.Args[0] := A[0];
+        Result.Args[1] := A[1];
+      end;
     { Scripts: the arguments as they are. }
     80, 81, 82, 83, 84, 85, 226:
       begin

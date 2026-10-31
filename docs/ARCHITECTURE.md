@@ -272,6 +272,27 @@ pushers) to Doom's with Boom's bits. Actions without a translation
 (polyobjects, slopes, 3D floors, portals...) are counted and
 logged.
 
+### Slopes (`TDoomMap.BuildSlopes`, `FloorAt` / `CeilingAt`)
+
+A sector's floor or ceiling may be a plane (`TSectorSlope`): a
+gradient (DX, DY) from an origin (OX, OY), added to `FloorHeight` /
+`CeilingHeight`, which stays the height at the origin, so every mover
+works unchanged and moves the whole plane. `BuildSlopes` runs after the
+UDMF links: UDMF's plane equations are re-origined at a vertex of the
+sector, `Plane_Align` lines (translated to the static `UdmfPlaneAlign`)
+put the plane through the line at the neighbour's height and through
+the sector's farthest vertex at its own, and a triangular sector with
+`zfloor` / `zceiling` on its vertices gets the plane through its
+corners. Everything that needs a height at a place asks
+`FloorAt(Sec, X, Y)` / `CeilingAt`: `DoomGeometry` for each flat
+corner and each wall end (walls carry four heights), and the world for
+actors, spawns and teleports; `TDoomWorld.LineOpening` gives a line's
+opening at the point (projected on the line) where a move, sight line,
+aim, hitscan or missile crosses it. The player walks on the drawn
+geometry (CGE's walk navigation), so ramps need no more code there.
+Movers' targets (`LowestFloorSurrounding`...) still read the sectors'
+heights, which on a slope are the origins'.
+
 ### ACS scripts (`DoomAcs`, `doomworld_acs.inc`)
 
 A UDMF map's `BEHAVIOR` lump (`TDoomMap.Behavior`) holds ACC's compiled

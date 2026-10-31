@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Slopes in UDMF maps: sloped floors and ceilings from the plane fields (`floorplane_*`,
+  `ceilingplane_*`), `Plane_Align` lines and vertex heights of triangular sectors. Players
+  walk up and down them, monsters and items stand on them, and sight, shots and missiles
+  follow them.
 - ACS scripts in UDMF maps: a map's `BEHAVIOR` lump (Hexen's, ZDoom's `ACSE` and `ACSe`
   formats) runs its open, enter and death scripts and the ones lines start
   (`ACS_Execute`, `ACS_ExecuteAlways`, `ACS_LockedExecute`, `ACS_Terminate`, `ACS_Suspend`):

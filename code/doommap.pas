@@ -83,8 +83,17 @@ type
     Activation: Integer;
   end;
 
+  { A sloped floor or ceiling (UZDoom's slopes): the height at (X, Y) is
+    the sector's FloorHeight / CeilingHeight + DX * (X - OX) + DY * (Y - OY),
+    so movers that change the height move the whole plane. }
+  TSectorSlope = record
+    Sloped: Boolean;
+    DX, DY, OX, OY: Single;
+  end;
+
   TDoomSector = record
-    { Current heights, changed by doors / lifts / floors. }
+    { Current heights, changed by doors / lifts / floors (on a slope:
+      the height at the slope's origin). }
     FloorHeight, CeilingHeight: Single;
     OrigFloor, OrigCeiling: Integer;
     FloorTex, CeilingTex: String;
@@ -104,6 +113,8 @@ type
       0..1 RGB; HasColor / HasFade false = white light, no fog. }
     HasColor, HasFade: Boolean;
     LightColor, FadeColor: TVector3;
+    { Slopes (TDoomMap.FloorAt / CeilingAt read them). }
+    FloorSlope, CeilingSlope: TSectorSlope;
   end;
 
   TDoomThing = record
@@ -211,6 +222,7 @@ type
     procedure BuildNodes;
     procedure LogUdmfLook;
     procedure ResolveUdmfLinks;
+    procedure BuildSlopes;
     procedure BuildLineGrid;
     procedure NextMark;
     procedure AddCellRow(const Row, Col0, Col1: Integer; var Found: TLineList; var Count: Integer);
@@ -301,6 +313,10 @@ type
     MapLights: array of TMapLight;
     { UDMF: the map's BEHAVIOR lump (compiled ACS scripts), empty if none. }
     Behavior: TBytes;
+    { UDMF vertex heights (zfloor / zceiling), NaN where none is given. }
+    VertexZFloor, VertexZCeiling: array of Single;
+    { How many floors and ceilings are sloped. }
+    SlopedFloors, SlopedCeilings: Integer;
 
     constructor Create(const AWad: TDoomWad; const MapName: String);
 
@@ -310,6 +326,13 @@ type
     function PointOnLineSide(const X, Y: Single; const LineIndex: Integer): Integer;
     function SubsectorAt(const X, Y: Single): Integer;
     function SectorAt(const X, Y: Single): Integer;
+    { The floor / ceiling height of sector Sec at (X, Y): its height, or
+      on a slope the plane's height there. }
+    function FloorAt(const Sec: Integer; const X, Y: Single): Single;
+    function CeilingAt(const Sec: Integer; const X, Y: Single): Single;
+    { The lowest and highest height a slope reaches over its sector's
+      vertices (the height itself when flat). }
+    function FloorRange(const Sec: Integer; out Lowest, Highest: Single): Boolean;
     { The REJECT table says sector S1 can never see S2. }
     function RejectBlocks(const S1, S2: Integer): Boolean;
     { The sector across the line from Sector, -1 when one-sided. }
@@ -476,7 +499,11 @@ begin
     LoadLumps(Marker);
   BuildSectorLists;
   BuildSubsectorPolygons;
-  if FUdmf then ResolveUdmfLinks;
+  if FUdmf then
+  begin
+    ResolveUdmfLinks;
+    BuildSlopes;
+  end;
   BuildLineGrid;
   BuildScrollers;
   BuildFrictionAndPushers;
@@ -700,6 +727,27 @@ const
     Look.LightAbsolute := UdmfBool(B^, 'light' + Which + 'absolute');
   end;
 
+  { UDMF's plane equation a x + b y + c z + d = 0 (c not 0): the height
+    at the map's origin and the gradient; BuildSlopes moves the origin
+    into the sector. }
+  procedure SlopePlane(var Slope: TSectorSlope; var Height: Single; const Prefix: String);
+  var
+    A, Bc, C, D: Double;
+  begin
+    if not (UdmfHas(B^, Prefix + 'a') or UdmfHas(B^, Prefix + 'b')) then Exit;
+    A := UdmfFloat(B^, Prefix + 'a');
+    Bc := UdmfFloat(B^, Prefix + 'b');
+    C := UdmfFloat(B^, Prefix + 'c');
+    D := UdmfFloat(B^, Prefix + 'd');
+    if Abs(C) < 1e-9 then Exit;
+    Slope.Sloped := (A <> 0) or (Bc <> 0);
+    Slope.DX := -A / C;
+    Slope.DY := -Bc / C;
+    Slope.OX := 0;
+    Slope.OY := 0;
+    Height := -D / C;
+  end;
+
   function ColorOf(const C: Integer): TVector3;
   begin
     Result := Vector3(((C shr 16) and 255) / 255, ((C shr 8) and 255) / 255, (C and 255) / 255);
@@ -741,6 +789,8 @@ begin
       else if Kind = 'thing' then Inc(NT);
     end;
     SetLength(Vertices, NV);
+    SetLength(VertexZFloor, NV);
+    SetLength(VertexZCeiling, NV);
     SetLength(Linedefs, NL);
     SetLength(Sidedefs, NS);
     SetLength(Sectors, NSec);
@@ -757,6 +807,8 @@ begin
       begin
         Vertices[NV].X := UdmfFloat(B^, 'x');
         Vertices[NV].Y := UdmfFloat(B^, 'y');
+        if UdmfHas(B^, 'zfloor') then VertexZFloor[NV] := UdmfFloat(B^, 'zfloor') else VertexZFloor[NV] := NaN;
+        if UdmfHas(B^, 'zceiling') then VertexZCeiling[NV] := UdmfFloat(B^, 'zceiling') else VertexZCeiling[NV] := NaN;
         MinX := Min(MinX, Vertices[NV].X);
         MaxX := Max(MaxX, Vertices[NV].X);
         MinY := Min(MinY, Vertices[NV].Y);
@@ -781,6 +833,8 @@ begin
         Sectors[NSec].Tag := UdmfInt(B^, 'id');
         Plane(Sectors[NSec].FloorLook, 'floor');
         Plane(Sectors[NSec].CeilingLook, 'ceiling');
+        SlopePlane(Sectors[NSec].FloorSlope, Sectors[NSec].FloorHeight, 'floorplane_');
+        SlopePlane(Sectors[NSec].CeilingSlope, Sectors[NSec].CeilingHeight, 'ceilingplane_');
         if UdmfHas(B^, 'lightcolor') then
         begin
           Sectors[NSec].LightColor := ColorOf(UdmfInt(B^, 'lightcolor'));
@@ -979,6 +1033,239 @@ begin
         FName, Translated, Unsupported.Count, FUdmfSummary]);
   end;
   FreeAndNil(Unsupported);
+end;
+
+{ Slopes ---------------------------------------------------------------------- }
+
+function SlopeHeight(const S: TSectorSlope; const H, X, Y: Single): Single; inline;
+begin
+  if S.Sloped then
+    Result := H + S.DX * (X - S.OX) + S.DY * (Y - S.OY)
+  else
+    Result := H;
+end;
+
+function TDoomMap.FloorAt(const Sec: Integer; const X, Y: Single): Single;
+begin
+  Result := SlopeHeight(Sectors[Sec].FloorSlope, Sectors[Sec].FloorHeight, X, Y);
+end;
+
+function TDoomMap.CeilingAt(const Sec: Integer; const X, Y: Single): Single;
+begin
+  Result := SlopeHeight(Sectors[Sec].CeilingSlope, Sectors[Sec].CeilingHeight, X, Y);
+end;
+
+function TDoomMap.FloorRange(const Sec: Integer; out Lowest, Highest: Single): Boolean;
+var
+  L, K: Integer;
+  V: TDoomVertex;
+  Z: Single;
+begin
+  Lowest := Sectors[Sec].FloorHeight;
+  Highest := Lowest;
+  Result := Sectors[Sec].FloorSlope.Sloped;
+  if not Result then Exit;
+  Lowest := 1e9;
+  Highest := -1e9;
+  for L in Sectors[Sec].Lines do
+    for K := 0 to 1 do
+    begin
+      if K = 0 then V := Vertices[Linedefs[L].V1] else V := Vertices[Linedefs[L].V2];
+      Z := FloorAt(Sec, V.X, V.Y);
+      Lowest := Min(Lowest, Z);
+      Highest := Max(Highest, Z);
+    end;
+  if Lowest > Highest then
+  begin
+    Lowest := Sectors[Sec].FloorHeight;
+    Highest := Lowest;
+  end;
+end;
+
+{ The plane through three points as a slope from O (one of them): its
+  gradient, and false when the points are on a vertical plane. }
+function SlopeFromPoints(const P1, P2, P3: TVector3; out S: TSectorSlope): Boolean;
+var
+  U, V, N: TVector3;
+begin
+  U := P2 - P1;
+  V := P3 - P1;
+  N := TVector3.CrossProduct(U, V);
+  S := Default(TSectorSlope);
+  if Abs(N.Z) < 1e-6 then Exit(false);
+  S.DX := -N.X / N.Z;
+  S.DY := -N.Y / N.Z;
+  S.Sloped := (Abs(S.DX) > 1e-7) or (Abs(S.DY) > 1e-7);
+  Result := true;
+end;
+
+{ Slopes from UDMF's plane fields (moved to an origin in the sector),
+  Plane_Align lines (DoomUdmf's UdmfPlaneAlign) and the vertex heights
+  of triangular sectors. }
+procedure TDoomMap.BuildSlopes;
+var
+  I, L, K, Sec, Other, Far, Side, Which: Integer;
+  V1, V2, VF: TDoomVertex;
+  Dist, Best, DX, DY, Len: Single;
+  S: TSectorSlope;
+  Verts: array of Integer;
+  P: array [0..2] of TVector3;
+  Ceiling, HasZ: Boolean;
+
+  procedure Reorigin(var Slope: TSectorSlope; var Height: Single; const Sec: Integer);
+  var
+    O: TDoomVertex;
+    Z: Single;
+  begin
+    if (not Slope.Sloped) or (Length(Sectors[Sec].Lines) = 0) then Exit;
+    O := Vertices[Linedefs[Sectors[Sec].Lines[0]].V1];
+    Z := SlopeHeight(Slope, Height, O.X, O.Y);
+    Slope.OX := O.X;
+    Slope.OY := O.Y;
+    Height := Z;
+  end;
+
+  procedure AddVertex(const V: Integer);
+  var
+    J: Integer;
+  begin
+    for J := 0 to High(Verts) do
+      if Verts[J] = V then Exit;
+    SetLength(Verts, Length(Verts) + 1);
+    Verts[High(Verts)] := V;
+  end;
+
+begin
+  for Sec := 0 to High(Sectors) do
+  begin
+    Reorigin(Sectors[Sec].FloorSlope, Sectors[Sec].FloorHeight, Sec);
+    Reorigin(Sectors[Sec].CeilingSlope, Sectors[Sec].CeilingHeight, Sec);
+  end;
+
+  { Plane_Align (arg0 the floor, arg1 the ceiling: 1 the front sector, 2
+    the back one): the sector slopes from the other's height at the line
+    to its own at its vertex farthest from the line. }
+  for L := 0 to High(Linedefs) do
+  begin
+    if Linedefs[L].Special <> UdmfPlaneAlign then Continue;
+    for Which := 0 to 1 do
+    begin
+      Side := Linedefs[L].Args[Which];
+      Ceiling := Which = 1;
+      if (Side < 1) or (Side > 2) then Continue;
+      if Side = 1 then
+      begin
+        Sec := Linedefs[L].FrontSector;
+        Other := Linedefs[L].BackSector;
+      end else
+      begin
+        Sec := Linedefs[L].BackSector;
+        Other := Linedefs[L].FrontSector;
+      end;
+      if (Sec < 0) or (Other < 0) then Continue;
+      V1 := Vertices[Linedefs[L].V1];
+      V2 := Vertices[Linedefs[L].V2];
+      DX := V2.X - V1.X;
+      DY := V2.Y - V1.Y;
+      Len := Sqrt(Sqr(DX) + Sqr(DY));
+      if Len < 1e-6 then Continue;
+      Far := -1;
+      Best := 0;
+      for I in Sectors[Sec].Lines do
+        for K := 0 to 1 do
+        begin
+          if K = 0 then VF := Vertices[Linedefs[I].V1] else VF := Vertices[Linedefs[I].V2];
+          Dist := Abs((VF.X - V1.X) * DY - (VF.Y - V1.Y) * DX) / Len;
+          if Dist > Best then
+          begin
+            Best := Dist;
+            if K = 0 then Far := Linedefs[I].V1 else Far := Linedefs[I].V2;
+          end;
+        end;
+      if Far < 0 then Continue;
+      VF := Vertices[Far];
+      if Ceiling then
+      begin
+        P[0] := Vector3(V1.X, V1.Y, Sectors[Other].CeilingHeight);
+        P[1] := Vector3(V2.X, V2.Y, Sectors[Other].CeilingHeight);
+        P[2] := Vector3(VF.X, VF.Y, Sectors[Sec].CeilingHeight);
+      end else
+      begin
+        P[0] := Vector3(V1.X, V1.Y, Sectors[Other].FloorHeight);
+        P[1] := Vector3(V2.X, V2.Y, Sectors[Other].FloorHeight);
+        P[2] := Vector3(VF.X, VF.Y, Sectors[Sec].FloorHeight);
+      end;
+      if not SlopeFromPoints(P[0], P[1], P[2], S) then Continue;
+      S.OX := VF.X;
+      S.OY := VF.Y;
+      if Ceiling then Sectors[Sec].CeilingSlope := S else Sectors[Sec].FloorSlope := S;
+    end;
+  end;
+
+  { Vertex heights: a triangular sector's floor or ceiling through its
+    three corners (each at its zfloor / zceiling, else the sector's
+    height). }
+  { (The node builder may have added vertices after these.) }
+  if Length(VertexZFloor) > 0 then
+    for Sec := 0 to High(Sectors) do
+    begin
+      Verts := nil;
+      for I in Sectors[Sec].Lines do
+      begin
+        AddVertex(Linedefs[I].V1);
+        AddVertex(Linedefs[I].V2);
+      end;
+      if (Length(Verts) <> 3) or (Max(Verts[0], Max(Verts[1], Verts[2])) > High(VertexZFloor)) then Continue;
+      for Which := 0 to 1 do
+      begin
+        HasZ := false;
+        for K := 0 to 2 do
+        begin
+          if Which = 0 then
+          begin
+            P[K] := Vector3(Vertices[Verts[K]].X, Vertices[Verts[K]].Y, Sectors[Sec].FloorHeight);
+            if not IsNan(VertexZFloor[Verts[K]]) then
+            begin
+              P[K].Z := VertexZFloor[Verts[K]];
+              HasZ := true;
+            end;
+          end else
+          begin
+            P[K] := Vector3(Vertices[Verts[K]].X, Vertices[Verts[K]].Y, Sectors[Sec].CeilingHeight);
+            if not IsNan(VertexZCeiling[Verts[K]]) then
+            begin
+              P[K].Z := VertexZCeiling[Verts[K]];
+              HasZ := true;
+            end;
+          end;
+        end;
+        if not HasZ then Continue;
+        if not SlopeFromPoints(P[0], P[1], P[2], S) then Continue;
+        S.OX := P[0].X;
+        S.OY := P[0].Y;
+        if Which = 0 then
+        begin
+          Sectors[Sec].FloorSlope := S;
+          Sectors[Sec].FloorHeight := P[0].Z;
+        end else
+        begin
+          Sectors[Sec].CeilingSlope := S;
+          Sectors[Sec].CeilingHeight := P[0].Z;
+        end;
+      end;
+    end;
+
+  SlopedFloors := 0;
+  SlopedCeilings := 0;
+  for Sec := 0 to High(Sectors) do
+  begin
+    if Sectors[Sec].FloorSlope.Sloped then Inc(SlopedFloors);
+    if Sectors[Sec].CeilingSlope.Sloped then Inc(SlopedCeilings);
+    Sectors[Sec].OrigFloor := Round(Sectors[Sec].FloorHeight);
+    Sectors[Sec].OrigCeiling := Round(Sectors[Sec].CeilingHeight);
+  end;
+  if SlopedFloors + SlopedCeilings > 0 then
+    WritelnLog('Map', '%s: slopes: %d floors, %d ceilings', [FName, SlopedFloors, SlopedCeilings]);
 end;
 
 { How many sectors and sides use UDMF's rendering fields, for the log. }

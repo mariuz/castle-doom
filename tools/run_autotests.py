@@ -388,6 +388,15 @@ TESTS = [
       r'Message: Array 30', r'Message: Init 100'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-acs.wad'), '--fixed-step'],
      lambda config: check_udmf_acs(config)),
+    # Slopes (udmf-slopes.wad): the ramp seen from the start room, walked
+    # up (the player's height in saves 1 and 2), an imp standing on it
+    # (save 3), Plane_Align's ceiling of sector 99.
+    ('slopes', 'E1M1',
+     'Y,W:0.3,G:-416:256,A:0,W:0.3,S,G:-224:150,A:90,W:0.3,SAVE:1,S,F:1,W:0.5,SAVE:2,G:-224:150,A:90,'
+     'P:3001:150,W:0.2,SAVE:3,G:-224:256,A:0,LOOK:30,W:0.3,S,Q',
+     [r'Map: E1M1: slopes: 2 floors, 1 ceilings'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-slopes.wad'), '--fixed-step'],
+     lambda config: check_slopes(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -661,6 +670,19 @@ def check_udmf_acs(config):
     assert c['sectorFloor'][140] == 32 and c['acs']['mapVars'][0] == 3, \
         'not resumed after the load: floor %s, %s' % (c['sectorFloor'][140], c['acs'])
     assert c['acsGlobals']['world'] == [], 'world variables after the load %s' % c['acsGlobals']
+
+
+def check_slopes(config):
+    """tools/testdata/udmf-slopes.wad: sector 141's floor is (y - 128) / 4;
+    the player walks up it and an imp spawned on it stands at that height."""
+    a, b, c = (save_json(config, n) for n in (1, 2, 3))
+    za, zb = a['player']['z'], b['player']['z']
+    ya, yb = a['player']['y'], b['player']['y']
+    assert abs(za - (ya - 128) / 4) < 3, 'start of the ramp: z %s at y %s' % (za, ya)
+    assert yb > 300 and abs(zb - (yb - 128) / 4) < 3, 'up the ramp: z %s at y %s' % (zb, yb)
+    imps = [t for t in c['actors'] if t.get('type') == 3001 and abs(t['x'] + 224) < 40]
+    assert imps, 'no imp on the ramp'
+    assert abs(imps[0]['z'] - (imps[0]['y'] - 128) / 4) < 1, 'imp at z %s, y %s' % (imps[0]['z'], imps[0]['y'])
 
 
 def check_carry(config):
@@ -1112,7 +1134,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
 ]

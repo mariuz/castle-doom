@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 55 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 56 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -931,6 +931,16 @@ autotest only checks the library loads.
   `udmf-acs` (goldens) saves during a delay and loads it. The p-code
   numbers come from ACC's `pcode.h` via `tools/make_acs_pcodes.py`
   (regenerate rather than edit `doomacs_pcodes.inc`).
+  Slopes: `udmf-slopes.wad` (same script) raises sector 141 (the
+  corridor east of the start room) from 0 at y 128 to 64 at y 384
+  (floorplane fields), slopes sector 99's ceiling by a `Plane_Align`
+  on line 836 and corner (-384, 64) of the triangular sector 165 by
+  `zfloor`; log `Map: E1M1: slopes: 2 floors, 1 ceilings`.
+  `G:-224:150,A:90,F:1` walks up the ramp (the player's `z` in a save
+  is about (y - 128) / 4); autotest `slopes` (goldens), unit test
+  `TestSlopes`. Code that needs a height at a place uses
+  `TDoomMap.FloorAt` / `CeilingAt`, and a line's opening at a point
+  `TDoomWorld.LineOpening`, not `Sectors[S].FloorHeight`.
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

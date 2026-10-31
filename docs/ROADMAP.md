@@ -6,6 +6,23 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Slopes (rendering roadmap item 4): `TDoomSector.FloorSlope` /
+  `CeilingSlope` hold a plane as a gradient from an origin, relative to
+  the sector's height, so movers move the whole plane;
+  `TDoomMap.FloorAt` / `CeilingAt` give the height at a point and
+  `BuildSlopes` makes them from UDMF's `floorplane_*` /
+  `ceilingplane_*` (re-origined into the sector), `Plane_Align` (181,
+  DoomUdmf's static `UdmfPlaneAlign`: the other sector's height at the
+  line, the own one at the farthest vertex) and `zfloor` / `zceiling` of
+  triangular sectors (log `Map: E1M1: slopes: 2 floors, 1 ceilings`).
+  `DoomGeometry` gives flats a height per corner and walls a bottom and
+  top per end; the walk navigation climbs them on the geometry, and the
+  world reads heights at the point (`TDoomWorld.LineOpening` at the
+  crossing for moves, sight, aim, hitscans and missiles; actors,
+  spawns, teleports). Test map `udmf-slopes.wad`
+  (`tools/make_udmf_wad.py`), unit test `TestSlopes`, autotest `slopes`
+  (goldens). Left: `Plane_Copy`, slope things, sloped 3D floors.
+
 - ACS scripts (UDMF, the rest): `DoomAcs` reads a UDMF map's
   `BEHAVIOR` lump in Hexen's `ACS\0`, ZDoom's `ACSE` / `ACSe` layouts
   (also behind an `ACS\0` header as ACC writes them; `SPTR`, `STRL` /
@@ -1329,15 +1346,15 @@ play.
 
 ## Suggested next three
 
-1. Rendering, slopes (L, `docs/RENDERING_ROADMAP.md` item 4):
-   `Plane_Align` and UDMF plane fields, in the geometry and the
-   simulation's floor heights.
-2. Map editor, the rest (M, see New features): sectors copied with
+1. Map editor, the rest (M, see New features): sectors copied with
    their holes, the things and the sky in the glTF / X3D export, UDMF
    maps in the editor.
-3. UDMF, the rest (M, see Content and formats): the remaining Hexen
+2. UDMF, the rest (M, see Content and formats): the remaining Hexen
    actions (`Thing_*`, `Scroll_Floor`, friction and wind sectors,
-   pillars) and ACS's thing spawning and inventory.
+   pillars), ACS's thing spawning and inventory, `Plane_Copy` and the
+   slope things.
+3. Rendering, 3D floors (L, `docs/RENDERING_ROADMAP.md` item 5):
+   `Sector_Set3dFloor` solid and translucent slabs, drawn and collided.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

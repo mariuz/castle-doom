@@ -236,6 +236,11 @@ type
     FAcsLogged: TStringList;
     FActivationSide: Integer;
     procedure ComputeDynamicSectors;
+    { The two sides' floor and ceiling heights where (X, Y), projected on
+      the line, lies (they differ along a line on slopes), and the
+      opening between them. }
+    procedure LineOpening(const Line: Integer; const X, Y: Single;
+      out OpenBottom, OpenTop, LowFloor: Single; out FloorsDiffer, CeilingsDiffer: Boolean);
     procedure SpawnThings;
     { LoadMap, optionally restoring a saved game (State <> nil). }
     procedure LoadMapCore(const MapName: String; const KeepInventory: Boolean; const State: TJSONObject);
@@ -1167,6 +1172,34 @@ begin
   SetLength(FLightSectors, 0);
 end;
 
+procedure TDoomWorld.LineOpening(const Line: Integer; const X, Y: Single;
+  out OpenBottom, OpenTop, LowFloor: Single; out FloorsDiffer, CeilingsDiffer: Boolean);
+var
+  L: TDoomLinedef;
+  V1, V2: TDoomVertex;
+  DX, DY, T, PX, PY, FF, FC, BF, BC: Single;
+begin
+  L := FMap.Linedefs[Line];
+  V1 := FMap.Vertices[L.V1];
+  V2 := FMap.Vertices[L.V2];
+  DX := V2.X - V1.X;
+  DY := V2.Y - V1.Y;
+  T := 0;
+  if (DX <> 0) or (DY <> 0) then
+    T := Max(0, Min(1, ((X - V1.X) * DX + (Y - V1.Y) * DY) / (Sqr(DX) + Sqr(DY))));
+  PX := V1.X + DX * T;
+  PY := V1.Y + DY * T;
+  FF := FMap.FloorAt(L.FrontSector, PX, PY);
+  FC := FMap.CeilingAt(L.FrontSector, PX, PY);
+  BF := FMap.FloorAt(L.BackSector, PX, PY);
+  BC := FMap.CeilingAt(L.BackSector, PX, PY);
+  OpenBottom := Max(FF, BF);
+  OpenTop := Min(FC, BC);
+  LowFloor := Min(FF, BF);
+  FloorsDiffer := FF <> BF;
+  CeilingsDiffer := FC <> BC;
+end;
+
 procedure TDoomWorld.ComputeDynamicSectors;
 var
   I, S, Sec, Back, Next, L, Guard: Integer;
@@ -1428,9 +1461,9 @@ begin
     A.MapFlags := T.Flags;
     A.Tid := T.Tid;
     if Info^.Hanging then
-      A.DoomZ := FMap.Sectors[Sec].CeilingHeight - Info^.Height
+      A.DoomZ := FMap.CeilingAt(Sec, T.X, T.Y) - Info^.Height
     else
-      A.DoomZ := FMap.Sectors[Sec].FloorHeight;
+      A.DoomZ := FMap.FloorAt(Sec, T.X, T.Y);
     if Info^.Kind in [tkTeleportDest, tkBossSpot] then
       A.HideSprite;
     if Info^.Num = 2035 then
@@ -1543,7 +1576,7 @@ begin
   Player.Angle := FDoomStartAngle;
   Player.Sector := FMap.SectorAt(Player.X, Player.Y);
   if Player.Sector >= 0 then
-    Player.Z := FMap.Sectors[Player.Sector].FloorHeight;
+    Player.Z := FMap.FloorAt(Player.Sector, Player.X, Player.Y);
   FOldPlayerX := Player.X;
   FOldPlayerY := Player.Y;
   FExitRequested := false;
@@ -2303,13 +2336,13 @@ begin
   { Damaging floors, only when standing on them; Boom's types (32 and
     up) say the damage in bits 5-6: 5, 10 or 20 a hit, the last one
     through a radiation suit too (2 in 256 tics). }
-  if (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) and (FTic mod 32 = 0) and (Special >= 32) then
+  if (Player.Z <= FMap.FloorAt(Sec, Player.X, Player.Y) + 1) and (FTic mod 32 = 0) and (Special >= 32) then
     case (Special shr 5) and 3 of
       1: if Player.RadSuitTics = 0 then DamagePlayer(5, nil);
       2: if Player.RadSuitTics = 0 then DamagePlayer(10, nil);
       3: if (Player.RadSuitTics = 0) or (Random1(256) < 5) then DamagePlayer(20, nil);
     end;
-  if (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) and (FTic mod 32 = 0) and (Player.RadSuitTics = 0) and
+  if (Player.Z <= FMap.FloorAt(Sec, Player.X, Player.Y) + 1) and (FTic mod 32 = 0) and (Player.RadSuitTics = 0) and
      (Special < 32) then
     case Special of
       7: DamagePlayer(5, nil);
@@ -2573,11 +2606,11 @@ begin
       if (Sec >= 0) and not (A.State in [asMissile, asEffect]) then
       begin
         if A.Info^.Hanging then
-          A.DoomZ := FMap.Sectors[Sec].CeilingHeight - A.Info^.Height
+          A.DoomZ := FMap.CeilingAt(Sec, A.DoomX, A.DoomY) - A.Info^.Height
         else if A.Info^.Floats and (A.Info^.Kind = tkMonster) then
           TicFloat(A)
         else
-          A.DoomZ := FMap.Sectors[Sec].FloorHeight;
+          A.DoomZ := FMap.FloorAt(Sec, A.DoomX, A.DoomY);
         LightActor(A, Sec);
       end;
       A.UpdateRotation(Player.X, Player.Y);
@@ -2611,7 +2644,8 @@ var
   I, F, B: Integer;
   L: TDoomLinedef;
   V1, V2: TDoomVertex;
-  T, TopSlope, BottomSlope, OpenTop, OpenBottom, Slope: Single;
+  T, TopSlope, BottomSlope, OpenTop, OpenBottom, LowFloor, Slope: Single;
+  FloorsDiffer, CeilingsDiffer: Boolean;
   MinX, MaxX, MinY, MaxY: Single;
   K, N: Integer;
 begin
@@ -2633,16 +2667,16 @@ begin
     F := L.FrontSector;
     B := L.BackSector;
     if (F < 0) or (B < 0) then Exit(false);
-    OpenTop := Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight);
-    OpenBottom := Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight);
+    LineOpening(I, X1 + (X2 - X1) * T, Y1 + (Y2 - Y1) * T, OpenBottom, OpenTop, LowFloor, FloorsDiffer,
+      CeilingsDiffer);
     if OpenTop <= OpenBottom then Exit(false);
     if T < 1e-4 then Continue; { the line under the viewer's feet }
-    if FMap.Sectors[F].FloorHeight <> FMap.Sectors[B].FloorHeight then
+    if FloorsDiffer then
     begin
       Slope := (OpenBottom - EyeZ) / T;
       if Slope > BottomSlope then BottomSlope := Slope;
     end;
-    if FMap.Sectors[F].CeilingHeight <> FMap.Sectors[B].CeilingHeight then
+    if CeilingsDiffer then
     begin
       Slope := (OpenTop - EyeZ) / T;
       if Slope < TopSlope then TopSlope := Slope;
@@ -2686,7 +2720,8 @@ var
   I, F, B: Integer;
   L: TDoomLinedef;
   V1, V2: TDoomVertex;
-  T: Single;
+  T, OpenBottom, OpenTop, LowFloor: Single;
+  FloorsDiffer, CeilingsDiffer: Boolean;
   MinX, MaxX, MinY, MaxY: Single;
   K, N: Integer;
 begin
@@ -2703,14 +2738,15 @@ begin
        (Max(V1.Y, V2.Y) < MinY) or (Min(V1.Y, V2.Y) > MaxY) then Continue;
     F := L.FrontSector;
     B := L.BackSector;
+    if not SegmentsIntersect(X1, Y1, X2, Y2, V1.X, V1.Y, V2.X, V2.Y, T) then Continue;
     if (F >= 0) and (B >= 0) then
     begin
       { Open two-sided line: see through unless the gap is closed. }
-      if Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight) >
-         Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight) then Continue;
+      LineOpening(I, X1 + (X2 - X1) * T, Y1 + (Y2 - Y1) * T, OpenBottom, OpenTop, LowFloor, FloorsDiffer,
+        CeilingsDiffer);
+      if OpenTop > OpenBottom then Continue;
     end;
-    if SegmentsIntersect(X1, Y1, X2, Y2, V1.X, V1.Y, V2.X, V2.Y, T) then
-      Exit(false);
+    Exit(false);
   end;
   Result := true;
 end;
@@ -2722,6 +2758,7 @@ var
   L: TDoomLinedef;
   V1, V2: TDoomVertex;
   OpenTop, OpenBottom, LowFloor, FloorZ: Single;
+  FloorsDiffer, CeilingsDiffer: Boolean;
   Corners: array [0..3] of Single;
   O: TDoomActor;
   K, N: Integer;
@@ -2752,7 +2789,7 @@ begin
   Corners[0] := 0; { silence warnings }
   Sec := FMap.SectorAt(NX, NY);
   if Sec < 0 then Exit;
-  FloorZ := FMap.Sectors[Sec].FloorHeight;
+  FloorZ := FMap.FloorAt(Sec, NX, NY);
 
   N := FMap.LinesInBox(NX - R - 1, NY - R - 1, NX + R + 1, NY + R + 1, FLinesMove);
   for K := 0 to N - 1 do
@@ -2774,9 +2811,7 @@ begin
       BlockedByLine := I;
       Exit;
     end;
-    OpenTop := Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight);
-    OpenBottom := Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight);
-    LowFloor := Min(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight);
+    LineOpening(I, NX, NY, OpenBottom, OpenTop, LowFloor, FloorsDiffer, CeilingsDiffer);
     if OpenTop - OpenBottom < H then
     begin
       BlockedByLine := I;
@@ -3050,7 +3085,7 @@ begin
     momentum, gives under a unit of slide there (the momentum falls below
     STOPSPEED within a few tics) and nothing with steps made every tic. }
   OnFriction := (A.Sector >= 0) and ((FMap.Sectors[A.Sector].Special and SectorFrictionBit) <> 0) and
-    (A.DoomZ <= FMap.Sectors[A.Sector].FloorHeight + 1) and not A.Info^.Floats;
+    (A.DoomZ <= FMap.FloorAt(A.Sector, A.DoomX, A.DoomY) + 1) and not A.Info^.Floats;
   if OnFriction and (FMap.Friction[A.Sector] < Friction) then
     Step := Max(1, Step * (1 + FMap.MoveFactor[A.Sector]) / 2);
   Moved := false;
@@ -3099,8 +3134,8 @@ var
   TX, TY, TZ, TR, DX, DY, Dist, Delta, Floor, Top: Single;
 begin
   Sec := A.Sector;
-  Floor := FMap.Sectors[Sec].FloorHeight;
-  Top := Max(Floor, FMap.Sectors[Sec].CeilingHeight - A.Info^.Height);
+  Floor := FMap.FloorAt(Sec, A.DoomX, A.DoomY);
+  Top := Max(Floor, FMap.CeilingAt(Sec, A.DoomX, A.DoomY) - A.Info^.Height);
   if A.State in [asDying, asDead] then
   begin
     { P_KillMobj clears MF_NOGRAVITY except for lost souls: the corpse
@@ -3176,7 +3211,7 @@ begin
       MonsterCrossLines(A, OldX, OldY);
   end;
   { No friction in the air: a flyer knocked back drifts until it hits a wall. }
-  if (A.Sector >= 0) and (A.DoomZ > FMap.Sectors[A.Sector].FloorHeight) then Exit;
+  if (A.Sector >= 0) and (A.DoomZ > FMap.FloorAt(A.Sector, A.DoomX, A.DoomY)) then Exit;
   if (Abs(A.VelX) < StopSpeed) and (Abs(A.VelY) < StopSpeed) then
   begin
     A.VelX := 0;
@@ -3269,7 +3304,7 @@ var
 begin
   if FMap.CarryingFloors = 0 then Exit;
   Sec := FMap.SectorAt(Player.X, Player.Y);
-  if (Sec >= 0) and not Player.Dead and (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) then
+  if (Sec >= 0) and not Player.Dead and (Player.Z <= FMap.FloorAt(Sec, Player.X, Player.Y) + 1) then
   begin
     C := FMap.Carry[Sec] + FMap.CarryNow[Sec];
     PlayerPushVX := PlayerPushVX + C.X;
@@ -3305,7 +3340,7 @@ begin
   if FMap = nil then Exit;
   Sec := FMap.SectorAt(Player.X, Player.Y);
   if (Sec < 0) or ((FMap.Sectors[Sec].Special and SectorFrictionBit) = 0) or
-     (Player.Z > FMap.Sectors[Sec].FloorHeight + 1) then Exit;
+     (Player.Z > FMap.FloorAt(Sec, Player.X, Player.Y) + 1) then Exit;
   F := FMap.Friction[Sec];
   if F > Friction then
     { Ice: the thrust is smaller, the slide (TicPlayerPush) makes up the
@@ -3414,7 +3449,7 @@ begin
     the smaller thrust does not give), which then slides on. }
   Sec := FMap.SectorAt(Player.X, Player.Y);
   F := FrictionAt(Sec);
-  if (F > Friction) and (Sec >= 0) and (Player.Z <= FMap.Sectors[Sec].FloorHeight + 1) and not Player.Dead then
+  if (F > Friction) and (Sec >= 0) and (Player.Z <= FMap.FloorAt(Sec, Player.X, Player.Y) + 1) and not Player.Dead then
   begin
     PlayerPushVX := PlayerPushVX + PlayerWalkVX * (1 - Friction - (1 - F));
     PlayerPushVY := PlayerPushVY + PlayerWalkVY * (1 - Friction - (1 - F));
@@ -3425,7 +3460,7 @@ begin
   PlayerPushDX := PlayerPushDX + PlayerPushVX;
   PlayerPushDY := PlayerPushDY + PlayerPushVY;
   Sec := FMap.SectorAt(Player.X, Player.Y);
-  if (Sec >= 0) and (Player.Z > FMap.Sectors[Sec].FloorHeight + 1) then Exit;
+  if (Sec >= 0) and (Player.Z > FMap.FloorAt(Sec, Player.X, Player.Y) + 1) then Exit;
   if (Abs(PlayerPushVX) < StopSpeed) and (Abs(PlayerPushVY) < StopSpeed) then
   begin
     PlayerPushVX := 0;
@@ -3642,13 +3677,13 @@ begin
   Sec := A.Sector;
   if Sec >= 0 then
   begin
-    if A.DoomZ < FMap.Sectors[Sec].FloorHeight then
+    if A.DoomZ < FMap.FloorAt(Sec, A.DoomX, A.DoomY) then
     begin
-      A.DoomZ := FMap.Sectors[Sec].FloorHeight;
+      A.DoomZ := FMap.FloorAt(Sec, A.DoomX, A.DoomY);
       A.VelZ := -A.VelZ;
-    end else if A.DoomZ + A.Info^.Height > FMap.Sectors[Sec].CeilingHeight then
+    end else if A.DoomZ + A.Info^.Height > FMap.CeilingAt(Sec, A.DoomX, A.DoomY) then
     begin
-      A.DoomZ := FMap.Sectors[Sec].CeilingHeight - A.Info^.Height;
+      A.DoomZ := FMap.CeilingAt(Sec, A.DoomX, A.DoomY) - A.Info^.Height;
       A.VelZ := -A.VelZ;
     end;
   end;
@@ -3823,7 +3858,7 @@ begin
   A.Removed := true;
   Sec := FMap.SectorAt(X, Y);
   if Sec < 0 then Exit;
-  Z := FMap.Sectors[Sec].FloorHeight;
+  Z := FMap.FloorAt(Sec, X, Y);
   FSounds.PlayAt('DSTELEPT', SpawnEffectAt(ekSpawnFire, X, Y, Z, 4));
 
   { A_SpawnFly: the monster by P_Random. }
@@ -3931,8 +3966,8 @@ begin
     Exit;
 
   SpawnFog(A.DoomX, A.DoomY, A.DoomZ, A.Sector);
-  SpawnFog(A.SpawnX, A.SpawnY, FMap.Sectors[Sec].FloorHeight, Sec);
-  M := SpawnMonster(Info^.Num, A.SpawnX, A.SpawnY, FMap.Sectors[Sec].FloorHeight);
+  SpawnFog(A.SpawnX, A.SpawnY, FMap.FloorAt(Sec, A.SpawnX, A.SpawnY), Sec);
+  M := SpawnMonster(Info^.Num, A.SpawnX, A.SpawnY, FMap.FloorAt(Sec, A.SpawnX, A.SpawnY));
   if M = nil then Exit;
   M.Angle := A.SpawnAngle;
   M.SpawnAngle := A.SpawnAngle;
@@ -4122,7 +4157,7 @@ begin
   Y := Player.Y + Sin(DegToRad(Player.Angle)) * Distance;
   Sec := FMap.SectorAt(X, Y);
   if Sec < 0 then Exit(nil);
-  Result := SpawnMonster(TypeNum, X, Y, FMap.Sectors[Sec].FloorHeight);
+  Result := SpawnMonster(TypeNum, X, Y, FMap.FloorAt(Sec, X, Y));
   if Result <> nil then
   begin
     Result.Angle := Player.Angle + 180;
@@ -4224,7 +4259,8 @@ end;
 procedure TDoomWorld.TraceLineAttack(const Shooter: TDoomActor; const X, Y, Z, Angle, Slope, Range: Single;
   out HitActor: TDoomActor; out HitPlayer, HitWall: Boolean; out HX, HY, HZ: Single);
 var
-  DX, DY, EX, EY, T, Best, Along, Side, Zh, OpenTop, OpenBottom: Single;
+  DX, DY, EX, EY, T, Best, Along, Side, Zh, OpenTop, OpenBottom, LowFloor: Single;
+  FloorsDiffer, CeilingsDiffer: Boolean;
   I, F, B: Integer;
   L: TDoomLinedef;
   V1, V2: TDoomVertex;
@@ -4262,8 +4298,8 @@ begin
     B := L.BackSector;
     if (F >= 0) and (B >= 0) then
     begin
-      OpenTop := Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight);
-      OpenBottom := Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight);
+      LineOpening(I, X + (EX - X) * T, Y + (EY - Y) * T, OpenBottom, OpenTop, LowFloor, FloorsDiffer,
+        CeilingsDiffer);
       if (Zh > OpenBottom) and (Zh < OpenTop) then Continue; { through the opening }
     end;
     Best := Along;
@@ -4360,13 +4396,15 @@ function TDoomWorld.LineBlocksMissile(const Line: Integer; const X, Y, Z: Single
 var
   L: TDoomLinedef;
   F, B: Integer;
+  OpenBottom, OpenTop, LowFloor: Single;
+  FloorsDiffer, CeilingsDiffer: Boolean;
 begin
   L := FMap.Linedefs[Line];
   F := L.FrontSector;
   B := L.BackSector;
   if (F < 0) or (B < 0) then Exit(true);
-  Result := (Z < Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight)) or
-            (Z > Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight));
+  LineOpening(Line, X, Y, OpenBottom, OpenTop, LowFloor, FloorsDiffer, CeilingsDiffer);
+  Result := (Z < OpenBottom) or (Z > OpenTop);
 end;
 
 procedure TDoomWorld.TicMissile(const A: TDoomActor);
@@ -4458,14 +4496,14 @@ begin
     Sec := FMap.SectorAt(NX, NY);
     if Sec >= 0 then
     begin
-      if NZ <= FMap.Sectors[Sec].FloorHeight then
+      if NZ <= FMap.FloorAt(Sec, NX, NY) then
       begin
         Hit := true;
-        NZ := FMap.Sectors[Sec].FloorHeight + 2;
-      end else if NZ + A.Info^.Height >= FMap.Sectors[Sec].CeilingHeight then
+        NZ := FMap.FloorAt(Sec, NX, NY) + 2;
+      end else if NZ + A.Info^.Height >= FMap.CeilingAt(Sec, NX, NY) then
       begin
         Hit := true;
-        NZ := FMap.Sectors[Sec].CeilingHeight - A.Info^.Height - 2;
+        NZ := FMap.CeilingAt(Sec, NX, NY) - A.Info^.Height - 2;
       end;
       A.Sector := Sec;
     end;
@@ -5042,7 +5080,8 @@ var
 
 var
   DX, DY, EX, EY, T, Along, Side, TopSlope, BottomSlope, Slope,
-    OpenTop, OpenBottom, ThingTop, ThingBottom: Single;
+    OpenTop, OpenBottom, ThingTop, ThingBottom, LowFloor: Single;
+  FloorsDiffer, CeilingsDiffer: Boolean;
   MinX, MaxX, MinY, MaxY: Single;
   I, J, F, B: Integer;
   L: TDoomLinedef;
@@ -5106,15 +5145,15 @@ begin
       F := L.FrontSector;
       B := L.BackSector;
       if (F < 0) or (B < 0) then Exit; { one-sided: stop }
-      OpenTop := Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight);
-      OpenBottom := Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight);
+      LineOpening(Intercepts[I].Line, X + DX * Intercepts[I].Along, Y + DY * Intercepts[I].Along, OpenBottom,
+        OpenTop, LowFloor, FloorsDiffer, CeilingsDiffer);
       if OpenBottom >= OpenTop then Exit; { closed door }
-      if FMap.Sectors[F].FloorHeight <> FMap.Sectors[B].FloorHeight then
+      if FloorsDiffer then
       begin
         Slope := (OpenBottom - Z) / Along;
         if Slope > BottomSlope then BottomSlope := Slope;
       end;
-      if FMap.Sectors[F].CeilingHeight <> FMap.Sectors[B].CeilingHeight then
+      if CeilingsDiffer then
       begin
         Slope := (OpenTop - Z) / Along;
         if Slope < TopSlope then TopSlope := Slope;
@@ -6210,7 +6249,7 @@ begin
     TX := A.DoomX; TY := A.DoomY; TZ := A.DoomZ; OldSec := A.Sector;
   end;
   Above := 0;
-  if OldSec >= 0 then Above := Max(0, TZ - FMap.Sectors[OldSec].FloorHeight);
+  if OldSec >= 0 then Above := Max(0, TZ - FMap.FloorAt(OldSec, TX, TY));
   for J := 0 to High(FMap.Linedefs) do
   begin
     if (J = Line) or (FMap.Linedefs[J].Tag <> FMap.Linedefs[Line].Tag) or
@@ -6252,7 +6291,7 @@ begin
       PlayerTeleported := true;
       PlayerTeleportX := X;
       PlayerTeleportY := Y;
-      PlayerTeleportZ := FMap.Sectors[Sec].FloorHeight + Above;
+      PlayerTeleportZ := FMap.FloorAt(Sec, X, Y) + Above;
       PlayerTeleportAngle := Player.Angle + Turn;
       Player.X := X;
       Player.Y := Y;
@@ -6271,7 +6310,7 @@ begin
     begin
       A.DoomX := X;
       A.DoomY := Y;
-      A.DoomZ := FMap.Sectors[Sec].FloorHeight + Above;
+      A.DoomZ := FMap.FloorAt(Sec, X, Y) + Above;
       A.Sector := Sec;
       A.Angle := A.Angle + Turn;
       VX := A.VelX * Cos(DegToRad(Turn)) - A.VelY * Sin(DegToRad(Turn));
@@ -6303,7 +6342,7 @@ begin
     for D in FActors do
       if (D.Info^.Kind = tkTeleportDest) and (D.Sector = S) then
       begin
-        Z := FMap.Sectors[S].FloorHeight;
+        Z := FMap.FloorAt(S, D.DoomX, D.DoomY);
         for O in FActors do
           if (O <> A) and (not O.Removed) and O.Collides and
              (O.Info^.Kind in [tkMonster, tkDecoration, tkPickup]) and
@@ -6352,7 +6391,7 @@ begin
       FMap.Vertices[FMap.Linedefs[Line].V2].X - FMap.Vertices[FMap.Linedefs[Line].V1].X));
     HeightAbove := 0;
     if Player.Sector >= 0 then
-      HeightAbove := Max(0, Player.Z - FMap.Sectors[Player.Sector].FloorHeight);
+      HeightAbove := Max(0, Player.Z - FMap.FloorAt(Player.Sector, Player.X, Player.Y));
   end;
   Tag := FMap.Linedefs[Line].Tag;
   S := -1;
@@ -6367,7 +6406,7 @@ begin
           PlayerTeleported := true;
           PlayerTeleportX := A.DoomX;
           PlayerTeleportY := A.DoomY;
-          PlayerTeleportZ := FMap.Sectors[S].FloorHeight + HeightAbove;
+          PlayerTeleportZ := FMap.FloorAt(S, A.DoomX, A.DoomY) + HeightAbove;
           PlayerTeleportAngle := Player.Angle + A.Angle - LineAngle - 90;
           Player.X := A.DoomX;
           Player.Y := A.DoomY;
@@ -6396,7 +6435,7 @@ begin
         PlayerTeleported := true;
         PlayerTeleportX := A.DoomX;
         PlayerTeleportY := A.DoomY;
-        PlayerTeleportZ := FMap.Sectors[S].FloorHeight;
+        PlayerTeleportZ := FMap.FloorAt(S, A.DoomX, A.DoomY);
         PlayerTeleportAngle := A.Angle;
         Player.X := A.DoomX;
         Player.Y := A.DoomY;

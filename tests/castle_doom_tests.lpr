@@ -68,6 +68,7 @@ type
     procedure TestUdmf;
     procedure TestGldefs;
     procedure TestAcs;
+    procedure TestSlopes;
     procedure TestDynScrollers;
     procedure TestDeepWater;
     procedure TestSectorSkies;
@@ -1125,6 +1126,69 @@ begin
   finally
     FreeAndNil(Globals);
     FreeAndNil(Host);
+    FreeAndNil(W);
+  end;
+end;
+
+{ DoomMap's slopes on tools/testdata/udmf-slopes.wad: UDMF plane fields
+  (sector 141 rising north 0 -> 64), Plane_Align on line 836 (sector 99's
+  ceiling 128 at the line down to 92) and a vertex height (triangular
+  sector 165's corner at 0); a mover keeps the plane's tilt. }
+procedure TTestMap.TestSlopes;
+var
+  Dir: String;
+  W: TDoomWad;
+  M: TDoomMap;
+  L, K, V: Integer;
+  Lowest, Highest, MinCeil: Single;
+begin
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf-slopes.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf-slopes.wad') then
+  begin
+    WriteLn('TestSlopes: no udmf-slopes.wad (python3 tools/make_udmf_wad.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-slopes.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('sloped floors', 2, M.SlopedFloors);
+      AssertEquals('sloped ceilings', 1, M.SlopedCeilings);
+      AssertTrue('141 sloped', M.Sectors[141].FloorSlope.Sloped);
+      AssertEquals('141 south end', 0, M.FloorAt(141, -224, 128), 0.01);
+      AssertEquals('141 middle', 32, M.FloorAt(141, -224, 256), 0.01);
+      AssertEquals('141 north end', 64, M.FloorAt(141, -200, 384), 0.01);
+      AssertEquals('141 flat ceiling', 128, M.CeilingAt(141, -224, 300), 0.01);
+      AssertTrue('a range', M.FloorRange(141, Lowest, Highest));
+      AssertEquals('range low', 0, Lowest, 0.01);
+      AssertEquals('range high', 64, Highest, 0.01);
+      { Plane_Align: 99's ceiling meets 141's at the line. }
+      AssertEquals('99 at the line', 128, M.CeilingAt(99, -192, 256), 0.01);
+      MinCeil := 1e9;
+      for L in M.Sectors[99].Lines do
+        for K := 0 to 1 do
+        begin
+          if K = 0 then V := M.Linedefs[L].V1 else V := M.Linedefs[L].V2;
+          MinCeil := Min(MinCeil, M.CeilingAt(99, M.Vertices[V].X, M.Vertices[V].Y));
+        end;
+      AssertEquals('99 far side', 92, MinCeil, 0.01);
+      AssertEquals('99 flat floor', 0, M.FloorAt(99, -150, 256), 0.01);
+      { Vertex heights. }
+      AssertEquals('165 low corner', 0, M.FloorAt(165, -384, 64), 0.01);
+      AssertEquals('165 corner', 16, M.FloorAt(165, -368, 64), 0.01);
+      AssertEquals('165 corner 2', 16, M.FloorAt(165, -368, 72), 0.01);
+      { A mover changes the height: the whole plane moves. }
+      M.Sectors[141].FloorHeight := M.Sectors[141].FloorHeight + 8;
+      AssertEquals('moved south end', 8, M.FloorAt(141, -224, 128), 0.01);
+      AssertEquals('moved north end', 72, M.FloorAt(141, -224, 384), 0.01);
+      AssertFalse('flat sector', M.Sectors[140].FloorSlope.Sloped);
+      AssertEquals('flat', 0, M.FloorAt(140, -416, 256), 0.01);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
     FreeAndNil(W);
   end;
 end;
