@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.60.0 (2026-10-31)
 
 - UDMF light things (ZDoom's dynamic light things: point, pulse, flicker, sector and Vavoom
   lights) light their surroundings when dynamic lights are on.
