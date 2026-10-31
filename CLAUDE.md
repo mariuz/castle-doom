@@ -913,7 +913,12 @@ autotest only checks the library loads.
   brightmaps`; the `DLIGHTS` recipes above show it; autotest `gldefs`,
   unit test `TestGldefs`); its brightmaps show only in dark places:
   `G:0:2168,A:0` (sector 74, light 128) sees BASE2's bright stripes
-  (log `Graphics: Brightmap BMSTRIPE on texture BASE2`).
+  (log `Graphics: Brightmap BMSTRIPE on texture BASE2`). UDMF light
+  things: `udmf-look.wad` has a green point light, a magenta pulse and
+  a subtractive one (log `Map: E1M1: 2 light things, 1 not supported`);
+  `SMOOTHLIGHT` in a demo toggles the smooth light mode
+  (`settings.json`'s `smoothLight`, Options -> Video -> LIGHT MODE; log
+  `Settings: Light mode smooth`; autotest `udmf-lights`).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

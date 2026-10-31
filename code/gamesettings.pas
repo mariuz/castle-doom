@@ -52,6 +52,8 @@ type
     { Missiles, explosions and muzzle flashes light their surroundings
       (an option next to the vanilla look). }
     DynamicLights: Boolean;
+    { The smooth light mode (DoomLighting.Smooth) instead of Doom's bands. }
+    SmoothLight: Boolean;
     { Doom's gamma correction level, 0 (off) .. MaxGamma (F11). }
     Gamma: Integer;
     { Best times in seconds, by BestTimeKey (WADs, map, skill). }
@@ -745,6 +747,7 @@ begin
     Settings.ShowStats := J.Get('showStats', Settings.ShowStats);
     Settings.Captions := J.Get('captions', Settings.Captions);
     Settings.DynamicLights := J.Get('dynamicLights', Settings.DynamicLights);
+    Settings.SmoothLight := J.Get('smoothLight', Settings.SmoothLight);
     Settings.Gamma := Clamped(J.Get('gamma', Settings.Gamma), 0, MaxGamma);
     if J.Find('bestTimes', BestJ) then
       for BestI := 0 to BestJ.Count - 1 do
@@ -796,6 +799,7 @@ begin
     J.Add('showStats', Settings.ShowStats);
     J.Add('captions', Settings.Captions);
     J.Add('dynamicLights', Settings.DynamicLights);
+    J.Add('smoothLight', Settings.SmoothLight);
     J.Add('gamma', Settings.Gamma);
     Best := TJSONObject.Create;
     for BestI := 0 to High(Settings.BestTimeKeys) do

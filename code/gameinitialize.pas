@@ -417,6 +417,7 @@ begin
     resources are being recreated, which is slow in the browser. }
   LogShaders := GetEnvironmentVariable('CASTLE_DOOM_LOG_SHADERS') <> '';
   DoomLightingInstance.Diminish := Settings.Diminish;
+  DoomLightingInstance.Smooth := Settings.SmoothLight;
   DoomLightingInstance.Gamma := Settings.Gamma;
   ViewMenu := TViewMenu.Create(Application);
   ViewMenu.Name := 'ViewMenu';

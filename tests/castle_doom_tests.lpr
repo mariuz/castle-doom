@@ -1220,6 +1220,14 @@ begin
       AssertEquals('side light', 224, SideLightLevel(M.Sidedefs[M.Linedefs[1046].Side[0]], 160));
       AssertEquals('absolute light', 40, PlaneLightLevel(LookWithLight(40, true), 200));
       AssertEquals('light clamped', 255, PlaneLightLevel(LookWithLight(100, false), 200));
+      { Light things: a green point light, a magenta pulse; the
+        subtractive one is not drawn. }
+      AssertEquals('light things', 2, Length(M.MapLights));
+      AssertTrue('green', TVector3.Equals(M.MapLights[0].Light.Color, Vector3(0, 1, 64 / 255)));
+      AssertTrue('radius', M.MapLights[0].Light.Size = 160);
+      AssertTrue('above the floor', M.MapLights[0].Z = M.Sectors[140].FloorHeight + 32);
+      AssertTrue('pulse', (M.MapLights[1].Light.Kind = glPulse) and (M.MapLights[1].Light.SecondarySize = 224));
+      AssertTrue('pulse cycle: its angle in tics', Abs(M.MapLights[1].Light.Interval - 2) < 0.001);
     finally
       FreeAndNil(M);
     end;

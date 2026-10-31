@@ -183,6 +183,7 @@ type
       they are, so shots and flashes win the slots). }
     procedure ConsiderLight(const Eye: TVector3; const X, Y, Z, Radius, Penalty: Single; const Color: TVector3);
     procedure SetDynamicLightsOn(const On: Boolean);
+    procedure SetSmoothLight(const On: Boolean);
     { The map editor (gaEditor, demo command EDIT): back to it from its
       play-test, else on this map. }
     procedure OpenEditor;
@@ -812,6 +813,8 @@ begin
     FWorld.DebugSight
   else if Cmd = 'DLIGHTS' then
     SetDynamicLightsOn(not Settings.DynamicLights)
+  else if Cmd = 'SMOOTHLIGHT' then
+    SetSmoothLight(not Settings.SmoothLight)
   else if Cmd = 'PHOTO' then
     SetPhotoMode(not FPhoto)
   else if Cmd = 'EDIT' then
@@ -1718,6 +1721,10 @@ begin
          LampDynamicLight(A.SpritePrefix, Radius, LampHeight, Color) then
         ConsiderLight(Eye, A.DoomX, A.DoomY, A.DoomZ + LampHeight, Radius, 400, Color);
     end;
+    { UDMF's light things: fixed lights with the lamps' priority. }
+    for I := 0 to High(FWorld.Map.MapLights) do
+      ConsiderLight(Eye, FWorld.Map.MapLights[I].X, FWorld.Map.MapLights[I].Y, FWorld.Map.MapLights[I].Z,
+        GldefsRadius(FWorld.Map.MapLights[I].Light, FWorld.Tic / 35), 400, FWorld.Map.MapLights[I].Light.Color);
     { The player's gun flash, a little in front of the eye. }
     if (FWorld.Player.FlashFrame <> #0) and not FWorld.Player.Dead then
     begin
@@ -1740,6 +1747,14 @@ begin
     FDynLogged := FDynCount;
     FDynLampsLogged := Lamps;
   end;
+end;
+
+procedure TViewPlay.SetSmoothLight(const On: Boolean);
+begin
+  Settings.SmoothLight := On;
+  DoomLightingInstance.Smooth := On;
+  SaveSettings;
+  WritelnLog('Settings', 'Light mode %s', [Iff(On, 'smooth', 'Doom (banded)')]);
 end;
 
 procedure TViewPlay.SetDynamicLightsOn(const On: Boolean);
@@ -2269,6 +2284,7 @@ begin
   FSlotScreen.MessagesOn := Settings.ShowMessages;
   FSlotScreen.CaptionsOn := Settings.Captions;
   FSlotScreen.VideoDynamicLights := Settings.DynamicLights;
+  FSlotScreen.VideoSmoothLight := Settings.SmoothLight;
   FSlotScreen.VideoFieldOfView := Settings.FieldOfView;
   FSlotScreen.VideoUiScale := Settings.UiScale;
   FSlotScreen.VideoRenderScale := Settings.RenderScale;
@@ -2339,6 +2355,8 @@ begin
           SetCaptions(FSlotScreen.CaptionsOn);
         if FSlotScreen.VideoDynamicLights <> Settings.DynamicLights then
           SetDynamicLightsOn(FSlotScreen.VideoDynamicLights);
+        if FSlotScreen.VideoSmoothLight <> Settings.SmoothLight then
+          SetSmoothLight(FSlotScreen.VideoSmoothLight);
         if FSlotScreen.Gamma <> Settings.Gamma then
           SetGamma(FSlotScreen.Gamma);
         { The Video page (field of view, UI scale, fullscreen / resolution). }

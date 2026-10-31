@@ -11,7 +11,7 @@ interface
 
 uses SysUtils, Classes, Generics.Collections,
   CastleVectors,
-  DoomWad;
+  DoomWad, DoomGldefs;
 
 const
   { Linedef flags. }
@@ -108,9 +108,18 @@ type
     Angle: Integer;
     TypeNum: Integer;
     Flags: Integer;
-    { UDMF: the thing id (TID, 0 none) and the height above the floor. }
+    { UDMF: the thing id (TID, 0 none), the height above the floor and
+      the arguments (arg0..arg4). }
     Tid: Integer;
     Z: Single;
+    Args: array [0..4] of Integer;
+  end;
+
+  { A UDMF light thing (ZDoom's 9800-9830): where it shines from (its
+    sector's floor + the thing's height, at load) and the light. }
+  TMapLight = record
+    X, Y, Z: Single;
+    Light: TGlLight;
   end;
 
   TDoomSeg = record
@@ -285,6 +294,8 @@ type
     HeightSec: array of Integer;
     WaterColormaps: array of array [0..2] of String;
     HeightTransfers: Integer;
+    { UDMF's light things (ZDoom's dynamic light things). }
+    MapLights: array of TMapLight;
 
     constructor Create(const AWad: TDoomWad; const MapName: String);
 
@@ -806,6 +817,8 @@ begin
         if (Things[NT].TypeNum = 9043) or (Things[NT].TypeNum = 9044) then
           Things[NT].TypeNum := 14;
         Things[NT].Tid := UdmfInt(B^, 'id');
+        for J := 0 to 4 do
+          Things[NT].Args[J] := UdmfInt(B^, 'arg' + IntToStr(J));
         Things[NT].Flags := 0;
         if UdmfBool(B^, 'skill1') or UdmfBool(B^, 'skill2') then
           Things[NT].Flags := Things[NT].Flags or MTF_EASY;
@@ -1088,8 +1101,73 @@ end;
   TranslucentLine's lines. }
 procedure TDoomMap.ResolveUdmfLinks;
 var
-  I, J, K, Line, Tid, Sec, NewTag, Id: Integer;
+  I, J, K, Line, Tid, Sec, NewTag, Id, Skipped: Integer;
+  T: TDoomThing;
+  L: TGlLight;
 begin
+  { ZDoom's light things: arg0..2 the colour (0..255), arg3 the radius,
+    arg4 the second radius (pulse, flicker); a pulse's cycle is its angle
+    in tics, a flicker's chance its angle / 360. 9810-9814 (additive)
+    act as 9800-9804; subtractive (9820-9824) and spot lights are
+    counted, not drawn. }
+  MapLights := nil;
+  Skipped := 0;
+  for I := 0 to High(Things) do
+  begin
+    T := Things[I];
+    if (T.TypeNum < 9800) or (T.TypeNum > 9849) then Continue;
+    L := Default(TGlLight);
+    L.Name := 'thing ' + IntToStr(I);
+    L.Color := Vector3(T.Args[0], T.Args[1], T.Args[2]) / 255;
+    L.Size := T.Args[3];
+    L.SecondarySize := T.Args[4];
+    L.Interval := Max(1, T.Angle) / 35;
+    L.Chance := (T.Angle mod 360) / 360;
+    case T.TypeNum of
+      9800, 9810: L.Kind := glPoint;
+      9801, 9811: L.Kind := glPulse;
+      9802, 9812: L.Kind := glFlicker;
+      9803, 9813:
+        begin
+          { The sector's light scales the radius (arg3 = 4: the light). }
+          L.Kind := glPoint;
+          Sec := SectorAt(T.X, T.Y);
+          if Sec >= 0 then L.Size := Sectors[Sec].LightLevel * T.Args[3] / 4;
+        end;
+      9804, 9814: L.Kind := glFlicker2;
+      9830:
+        begin
+          { Vavoom's light: arg0 the radius, arg1..3 the colour. }
+          L.Kind := glPoint;
+          L.Size := T.Args[0];
+          L.Color := Vector3(T.Args[1], T.Args[2], T.Args[3]) / 255;
+        end;
+      9825:
+        begin
+          L.Kind := glPoint;
+          L.Size := T.Args[0];
+          L.Color := Vector3(1, 1, 1);
+        end;
+      else
+        begin
+          Inc(Skipped);
+          Continue;
+        end;
+    end;
+    if L.SecondarySize = 0 then L.SecondarySize := L.Size;
+    if L.Size <= 0 then Continue;
+    Sec := SectorAt(T.X, T.Y);
+    if Sec < 0 then Continue;
+    SetLength(MapLights, Length(MapLights) + 1);
+    MapLights[High(MapLights)].X := T.X;
+    MapLights[High(MapLights)].Y := T.Y;
+    MapLights[High(MapLights)].Z := Sectors[Sec].FloorHeight + T.Z;
+    MapLights[High(MapLights)].Light := L;
+  end;
+  if (Length(MapLights) > 0) or (Skipped > 0) then
+    WritelnLog('Map', '%s: %d light things, %d not supported (subtractive or spot lights)', [
+      FName, Length(MapLights), Skipped]);
+
   NewTag := 0;
   for I := 0 to High(Sectors) do
     NewTag := Max(NewTag, Sectors[I].Tag);

@@ -123,6 +123,8 @@ type
     VideoVSync: Boolean;
     { Dynamic lights on / off (the Video page's last item). }
     VideoDynamicLights: Boolean;
+    { The light mode: smooth or Doom's bands (the item after it). }
+    VideoSmoothLight: Boolean;
     VideoFrameCap: Integer;
     { The custom game page (New Game -> Custom game): what its rows show
       (the owning view fills them on maCustom), the random seed typed
@@ -196,6 +198,8 @@ uses SysUtils, Math,
 
 const
   LineHeight = 16;
+  { The Video page's nine rows are a little closer. }
+  VideoRowHeight = 14;
   { Used when the WAD has no DEHACKED strings. }
   NightmarePrompt = 'Are you sure? This skill level' + #10 + 'isn''t even remotely fair.' + #10#10 + 'Press Y or N.';
   QuitPrompt = 'Are you sure you want to quit?';
@@ -452,6 +456,8 @@ begin
     VideoVSync := not VideoVSync
   else if Item = 'T:DYNAMIC LIGHTS' then
     VideoDynamicLights := not VideoDynamicLights
+  else if Item = 'T:LIGHT MODE' then
+    VideoSmoothLight := not VideoSmoothLight
   else if Item = 'T:FRAME RATE' then
     VideoFrameCap := NextCap(VideoFrameCap, Delta)
   else
@@ -518,7 +524,7 @@ begin
     mpReadThis1, mpReadThis2: Result := 1;
     mpOptions: Result := 8;
     mpSound: Result := 5;
-    mpVideo: Result := {$ifdef WASI} 7 {$else} 8 {$endif};
+    mpVideo: Result := {$ifdef WASI} 8 {$else} 9 {$endif};
     mpCustom: Result := 9;
     mpPwads: Result := CustomPwadNames.Count + 2;
     mpStored: Result := Max(1, StoredNames.Count);
@@ -539,11 +545,11 @@ const
   SoundItems: array [0..4] of String = ('M_SFXVOL', '', 'M_MUSVOL', '', 'T:CAPTIONS');
   { Items named 'T:...' are drawn as text (no patch for them in Doom). }
   {$ifdef WASI}
-  VideoItems: array [0..6] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:RESOLUTION', '',
-    'T:DYNAMIC LIGHTS');
+  VideoItems: array [0..7] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:RESOLUTION', '',
+    'T:DYNAMIC LIGHTS', 'T:LIGHT MODE');
   {$else}
-  VideoItems: array [0..7] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN',
-    'T:V-SYNC', 'T:FRAME RATE', 'T:DYNAMIC LIGHTS');
+  VideoItems: array [0..8] of String = ('T:FIELD OF VIEW', '', 'T:UI SCALE', '', 'T:FULLSCREEN',
+    'T:V-SYNC', 'T:FRAME RATE', 'T:DYNAMIC LIGHTS', 'T:LIGHT MODE');
   {$endif}
   CustomItems: array [0..8] of String = ('T:GAME', 'T:PWADS', 'T:RECENT', 'T:MAP', 'T:SKILL',
     'T:RANDOM SEED', '', 'T:START', 'T:EDIT MAP');
@@ -581,7 +587,9 @@ begin
     mpLoad, mpSave: begin X := 80; Y := 54; end;
     mpOptions: begin X := 60; Y := 37; end;
     mpSound: begin X := 80; Y := 64; end;
-    mpVideo: begin X := 60; Y := 40; end;
+    { Nine rows of VideoRowHeight: the last one stays above the status
+      bar. }
+    mpVideo: begin X := 60; Y := 32; end;
     mpCustom: begin X := 40; Y := 40; end;
     mpPwads: begin X := 40; Y := 48; end;
     mpStored: begin X := 40; Y := 48; end;
@@ -793,7 +801,7 @@ begin
         ChangeSlider(1);
     mpVideo:
       if (ItemName = 'T:FULLSCREEN') or (ItemName = 'T:V-SYNC') or (ItemName = 'T:FRAME RATE') or
-         (ItemName = 'T:DYNAMIC LIGHTS') then
+         (ItemName = 'T:DYNAMIC LIGHTS') or (ItemName = 'T:LIGHT MODE') then
         ChangeSlider(1);
   end;
 end;
@@ -981,12 +989,20 @@ begin
   DY := 200 - (ScreenPos.Y - R.Bottom) / R.Height * 200;
 end;
 
+function PageRowHeight(const Page: TDoomMenuPage): Integer;
+begin
+  if Page = mpVideo then
+    Result := VideoRowHeight
+  else
+    Result := LineHeight;
+end;
+
 function TDoomMenuScreen.ItemAt(const DX, DY: Single): Integer;
 var
   X, Y: Integer;
 begin
   PageOrigin(FPage, X, Y);
-  Result := Floor((DY - Y) / LineHeight);
+  Result := Floor((DY - Y) / PageRowHeight(FPage));
   if (Result < 0) or (Result >= ItemCount(FPage)) or (DX < X + SkullXOff) then
     Result := -1;
 end;
@@ -1208,26 +1224,28 @@ begin
     mpVideo:
       begin
         { Like M_DrawSound, with the title and the values in the HU font. }
-        DrawPatch('M_OPTTTL', 108, 15);
+        DrawPatch('M_OPTTTL', 108, 6);
         Text := Format('%d', [VideoFieldOfView]);
         DrawDoomText(FGraphics, Img, X + 175, Y + 4, Text);
-        DrawThermo(Img, X, Y + LineHeight * 1, 13, (VideoFieldOfView - 60) div 5);
-        DrawDoomText(FGraphics, Img, X + 175, Y + LineHeight * 2 + 4, Format('%d%%', [VideoUiScale]));
-        DrawThermo(Img, X, Y + LineHeight * 3, 16, (VideoUiScale - 50) div 10);
+        DrawThermo(Img, X, Y + VideoRowHeight * 1, 13, (VideoFieldOfView - 60) div 5);
+        DrawDoomText(FGraphics, Img, X + 175, Y + VideoRowHeight * 2 + 4, Format('%d%%', [VideoUiScale]));
+        DrawThermo(Img, X, Y + VideoRowHeight * 3, 16, (VideoUiScale - 50) div 10);
         {$ifdef WASI}
-        DrawDoomText(FGraphics, Img, X + 175, Y + LineHeight * 4 + 4, Format('%d%%', [VideoRenderScale]));
-        DrawThermo(Img, X, Y + LineHeight * 5, 4, (VideoRenderScale - 25) div 25);
-        if VideoDynamicLights then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 6)
-        else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 6);
+        DrawDoomText(FGraphics, Img, X + 175, Y + VideoRowHeight * 4 + 4, Format('%d%%', [VideoRenderScale]));
+        DrawThermo(Img, X, Y + VideoRowHeight * 5, 4, (VideoRenderScale - 25) div 25);
+        if VideoDynamicLights then DrawPatch('M_MSGON', X + 175, Y + VideoRowHeight * 6)
+        else DrawPatch('M_MSGOFF', X + 175, Y + VideoRowHeight * 6);
+        DrawDoomText(FGraphics, Img, X + 175, Y + VideoRowHeight * 7 + 4, Iff(VideoSmoothLight, 'SMOOTH', 'DOOM'));
         {$else}
-        if VideoFullscreen then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 4)
-        else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 4);
-        if VideoVSync then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 5)
-        else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 5);
+        if VideoFullscreen then DrawPatch('M_MSGON', X + 175, Y + VideoRowHeight * 4)
+        else DrawPatch('M_MSGOFF', X + 175, Y + VideoRowHeight * 4);
+        if VideoVSync then DrawPatch('M_MSGON', X + 175, Y + VideoRowHeight * 5)
+        else DrawPatch('M_MSGOFF', X + 175, Y + VideoRowHeight * 5);
         if VideoFrameCap > 0 then Text := IntToStr(VideoFrameCap) else Text := 'NONE';
-        DrawDoomText(FGraphics, Img, X + 175, Y + LineHeight * 6 + 4, Text);
-        if VideoDynamicLights then DrawPatch('M_MSGON', X + 175, Y + LineHeight * 7)
-        else DrawPatch('M_MSGOFF', X + 175, Y + LineHeight * 7);
+        DrawDoomText(FGraphics, Img, X + 175, Y + VideoRowHeight * 6 + 4, Text);
+        if VideoDynamicLights then DrawPatch('M_MSGON', X + 175, Y + VideoRowHeight * 7)
+        else DrawPatch('M_MSGOFF', X + 175, Y + VideoRowHeight * 7);
+        DrawDoomText(FGraphics, Img, X + 175, Y + VideoRowHeight * 8 + 4, Iff(VideoSmoothLight, 'SMOOTH', 'DOOM'));
         {$endif}
       end;
   end;
@@ -1283,13 +1301,13 @@ begin
     for I := 0 to ItemCount(FPage) - 1 do
       if Copy(ItemPatch(FPage, I), 1, 2) = 'T:' then
         { A text item, the HU font's capitals in the patches' place. }
-        DrawDoomText(FGraphics, Img, X, Y + LineHeight * I + 4, Copy(ItemPatch(FPage, I), 3, MaxInt))
+        DrawDoomText(FGraphics, Img, X, Y + PageRowHeight(FPage) * I + 4, Copy(ItemPatch(FPage, I), 3, MaxInt))
       else if ItemPatch(FPage, I) <> '' then
-        DrawPatch(ItemPatch(FPage, I), X, Y + LineHeight * I);
+        DrawPatch(ItemPatch(FPage, I), X, Y + PageRowHeight(FPage) * I);
 
   { Skull cursor }
   if FLastSkull = 0 then Text := 'M_SKULL1' else Text := 'M_SKULL2';
-  DrawPatch(Text, X + SkullXOff, Y + SkullYOff + FItemOn[FPage] * LineHeight);
+  DrawPatch(Text, X + SkullXOff, Y + SkullYOff + FItemOn[FPage] * PageRowHeight(FPage));
   Image := Img;
 end;
 

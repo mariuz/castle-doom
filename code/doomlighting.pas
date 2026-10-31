@@ -64,7 +64,7 @@ type
   strict private
     FEffects: TEffectNodeList;
     FExtraLight, FFixedColormap, FGamma: Integer;
-    FDiminish: Boolean;
+    FDiminish, FSmooth: Boolean;
     FIndexLutUrl, FColormapLutUrl: String;
     FPaletteMapped: Boolean;
     FFuzzScale: Single;
@@ -82,6 +82,7 @@ type
     procedure SetExtraLight(const Value: Integer);
     procedure SetFixedColormap(const Value: Integer);
     procedure SetDiminish(const Value: Boolean);
+    procedure SetSmooth(const Value: Boolean);
     procedure SetGamma(const Value: Integer);
     procedure SendAll(const FieldName: String; const Value: Single);
   public
@@ -131,6 +132,10 @@ type
     property FixedColormap: Integer read FFixedColormap write SetFixedColormap;
     { Light diminishing with distance; off gives each sector a flat light. }
     property Diminish: Boolean read FDiminish write SetDiminish;
+    { The smooth light mode: Doom's light curves without their 16 light
+      steps and integer distance bands, between colormap rows (the
+      banded, Doom-exact mode is the default). }
+    property Smooth: Boolean read FSmooth write SetSmooth;
     { Gamma correction level 0..4 (Doom's usegamma): the colours raised to
       GammaExponent (1, 0.77, 0.63, 0.53, 0.45), so dark parts brighten
       most, roughly like Doom's gamma tables. }
@@ -202,6 +207,7 @@ const
     'uniform float doom_extra_light;' + NL +
     'uniform float doom_fixed_colormap;' + NL +
     'uniform float doom_diminish;' + NL +
+    'uniform float doom_smooth;' + NL +
     'uniform float doom_palette_mapped;' + NL +
     'uniform sampler2D doom_index_lut;' + NL +
     'uniform sampler2D doom_colormap_lut;' + NL +
@@ -286,7 +292,18 @@ const
     '    float contrast = kind > 5.0 ? 0.0 : kind;' + NL +
     '    float lightnum = clamp(floor(light / 16.0) + doom_extra_light + contrast, 0.0, 15.0);' + NL +
     '    float start = (15.0 - lightnum) * 4.0;' + NL +
-    '    if (doom_diminish < 0.5)' + NL +
+    '    if (doom_smooth > 0.5) {' + NL +
+    { The smooth light mode: Doom's curves without their integer steps
+      (the light in fractions of 16, the distances unrounded). }
+    '      lightnum = clamp(light / 16.0 + doom_extra_light + contrast, 0.0, 15.0);' + NL +
+    '      start = (15.0 - lightnum) * 4.0;' + NL +
+    '      if (doom_diminish < 0.5)' + NL +
+    '        level = start / 2.0;' + NL +
+    '      else if (kind > 5.0)' + NL +
+    '        level = start - 80.0 / (min(depth / 16.0, 127.0) + 1.0);' + NL +
+    '      else' + NL +
+    '        level = start - min(2560.0 / depth, 47.0) / 2.0;' + NL +
+    '    } else if (doom_diminish < 0.5)' + NL +
     '      level = floor(start / 2.0);' + NL +
     '    else if (kind > 5.0) {' + NL +
     '      float index = min(floor(depth / 16.0), 127.0);' + NL +
@@ -304,13 +321,20 @@ const
     '    if (float(i) >= doom_dlight_count) break;' + NL +
     '    doom_dlight(doom_dlights[i], doom_dlight_colors[i], doom_boost, doom_tint);' + NL +
     '  }' + NL +
-    '  level -= floor(min(doom_boost, 1.5) * 16.0);' + NL +
-    '  level = floor(level * (1.0 - doom_bright) + 0.5);' + NL +
+    '  if (doom_smooth > 0.5) level -= min(doom_boost, 1.5) * 16.0;' + NL +
+    '  else level -= floor(min(doom_boost, 1.5) * 16.0);' + NL +
+    '  level = level * (1.0 - doom_bright);' + NL +
+    '  if (doom_smooth < 0.5) level = floor(level + 0.5);' + NL +
     '  vec3 doom_base = fragment_color.rgb;' + NL +
     '  level = clamp(level, 0.0, 31.0);' + NL +
-    '  if (doom_palette_mapped > 0.5)' + NL +
-    '    fragment_color.rgb = doom_colormapped(fragment_color.rgb, level);' + NL +
-    '  else' + NL +
+    '  if (doom_palette_mapped > 0.5) {' + NL +
+    '    if (doom_smooth > 0.5 && fract(level) > 0.0)' + NL +
+    { Between two colormap rows. }
+    '      fragment_color.rgb = mix(doom_colormapped(fragment_color.rgb, floor(level)),' + NL +
+    '        doom_colormapped(fragment_color.rgb, min(floor(level) + 1.0, 31.0)), fract(level));' + NL +
+    '    else' + NL +
+    '      fragment_color.rgb = doom_colormapped(fragment_color.rgb, level);' + NL +
+    '  } else' + NL +
     '    fragment_color.rgb *= 1.0 - level / 32.0;' + NL +
     '  fragment_color.rgb = min(fragment_color.rgb + doom_base * doom_tint * 0.6, vec3(1.0));' + NL +
     { UDMF sector colours (lightcolor) on lit surfaces, and fog
@@ -594,6 +618,7 @@ begin
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_extra_light', FExtraLight));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fixed_colormap', FFixedColormap));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_diminish', Ord(FDiminish)));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_smooth', Ord(FSmooth)));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_palette_mapped',
     Ord(FPaletteMapped and (FIndexLutUrl <> ''))));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_scale', FFuzzScale));
@@ -853,6 +878,13 @@ begin
   if FGamma = Value then Exit;
   FGamma := Value;
   SendAll('doom_gamma', GammaExponent);
+end;
+
+procedure TDoomLighting.SetSmooth(const Value: Boolean);
+begin
+  if FSmooth = Value then Exit;
+  FSmooth := Value;
+  SendAll('doom_smooth', Ord(Value));
 end;
 
 procedure TDoomLighting.SetDiminish(const Value: Boolean);

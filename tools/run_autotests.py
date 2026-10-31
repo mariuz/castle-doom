@@ -368,6 +368,13 @@ TESTS = [
       r'Graphics: Brightmap BMCHECK on flat AQF054'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'gldefs.wad'), '--fixed-step'],
      None),
+    # UDMF light things (udmf-look.wad: green, a magenta pulse) and the
+    # smooth light mode.
+    ('udmf-lights', 'E1M1', 'DLIGHTS,Y,G:-416:256,A:0,W:0.5,S,SMOOTHLIGHT,W:0.2,S,Q',
+     [r'Map: E1M1: 2 light things, 1 not supported \(subtractive or spot lights\)',
+      r'Lights: 8 dynamic lights', r'Settings: Light mode smooth'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-look.wad'), '--fixed-step'],
+     None),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -1075,6 +1082,7 @@ GOLDEN = [
     'ghost-race_1.png', 'ghost-race_2.png',
     'udmf_1.png', 'udmf_2.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
+    'udmf-lights_1.png', 'udmf-lights_2.png',
 ]
 
 

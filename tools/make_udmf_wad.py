@@ -27,7 +27,8 @@ udmf-look.wad, as udmf.wad plus UZDoom's look fields (rendering stage
 1): the start room (sector 140) lit warm orange (lightcolor 0xFFA070)
 with its floor turned 45 degrees and scaled 2x, the room east of it
 (141) in blue fog (fadecolor 0x2040A0), the west wall's line 829
-texture scaled 2x and line 1046's shifted 32 units and 64 brighter.
+texture scaled 2x and line 1046's shifted 32 units and 64 brighter;
+three light things (LOOK_LIGHTS) for the dynamic lights.
 
 Usage: make_udmf_wad.py [OUTDIR]
 """
@@ -66,6 +67,13 @@ LOOK_SECTORS = {140: {'lightcolor': '0xFFA070', 'rotationfloor': '45.0', 'xscale
 LOOK_FRONT_SIDES_OF_LINES = {829: {'scalex_mid': '2.0', 'scaley_mid': '2.0'},
                              1046: {'offsetx_mid': '32.0', 'light': '64'}}
 TELEPORT_DEST = (1000, -900, 5)
+# Light things (x, y, angle, type, height, args) in udmf-look.wad: a
+# green point light (9800, radius 160) at the start room's east side,
+# a magenta pulse (9801, 96..224 every 70 tics) in the room east of it,
+# and a subtractive light (9820: counted, not drawn).
+LOOK_LIGHTS = [(-300, 256, 0, 9800, 32, (0, 255, 64, 160)),
+               (-150, 256, 70, 9801, 32, (255, 0, 255, 96, 224)),
+               (-416, 400, 0, 9820, 0, (255, 255, 255, 64))]
 ZDOOM_SECTOR = {1: 65, 2: 66, 3: 67, 4: 68, 5: 69, 7: 71, 8: 72, 9: 1024, 10: 74, 11: 75,
                 12: 76, 13: 77, 14: 78, 16: 80, 17: 81}
 
@@ -165,6 +173,12 @@ def textmap(hexen, look=False):
     things = [struct.unpack('<hhhhh', T[k * 10:k * 10 + 10]) for k in range(len(T) // 10)]
     if hexen:
         things.append((TELEPORT_DEST[0], TELEPORT_DEST[1], 0, 14, 7, TELEPORT_DEST[2]))
+    if look:
+        for (x, y, angle, typ, height, args) in LOOK_LIGHTS:
+            out.append('thing\n{\n%s\n}\n' % '\n'.join(
+                ['x = %d.0;' % x, 'y = %d.0;' % y, 'angle = %d;' % angle, 'type = %d;' % typ,
+                 'height = %d.0;' % height] + ['arg%d = %d;' % (i, a) for i, a in enumerate(args)] +
+                ['skill%d = true;' % k for k in range(1, 6)] + ['single = true;']))
     for t in things:
         x, y, angle, typ, fl = t[:5]
         body = ['x = %d.0;' % x, 'y = %d.0;' % y, 'angle = %d;' % angle, 'type = %d;' % typ]

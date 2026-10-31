@@ -6,6 +6,22 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- Light things and a smooth light mode (rendering roadmap items 8 and
+  9): UDMF things 9800-9804 / 9810-9814 (point, pulse, flicker,
+  sector, random flicker; arg0..2 colour, arg3 / arg4 radii, a pulse's
+  cycle and a flicker's chance from the angle), 9825 and 9830 (Vavoom
+  lights) become `TDoomMap.MapLights` (the floor height + the thing's
+  at load; subtractive and spot lights counted only, log `Map: E1M1: 2
+  light things, 1 not supported`), considered by
+  `UpdateDynamicLights` with the lamps' priority. The smooth light mode
+  (`Settings.SmoothLight`, `settings.json`'s `smoothLight`, Options ->
+  Video -> LIGHT MODE, `SMOOTHLIGHT` in a demo; log `Settings: Light
+  mode smooth`) runs Doom's curves without the 16 light steps and the
+  integer distance bands and blends two colormap rows; the Video page
+  got 14-unit rows to fit its ninth. Autotest `udmf-lights` (goldens),
+  `TestUdmf` checks the lights; the `video-menu` and
+  `dynamic-lights-menu` goldens show the new row.
+
 - GLDEFS brightmaps (rendering roadmap item 12): `TDoomGraphics`
   codes a texture's or flat's brightmap (a PNG or Doom patch lump,
   scaled to the image, brightness from its brightest channel) into
@@ -1291,11 +1307,11 @@ play.
 
 ## Suggested next three
 
-1. Rendering, lights (S-M, `docs/RENDERING_ROADMAP.md` items 8 and 9):
-   UDMF's light things 9800-9830, spot lights, a smooth "Doom" light
-   mode beside the banded one.
-2. UDMF, the rest (L, see Content and formats): an ACS interpreter for
+1. UDMF, the rest (L, see Content and formats): an ACS interpreter for
    the common script uses, the remaining Hexen actions.
+2. Rendering, slopes (L, `docs/RENDERING_ROADMAP.md` item 4):
+   `Plane_Align` and UDMF plane fields, in the geometry and the
+   simulation's floor heights.
 3. Map editor, the rest (M, see New features): sectors copied with
    their holes, the things and the sky in the glTF / X3D export, UDMF
    maps in the editor.

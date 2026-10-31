@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- UDMF light things (ZDoom's dynamic light things: point, pulse, flicker, sector and Vavoom
+  lights) light their surroundings when dynamic lights are on.
+- A smooth light mode (Options -> Video -> LIGHT MODE): Doom's light falloff without its
+  visible bands; DOOM keeps the original look.
+
 ## v0.59.0 (2026-10-31)
 
 - GLDEFS brightmaps: the parts of a wall texture or flat a mod's brightmap marks glow at

@@ -553,6 +553,12 @@ floors get collision triangles in the invisible collision scene.
 
 ### Light diminishing (`DoomLighting`)
 
+(The smooth light mode, `TDoomLighting.Smooth` / `doom_smooth`, keeps
+these curves but skips their integer steps: the light in fractions of
+16, the distances unrounded, and the texel between two colormap rows.
+UDMF light things are `TDoomMap.MapLights`, fixed lights the view
+considers with the lamps.)
+
 (GLDEFS: `DoomGldefs` reads the WADs' light definitions into
 `GlLights` / `GlBindings` / `GlBrightmaps`; `TViewPlay.UpdateDynamicLights`
 takes a thing's bound light (by sprite and frame) before the built-in

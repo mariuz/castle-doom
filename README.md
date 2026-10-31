@@ -169,7 +169,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   sector light, fog, texture scaling, offsets and rotation and per-surface light (ACS scripts,
   slopes, 3D floors and polyobjects are not supported yet). A PWAD's GLDEFS lights
   (point, pulse, flicker, bound to sprite frames) become dynamic lights, and its
-  brightmaps make the marked parts of textures and flats glow. Boom's generalized linedef
+  brightmaps make the marked parts of textures and flats glow; UDMF light things light
+  their rooms. Options -> Video -> LIGHT MODE switches Doom's banded light for a smooth one. Boom's generalized linedef
   types (floors, ceilings, doors, locked doors, lifts, stairs and crushers), its numbered
   extra line types (silent teleports among them), sector types (damage and secret bits),
   ice and mud, wind, currents and point pushers, translucent middle textures and things (MBF's DeHackEd bit), elevators, line-to-line
