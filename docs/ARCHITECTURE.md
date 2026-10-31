@@ -1870,11 +1870,17 @@ above the floor, light stays in 0..255, a vertex typed onto another
 joins it like a drag) and `ApplyProp` sets the typed number on the
 whole selection as one undo step. `FlipLines` swaps a two-sided line's
 ends and sides together, so the geometry stays and only which sector is
-in front changes. Copying sectors keeps each one's `SectorOutline` (its
-walls as edges with the sector on the right, chained into loops; the
-loop with the largest area, so holes are left out) and values; a paste
-draws the outlines again with `DrawSector` at the mouse and gives the new
-sectors those values. The 3D preview (`F5`, `TogglePreview`) is a
+in front changes. Copying sectors keeps each one's `SectorLoops` (its
+walls as edges with the sector on the right, chained into loops, the
+largest, its outline, first; the others are holes), its inner lines
+(`SectorInnerLines`: the sector on both sides, with their values and
+sides) and values, the copied sectors sorted largest first; a paste
+draws each outline with `DrawSector` at the mouse, gives the new sector
+those values, cuts out the holes no other copied sector fills (drawn as
+a room and deleted, which leaves one-sided walls facing the sector)
+and adds the inner lines back (`AddInnerLine`, which joins their ends
+to vertices there or splits the walls they lie on); a hole another
+copied sector fills is drawn with that one, later, inside it. The 3D preview (`F5`, `TogglePreview`) is a
 `TCastleViewport` over the right of the view (a camera at the mouse,
 or the selected thing, at eye height, and a flying walk navigation)
 holding a `TDoomMapTransform`; `BuildPreview` writes the map's PWAD
@@ -1932,7 +1938,17 @@ masked textures and `BLEND` for Boom's translucent ones; X3D gets a
 `Shape` per texture with an `UnlitMaterial` whose emissive texture is
 the image (`TextureProperties` with nearest filtering) and `alphaMode`,
 saved by CGE's `SaveNode`. Coordinates are CGE's (Y up, 1 unit = 1
-Doom unit). The unit test reads both back with `LoadNode`.
+Doom unit). The things a single-player game on skill 3 starts with
+(`CollectThings`: no player starts, teleport destinations or invisible
+markers) become two crossed double-sided quads each with their front
+sprite (rotation 1, mirrored when the sprite says so), placed by its
+offsets on the floor (or under the ceiling when hanging) and coloured
+by their sector's light: glTF has no billboards. The sky
+(`CollectSky`, maps with a sky ceiling) is a 32-sided cylinder around
+the map's middle, half its diagonal and 256 units away, from the
+lowest floor to 256 above the highest ceiling, the sky texture four
+times around at full brightness. The unit test reads both back with
+`LoadNode`.
 
 ### The engine's inspector
 

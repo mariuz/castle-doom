@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Map editor: copied sectors keep their holes and the lines inside them; a hole no other
+  copied sector fills is cut out of the pasted one.
+- glTF / X3D export: the level's things (as crossed sprite quads) and its sky (a cylinder
+  around the map) are exported too.
 - Slopes in UDMF maps: sloped floors and ceilings from the plane fields (`floorplane_*`,
   `ceilingplane_*`), `Plane_Align` lines and vertex heights of triangular sectors. Players
   walk up and down them, monsters and items stand on them, and sight, shots and missiles

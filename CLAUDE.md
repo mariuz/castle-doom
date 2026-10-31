@@ -703,7 +703,10 @@ whose ends lie on walls does the same; `DRAW` always closes a room),
 the selected lines or things (autotest `editor-cut`). `KEY:E` opens the
 properties panel (`KEY:Down` picks a value, `TYPE:24,KEY:Enter` sets
 it on the selection), `KEY:F` flips two-sided lines, `KEY:Ctrl+C` /
-`KEY:Ctrl+V` in sectors mode copy sectors to the mouse (autotest
+`KEY:Ctrl+V` in sectors mode copy sectors to the mouse, with their
+holes and inner lines (log `Editor: Copied 1 sectors, 1 holes, 2 inner
+lines`; E1M1's sector 173 is a ring around 130 with two lines inside:
+autotest `editor-copy` with goldens) (autotest
 `editor-props`, which reads the exported WAD back). `KEY:F5` toggles the
 3D preview from the mouse's spot (log `Editor: 3D preview of E1M1 from
 -416, 256 facing 90`, then `... rebuilt` half a second after an edit;

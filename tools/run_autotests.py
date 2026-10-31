@@ -556,6 +556,19 @@ TESTS = [
       r'Editor: Pasted 1 sectors at -416, -288', r'Editor: Pasted 1 sectors at -896, 256',
       r'Editor: Flipped 1 lines: line 1176 front sector 140', r'Editor: Line 1176: Front X offset 16'],
      ['--edit'], lambda config: check_editor_props(config)),
+    # Copying sectors with their holes and inner lines: sector 173 (a ring
+    # around sector 130, two lines inside it) alone (130 cut out as a
+    # hole) and then with 130 (the hole filled), pasted east of the map.
+    ('editor-copy', 'E1M1',
+     'VIEW:1600:1000:0.5,MODE:s,CLICK:1400:1000,KEY:Ctrl+C,MOUSE:4600:1000,KEY:Ctrl+V,VIEW:4600:1000:0.5,S,'
+     'KEY:Ctrl+Z,VIEW:1600:1000:0.5,CLICK:1400:1000,SHIFTCLICK:1680:1080,KEY:Ctrl+C,MOUSE:4600:1000,KEY:Ctrl+V,'
+     'VIEW:4600:1000:0.5,S,EXPORT,Q',
+     [r'Editor: Copied 1 sectors, 1 holes, 2 inner lines',
+      r'Editor: Pasted 1 sectors at 4608, 992 \(1 holes, 2 inner lines\)',
+      r'Editor: Copied 2 sectors, 1 holes, 2 inner lines',
+      r'Editor: Pasted 2 sectors at 4608, 992 \(0 holes, 2 inner lines\)',
+      r'Editor: Exported E1M1: 1007 vertices, 1199 lines, 1864 sides, 184 sectors, 292 things'],
+     ['--edit'], lambda config: check_editor_copy(config)),
     # The 3D preview (F5: the "Doom Map" component on the editor's WADs,
     # rebuilt after an edit), a back side's offset typed in the
     # properties panel, and a PWAD opened (Ctrl+O; OPEN with --upload).
@@ -986,6 +999,27 @@ def check_editor_cut(config):
     assert (kind, flags & 8) == (1, 8), 'thing 157: type %d flags %d' % (kind, flags)
 
 
+def check_editor_copy(config):
+    """The copied ring and its middle in the exported PWAD: the two new
+    sectors (182 the ring, 183 the middle) have lines on both sides of each
+    other, and the ring's two inner lines have it on both sides."""
+    import struct
+    d = check_map_wad(os.path.join(os.path.dirname(config), 'editor-copy_e1m1.wad'), 'E1M1', 184, 292)
+    side_sec = [struct.unpack_from('<H', d['SIDEDEFS'], i * 30 + 28)[0] for i in range(len(d['SIDEDEFS']) // 30)]
+    between = inner = 0
+    for i in range(len(d['LINEDEFS']) // 14):
+        sf, sb = struct.unpack_from('<HH', d['LINEDEFS'], i * 14 + 10)
+        if sb == 0xFFFF:
+            continue
+        pair = {side_sec[sf], side_sec[sb]}
+        if pair == {182, 183}:
+            between += 1
+        if pair == {182}:
+            inner += 1
+    assert between >= 8, 'ring and middle share %d lines' % between
+    assert inner == 2, 'ring has %d inner lines' % inner
+
+
 def check_editor_props(config):
     """Typed values, pasted sectors and a flipped line in the exported PWAD:
     sector 182 (floor 24, light 255) and its two copies, line 1176 turned
@@ -1025,7 +1059,8 @@ def check_editor_align(config):
 
 def export_test(exe, out):
     """--export-map, --export-gltf and --export-x3d: E1M1 as a PWAD with
-    its BSP built anew, and its geometry as glTF and X3D with textures."""
+    its BSP built anew, and its geometry as glTF and X3D with textures,
+    things (crossed sprite quads) and the sky."""
     import json
     config = os.path.join(out, 'config-export')
     shutil.rmtree(config, ignore_errors=True)
@@ -1062,6 +1097,11 @@ def export_test(exe, out):
             assert os.path.exists(os.path.join(out, img['uri'])), 'missing %s' % img['uri']
         tris = sum(g['accessors'][p['indices']]['count'] for p in prims) // 3
         assert tris > 5000, '%d triangles' % tris
+        names = [img['name'] for img in g['images']]
+        assert 'SKY1' in names and 'TROOA1' in names, 'no sky or imp sprite: %s' % names[:5]
+        with open(os.path.join(out, 'export-export-gltf.log')) as f:
+            m = re.search(r'Export: E1M1: \d+ triangles in \d+ materials, (\d+) things, sky SKY1', f.read())
+        assert m and int(m.group(1)) > 150, 'things / sky not exported: %s' % (m and m.group(0))
     except Exception as e:
         problems.append('glTF: %s' % e)
     x3d = os.path.join(out, 'export-map01.x3d')
@@ -1134,7 +1174,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
 ]

@@ -45,6 +45,8 @@ type
     X, Y: Integer;
   end;
   TEditPoints = array of TEditPoint;
+  TEditLoops = array of TEditPoints;
+  TEditIndices = array of Integer;
 
   TEditHitKind = (ehNone, ehWall, ehFloor, ehCeiling);
   { What a ray from the eye meets first (RayHit): a wall part, a floor
@@ -201,6 +203,17 @@ type
       left out), the corners in order with the sector on the right
       (clockwise); empty when its walls make no loop. }
     function SectorOutline(const Sec: Integer): TEditPoints;
+    { Every closed loop of the sector's walls (the outer one, then its
+      holes), largest first. }
+    function SectorLoops(const Sec: Integer): TEditLoops;
+    { Lines with Sec on both sides (inside it, not its walls). }
+    function SectorInnerLines(const Sec: Integer): TEditIndices;
+    { A line from A to B inside sector Sec, both its sides in Sec, like
+      Template (flags, special, tag) with sides like Front and Back; its
+      ends join vertices there or split the lines they lie on. -1 when a
+      line between those points exists already. }
+    function AddInnerLine(const A, B: TEditPoint; const Sec: Integer; const Template: TEditLine;
+      const Front, Back: TEditSide): Integer;
     { (X, Y) is a vertex or on a line (where a cut may end). }
     function OnWall(const X, Y: Integer): Boolean;
     { Change sector heights and light, keeping the ceiling above the
@@ -1220,14 +1233,79 @@ end;
 
 function TDoomEditMap.SectorOutline(const Sec: Integer): TEditPoints;
 var
+  Loops: TEditLoops;
+begin
+  Loops := SectorLoops(Sec);
+  if Length(Loops) = 0 then Exit(nil);
+  Result := Loops[0];
+end;
+
+function TDoomEditMap.SectorInnerLines(const Sec: Integer): TEditIndices;
+var
+  I: Integer;
+begin
+  Result := nil;
+  for I := 0 to High(Lines) do
+    if (LineSector(I, 0) = Sec) and (LineSector(I, 1) = Sec) then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := I;
+    end;
+end;
+
+function TDoomEditMap.AddInnerLine(const A, B: TEditPoint; const Sec: Integer; const Template: TEditLine;
+  const Front, Back: TEditSide): Integer;
+
+  function EndVertex(const P: TEditPoint): Integer;
+  var
+    L: Integer;
+  begin
+    Result := FindVertex(P.X, P.Y);
+    if Result >= 0 then Exit;
+    for L := 0 to High(Lines) do
+      if OnLineInside(P.X, P.Y, L) then
+      begin
+        SplitLineAtPoint(L, P.X, P.Y);
+        Break;
+      end;
+    Result := VertexAt(P.X, P.Y);
+  end;
+
+var
+  V1, V2, S: Integer;
+begin
+  Result := -1;
+  V1 := EndVertex(A);
+  V2 := EndVertex(B);
+  if (V1 = V2) or (FindLine(V1, V2) >= 0) then Exit;
+  Result := Length(Lines);
+  SetLength(Lines, Result + 1);
+  Lines[Result] := Template;
+  Lines[Result].V1 := V1;
+  Lines[Result].V2 := V2;
+  for S := 0 to 1 do
+  begin
+    Lines[Result].Side[S] := Length(Sides);
+    SetLength(Sides, Length(Sides) + 1);
+    if S = 0 then Sides[High(Sides)] := Front else Sides[High(Sides)] := Back;
+    Sides[High(Sides)].Sector := Sec;
+  end;
+end;
+
+function TDoomEditMap.SectorLoops(const Sec: Integer): TEditLoops;
+var
   From, Upto: array of Integer;
   Used: array of Boolean;
   Loop: array of Integer;
   I, J, N, Start, Cur, Count: Integer;
-  Area, BestArea: Double;
+  Area: Double;
+  Areas: array of Double;
   Found: Boolean;
+  Tmp: TEditPoints;
+  TmpArea: Double;
 begin
   Result := nil;
+  Areas := nil;
   { The walls as edges with the sector on their right. }
   N := 0;
   for I := 0 to High(Lines) do
@@ -1247,7 +1325,6 @@ begin
     end;
   end;
   SetLength(Used, N);
-  BestArea := 0;
   for Start := 0 to N - 1 do
   begin
     if Used[Start] then Continue;
@@ -1277,15 +1354,25 @@ begin
       J := (I + 1) mod Count;
       Area := Area + Vertices[Loop[I]].X * Vertices[Loop[J]].Y - Vertices[Loop[J]].X * Vertices[Loop[I]].Y;
     end;
-    if Abs(Area) > BestArea then
+    SetLength(Result, Length(Result) + 1);
+    SetLength(Areas, Length(Result));
+    Areas[High(Areas)] := Abs(Area);
+    SetLength(Result[High(Result)], Count);
+    for I := 0 to Count - 1 do
     begin
-      BestArea := Abs(Area);
-      SetLength(Result, Count);
-      for I := 0 to Count - 1 do
-      begin
-        Result[I].X := Vertices[Loop[I]].X;
-        Result[I].Y := Vertices[Loop[I]].Y;
-      end;
+      Result[High(Result)][I].X := Vertices[Loop[I]].X;
+      Result[High(Result)][I].Y := Vertices[Loop[I]].Y;
+    end;
+  end;
+  { Largest first (a few loops: insertion sort). }
+  for I := 1 to High(Result) do
+  begin
+    J := I;
+    while (J > 0) and (Areas[J] > Areas[J - 1]) do
+    begin
+      Tmp := Result[J]; Result[J] := Result[J - 1]; Result[J - 1] := Tmp;
+      TmpArea := Areas[J]; Areas[J] := Areas[J - 1]; Areas[J - 1] := TmpArea;
+      Dec(J);
     end;
   end;
 end;

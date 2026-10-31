@@ -6,7 +6,10 @@
   levels become vertex colours on unlit materials (glTF's
   KHR_materials_unlit), masked textures (grates, fences) alpha-tested and
   Boom's translucent ones blended. 1 unit = 1 Doom unit (the player is 56
-  tall), Y up like CGE. The sky and the things are not exported.
+  tall), Y up like CGE. The things a single-player game on the middle
+  skill starts with are two crossed quads each with their front sprite
+  (glTF has no billboards), lit by their sector; the sky is a cylinder
+  around the map with the sky texture wrapped four times.
 
   The map editor exports what it edits (ExportEditedLevel, F3 / F4),
   --export-gltf / --export-x3d MAP FILE any map of the WADs, and the
@@ -35,7 +38,7 @@ function ExportEditedLevel(const Wad: TDoomWad; const Graphics: TDoomGraphics; c
 
 implementation
 
-uses Math, Generics.Collections, FpJson, DoomLighting,
+uses Math, Generics.Collections, FpJson, DoomLighting, DoomThings,
   CastleVectors, CastleImages, CastleLog, CastleUriUtils, CastleUtils, CastleStringUtils,
   X3DNodes, X3DLoad, CastleRenderOptions,
   DoomGeometry;
@@ -45,6 +48,8 @@ type
   TExportGroup = class
     Img: TDoomImage;
     Alpha: Single;
+    { Sprites and the sky: seen from both sides. }
+    DoubleSided: Boolean;
     Positions: TVector3List;
     TexCoords: TVector2List;
     Colors: TVector3List;
@@ -126,6 +131,152 @@ begin
       for I := 0 to B.Indices.Count - 1 do
         Found.Indices.Add(Base + B.Indices[I]);
     end;
+end;
+
+function GroupFor(const Groups: TExportGroupList; const Img: TDoomImage): TExportGroup;
+var
+  G: TExportGroup;
+begin
+  for G in Groups do
+    if (G.Img = Img) and (G.Alpha = 1) and G.DoubleSided then
+      Exit(G);
+  Result := TExportGroup.Create;
+  Result.Img := Img;
+  Result.Alpha := 1;
+  Result.DoubleSided := true;
+  Groups.Add(Result);
+end;
+
+procedure AddQuad(const G: TExportGroup; const A, B, C, D: TVector3; const U0, U1, V0, V1: Single;
+  const Color: TVector3);
+var
+  Base: Integer;
+begin
+  Base := G.Positions.Count;
+  G.Positions.Add(A); G.Positions.Add(B); G.Positions.Add(C); G.Positions.Add(D);
+  G.TexCoords.Add(Vector2(U0, V0)); G.TexCoords.Add(Vector2(U1, V0));
+  G.TexCoords.Add(Vector2(U1, V1)); G.TexCoords.Add(Vector2(U0, V1));
+  G.Colors.Add(Color); G.Colors.Add(Color); G.Colors.Add(Color); G.Colors.Add(Color);
+  G.Indices.Add(Base); G.Indices.Add(Base + 1); G.Indices.Add(Base + 2);
+  G.Indices.Add(Base); G.Indices.Add(Base + 2); G.Indices.Add(Base + 3);
+end;
+
+{ The things of a single-player game on skill 3, as two crossed quads
+  with their front sprite (rotation 1, or the one for every angle),
+  placed by the sprite's offsets. }
+function CollectThings(const Map: TDoomMap; const Graphics: TDoomGraphics; const Groups: TExportGroupList): Integer;
+var
+  T: TDoomThing;
+  Info: PThingInfo;
+  Img: TDoomImage;
+  Mirror: Boolean;
+  Sec, K: Integer;
+  Z, Top, Bottom, Left, Right, Angle, U0, U1: Single;
+  Dir: TVector2;
+  Color: TVector3;
+  G: TExportGroup;
+begin
+  Result := 0;
+  for T in Map.Things do
+  begin
+    if ((T.Flags and MTF_NOTSINGLE) <> 0) or ((T.Flags and MTF_NORMAL) = 0) then Continue;
+    Info := FindThingInfo(T.TypeNum);
+    if (Info = nil) or (Info^.Kind in [tkNone, tkPlayerStart, tkTeleportDest, tkInvisible, tkBossSpot]) then
+      Continue;
+    if Info^.IdleFrames = '' then Continue;
+    Img := Graphics.Sprite(Info^.Sprite, Info^.IdleFrames[1], 1, Mirror);
+    if (Img = nil) or (Img.Image = nil) then Continue;
+    Sec := Map.SectorAt(T.X, T.Y);
+    if Sec < 0 then Continue;
+    if Info^.Hanging then
+      Z := Map.CeilingAt(Sec, T.X, T.Y) - Info^.Height
+    else
+      Z := Map.FloorAt(Sec, T.X, T.Y);
+    { Doom draws a sprite's top TopOffset above the thing, its left
+      LeftOffset to the left of it. }
+    Top := Z + Img.TopOffset;
+    Bottom := Top - Img.Height;
+    Left := -Img.LeftOffset;
+    Right := Img.Width - Img.LeftOffset;
+    if Mirror then
+    begin
+      U0 := 1;
+      U1 := 0;
+    end else
+    begin
+      U0 := 0;
+      U1 := 1;
+    end;
+    Color := LightColor(Map.Sectors[Sec].LightLevel, 10);
+    G := GroupFor(Groups, Img);
+    for K := 0 to 1 do
+    begin
+      { The first quad faces where the thing looks, the second across it. }
+      Angle := DegToRad(T.Angle + 90 + K * 90);
+      Dir := Vector2(Cos(Angle), Sin(Angle));
+      AddQuad(G,
+        DoomToCge(T.X + Dir.X * Left, T.Y + Dir.Y * Left, Bottom),
+        DoomToCge(T.X + Dir.X * Right, T.Y + Dir.Y * Right, Bottom),
+        DoomToCge(T.X + Dir.X * Right, T.Y + Dir.Y * Right, Top),
+        DoomToCge(T.X + Dir.X * Left, T.Y + Dir.Y * Left, Top),
+        U0, U1, 0, 1, Color);
+    end;
+    Inc(Result);
+  end;
+end;
+
+{ The sky: a cylinder around the map (its middle, half its diagonal and
+  a margin away), from the lowest floor to 256 above the highest
+  ceiling, the texture four times around. '' when the map has no sky. }
+function CollectSky(const Map: TDoomMap; const Graphics: TDoomGraphics; const Groups: TExportGroupList): String;
+const
+  Segments = 32;
+var
+  Img: TDoomImage;
+  I: Integer;
+  HasSky: Boolean;
+  MinX, MinY, MaxX, MaxY, MinZ, MaxZ, CX, CY, R, A0, A1: Single;
+  V: TDoomVertex;
+  G: TExportGroup;
+begin
+  Result := '';
+  HasSky := false;
+  for I := 0 to High(Map.Sectors) do
+    if Map.HasSkyCeiling(I) then HasSky := true;
+  if (not HasSky) or (Length(Map.Vertices) = 0) or (Length(Map.Sectors) = 0) then Exit;
+  Img := Graphics.Texture(Graphics.SkyTextureName(Map.Name));
+  if (Img = nil) or (Img.Image = nil) then Exit;
+  MinX := 1e9; MinY := 1e9; MaxX := -1e9; MaxY := -1e9;
+  for V in Map.Vertices do
+  begin
+    MinX := Min(MinX, V.X); MaxX := Max(MaxX, V.X);
+    MinY := Min(MinY, V.Y); MaxY := Max(MaxY, V.Y);
+  end;
+  MinZ := 1e9; MaxZ := -1e9;
+  for I := 0 to High(Map.Sectors) do
+  begin
+    MinZ := Min(MinZ, Map.Sectors[I].FloorHeight);
+    MaxZ := Max(MaxZ, Map.Sectors[I].CeilingHeight);
+  end;
+  MaxZ := MaxZ + 256;
+  CX := (MinX + MaxX) / 2;
+  CY := (MinY + MaxY) / 2;
+  R := Sqrt(Sqr(MaxX - MinX) + Sqr(MaxY - MinY)) / 2 + 256;
+  G := GroupFor(Groups, Img);
+  for I := 0 to Segments - 1 do
+  begin
+    A0 := 2 * Pi * I / Segments;
+    A1 := 2 * Pi * (I + 1) / Segments;
+    { Seen from inside: the texture runs left to right as the view
+      turns clockwise (against Doom's angles). }
+    AddQuad(G,
+      DoomToCge(CX + R * Cos(A0), CY + R * Sin(A0), MinZ),
+      DoomToCge(CX + R * Cos(A1), CY + R * Sin(A1), MinZ),
+      DoomToCge(CX + R * Cos(A1), CY + R * Sin(A1), MaxZ),
+      DoomToCge(CX + R * Cos(A0), CY + R * Sin(A0), MaxZ),
+      4 - 4 * I / Segments, 4 - 4 * (I + 1) / Segments, 0, 1, Vector3(1, 1, 1));
+  end;
+  Result := Img.Name;
 end;
 
 function SafeName(const S: String): String;
@@ -295,7 +446,7 @@ begin
         Mat.Add('alphaMode', 'BLEND');
         Mat.Add('doubleSided', true);
       end else
-      if G.Img.HasAlpha then
+      if G.Img.HasAlpha or G.DoubleSided then
       begin
         Mat.Add('alphaMode', 'MASK');
         Mat.Add('alphaCutoff', 0.5);
@@ -357,7 +508,7 @@ begin
       Geo.TexCoord := TexCoord;
       Geo.Color := Color;
       Geo.SetIndex(G.Indices);
-      Geo.Solid := not (G.Img.HasAlpha or (G.Alpha < 1));
+      Geo.Solid := not (G.Img.HasAlpha or (G.Alpha < 1) or G.DoubleSided);
       Tex := TImageTextureNode.Create;
       Tex.SetUrl([TexturePaths[Gi]]);
       { Doom's look: nearest texels. }
@@ -393,7 +544,8 @@ var
   Paths: TStringList;
   OldAtlas: Boolean;
   Dir, RelDir: String;
-  Triangles: Integer;
+  Triangles, Things: Integer;
+  Sky: String;
   G: TExportGroup;
 begin
   Result := false;
@@ -408,6 +560,8 @@ begin
       Geometry := TDoomGeometry.Create(Map, Graphics, [], Graphics.SkyTextureName(Map.Name), false,
         Graphics.SkyTextureName(Map.Name));
       CollectGroups(Geometry, Groups);
+      Things := CollectThings(Map, Graphics, Groups);
+      Sky := CollectSky(Map, Graphics, Groups);
       RelDir := ChangeFileExt(ExtractFileName(FileName), '') + '_textures';
       Dir := IncludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(FileName))) + RelDir;
       WriteTextures(Groups, Dir, RelDir, Paths);
@@ -418,7 +572,9 @@ begin
       Triangles := 0;
       for G in Groups do
         Inc(Triangles, G.Indices.Count div 3);
-      WritelnLog('Export', '%s: %d triangles in %d materials to %s', [Map.Name, Triangles, Groups.Count, FileName]);
+      if Sky = '' then Sky := 'none';
+      WritelnLog('Export', '%s: %d triangles in %d materials, %d things, sky %s to %s', [Map.Name, Triangles,
+        Groups.Count, Things, Sky, FileName]);
       Result := true;
     except
       on E: Exception do

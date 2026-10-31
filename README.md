@@ -81,7 +81,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   it picks the texture of the wall or flat you point at, `O` aligns it with the arrows) and open PWAD files (`Ctrl+O`, in the
   browser too; `M` lists their maps). `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
   as a PWAD with its nodes built (it runs in other Doom ports: `-file e1m1-edited.wad`),
-  `F3` / `F4` export the level's walls and floors as glTF / X3D with their textures for
+  `F3` / `F4` export the level's walls, floors, things and sky as glTF / X3D with their textures for
   Blender, other engines or the Castle Game Engine editor. On the command line
   `--export-map MAP FILE`, `--export-gltf MAP FILE` and `--export-x3d MAP FILE` do the same
   for any map of the loaded WADs.

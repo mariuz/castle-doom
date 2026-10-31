@@ -49,6 +49,15 @@ type
   TEditMode = (emVertices, emLines, emSectors, emThings);
   TEditIndexArray = array of Integer;
 
+  { A line inside a copied sector (both its sides in it): its ends
+    relative to the copy's middle, its values and sides. }
+  TSectorClipLine = record
+    A, B: TEditPoint;
+    Line: TEditLine;
+    Front, Back: TEditSide;
+  end;
+  TSectorClipLines = array of TSectorClipLine;
+
   TViewEdit = class(TCastleView)
   strict private
     FEdit: TDoomEditMap;
@@ -65,9 +74,12 @@ type
     FDragThings: array of Integer;
     { Copied things, relative to their middle (Ctrl+C / Ctrl+V). }
     FClipboard: TEditThingArray;
-    { Copied sectors (Ctrl+C in sectors mode): outlines relative to their
-      middle and the sectors' values. }
+    { Copied sectors (Ctrl+C in sectors mode), largest first: outlines
+      relative to their middle, their holes (other walls loops inside
+      them), the lines inside them and the sectors' values. }
     FSectorClip: array of TEditPoints;
+    FSectorClipHoles: array of TEditLoops;
+    FSectorClipInner: array of TSectorClipLines;
     FSectorClipValues: TEditSectorArray;
     { The properties panel (E): typed values of the selection; the field
       being typed and its text. }
@@ -971,33 +983,108 @@ begin
   LogAction(Format('Pasted %d things at %d, %d', [Length(FClipboard), Pt.X, Pt.Y]));
 end;
 
-{ Copying sectors: their outer walls (holes left out) and values; a
-  paste draws them as new rooms (DrawSector) at the mouse. }
+function LoopArea(const P: TEditPoints): Double;
+var
+  I, J: Integer;
+begin
+  Result := 0;
+  for I := 0 to High(P) do
+  begin
+    J := (I + 1) mod Length(P);
+    Result := Result + Double(P[I].X) * P[J].Y - Double(P[J].X) * P[I].Y;
+  end;
+  Result := Abs(Result) / 2;
+end;
+
+{ The same corners (in any order and direction). }
+function SameLoop(const A, B: TEditPoints): Boolean;
+var
+  I, J: Integer;
+  Found: Boolean;
+begin
+  if Length(A) <> Length(B) then Exit(false);
+  for I := 0 to High(A) do
+  begin
+    Found := false;
+    for J := 0 to High(B) do
+      if (A[I].X = B[J].X) and (A[I].Y = B[J].Y) then
+      begin
+        Found := true;
+        Break;
+      end;
+    if not Found then Exit(false);
+  end;
+  Result := true;
+end;
+
+function Shifted(const P: TEditPoints; const DX, DY: Integer): TEditPoints;
+var
+  I: Integer;
+begin
+  Result := Copy(P);
+  for I := 0 to High(Result) do
+  begin
+    Result[I].X := Result[I].X + DX;
+    Result[I].Y := Result[I].Y + DY;
+  end;
+end;
+
+{ Copying sectors: their outer walls, holes, inner lines and values; a
+  paste draws the outer walls as new rooms (DrawSector) at the mouse,
+  largest first, cuts the holes no other copied sector fills back out
+  and adds the inner lines. }
 procedure TViewEdit.CopySectors;
 var
   Sel: TEditIndexArray;
-  I, J, N: Integer;
+  I, J, K, N, DX, DY: Integer;
   CX, CY: Double;
-  Outline: TEditPoints;
+  Loops: TEditLoops;
+  Inner: TEditIndices;
+  Lines: TSectorClipLines;
+  L: TEditLine;
+  TmpOutline: TEditPoints;
+  TmpHoles: TEditLoops;
+  TmpInner: TSectorClipLines;
+  TmpValues: TEditSector;
 begin
   Sel := Selection;
   FSectorClip := nil;
+  FSectorClipHoles := nil;
+  FSectorClipInner := nil;
   FSectorClipValues := nil;
   CX := 0;
   CY := 0;
   N := 0;
   for I := 0 to High(Sel) do
   begin
-    Outline := FEdit.SectorOutline(Sel[I]);
-    if Length(Outline) < 3 then Continue;
+    Loops := FEdit.SectorLoops(Sel[I]);
+    if (Length(Loops) = 0) or (Length(Loops[0]) < 3) then Continue;
     SetLength(FSectorClip, Length(FSectorClip) + 1);
-    FSectorClip[High(FSectorClip)] := Outline;
+    FSectorClip[High(FSectorClip)] := Loops[0];
+    SetLength(FSectorClipHoles, Length(FSectorClip));
+    FSectorClipHoles[High(FSectorClipHoles)] := Copy(Loops, 1, Length(Loops) - 1);
+    Inner := FEdit.SectorInnerLines(Sel[I]);
+    Lines := nil;
+    SetLength(Lines, Length(Inner));
+    for K := 0 to High(Inner) do
+    begin
+      L := FEdit.Lines[Inner[K]];
+      Lines[K].A.X := FEdit.Vertices[L.V1].X;
+      Lines[K].A.Y := FEdit.Vertices[L.V1].Y;
+      Lines[K].B.X := FEdit.Vertices[L.V2].X;
+      Lines[K].B.Y := FEdit.Vertices[L.V2].Y;
+      Lines[K].Line := L;
+      Lines[K].Front := FEdit.Sides[L.Side[0]];
+      Lines[K].Back := FEdit.Sides[L.Side[1]];
+    end;
+    SetLength(FSectorClipInner, Length(FSectorClip));
+    FSectorClipInner[High(FSectorClipInner)] := Lines;
     SetLength(FSectorClipValues, Length(FSectorClipValues) + 1);
     FSectorClipValues[High(FSectorClipValues)] := FEdit.Sectors[Sel[I]];
-    for J := 0 to High(Outline) do
+    for J := 0 to High(Loops[0]) do
     begin
-      CX := CX + Outline[J].X;
-      CY := CY + Outline[J].Y;
+      CX := CX + Loops[0][J].X;
+      CY := CY + Loops[0][J].Y;
       Inc(N);
     end;
   end;
@@ -1006,22 +1093,58 @@ begin
     Message('Select sectors to copy');
     Exit;
   end;
+  { Relative to the middle. }
+  DX := -Round(CX / N);
+  DY := -Round(CY / N);
   for I := 0 to High(FSectorClip) do
-    for J := 0 to High(FSectorClip[I]) do
+  begin
+    FSectorClip[I] := Shifted(FSectorClip[I], DX, DY);
+    for J := 0 to High(FSectorClipHoles[I]) do
+      FSectorClipHoles[I][J] := Shifted(FSectorClipHoles[I][J], DX, DY);
+    for J := 0 to High(FSectorClipInner[I]) do
     begin
-      FSectorClip[I][J].X := FSectorClip[I][J].X - Round(CX / N);
-      FSectorClip[I][J].Y := FSectorClip[I][J].Y - Round(CY / N);
+      FSectorClipInner[I][J].A.X := FSectorClipInner[I][J].A.X + DX;
+      FSectorClipInner[I][J].A.Y := FSectorClipInner[I][J].A.Y + DY;
+      FSectorClipInner[I][J].B.X := FSectorClipInner[I][J].B.X + DX;
+      FSectorClipInner[I][J].B.Y := FSectorClipInner[I][J].B.Y + DY;
     end;
-  LogAction(Format('Copied %d sectors', [Length(FSectorClip)]));
+  end;
+  { Largest first: a room is drawn before what lies inside it. }
+  for I := 1 to High(FSectorClip) do
+  begin
+    J := I;
+    while (J > 0) and (LoopArea(FSectorClip[J]) > LoopArea(FSectorClip[J - 1])) do
+    begin
+      TmpOutline := FSectorClip[J]; FSectorClip[J] := FSectorClip[J - 1]; FSectorClip[J - 1] := TmpOutline;
+      TmpHoles := FSectorClipHoles[J]; FSectorClipHoles[J] := FSectorClipHoles[J - 1];
+      FSectorClipHoles[J - 1] := TmpHoles;
+      TmpInner := FSectorClipInner[J]; FSectorClipInner[J] := FSectorClipInner[J - 1];
+      FSectorClipInner[J - 1] := TmpInner;
+      TmpValues := FSectorClipValues[J]; FSectorClipValues[J] := FSectorClipValues[J - 1];
+      FSectorClipValues[J - 1] := TmpValues;
+      Dec(J);
+    end;
+  end;
+  N := 0;
+  K := 0;
+  for I := 0 to High(FSectorClip) do
+  begin
+    Inc(N, Length(FSectorClipHoles[I]));
+    Inc(K, Length(FSectorClipInner[I]));
+  end;
+  LogAction(Format('Copied %d sectors, %d holes, %d inner lines', [Length(FSectorClip), N, K]));
 end;
 
 procedure TViewEdit.PasteSectors;
 var
   Pt: TEditPoint;
-  I, J, Sec, Pasted: Integer;
-  Points: TEditPoints;
+  I, J, K, Sec, Pasted, Hole, Holes, InnerLines: Integer;
+  Points, A, B: TEditPoints;
   Error, Errors: String;
   V: TEditSector;
+  Filled: Boolean;
+  Pasteds: TEditIndexArray;
+  Clip: TSectorClipLine;
 begin
   if Length(FSectorClip) = 0 then
   begin
@@ -1031,17 +1154,15 @@ begin
   Pt := Snap(FMouse);
   ClearSelection;
   Pasted := 0;
+  Holes := 0;
+  InnerLines := 0;
+  Pasteds := nil;
   Errors := '';
   FEdit.BeginChange;
   try
     for I := 0 to High(FSectorClip) do
     begin
-      Points := Copy(FSectorClip[I]);
-      for J := 0 to High(Points) do
-      begin
-        Points[J].X := Points[J].X + Pt.X;
-        Points[J].Y := Points[J].Y + Pt.Y;
-      end;
+      Points := Shifted(FSectorClip[I], Pt.X, Pt.Y);
       Sec := FEdit.DrawSector(Points, Error);
       if Sec < 0 then
       begin
@@ -1056,14 +1177,45 @@ begin
       FEdit.Sectors[Sec].Light := V.Light;
       FEdit.Sectors[Sec].Special := V.Special;
       FEdit.Sectors[Sec].Tag := V.Tag;
-      ToggleSelect(Sec);
+      { Holes: those another copied sector fills are drawn with it
+        (later, being smaller); the others are drawn as rooms and
+        deleted, which leaves their walls one-sided around them. }
+      for J := 0 to High(FSectorClipHoles[I]) do
+      begin
+        Filled := false;
+        for K := 0 to High(FSectorClip) do
+          if (K <> I) and SameLoop(FSectorClipHoles[I][J], FSectorClip[K]) then
+            Filled := true;
+        if Filled then Continue;
+        Hole := FEdit.DrawSector(Shifted(FSectorClipHoles[I][J], Pt.X, Pt.Y), Error);
+        if Hole < 0 then
+        begin
+          Errors := Error;
+          Continue;
+        end;
+        FEdit.DeleteSector(Hole);
+        Inc(Holes);
+      end;
+      for J := 0 to High(FSectorClipInner[I]) do
+      begin
+        Clip := FSectorClipInner[I][J];
+        A := Shifted([Clip.A], Pt.X, Pt.Y);
+        B := Shifted([Clip.B], Pt.X, Pt.Y);
+        if FEdit.AddInnerLine(A[0], B[0], Sec, Clip.Line, Clip.Front, Clip.Back) >= 0 then
+          Inc(InnerLines);
+      end;
+      SetLength(Pasteds, Length(Pasteds) + 1);
+      Pasteds[High(Pasteds)] := Sec;
       Inc(Pasted);
     end;
   finally
     FEdit.EndChange;
   end;
+  for Sec in Pasteds do
+    ToggleSelect(Sec);
   if Pasted > 0 then
-    LogAction(Format('Pasted %d sectors at %d, %d', [Pasted, Pt.X, Pt.Y]))
+    LogAction(Format('Pasted %d sectors at %d, %d (%d holes, %d inner lines)', [Pasted, Pt.X, Pt.Y, Holes,
+      InnerLines]))
   else
     Message('Cannot paste here: ' + Errors);
 end;
