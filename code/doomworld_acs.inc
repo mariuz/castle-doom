@@ -35,6 +35,10 @@ type
     function SectorValue(const Tag, What: Integer): Integer; override;
     function Localize(const Name: String): String; override;
     function ThisMap(const N: Integer): Boolean; override;
+    function Spawn(const ThingClass: String; const X, Y: Single; const Tid: Integer; const Angle: Single): Integer;
+      override;
+    function SpawnSpot(const ThingClass: String; const SpotTid, Tid: Integer; const Angle: Single;
+      const FaceSpot: Boolean): Integer; override;
   end;
 
   TAcsThingName = record
@@ -45,7 +49,7 @@ type
 const
   { ZDoom's class names and spawn numbers (zdefs.acs's T_*) of Doom's
     monsters and the barrel. }
-  AcsThingNames: array [0..18] of TAcsThingName = (
+  AcsThingNames: array [0..36] of TAcsThingName = (
     (Name: 'ZombieMan'; SpawnNum: 4; DoomNum: 3004),
     (Name: 'ShotgunGuy'; SpawnNum: 1; DoomNum: 9),
     (Name: 'ChaingunGuy'; SpawnNum: 2; DoomNum: 65),
@@ -64,7 +68,26 @@ const
     (Name: 'Cyberdemon'; SpawnNum: 114; DoomNum: 16),
     (Name: 'SpiderMastermind'; SpawnNum: 7; DoomNum: 7),
     (Name: 'WolfensteinSS'; SpawnNum: 116; DoomNum: 84),
-    (Name: 'ExplosiveBarrel'; SpawnNum: 125; DoomNum: 2035)
+    (Name: 'ExplosiveBarrel'; SpawnNum: 125; DoomNum: 2035),
+    { Items, by class name only (Spawn, SpawnSpot). }
+    (Name: 'Clip'; SpawnNum: -1; DoomNum: 2007),
+    (Name: 'Shell'; SpawnNum: -1; DoomNum: 2008),
+    (Name: 'RocketAmmo'; SpawnNum: -1; DoomNum: 2010),
+    (Name: 'Cell'; SpawnNum: -1; DoomNum: 2047),
+    (Name: 'Stimpack'; SpawnNum: -1; DoomNum: 2011),
+    (Name: 'Medikit'; SpawnNum: -1; DoomNum: 2012),
+    (Name: 'HealthBonus'; SpawnNum: -1; DoomNum: 2014),
+    (Name: 'ArmorBonus'; SpawnNum: -1; DoomNum: 2015),
+    (Name: 'GreenArmor'; SpawnNum: -1; DoomNum: 2018),
+    (Name: 'BlueArmor'; SpawnNum: -1; DoomNum: 2019),
+    (Name: 'Soulsphere'; SpawnNum: -1; DoomNum: 2013),
+    (Name: 'Shotgun'; SpawnNum: -1; DoomNum: 2001),
+    (Name: 'Chaingun'; SpawnNum: -1; DoomNum: 2002),
+    (Name: 'RocketLauncher'; SpawnNum: -1; DoomNum: 2003),
+    (Name: 'PlasmaRifle'; SpawnNum: -1; DoomNum: 2004),
+    (Name: 'Chainsaw'; SpawnNum: -1; DoomNum: 2005),
+    (Name: 'BFG9000'; SpawnNum: -1; DoomNum: 2006),
+    (Name: 'SuperShotgun'; SpawnNum: -1; DoomNum: 82)
   );
 
 constructor TWorldAcsHost.Create(const AWorld: TDoomWorld);
@@ -104,7 +127,7 @@ var
 begin
   if SpawnNum = 0 then Exit(FWorld.AcsThingCount(0, Tid));
   for I := 0 to High(AcsThingNames) do
-    if AcsThingNames[I].SpawnNum = SpawnNum then
+    if (SpawnNum > 0) and (AcsThingNames[I].SpawnNum = SpawnNum) then
       Exit(FWorld.AcsThingCount(AcsThingNames[I].DoomNum, Tid));
   FWorld.AcsLogOnce(Format('ThingCount of spawn number %d', [SpawnNum]));
   Result := 0;
@@ -216,7 +239,81 @@ begin
   Result := FWorld.AcsThisMap(N);
 end;
 
+function AcsClassDoomNum(const ThingClass: String): Integer;
+var
+  I: Integer;
+begin
+  for I := 0 to High(AcsThingNames) do
+    if SameText(AcsThingNames[I].Name, ThingClass) then
+      Exit(AcsThingNames[I].DoomNum);
+  Result := 0;
+end;
+
+function TWorldAcsHost.Spawn(const ThingClass: String; const X, Y: Single; const Tid: Integer;
+  const Angle: Single): Integer;
+var
+  N: Integer;
+begin
+  Result := 0;
+  N := AcsClassDoomNum(ThingClass);
+  if N = 0 then
+  begin
+    FWorld.AcsLogOnce(Format('Spawn of "%s"', [ThingClass]));
+    Exit;
+  end;
+  if FWorld.SpawnByScript(N, X, Y, Angle, Tid, false) <> nil then Result := 1;
+  WritelnLog('Acs', 'Spawn %s at (%.0f, %.0f): %d', [ThingClass, X, Y, Result]);
+end;
+
+function TWorldAcsHost.SpawnSpot(const ThingClass: String; const SpotTid, Tid: Integer; const Angle: Single;
+  const FaceSpot: Boolean): Integer;
+var
+  N, I: Integer;
+  A: TDoomActor;
+  Spots: array of TVector3;
+  Face: Single;
+begin
+  Result := 0;
+  N := AcsClassDoomNum(ThingClass);
+  if N = 0 then
+  begin
+    FWorld.AcsLogOnce(Format('SpawnSpot of "%s"', [ThingClass]));
+    Exit;
+  end;
+  Spots := FWorld.AcsSpots(SpotTid);
+  for I := 0 to High(Spots) do
+  begin
+    { Z holds the spot's angle. }
+    if FaceSpot then Face := Spots[I].Z else Face := Angle;
+    A := FWorld.SpawnByScript(N, Spots[I].X, Spots[I].Y, Face, Tid, false);
+    if A <> nil then Inc(Result);
+  end;
+  WritelnLog('Acs', 'SpawnSpot %s at things %d: %d', [ThingClass, SpotTid, Result]);
+end;
+
 { TDoomWorld's side ------------------------------------------------------------- }
+
+function TDoomWorld.AcsSpots(const Tid: Integer): TAcsSpots;
+var
+  A: TDoomActor;
+  I: Integer;
+begin
+  Result := nil;
+  if Tid = 0 then Exit;
+  for A in FActors do
+    if (A.Tid = Tid) and not A.Removed then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := Vector3(A.DoomX, A.DoomY, A.Angle);
+    end;
+  if Length(Result) > 0 then Exit;
+  for I := 0 to High(FMap.Things) do
+    if FMap.Things[I].Tid = Tid then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := Vector3(FMap.Things[I].X, FMap.Things[I].Y, FMap.Things[I].Angle);
+    end;
+end;
 
 function TDoomWorld.AcsRandom(const N: Integer): Integer;
 begin

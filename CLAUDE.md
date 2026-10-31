@@ -944,6 +944,14 @@ autotest only checks the library loads.
   `TestSlopes`. Code that needs a height at a place uses
   `TDoomMap.FloorAt` / `CeilingAt`, and a line's opening at a point
   `TDoomWorld.LineOpening`, not `Sectors[S].FloorHeight`.
+  Thing actions: `udmf-things.wad` (same script) has a map spot (id 20)
+  at (-320, 320); `LINE:829` spawns an imp there (`Thing_Spawn`, id
+  21), `LINE:1045` kills it (`Thing_Damage`), `LINE:1046` /
+  `LINE:1052` spawn and remove a zombieman, line 898 makes sector 141's
+  floor carry east (`Scroll_Floor`) and its open script spawns a
+  shotgun guy (`SpawnSpot`, id 30) and a medikit (`Spawn`, id 31; log
+  `Message: Spawned 2`). Saves keep actors' ids (`tid`); autotest
+  `udmf-things` (golden).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

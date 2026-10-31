@@ -2662,6 +2662,22 @@ begin
       48: AddSide(Linedefs[I].Side[0], Vector2(1, 0));
       UdmfScrollWall:
         AddSide(Linedefs[I].Side[0], Vector2(Linedefs[I].Args[0] / 64, Linedefs[I].Args[1] / 64));
+      UdmfScrollFloor, UdmfScrollCeiling:
+        begin
+          V := Vector2(Linedefs[I].Args[1] / 32, Linedefs[I].Args[2] / 32);
+          S := -1;
+          repeat
+            S := FindSectorFromTag(Linedefs[I].Args[0], S);
+            if S < 0 then Break;
+            if Special = UdmfScrollCeiling then
+              Add(stCeiling, S, V)
+            else
+            begin
+              if Linedefs[I].Args[3] <> 1 then Add(stFloor, S, V);
+              if Linedefs[I].Args[3] >= 1 then Add(stCarry, S, V * CarryFactor);
+            end;
+          until false;
+        end;
       85: AddSide(Linedefs[I].Side[0], Vector2(-1, 0));
       250, 251, 252, 253:
         begin

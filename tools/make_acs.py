@@ -256,6 +256,43 @@ def tests_program(layout):
     return code, scripts, funcs, S
 
 
+SPAWN_STRINGS = ['ShotgunGuy', 'Medikit', 'Spawned ']
+
+
+def spawn_program(layout):
+    """udmf-things.wad's open script: SpawnSpot("ShotgunGuy", 20, 30, 0),
+    Spawn("Medikit", -352.0, 192.0, 0, 31, 0), then prints "Spawned N"
+    (ThingCount(0, 30) + ThingCount(0, 31))."""
+    a = Asm(layout)
+    S = SPAWN_STRINGS
+    a.label('s1')
+    for v in (S.index('ShotgunGuy'), 20, 30, 0):
+        a.push(v)
+    a.op('SPAWNSPOT')
+    a.op('DROP')
+    a.push(S.index('Medikit'))
+    a.op('PUSHNUMBER', -352 << 16)
+    a.op('PUSHNUMBER', 192 << 16)
+    a.push(0)
+    a.push(31)
+    a.push(0)
+    a.op('SPAWN')
+    a.op('DROP')
+    a.op('BEGINPRINT')
+    a.print_str('Spawned ', S)
+    a.push(0)
+    a.push(30)
+    a.op('THINGCOUNT')
+    a.push(0)
+    a.push(31)
+    a.op('THINGCOUNT')
+    a.op('ADD')
+    a.op('PRINTNUMBER')
+    a.op('ENDPRINT')
+    a.op('TERMINATE')
+    return a.finish(), [(1, 1, a.labels['s1'], 0)], [], S
+
+
 def chunk(cid, data):
     return cid + struct.pack('<i', len(data)) + data
 

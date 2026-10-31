@@ -397,6 +397,19 @@ TESTS = [
      [r'Map: E1M1: slopes: 2 floors, 1 ceilings'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-slopes.wad'), '--fixed-step'],
      lambda config: check_slopes(config)),
+    # Thing actions and floor scrollers (udmf-things.wad): ACS's SpawnSpot
+    # and Spawn at the start, Thing_Spawn / Thing_Damage / Thing_SpawnNoFog
+    # / Thing_Remove by line, Scroll_Floor carrying the player east.
+    ('udmf-things', 'E1M1',
+     'Y,W:0.5,SAVE:1,LINE:829,W:0.5,G:-416:256,A:45,S,SAVE:2,LINE:1045,W:1,SAVE:3,LINE:1046,W:0.2,LINE:1052,'
+     'W:0.3,SAVE:4,G:-224:200,W:1,SAVE:5,Q',
+     [r'Acs: SpawnSpot ShotgunGuy at things 20: 1', r'Acs: Spawn Medikit at \(-352, 192\): 1',
+      r'Message: Spawned 2', r'Udmf: Thing_Spawn \(20, 5, 64, 21\): 1 things',
+      r'Udmf: Thing_Damage \(21, 1000, 0, 0\): 1 things', r'Udmf: Thing_SpawnNoFog \(20, 4, 0, 22\): 1 things',
+      r'Udmf: Thing_Remove \(22, 0, 0, 0\): 1 things',
+      r'Map: E1M1: scrollers: 0 walls, 1 floors, 0 ceilings, 1 carrying floors'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad'), '--fixed-step'],
+     lambda config: check_udmf_things(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -696,6 +709,22 @@ def check_slopes(config):
     imps = [t for t in c['actors'] if t.get('type') == 3001 and abs(t['x'] + 224) < 40]
     assert imps, 'no imp on the ramp'
     assert abs(imps[0]['z'] - (imps[0]['y'] - 128) / 4) < 1, 'imp at z %s, y %s' % (imps[0]['z'], imps[0]['y'])
+
+
+def check_udmf_things(config):
+    """tools/testdata/udmf-things.wad: things by thing id in the saves."""
+    saves = [save_json(config, n) for n in range(1, 6)]
+
+    def tid(save, t):
+        return [a for a in save['actors'] if a.get('tid') == t]
+    assert [a['type'] for a in tid(saves[0], 30)] == [9], 'no shotgun guy from SpawnSpot'
+    assert [a['type'] for a in tid(saves[0], 31)] == [2012], 'no medikit from Spawn'
+    imp = tid(saves[1], 21)
+    assert imp and imp[0]['type'] == 3001 and imp[0]['health'] > 0, 'no imp from Thing_Spawn: %s' % imp
+    assert abs(imp[0]['x'] + 320) < 1 and abs(imp[0]['y'] - 320) < 1, 'imp not at the map spot'
+    assert tid(saves[2], 21)[0]['health'] <= 0, 'Thing_Damage did not kill the imp'
+    assert not tid(saves[3], 22), 'Thing_Remove left the zombieman'
+    assert saves[4]['player']['x'] > -224 + 10, 'Scroll_Floor did not carry: x %s' % saves[4]['player']['x']
 
 
 def check_carry(config):
@@ -1174,7 +1203,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
 ]

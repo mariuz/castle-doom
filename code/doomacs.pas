@@ -183,6 +183,13 @@ type
     function Localize(const Name: String): String; virtual;
     { ACS_Execute's map argument names this map (0 always does). }
     function ThisMap(const N: Integer): Boolean; virtual;
+    { Spawn a thing by ZDoom class name at (X, Y) on the floor, with thing
+      id Tid, facing Angle (degrees); at every thing with thing id SpotTid
+      (facing its angle when FaceSpot). How many were spawned. }
+    function Spawn(const ThingClass: String; const X, Y: Single; const Tid: Integer; const Angle: Single): Integer;
+      virtual;
+    function SpawnSpot(const ThingClass: String; const SpotTid, Tid: Integer; const Angle: Single;
+      const FaceSpot: Boolean): Integer; virtual;
   end;
 
   { World and global variables (and their arrays): they outlive a map. }
@@ -917,6 +924,17 @@ end;
 function TAcsHost.ThisMap(const N: Integer): Boolean;
 begin
   Result := N = 0;
+end;
+
+function TAcsHost.Spawn(const ThingClass: String; const X, Y: Single; const Tid: Integer; const Angle: Single): Integer;
+begin
+  Result := 0;
+end;
+
+function TAcsHost.SpawnSpot(const ThingClass: String; const SpotTid, Tid: Integer; const Angle: Single;
+  const FaceSpot: Boolean): Integer;
+begin
+  Result := 0;
 end;
 
 { TAcsGlobals --------------------------------------------------------------- }
@@ -1956,12 +1974,57 @@ begin
       PcdSetactorproperty, PcdSetcameratotexture, PcdSethudsize, PcdSetmousepointer, PcdConsolecommand,
       PcdReplacetextures, PcdGiveactorinventory, PcdTakeactorinventory:
         Skip(3);
-      PcdSpawnspotfacing, PcdSetactorstate, PcdThingdamage2: Skip(3, true);
+      PcdSetactorstate, PcdThingdamage2: Skip(3, true);
       PcdTranslationrange1: Skip(4);
-      PcdSpawnspot: Skip(4, true);
+      { Spawn(class, x, y, z, tid, angle); SpawnSpot(class, spot, tid,
+        angle); SpawnSpotFacing(class, spot, tid): angles in 256ths. }
+      PcdSpawn, PcdSpawndirect:
+        begin
+          if Op = PcdSpawn then
+          begin
+            B := Pop;
+            N := Pop;
+            Drop(1);
+            K := Pop;
+            A := Pop;
+            Target := Pop;
+          end else
+          begin
+            Target := M.ReadWord(I.PC);
+            A := M.ReadWord(I.PC);
+            K := M.ReadWord(I.PC);
+            M.ReadWord(I.PC);
+            N := M.ReadWord(I.PC);
+            B := M.ReadWord(I.PC);
+          end;
+          Push(FHost.Spawn(StringOf(Target), A / 65536, K / 65536, N, B * 360 / 256));
+        end;
+      PcdSpawnspot, PcdSpawnspotdirect:
+        begin
+          if Op = PcdSpawnspot then
+          begin
+            B := Pop;
+            N := Pop;
+            K := Pop;
+            Target := Pop;
+          end else
+          begin
+            Target := M.ReadWord(I.PC);
+            K := M.ReadWord(I.PC);
+            N := M.ReadWord(I.PC);
+            B := M.ReadWord(I.PC);
+          end;
+          Push(FHost.SpawnSpot(StringOf(Target), K, N, B * 360 / 256, false));
+        end;
+      PcdSpawnspotfacing:
+        begin
+          N := Pop;
+          K := Pop;
+          Target := Pop;
+          Push(FHost.SpawnSpot(StringOf(Target), K, N, 0, true));
+        end;
       PcdSetactorposition: Skip(5, true);
       PcdFadeto, PcdSectordamage: Skip(5);
-      PcdSpawn: Skip(6, true);
       PcdSpawnprojectile, PcdThingProjectile2, PcdSetthingspecial: Skip(7);
       PcdMorphactor: Skip(7, true);
       PcdTranslationrange2, PcdSetfloortrigger, PcdSetceilingtrigger: Skip(8);
@@ -1970,11 +2033,6 @@ begin
         begin
           Inc(I.PC, 12);
           Skip(0);
-        end;
-      PcdSpawndirect, PcdSpawnspotdirect:
-        begin
-          if Op = PcdSpawndirect then Inc(I.PC, 24) else Inc(I.PC, 16);
-          Skip(0, true);
         end;
       PcdGetlinerowoffset: Push(0);
       PcdChangelevel:

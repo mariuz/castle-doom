@@ -6,6 +6,21 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- UDMF, the rest (part): Hexen's thing actions become DoomUdmf's
+  `UdmfThing*` types, run by `TDoomWorld.ThingAction` from lines and
+  scripts alike (`Thing_Spawn` / `NoFog` at the things or map spots
+  with a thing id, ZDoom spawn numbers of Doom's monsters; `Remove`,
+  `Destroy`, `Damage`, `Activate`; `DamageThing`, `HealThing` on the
+  player; log `Udmf: Thing_Spawn (20, 5, 64, 21): 1 things`), map spots
+  (9001, 9013) stay markers in `TDoomMap.Things`, `Scroll_Floor` /
+  `Scroll_Ceiling` are static scrollers (`UdmfScrollFloor` / `Ceiling`
+  in `BuildScrollers`, floors carrying too), and ACS spawns by class
+  name (`Spawn`, `SpawnSpot`, `SpawnSpotFacing`: Doom's monsters and
+  the common items, `TWorldAcsHost.Spawn` / `SpawnSpot`). Test map
+  `udmf-things.wad` (`tools/make_udmf_wad.py`, its script from
+  `tools/make_acs.py`'s `spawn_program`), autotest `udmf-things`
+  (golden), `TestUdmf` checks the translations.
+
 - Map editor, the rest: copying sectors with their holes and inner
   lines (`TDoomEditMap.SectorLoops`, `SectorInnerLines`,
   `AddInnerLine`; a paste draws the outlines largest first, cuts the
@@ -1313,7 +1328,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); left are ACS's spawning, inventory and actor functions (`Thing_Spawn`, `GiveInventory`, `CALLFUNC`'s ACSF functions, named scripts, libraries via `LOADACS`), the Hexen actions still logged as not supported (`Scroll_Floor`/`Ceiling`, `Sector_SetFriction` / wind / current, `Plat_UpWaitDownStay`, `Pillar_*`, polyobjects), thing specials and `Thing_*` actions, the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
+| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, floor scrollers and ACS spawning done too; left are ACS's inventory and actor functions (`GiveInventory`, `CALLFUNC`'s ACSF functions, named scripts, libraries via `LOADACS`), the Hexen actions still logged as not supported (`Sector_SetFriction` / wind / current, `Plat_UpWaitDownStay`, `Pillar_*`, `Thing_Projectile`, `Thing_Move`, polyobjects), thing specials (a thing's own action on death), the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
@@ -1358,9 +1373,9 @@ play.
 ## Suggested next three
 
 1. UDMF, the rest (M, see Content and formats): the remaining Hexen
-   actions (`Thing_*`, `Scroll_Floor`, friction and wind sectors,
-   pillars), ACS's thing spawning and inventory, `Plane_Copy` and the
-   slope things.
+   actions (`Thing_Projectile`, `Thing_Move`, friction and wind
+   sectors, pillars, polyobjects), ACS's inventory, `Plane_Copy` and
+   the slope things.
 2. Rendering, 3D floors (L, `docs/RENDERING_ROADMAP.md` item 5):
    `Sector_Set3dFloor` solid and translucent slabs, drawn and collided.
 3. Map editor on UDMF maps (M): read `TEXTMAP` into `TDoomEditMap`

@@ -148,6 +148,8 @@ type
 
   TActivation = (acUse, acCross, acShoot);
 
+  TAcsSpots = array of TVector3;
+
   TDoomWorld = class
   strict private
     { Set by a failed TryMove2D when only the mover's height was wrong
@@ -410,6 +412,9 @@ type
     function IsGunLine(const Line: Integer): Boolean;
     { The UdmfSpecial* types (doomworld_udmf.inc). }
     function ApplyUdmfSpecial(const Line: Integer; const Activation: TActivation; const ByMonster: Boolean): Boolean;
+    { Hexen's thing actions (DoomUdmf's UdmfThing*: Thing_Spawn...) with
+      their arguments; true when they did something. }
+    function ThingAction(const Special: Integer; const Args: array of Integer): Boolean;
     function ApplySpecial(const Line: Integer; const Activation: TActivation; const ByMonster: Boolean): Boolean;
     { Speed 0: the vanilla speed (Blaze: 4x); a faster one plays the
       blazing door sounds. }
@@ -465,6 +470,13 @@ type
     { For TWorldAcsHost (doomworld_acs.inc). }
     procedure AcsLogOnce(const What: String);
     function AcsThisMap(const N: Integer): Boolean;
+    { Spawn Doom thing type DoomNum at (X, Y) on the floor,
+      facing Angle (degrees), with thing id Tid; teleport fog when Fog. }
+    function SpawnByScript(const DoomNum: Integer; const X, Y, Angle: Single; const Tid: Integer;
+      const Fog: Boolean): TDoomActor;
+    { Where the things with thing id Tid stand (live ones, else the map's
+      things such as map spots), the angle in Z. }
+    function AcsSpots(const Tid: Integer): TAcsSpots;
     function AcsRandom(const N: Integer): Integer;
     function AcsLineSpecial(const Inst: TAcsInstance; const Special: Integer; const Args: TAcsArgs): Integer;
     function AcsTagBusy(const Tag: Integer): Boolean;
@@ -1430,6 +1442,9 @@ begin
     if (T.Flags and SkillFlag) = 0 then Continue;
     { Boom's point pusher and puller things are markers (DoomMap.Pushers). }
     if (T.TypeNum = 5001) or (T.TypeNum = 5002) then Continue;
+    { ZDoom's map spots (9001, 9013) mark places for scripts and Thing_Spawn
+      (by their thing id, from FMap.Things). }
+    if (T.TypeNum = 9001) or (T.TypeNum = 9013) then Continue;
     Info := FindThingInfo(T.TypeNum);
     if Info = nil then
     begin
@@ -6830,8 +6845,8 @@ end;
 
 {$I doomworld_save.inc}
 {$I doomworld_generalized.inc}
-{$I doomworld_udmf.inc}
 {$I doomworld_acs.inc}
+{$I doomworld_udmf.inc}
 
 initialization
   InitEffectInfos;

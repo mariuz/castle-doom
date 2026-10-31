@@ -1377,6 +1377,16 @@ begin
   AssertEquals('ACS: no sector tag', 0, H.Tag);
   AssertEquals('ACS: script argument', 7, H.Args[2]);
   AssertEquals('ACS: a switch', 2, H.Trigger);
+  H := TranslateHexenLine(135, [20, 5, 64, 21], UaPlayerUse);
+  AssertEquals('Thing_Spawn', UdmfThingSpawn, H.Special);
+  AssertEquals('Thing_Spawn: no sector tag', 0, H.Tag);
+  AssertEquals('Thing_Spawn: new tid', 21, H.Args[3]);
+  AssertEquals('Thing_Remove', UdmfThingRemove, TranslateHexenLine(132, [22], UaPlayerCross).Special);
+  AssertEquals('HealThing', UdmfHealThing, TranslateHexenLine(248, [10], UaPlayerUse).Special);
+  H := TranslateHexenLine(223, [9, 64, 0, 2], 0);
+  AssertEquals('Scroll_Floor (static)', UdmfScrollFloor, H.Special);
+  AssertEquals('Scroll_Floor: nothing unsupported', '', H.Unsupported);
+  AssertEquals('Scroll_Ceiling', UdmfScrollCeiling, TranslateHexenLine(224, [9, 0, 32], 0).Special);
   { Sector types: Doom's light types, secret, damage. }
   AssertEquals('flicker', 1, TranslateZDoomSectorSpecial(65));
   AssertEquals('secret', 128, TranslateZDoomSectorSpecial(1024));

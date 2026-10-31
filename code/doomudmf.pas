@@ -76,6 +76,11 @@ const
   { Static: Plane_Align (Args[0] the floor, Args[1] the ceiling: 1 the
     front sector slopes, 2 the back one); DoomMap builds the slopes. }
   UdmfPlaneAlign = UdmfSpecialBase + 51;
+  { Static: Scroll_Floor / Scroll_Ceiling (Args[0] the tag, [1] and [2]
+    the speed in 32nds of a unit a tic, [3] for floors: 0 the texture, 1
+    carry things, 2 both). }
+  UdmfScrollFloor = UdmfSpecialBase + 52;
+  UdmfScrollCeiling = UdmfSpecialBase + 53;
   { ACS scripts (DoomAcs). Args as Hexen's: script, map (0 = this one),
     the script's arguments; ACS_ExecuteWithResult: script and four
     arguments; the locked ones: the lock in Args[4]. }
@@ -85,6 +90,18 @@ const
   UdmfAcsLockedExecute = UdmfSpecialBase + 23;
   UdmfAcsTerminate = UdmfSpecialBase + 24;
   UdmfAcsSuspend = UdmfSpecialBase + 25;
+  { Things by thing id (Args[0], 0 = the activator) as Hexen's: spawn
+    (tid of the spots, ZDoom spawn number, byte angle, new tid), remove,
+    destroy, damage (amount), wake (Thing_Activate); DamageThing and
+    HealThing act on the activator (amount; HealThing's maximum). }
+  UdmfThingSpawn = UdmfSpecialBase + 30;
+  UdmfThingSpawnNoFog = UdmfSpecialBase + 31;
+  UdmfThingRemove = UdmfSpecialBase + 32;
+  UdmfThingDestroy = UdmfSpecialBase + 33;
+  UdmfThingDamage = UdmfSpecialBase + 34;
+  UdmfThingActivate = UdmfSpecialBase + 35;
+  UdmfDamageThing = UdmfSpecialBase + 36;
+  UdmfHealThing = UdmfSpecialBase + 37;
 
   { UDMF line activation flags (TUdmfLine.Activation). }
   UaPlayerCross = 1;
@@ -134,6 +151,8 @@ function HexenActionName(const Special: Integer): String;
 function UdmfSpecialName(const Special: Integer): String;
 { One of the UdmfAcs* types. }
 function UdmfAcsSpecial(const Special: Integer): Boolean;
+{ One of the thing actions (UdmfThingSpawn..UdmfHealThing). }
+function UdmfThingSpecial(const Special: Integer): Boolean;
 
 implementation
 
@@ -404,6 +423,11 @@ end;
 
 { Specials ------------------------------------------------------------------ }
 
+function UdmfThingSpecial(const Special: Integer): Boolean;
+begin
+  Result := (Special >= UdmfThingSpawn) and (Special <= UdmfHealThing);
+end;
+
 function UdmfAcsSpecial(const Special: Integer): Boolean;
 begin
   Result := (Special >= UdmfAcsExecute) and (Special <= UdmfAcsSuspend);
@@ -420,6 +444,16 @@ begin
     UdmfLightByValue: Result := 'light by value';
     UdmfScrollWall: Result := 'scrolling wall';
     UdmfPlaneAlign: Result := 'Plane_Align';
+    UdmfScrollFloor: Result := 'Scroll_Floor';
+    UdmfScrollCeiling: Result := 'Scroll_Ceiling';
+    UdmfThingSpawn: Result := 'Thing_Spawn';
+    UdmfThingSpawnNoFog: Result := 'Thing_SpawnNoFog';
+    UdmfThingRemove: Result := 'Thing_Remove';
+    UdmfThingDestroy: Result := 'Thing_Destroy';
+    UdmfThingDamage: Result := 'Thing_Damage';
+    UdmfThingActivate: Result := 'Thing_Activate';
+    UdmfDamageThing: Result := 'DamageThing';
+    UdmfHealThing: Result := 'HealThing';
     UdmfAcsExecute: Result := 'ACS_Execute';
     UdmfAcsExecuteAlways: Result := 'ACS_ExecuteAlways';
     UdmfAcsExecuteWithResult: Result := 'ACS_ExecuteWithResult';
@@ -790,7 +824,7 @@ begin
   Trig := GenTrigger;
   Result.Trigger := Trig;
   if Monster then Result.Trigger := Result.Trigger + 8;
-  if not (Cross or Use or Impact) and not (Special in [100..103, 121, 181, 208..211]) then
+  if not (Cross or Use or Impact) and not (Special in [100..103, 121, 181, 208..211, 223, 224]) then
   begin
     { No activation (only scripts could trigger it). }
     if Special <> 0 then
@@ -954,6 +988,28 @@ begin
         if A[0] = 0 then Result.TranslucentId := -1;
       end;
     121: Result.Tag := 0;
+    { Things }
+    135, 137, 132, 133, 119, 130, 73, 248:
+      begin
+        case Special of
+          135: Result.Special := UdmfThingSpawn;
+          137: Result.Special := UdmfThingSpawnNoFog;
+          132: Result.Special := UdmfThingRemove;
+          133: Result.Special := UdmfThingDestroy;
+          119: Result.Special := UdmfThingDamage;
+          130: Result.Special := UdmfThingActivate;
+          73: Result.Special := UdmfDamageThing;
+          else Result.Special := UdmfHealThing;
+        end;
+        Result.Tag := 0;
+        for I := 0 to 4 do Result.Args[I] := A[I];
+      end;
+    223, 224:
+      begin
+        if Special = 223 then Result.Special := UdmfScrollFloor else Result.Special := UdmfScrollCeiling;
+        Result.Tag := 0;
+        for I := 0 to 4 do Result.Args[I] := A[I];
+      end;
     181:
       begin
         Result.Special := UdmfPlaneAlign;

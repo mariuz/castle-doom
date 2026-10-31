@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- UDMF maps and their scripts: thing actions by thing id (`Thing_Spawn`, `Thing_SpawnNoFog`,
+  `Thing_Remove`, `Thing_Destroy`, `Thing_Damage`, `Thing_Activate`, `DamageThing`,
+  `HealThing`), map spots, scrolling and carrying floors and ceilings (`Scroll_Floor`,
+  `Scroll_Ceiling`), and ACS's `Spawn`, `SpawnSpot` and `SpawnSpotFacing` for Doom's
+  monsters and the common items.
 - Map editor: copied sectors keep their holes and the lines inside them; a hole no other
   copied sector fills is cut out of the pasted one.
 - glTF / X3D export: the level's things (as crossed sprite quads) and its sky (a cylinder

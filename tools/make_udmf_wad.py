@@ -35,6 +35,15 @@ around them get lower and upper textures where they had none; the
 triangular sector 165 (floor 16) slopes down to 0 at its corner
 (-384, 64) by that vertex's zfloor.
 
+udmf-things.wad, as udmf.wad with thing actions: a map spot (9001, id 20)
+in the start room at (-320, 320); line 829 a Thing_Spawn(20, 5, 64, 21)
+(an imp there), 1045 a Thing_Damage(21, 1000) (it dies), 1046 a
+Thing_SpawnNoFog(20, 4, 0, 22) (a zombieman), 1052 a Thing_Remove(22),
+all used; line 898 a Scroll_Floor(9, 64, 0, 2) (sector 141's floor
+scrolls east and carries things); an open ACS script spawns a shotgun
+guy at the spot (SpawnSpot, id 30) and a medikit at (-352, 192) (Spawn,
+id 31) and prints "Spawned 2".
+
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
 
@@ -83,6 +92,9 @@ SLOPE_SECTORS = {141: {'floorplane_a': '0.0', 'floorplane_b': '-0.25', 'floorpla
                        'floorplane_d': '32.0'}}
 SLOPE_LINES = {836: (181, (0, 1), '')}
 SLOPE_FILL = (99, 141)
+THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
+               1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), '')}
+THING_SPOT = (-320, 320, 9001, 20)
 # Vertex heights: the triangular sector 165 (floor 16) gets its corner
 # (-384, 64) at 0.
 SLOPE_VERTEX_Z = {(-384, 64): 0}
@@ -117,7 +129,7 @@ def flag_names(flags):
     return names
 
 
-def textmap(hexen, look=False, acs=False, slopes=False):
+def textmap(hexen, look=False, acs=False, slopes=False, things=False):
     out = ['namespace = "%s";' % ('zdoom' if hexen else 'doom'), '']
     V = lump('VERTEXES')
     for k in range(len(V) // 4):
@@ -143,6 +155,8 @@ def textmap(hexen, look=False, acs=False, slopes=False):
                 act = ACS_LINES[k]
             if slopes and k in SLOPE_LINES:
                 act = SLOPE_LINES[k]
+            if things and k in THING_LINES:
+                act = THING_LINES[k]
             if act:
                 special, args, how = act
                 body.append('special = %d;' % special)
@@ -213,10 +227,13 @@ def textmap(hexen, look=False, acs=False, slopes=False):
         if slopes:
             body += ['%s = %s;' % kv for kv in SLOPE_SECTORS.get(k, {}).items()]
         out.append('sector // %d\n{\n%s\n}\n' % (k, '\n'.join(body)))
+    things_on = things
     T = lump('THINGS')
     things = [struct.unpack('<hhhhh', T[k * 10:k * 10 + 10]) for k in range(len(T) // 10)]
     if hexen:
         things.append((TELEPORT_DEST[0], TELEPORT_DEST[1], 0, 14, 7, TELEPORT_DEST[2]))
+    if things_on:
+        things.append((THING_SPOT[0], THING_SPOT[1], 0, THING_SPOT[2], 7, THING_SPOT[3]))
     if look:
         for (x, y, angle, typ, height, args) in LOOK_LIGHTS:
             out.append('thing\n{\n%s\n}\n' % '\n'.join(
@@ -270,6 +287,9 @@ def main():
                ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-slopes.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, slopes=True)), ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-things.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, things=True)),
+               ('BEHAVIOR', make_acs.behavior('compat', make_acs.spawn_program('compat'))), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-doom.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(False)), ('ZNODES', b'XGLN' + zn.gl(False, False)),
                ('ENDMAP', b'')])
