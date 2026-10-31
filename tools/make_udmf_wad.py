@@ -18,7 +18,13 @@ east of it (141, given id 9):
 - line 1046: TranslucentLine(0, 128): itself half see-through;
 - line 911: Teleport(5, 0), walked over: to the teleport destination
   with thing id 5 at (1000, -900) (no sector tag: found by its id);
-- line 1052: ACS_Execute(1), used: not supported (scripts), logged.
+- line 1052: ACS_Execute(1), used: there is no BEHAVIOR lump (logged).
+
+udmf-acs.wad, as udmf.wad with ACS scripts: a BEHAVIOR lump (the test
+program of tools/make_acs.py, in ACC's "ACS\0" + ACSe layout), the start
+room (sector 140) given id 10 for its open script to raise, and line
+1052 an ACS_Execute(2, 0, 7) (script 2 with x = 7: sector 141's light
+200 and floor FLOOR7_2, "Seven").
 
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
@@ -39,6 +45,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import make_znodes as zn  # noqa: E402  (reads Freedoom's E1M1, computes its GL nodes)
+import make_acs  # noqa: E402
 
 # Doom special -> (Hexen action, args, activation flags); args with 'tag'
 # take the line's tag. Activation: c cross, u use, m monsters, r repeat.
@@ -61,6 +68,8 @@ EXTRA_LINES = {
     1052: (80, (1,), 'u'),
 }
 SECTOR_IDS = {141: 9}
+ACS_SECTOR_IDS = {141: 9, 140: 10}
+ACS_LINES = {1052: (80, (2, 0, 7), 'u')}
 LOOK_SECTORS = {140: {'lightcolor': '0xFFA070', 'rotationfloor': '45.0', 'xscalefloor': '2.0',
                       'yscalefloor': '2.0'},
                 141: {'fadecolor': '0x2040A0'}}
@@ -92,7 +101,7 @@ def flag_names(flags):
     return names
 
 
-def textmap(hexen, look=False):
+def textmap(hexen, look=False, acs=False):
     out = ['namespace = "%s";' % ('zdoom' if hexen else 'doom'), '']
     V = lump('VERTEXES')
     for k in range(len(V) // 4):
@@ -113,6 +122,8 @@ def textmap(hexen, look=False):
             act = DOOM_TO_HEXEN.get(sp) if sp else None
             if k in EXTRA_LINES:
                 act = EXTRA_LINES[k]
+            if acs and k in ACS_LINES:
+                act = ACS_LINES[k]
             if act:
                 special, args, how = act
                 body.append('special = %d;' % special)
@@ -161,7 +172,7 @@ def textmap(hexen, look=False):
                 'textureceiling = "%s";' % ct, 'lightlevel = %d;' % light]
         if hexen:
             sp = ZDOOM_SECTOR.get(sp, 0)
-            tag = SECTOR_IDS.get(k, tag)
+            tag = (ACS_SECTOR_IDS if acs else SECTOR_IDS).get(k, tag)
         if sp:
             body.append('special = %d;' % sp)
         if tag:
@@ -221,6 +232,9 @@ def main():
               [('E1M1', b''), ('TEXTMAP', textmap(True)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-look.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, True)), ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-acs.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, acs=True)), ('BEHAVIOR', make_acs.behavior('compat')),
+               ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-doom.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(False)), ('ZNODES', b'XGLN' + zn.gl(False, False)),
                ('ENDMAP', b'')])

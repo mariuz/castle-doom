@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 54 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 55 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -919,6 +919,18 @@ autotest only checks the library loads.
   `SMOOTHLIGHT` in a demo toggles the smooth light mode
   (`settings.json`'s `smoothLight`, Options -> Video -> LIGHT MODE; log
   `Settings: Light mode smooth`; autotest `udmf-lights`).
+  ACS (`DoomAcs`): `udmf-acs.wad` (same script) has a BEHAVIOR from
+  `tools/make_acs.py`, a small p-code assembler whose test program
+  also fills `tools/testdata/acs.wad` (the four lump layouts, unit
+  test `TestAcs`); the log says `Acs: E1M1: BEHAVIOR in the ACSe
+  format: 3 scripts, ...`, `Acs: script 1 (open) started` and
+  `script N prints "..."`; the open script raises the start room 32
+  ("Floor at 32") and `LINE:1052` starts script 2 ("Seven"; sector
+  141 light 200, FLOOR7_2). Saves hold the VM (`acs`: map variables,
+  running scripts as [number, pc, state, ...]; `acsGlobals`). Autotest
+  `udmf-acs` (goldens) saves during a delay and loads it. The p-code
+  numbers come from ACC's `pcode.h` via `tools/make_acs_pcodes.py`
+  (regenerate rather than edit `doomacs_pcodes.inc`).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

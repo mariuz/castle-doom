@@ -6,6 +6,28 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- ACS scripts (UDMF, the rest): `DoomAcs` reads a UDMF map's
+  `BEHAVIOR` lump in Hexen's `ACS\0`, ZDoom's `ACSE` / `ACSe` layouts
+  (also behind an `ACS\0` header as ACC writes them; `SPTR`, `STRL` /
+  encrypted `STRE`, `FUNC`, `SVCT`, `MINI`, `ARAY` / `AINI`) and runs
+  its scripts in `TAcsVM` a tic at a time (the p-code numbers from
+  ACC's `pcode.h`, `tools/make_acs_pcodes.py`): open and enter scripts
+  at the level start, death scripts, and the `ACS_*` line actions
+  (`UdmfAcs*` types; ZDoom lock numbers for the locked one). Delays,
+  tag and script waits, prints and HUD messages (as player messages),
+  variables and arrays of every scope, functions, `switch`, line
+  actions with computed arguments (translated like a line's and run on
+  a borrowed line, `doomworld_acs.inc`), `ChangeFloor` / `Ceiling`,
+  `SetLineTexture` / `Blocking` / `Special`, `ThingCount` (ZDoom's
+  spawn numbers and class names of Doom's monsters, things by `tid`),
+  sector and actor queries, `SetMusic`. Unknown p-codes stop their
+  script (logged); ones for features the game lacks (inventory,
+  fonts, fades, spawning) are skipped. Constant line actions found in
+  the code make their sectors dynamic. The VM's state is in saves
+  (`acs`, `acsGlobals`). Test lumps from `tools/make_acs.py` (a small
+  assembler; `acs.wad` in four layouts, `udmf-acs.wad`), unit test
+  `TestAcs`, autotest `udmf-acs` (goldens).
+
 - Light things and a smooth light mode (rendering roadmap items 8 and
   9): UDMF things 9800-9804 / 9810-9814 (point, pulse, flicker,
   sector, random flicker; arg0..2 colour, arg3 / arg4 radii, a pulse's
@@ -1263,7 +1285,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **UDMF, the rest**: maps load and play (done, see above); left are ACS (`BEHAVIOR`: a script interpreter for the common `ACS_Execute` uses: doors, lifts, messages, `Thing_Spawn`), the Hexen actions still logged as not supported (`Scroll_Floor`/`Ceiling`, `Sector_SetFriction` / wind / current, `Plat_UpWaitDownStay`, `Pillar_*`, polyobjects), thing specials and `Thing_*` actions, the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
+| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); left are ACS's spawning, inventory and actor functions (`Thing_Spawn`, `GiveInventory`, `CALLFUNC`'s ACSF functions, named scripts, libraries via `LOADACS`), the Hexen actions still logged as not supported (`Scroll_Floor`/`Ceiling`, `Sector_SetFriction` / wind / current, `Plat_UpWaitDownStay`, `Pillar_*`, polyobjects), thing specials and `Thing_*` actions, the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
@@ -1307,14 +1329,15 @@ play.
 
 ## Suggested next three
 
-1. UDMF, the rest (L, see Content and formats): an ACS interpreter for
-   the common script uses, the remaining Hexen actions.
-2. Rendering, slopes (L, `docs/RENDERING_ROADMAP.md` item 4):
+1. Rendering, slopes (L, `docs/RENDERING_ROADMAP.md` item 4):
    `Plane_Align` and UDMF plane fields, in the geometry and the
    simulation's floor heights.
-3. Map editor, the rest (M, see New features): sectors copied with
+2. Map editor, the rest (M, see New features): sectors copied with
    their holes, the things and the sky in the glTF / X3D export, UDMF
    maps in the editor.
+3. UDMF, the rest (M, see Content and formats): the remaining Hexen
+   actions (`Thing_*`, `Scroll_Floor`, friction and wind sectors,
+   pillars) and ACS's thing spawning and inventory.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

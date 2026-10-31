@@ -73,6 +73,15 @@ const
   { Static: the line's front side scrolls by Args[0], Args[1] / 64 texels
     a tic (x: left, y: up, like Boom's 255). }
   UdmfScrollWall = UdmfSpecialBase + 50;
+  { ACS scripts (DoomAcs). Args as Hexen's: script, map (0 = this one),
+    the script's arguments; ACS_ExecuteWithResult: script and four
+    arguments; the locked ones: the lock in Args[4]. }
+  UdmfAcsExecute = UdmfSpecialBase + 20;
+  UdmfAcsExecuteAlways = UdmfSpecialBase + 21;
+  UdmfAcsExecuteWithResult = UdmfSpecialBase + 22;
+  UdmfAcsLockedExecute = UdmfSpecialBase + 23;
+  UdmfAcsTerminate = UdmfSpecialBase + 24;
+  UdmfAcsSuspend = UdmfSpecialBase + 25;
 
   { UDMF line activation flags (TUdmfLine.Activation). }
   UaPlayerCross = 1;
@@ -120,6 +129,8 @@ function TranslateZDoomSectorSpecial(const Special: Integer): Integer;
 function HexenActionName(const Special: Integer): String;
 { A UdmfSpecial* type's name, for the log. }
 function UdmfSpecialName(const Special: Integer): String;
+{ One of the UdmfAcs* types. }
+function UdmfAcsSpecial(const Special: Integer): Boolean;
 
 implementation
 
@@ -390,6 +401,11 @@ end;
 
 { Specials ------------------------------------------------------------------ }
 
+function UdmfAcsSpecial(const Special: Integer): Boolean;
+begin
+  Result := (Special >= UdmfAcsExecute) and (Special <= UdmfAcsSuspend);
+end;
+
 function UdmfSpecialName(const Special: Integer): String;
 begin
   case Special of
@@ -400,6 +416,12 @@ begin
     UdmfLightToValue: Result := 'light to value';
     UdmfLightByValue: Result := 'light by value';
     UdmfScrollWall: Result := 'scrolling wall';
+    UdmfAcsExecute: Result := 'ACS_Execute';
+    UdmfAcsExecuteAlways: Result := 'ACS_ExecuteAlways';
+    UdmfAcsExecuteWithResult: Result := 'ACS_ExecuteWithResult';
+    UdmfAcsLockedExecute: Result := 'ACS_LockedExecute';
+    UdmfAcsTerminate: Result := 'ACS_Terminate';
+    UdmfAcsSuspend: Result := 'ACS_Suspend';
     else Result := Format('special %d', [Special]);
   end;
 end;
@@ -928,6 +950,20 @@ begin
         if A[0] = 0 then Result.TranslucentId := -1;
       end;
     121: Result.Tag := 0;
+    { Scripts: the arguments as they are. }
+    80, 81, 82, 83, 84, 85, 226:
+      begin
+        case Special of
+          80: Result.Special := UdmfAcsExecute;
+          81: Result.Special := UdmfAcsTerminate;
+          82: Result.Special := UdmfAcsSuspend;
+          84: Result.Special := UdmfAcsExecuteWithResult;
+          226: Result.Special := UdmfAcsExecuteAlways;
+          else Result.Special := UdmfAcsLockedExecute;
+        end;
+        Result.Tag := 0;
+        for I := 0 to 4 do Result.Args[I] := A[I];
+      end;
     else
       begin
         Result.Tag := 0;

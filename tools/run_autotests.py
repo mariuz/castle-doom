@@ -344,7 +344,7 @@ TESTS = [
      'Y,W:0.3,S,LINE:829,LINE:1045,W:2,SAVE:1,G:480:712,A:0,U,W:1.5,S,LINE:911,W:0.3,SAVE:2,Q',
      [r'Map: E1M1: UDMF, namespace "zdoom": 1311 vertices, 1175 linedefs, 1829 sidedefs, 182 sectors, '
       r'293 things, BUILT nodes',
-      r'Map: E1M1: 46 Hexen-style line specials translated, 1 not supported: ACS_Execute',
+      r'Map: E1M1: 47 Hexen-style line specials translated(?!,)',
       r'Udmf: line 829: floor by value, tag 9, 8, 40', r'Udmf: line 1045: light to value, tag 9, 200',
       r'Generalized: line 537: door open, wait, close, delay 150 tics, slow, DR, monsters too',
       r'Teleport: player to \(1000, -900\) by line 911', r'Things: 210 things spawned, 29 monsters'],
@@ -375,6 +375,19 @@ TESTS = [
       r'Lights: 8 dynamic lights', r'Settings: Light mode smooth'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-look.wad'), '--fixed-step'],
      None),
+    # ACS scripts (code/doomacs.pas; tools/make_acs.py's test program in
+    # udmf-acs.wad): the open and enter scripts, a used line's
+    # ACS_Execute, a game saved during a script's delay and loaded.
+    ('udmf-acs', 'E1M1', 'Y,W:0.2,SAVE:4,W:2,S,SAVE:1,LINE:1052,W:0.5,S,SAVE:2,LOAD:4,W:2,SAVE:3,Q',
+     [r'Acs: E1M1: BEHAVIOR in the ACSe format: 3 scripts, 1 functions, 10 strings',
+      r'Acs: E1M1: 2 constant line specials in the scripts',
+      r'Acs: script 1 \(open\) started', r'Acs: script 3 \(enter\) started',
+      r'Message: Hello from ACS', r'Message: Welcome', r'Acs: script 1: Floor_RaiseByValue \(10, 16, 32, 0, 0\)',
+      r'Message: Floor at 32', r'Message: Imps: 10', r'Acs: line 1052: ACS_Execute 2',
+      r'Acs: script 2: Light_ChangeToValue \(9, 200, 0, 0, 0\)', r'Message: Seven', r'Message: Twice 14',
+      r'Message: Array 30', r'Message: Init 100'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-acs.wad'), '--fixed-step'],
+     lambda config: check_udmf_acs(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -629,6 +642,25 @@ def check_udmf(config):
     assert a['sectorLight'][141] == 200, 'light %s' % a['sectorLight'][141]
     assert (round(b['player']['x']), round(b['player']['y'])) == (1000, -900), \
         'not teleported: (%s, %s)' % (b['player']['x'], b['player']['y'])
+
+
+def check_udmf_acs(config):
+    """tools/testdata/udmf-acs.wad: the open script raises sector 140 by 32
+    after counting map variable 0 to 3; script 2 (line 1052) lights
+    sector 141 200, gives it FLOOR7_2 and adds 1 to world variable 0; a
+    game saved during the open script's delay goes on after a load."""
+    early, a, b, c = (save_json(config, n) for n in (4, 1, 2, 3))
+    running = [s[0] for s in early['acs']['scripts']]
+    assert running == [1], 'scripts in the early save: %s' % running
+    assert early['sectorFloor'][140] == 0, 'raised too soon: %s' % early['sectorFloor'][140]
+    assert a['sectorFloor'][140] == 32, 'floor %s' % a['sectorFloor'][140]
+    assert a['acs']['scripts'] == [] and a['acs']['mapVars'][0] == 3, 'open script: %s' % a['acs']
+    assert b['sectorLight'][141] == 200 and b['sectorFloorTex'][141] == 'FLOOR7_2', \
+        'script 2: light %s, floor %s' % (b['sectorLight'][141], b['sectorFloorTex'][141])
+    assert b['acsGlobals']['world'] == [1], 'world variables %s' % b['acsGlobals']
+    assert c['sectorFloor'][140] == 32 and c['acs']['mapVars'][0] == 3, \
+        'not resumed after the load: floor %s, %s' % (c['sectorFloor'][140], c['acs'])
+    assert c['acsGlobals']['world'] == [], 'world variables after the load %s' % c['acsGlobals']
 
 
 def check_carry(config):
@@ -1080,7 +1112,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
 ]

@@ -107,6 +107,8 @@ type
     ReactionTics: Integer;
     { Original THINGS flags. }
     MapFlags: Integer;
+    { UDMF: the thing id (ACS's tid), 0 none. }
+    Tid: Integer;
     { Missiles: velocity in Doom units per tic and damage dice. }
     VelX, VelY, VelZ: Single;
     MissileDamageDice, MissileDamageFaces: Integer;

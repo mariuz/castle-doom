@@ -156,6 +156,9 @@ begin
   for I := 0 to High(FSectorSound) do
     if FSectorSound[I] then Arr.Add(I);
   Result.Add('sectorsHeard', Arr);
+  if FAcs <> nil then
+    Result.Add('acs', FAcs.SaveState);
+  Result.Add('acsGlobals', FAcsGlobals.SaveState);
   Result.Add('startX', Double(FDoomStartX));
   Result.Add('startY', Double(FDoomStartY));
   Result.Add('startAngle', Double(FDoomStartAngle));
@@ -348,6 +351,8 @@ begin
       AJ.Add('awake', A.Awake);
       AJ.Add('reaction', A.ReactionTics);
       AJ.Add('mapFlags', A.MapFlags);
+      if A.Tid <> 0 then
+        AJ.Add('tid', A.Tid);
       AJ.Add('velocity', JsonFloatArray([A.VelX, A.VelY, A.VelZ]));
       AJ.Add('damageDice', A.MissileDamageDice);
       AJ.Add('damageFaces', A.MissileDamageFaces);
@@ -503,6 +508,10 @@ begin
       if (Heard.Integers[I] >= 0) and (Heard.Integers[I] < Length(FSectorSound)) then
         FSectorSound[Heard.Integers[I]] := true;
   FDoomStartX := State.Get('startX', Double(FDoomStartX));
+  if State.Find('acsGlobals') is TJSONObject then
+    FAcsGlobals.LoadState(TJSONObject(State.Find('acsGlobals')));
+  if (FAcs <> nil) and (State.Find('acs') is TJSONObject) then
+    FAcs.LoadState(TJSONObject(State.Find('acs')));
   FDoomStartY := State.Get('startY', Double(FDoomStartY));
   FDoomStartAngle := State.Get('startAngle', Double(FDoomStartAngle));
   FHaveStart := true;
@@ -649,6 +658,7 @@ begin
             A.Awake := AJ.Get('awake', false);
             A.ReactionTics := AJ.Get('reaction', 0);
             A.MapFlags := AJ.Get('mapFlags', 0);
+            A.Tid := AJ.Get('tid', 0);
             A.VelX := ArrayItemFloat(ObjArray(AJ, 'velocity'), 0, 0);
             A.VelY := ArrayItemFloat(ObjArray(AJ, 'velocity'), 1, 0);
             A.VelZ := ArrayItemFloat(ObjArray(AJ, 'velocity'), 2, 0);

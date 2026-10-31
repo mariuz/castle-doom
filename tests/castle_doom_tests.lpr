@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf, DoomGldefs;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf, DoomGldefs, DoomAcs;
 
 function DataPath(const Name: String): String;
 begin
@@ -67,6 +67,7 @@ type
     procedure TestScrollers;
     procedure TestUdmf;
     procedure TestGldefs;
+    procedure TestAcs;
     procedure TestDynScrollers;
     procedure TestDeepWater;
     procedure TestSectorSkies;
@@ -974,6 +975,160 @@ begin
     Result := '';
 end;
 
+type
+  { What the ACS test scripts do (tools/make_acs.py), as text. }
+  TTestAcsHost = class(TAcsHost)
+  public
+    Trace: TStringList;
+    BusyTics: Integer;
+    constructor Create;
+    destructor Destroy; override;
+    function LineSpecial(const Inst: TAcsInstance; const Special: Integer; const Args: TAcsArgs): Integer; override;
+    procedure Print(const Inst: TAcsInstance; const Text: String; const Kind: TAcsPrintKind); override;
+    function TagBusy(const Tag: Integer): Boolean; override;
+    function ThingCount(const SpawnNum, Tid: Integer): Integer; override;
+    procedure ChangeFlat(const Tag: Integer; const Name: String; const Ceiling: Boolean); override;
+    function SectorValue(const Tag, What: Integer): Integer; override;
+  end;
+
+constructor TTestAcsHost.Create;
+begin
+  inherited;
+  Trace := TStringList.Create;
+end;
+
+destructor TTestAcsHost.Destroy;
+begin
+  FreeAndNil(Trace);
+  inherited;
+end;
+
+function TTestAcsHost.LineSpecial(const Inst: TAcsInstance; const Special: Integer; const Args: TAcsArgs): Integer;
+begin
+  Trace.Add(Format('special %d (%d, %d, %d)', [Special, Args[0], Args[1], Args[2]]));
+  BusyTics := 3;
+  Result := 1;
+end;
+
+procedure TTestAcsHost.Print(const Inst: TAcsInstance; const Text: String; const Kind: TAcsPrintKind);
+const
+  Kinds: array [TAcsPrintKind] of String = ('print', 'bold', 'hud', 'log');
+begin
+  Trace.Add(Kinds[Kind] + ' ' + Text);
+end;
+
+function TTestAcsHost.TagBusy(const Tag: Integer): Boolean;
+begin
+  Dec(BusyTics);
+  Result := BusyTics > 0;
+end;
+
+function TTestAcsHost.ThingCount(const SpawnNum, Tid: Integer): Integer;
+begin
+  if SpawnNum = 5 then Result := 3 else Result := 0;
+end;
+
+procedure TTestAcsHost.ChangeFlat(const Tag: Integer; const Name: String; const Ceiling: Boolean);
+begin
+  Trace.Add(Format('floor %d %s', [Tag, Name]));
+end;
+
+function TTestAcsHost.SectorValue(const Tag, What: Integer): Integer;
+begin
+  if (Tag = 10) and (What = 0) then Result := 32 shl 16 else Result := 0;
+end;
+
+{ DoomAcs: the four BEHAVIOR layouts of tools/testdata/acs.wad run the
+  same scripts (tools/make_acs.py): prints, delays, a tag wait, a switch,
+  map / world variables, a function, a map array; the VM's state saved in
+  the middle of a delay and resumed; the constant line specials found. }
+procedure TTestMap.TestAcs;
+const
+  Lumps: array [0..3] of String = ('ACS_OLD', 'ACS_COMP', 'ACS_E', 'ACS_LE');
+  Formats: array [0..3] of String = ('Hexen', 'ACSe', 'ACSE', 'ACSe');
+var
+  Dir: String;
+  W: TDoomWad;
+  L, T: Integer;
+  M: TAcsModule;
+  VM, VM2: TAcsVM;
+  Host: TTestAcsHost;
+  Globals: TAcsGlobals;
+  Calls: TAcsConstCalls;
+  State: TJSONObject;
+  Expected: String;
+begin
+  AssertEquals('unescape', 'a' + #10 + 'b "red"', AcsUnescape('a\nb \cG"red\c[Gold]"'));
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'acs.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'acs.wad') then
+  begin
+    WriteLn('TestAcs: no acs.wad (python3 tools/make_acs.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'acs.wad')));
+  Host := TTestAcsHost.Create;
+  Globals := TAcsGlobals.Create;
+  try
+    for L := 0 to High(Lumps) do
+    begin
+      M := TAcsModule.Create(W.LumpBytes(W.FindLump(Lumps[L])));
+      AssertEquals(Lumps[L] + ': read', '', M.Error);
+      AssertEquals(Lumps[L] + ': format', Formats[L], M.FormatName);
+      AssertEquals(Lumps[L] + ': scripts', 3, Length(M.Scripts));
+      AssertEquals(Lumps[L] + ': open script', AcsOpen, M.Scripts[0].ScriptType);
+      AssertEquals(Lumps[L] + ': enter script', AcsEnter, M.Scripts[2].ScriptType);
+      AssertEquals(Lumps[L] + ': argument', 1, M.Scripts[1].ArgCount);
+      AssertEquals(Lumps[L] + ': strings', 10, Length(M.Strings));
+      AssertEquals(Lumps[L] + ': a string', 'Hello from ACS', M.Strings[0]);
+      Calls := M.ConstCalls;
+      AssertEquals(Lumps[L] + ': constant calls', 2, Length(Calls));
+      Host.Trace.Clear;
+      Globals.Clear;
+      VM := TAcsVM.Create(M, Host, Globals);
+      try
+        VM.StartLevel;
+        { Save in the middle of the counting loop (10-tic delays). }
+        for T := 1 to 15 do VM.Tic;
+        AssertEquals(Lumps[L] + ': counting', 2, VM.MapVar(0));
+        State := VM.SaveState;
+        try
+          M := TAcsModule.Create(W.LumpBytes(W.FindLump(Lumps[L])));
+          VM2 := TAcsVM.Create(M, Host, Globals);
+          try
+            VM2.LoadState(State);
+            AssertEquals(Lumps[L] + ': restored', 1, VM2.InstanceCount);
+            for T := 1 to 60 do VM2.Tic;
+            AssertEquals(Lumps[L] + ': counted', 3, VM2.MapVar(0));
+            AssertEquals(Lumps[L] + ': done', 0, VM2.InstanceCount);
+            VM2.StartScript(2, [7], aaPlayer, -1, false, false);
+            VM2.Tic;
+          finally
+            FreeAndNil(VM2);
+          end;
+        finally
+          FreeAndNil(State);
+        end;
+      finally
+        FreeAndNil(VM);
+      end;
+      Expected := 'print Hello from ACS|hud Welcome|special 23 (10, 16, 32)|print Floor at 32|print Imps: 3|' +
+        'special 112 (9, 200, 0)|floor 9 FLOOR7_2|bold Seven';
+      if L > 0 then
+        Expected := Expected + '|print Twice 14|print Array 30|print Init 100';
+      Host.Trace.Delimiter := '|';
+      Host.Trace.StrictDelimiter := true;
+      AssertEquals(Lumps[L] + ': trace', Expected, Host.Trace.DelimitedText);
+      AssertEquals(Lumps[L] + ': world variable', 1, Globals.WorldVars[0]);
+    end;
+  finally
+    FreeAndNil(Globals);
+    FreeAndNil(Host);
+    FreeAndNil(W);
+  end;
+end;
+
 { DoomGldefs: lights, includes, frame bindings, brightmaps, the animated
   radii, and tools/testdata/gldefs.wad through a WAD. }
 procedure TTestMap.TestGldefs;
@@ -1153,9 +1308,11 @@ begin
   AssertEquals('monster teleport', 125, TranslateHexenLine(70, [0, 4], UaMonsterCross).Special);
   AssertEquals('light 255 switch', 171, TranslateHexenLine(112, [2, 255], UaPlayerUse).Special);
   AssertEquals('light 200', UdmfLightToValue, TranslateHexenLine(112, [2, 200], UaPlayerUse).Special);
-  H := TranslateHexenLine(80, [1], UaPlayerUse);
-  AssertEquals('ACS: nothing', 0, H.Special);
-  AssertEquals('ACS: logged', 'ACS_Execute', H.Unsupported);
+  H := TranslateHexenLine(80, [1, 0, 7], UaPlayerUse);
+  AssertEquals('ACS_Execute', UdmfAcsExecute, H.Special);
+  AssertEquals('ACS: no sector tag', 0, H.Tag);
+  AssertEquals('ACS: script argument', 7, H.Args[2]);
+  AssertEquals('ACS: a switch', 2, H.Trigger);
   { Sector types: Doom's light types, secret, damage. }
   AssertEquals('flicker', 1, TranslateZDoomSectorSpecial(65));
   AssertEquals('secret', 128, TranslateZDoomSectorSpecial(1024));
@@ -1184,7 +1341,8 @@ begin
       AssertEquals('floor by value', UdmfFloorByValue, M.Linedefs[829].Special);
       AssertEquals('scrolling wall', 1, M.ScrollingSides);
       AssertTrue('translucent line', M.LineAlpha[1046] < 0.6);
-      AssertEquals('ACS: nothing', 0, M.Linedefs[1052].Special);
+      AssertEquals('ACS line', UdmfAcsExecute, M.Linedefs[1052].Special);
+      AssertEquals('no BEHAVIOR', 0, Length(M.Behavior));
       { Teleport(5, 0): the destination's sector got a tag for it. }
       AssertEquals('teleport', 39, M.Linedefs[911].Special);
       AssertEquals('teleport tag', M.Sectors[M.SectorAt(1000, -900)].Tag, M.Linedefs[911].Tag);
@@ -1192,7 +1350,7 @@ begin
       Specials := 0;
       for I := 0 to High(M.Linedefs) do
         if M.Linedefs[I].Special <> 0 then Inc(Specials);
-      AssertEquals('specials', 46, Specials);
+      AssertEquals('specials', 47, Specials);
       Specials := 0;
       for I := 0 to High(M.Sectors) do
         if (M.Sectors[I].Special and 128) <> 0 then Inc(Specials);

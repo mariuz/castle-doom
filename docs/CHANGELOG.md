@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- ACS scripts in UDMF maps: a map's `BEHAVIOR` lump (Hexen's, ZDoom's `ACSE` and `ACSe`
+  formats) runs its open, enter and death scripts and the ones lines start
+  (`ACS_Execute`, `ACS_ExecuteAlways`, `ACS_LockedExecute`, `ACS_Terminate`, `ACS_Suspend`):
+  delays, waits for sectors and other scripts, prints and HUD messages, map / world /
+  global variables and arrays, functions, line actions with any arguments, floor and
+  ceiling textures, line textures, blocking and actions, thing counts, music. Running
+  scripts are kept in saved games and demos.
+
 ## v0.60.0 (2026-10-31)
 
 - UDMF light things (ZDoom's dynamic light things: point, pulse, flicker, sector and Vavoom

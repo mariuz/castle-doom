@@ -16,6 +16,21 @@ var
   S: Integer;
   Speed, H: Single;
 
+  { The switch or impact line's new look, and a once-only line cleared. }
+  procedure FinishLine;
+  begin
+    if (Activation = acUse) and not Manual then
+    begin
+      if not ByMonster then
+        FSounds.PlayAt('DSSWTCHN', FPlayerEmitter);
+      ChangeLineButton(Line, Repeatable);
+    end else
+    if Activation = acShoot then
+      ChangeLineButton(Line, Repeatable);
+    if not Repeatable then
+      FMap.Linedefs[Line].Special := 0;
+  end;
+
   function NextSector(var Iter: Integer): Boolean;
   begin
     if Manual then
@@ -41,6 +56,15 @@ begin
   if ByMonster and ((L.Trigger and 8) = 0) then Exit;
   Manual := Trigger in [gtD1, gtDR];
   Repeatable := Odd(Ord(Trigger));
+  if UdmfAcsSpecial(L.Special) then
+  begin
+    { Scripts: a used line counts as a switch even when its tag would
+      say the sector behind it. }
+    Manual := false;
+    Result := AcsLineAction(Line, ByMonster);
+    if Result then FinishLine;
+    Exit;
+  end;
   if (not Manual) and (L.Args[0] = 0) then Exit;
   Speed := Max(1, L.Args[1]) / 8;
   S := -1;
@@ -72,14 +96,5 @@ begin
   Result := true;
   WritelnLog('Udmf', 'line %d: %s, tag %d, %d, %d', [Line, UdmfSpecialName(L.Special), L.Args[0],
     L.Args[1], L.Args[2]]);
-  if (Activation = acUse) and not Manual then
-  begin
-    if not ByMonster then
-      FSounds.PlayAt('DSSWTCHN', FPlayerEmitter);
-    ChangeLineButton(Line, Repeatable);
-  end else
-  if Activation = acShoot then
-    ChangeLineButton(Line, Repeatable);
-  if not Repeatable then
-    FMap.Linedefs[Line].Special := 0;
+  FinishLine;
 end;

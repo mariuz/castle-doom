@@ -269,8 +269,42 @@ line, `TranslucentLine` sets the opacity of lines by id.
 `TranslateZDoomSectorSpecial` maps ZDoom's sector types (65..81 =
 Doom's 1..17, 1024 secret, 256..768 damage, 2048 friction, 4096
 pushers) to Doom's with Boom's bits. Actions without a translation
-(ACS, polyobjects, slopes, 3D floors, portals...) are counted and
+(polyobjects, slopes, 3D floors, portals...) are counted and
 logged.
+
+### ACS scripts (`DoomAcs`, `doomworld_acs.inc`)
+
+A UDMF map's `BEHAVIOR` lump (`TDoomMap.Behavior`) holds ACC's compiled
+scripts. `TAcsModule` reads Hexen's `ACS\0` (a directory at the end:
+scripts as number + type * 1000, strings), ZDoom's `ACSE` (32-bit
+p-codes) and `ACSe` (byte p-codes, byte arguments) chunk formats, and
+the chunks ACC hides before an `ACS\0` directory (an `ACSE` / `ACSe`
+marker just before it). `TAcsVM` keeps the running scripts
+(`TAcsInstance`: pc, a stack whose bottom holds the locals, call
+frames, a state: running, delayed, waiting for a tag or a script,
+suspended) and runs each a tic at a time from `TDoomWorld.RunTic`,
+after the movers, like ZDoom's thinker: until it delays, waits, ends,
+or runs 500000 instructions (stopped as a runaway). The p-code numbers
+are generated from ACC's `pcode.h` (`doomacs_pcodes.inc`, by
+`tools/make_acs_pcodes.py`); an unknown one stops its script with a
+log line, the known ones the game has no use for drop their arguments
+(logged once). Nothing raises: the web build cannot catch exceptions.
+
+The world is reached through `TAcsHost`: `TWorldAcsHost` forwards to
+`TDoomWorld.Acs*`. A line action from a script (`LSPEC*`) is
+translated like a UDMF line (`TranslateHexenLine`, walk-over and
+repeatable) and applied with `ApplySpecial` on a borrowed line (the
+one that started the script, else line 0) whose record is put back
+afterwards; a teleport to a thing id tags the destination's sector for
+the call. `ACS_Execute` and its kin are the world's `UdmfAcs*` line
+types (`AcsLineAction`), and from scripts the VM runs them itself.
+Random numbers come from `TDoomWorld.Random`, so demos replay. Map
+variables and arrays live in the VM, world and global ones in
+`TAcsGlobals` (cleared by a new game); both are in saves (`acs`,
+`acsGlobals`), and a save restores the running scripts instead of
+starting the open ones. `TAcsModule.ConstCalls` walks the reachable
+code for line actions with constant arguments (and texture changes),
+so `ComputeDynamicSectors` gives their sectors their own chunks.
 
 Two things are derived that Doom's renderer never needed:
 

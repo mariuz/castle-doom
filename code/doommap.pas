@@ -78,6 +78,9 @@ type
     Id: Integer;
     Args: array [0..4] of Integer;
     Trigger: Integer;
+    { UDMF Hexen-style lines: the activation flags (DoomUdmf's Ua*), for
+      scripts that give the line another action. }
+    Activation: Integer;
   end;
 
   TDoomSector = record
@@ -296,6 +299,8 @@ type
     HeightTransfers: Integer;
     { UDMF's light things (ZDoom's dynamic light things). }
     MapLights: array of TMapLight;
+    { UDMF: the map's BEHAVIOR lump (compiled ACS scripts), empty if none. }
+    Behavior: TBytes;
 
     constructor Create(const AWad: TDoomWad; const MapName: String);
 
@@ -646,7 +651,7 @@ begin
 end;
 
 { A UDMF map (DoomUdmf): the marker, TEXTMAP, maybe ZNODES (ZDoom's GL
-  nodes for this TEXTMAP), REJECT, BLOCKMAP, BEHAVIOR (ACS, not run)...
+  nodes for this TEXTMAP), REJECT, BLOCKMAP, BEHAVIOR (ACS scripts, run by DoomAcs)...
   and ENDMAP. Without (current) ZNODES the nodes are built here
   (DoomNodeBuilder), as UZDoom does. Hexen-namespace specials and sector
   types are translated to Doom's / Boom's (TranslateHexenLine). }
@@ -713,6 +718,7 @@ begin
   begin
     if FWad.LumpName(I) = 'ENDMAP' then Break;
     if FWad.LumpName(I) = 'ZNODES' then ZNodes := I;
+    if FWad.LumpName(I) = 'BEHAVIOR' then Behavior := FWad.LumpBytes(I);
     if FWad.LumpName(I) = 'REJECT' then J := I else J := -1;
     if J >= 0 then Reject := FWad.LumpBytes(J);
   end;
@@ -875,6 +881,7 @@ begin
           for J := 0 to 4 do
             Linedefs[NL].Args[J] := H.Args[J];
           Linedefs[NL].Trigger := H.Trigger;
+          Linedefs[NL].Activation := Act;
           if H.Special <> 0 then Inc(Translated);
           if H.Unsupported <> '' then
             Unsupported.Add(H.Unsupported);

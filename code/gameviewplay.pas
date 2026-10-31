@@ -2853,6 +2853,12 @@ begin
   if FWorld = nil then Exit;
   { Songs are rendered a slice per frame (no freeze at a level start). }
   if Music <> nil then Music.Update;
+  { An ACS script's SetMusic. }
+  if FWorld.MusicRequest <> '' then
+  begin
+    if Music <> nil then Music.Play(FWorld.MusicRequest);
+    FWorld.MusicRequest := '';
+  end;
 
   if FWipe.Active then
   begin

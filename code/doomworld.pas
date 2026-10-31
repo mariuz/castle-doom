@@ -13,7 +13,7 @@ interface
 uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
   DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting, DoomStates,
-  DoomGeneralized, DoomDemo, DoomUdmf;
+  DoomGeneralized, DoomDemo, DoomUdmf, DoomAcs;
 
 const
   TicRate = 35;
@@ -226,6 +226,15 @@ type
     { Lines whose special monsters may trigger by walking over them. }
     FMonsterCrossLines: array of Integer;
     FDynamic: array of Boolean;
+    { ACS (DoomAcs, doomworld_acs.inc): the map's scripts, the host that
+      runs their actions here, the world and global variables (kept for
+      the game), what was logged once, and which side of its line the
+      player set off the last special from. }
+    FAcs: TAcsVM;
+    FAcsHost: TAcsHost;
+    FAcsGlobals: TAcsGlobals;
+    FAcsLogged: TStringList;
+    FActivationSide: Integer;
     procedure ComputeDynamicSectors;
     procedure SpawnThings;
     { LoadMap, optionally restoring a saved game (State <> nil). }
@@ -442,7 +451,31 @@ type
     function CheckKey(const Line: Integer; const Key: TDoomKey; const Skull: TDoomKey; const IsDoor: Boolean): Boolean;
     procedure ChangeLineButton(const Line: Integer; const Repeatable: Boolean);
     procedure AddShotTrail(const X1, Y1, Z1, X2, Y2, Z2: Single; const Hit: Boolean);
+    function NewAcsHost: TAcsHost;
+    procedure LoadScripts;
+    procedure AcsMarkDynamic;
+    function AcsLineAction(const Line: Integer; const ByMonster: Boolean): Boolean;
+    function AcsCheckLock(const Line, Lock: Integer): Boolean;
+  private
+    { For TWorldAcsHost (doomworld_acs.inc). }
+    procedure AcsLogOnce(const What: String);
+    function AcsThisMap(const N: Integer): Boolean;
+    function AcsRandom(const N: Integer): Integer;
+    function AcsLineSpecial(const Inst: TAcsInstance; const Special: Integer; const Args: TAcsArgs): Integer;
+    function AcsTagBusy(const Tag: Integer): Boolean;
+    function AcsThingCount(const DoomNum, Tid: Integer): Integer;
+    procedure AcsChangeFlat(const Tag: Integer; const Name: String; const Ceiling: Boolean);
+    procedure AcsClearLineSpecial(const Line: Integer);
+    procedure AcsSetLineTexture(const LineId, Side, Position: Integer; const Name: String);
+    procedure AcsSetLineFlag(const LineId, Flag: Integer; const Value: Boolean);
+    procedure AcsSetLineSpecial(const LineId, Special: Integer; const Args: TAcsArgs);
+    procedure AcsPlaySound(const Name: String);
+    function AcsActorValue(const Inst: TAcsInstance; const Tid, What: Integer): Integer;
+    function AcsSectorValue(const Tag, What: Integer): Integer;
   public
+    { A song an ACS script asked for (SetMusic), for the view to play;
+      it clears it. }
+    MusicRequest: String;
     { Log every player shot (aim, slope, what it hit): "Shot:" lines. }
     DebugShots: Boolean;
     { The player's last hitscans, oldest first (GameDebugDraw draws them):
@@ -1058,6 +1091,8 @@ begin
   FActors := TDoomActorList.Create(true);
   FMovers := TSectorMoverList.Create(true);
   FPlayerEmitter := TCastleTransform.Create(nil);
+  FAcsHost := NewAcsHost;
+  FAcsGlobals := TAcsGlobals.Create;
   Skill := 2;
   ResetPlayer;
 end;
@@ -1065,6 +1100,9 @@ end;
 destructor TDoomWorld.Destroy;
 begin
   UnloadMap;
+  FreeAndNil(FAcsHost);
+  FreeAndNil(FAcsGlobals);
+  FreeAndNil(FAcsLogged);
   FreeAndNil(FPlayerEmitter);
   FreeAndNil(FMovers);
   FreeAndNil(FActors);
@@ -1115,6 +1153,7 @@ var
   A: TDoomActor;
 begin
   ClearGhost;
+  FreeAndNil(FAcs);
   FMovers.Clear;
   for A in FActors do
     if A.Parent <> nil then
@@ -1288,6 +1327,7 @@ begin
   for I := 0 to High(FDynamic) do
     if FMap.HeightSec[I] >= 0 then
       FDynamic[I] := true;
+  AcsMarkDynamic;
   { Boom's light transfers: a sector showing a dynamic sector's light
     changes with it, so it needs its own chunk too. }
   for I := 0 to High(FDynamic) do
@@ -1386,6 +1426,7 @@ begin
     A.SpawnAngle := T.Angle;
     A.Sector := Sec;
     A.MapFlags := T.Flags;
+    A.Tid := T.Tid;
     if Info^.Hanging then
       A.DoomZ := FMap.Sectors[Sec].CeilingHeight - Info^.Height
     else
@@ -1439,6 +1480,11 @@ begin
   BuildWeaponSeqs;
   SyncProjectileInfos;
   FMap := TDoomMap.Create(FWad, MapName);
+  { A new game clears ACS's world and global variables. }
+  if (State = nil) and not KeepInventory then
+    FAcsGlobals.Clear;
+  MusicRequest := '';
+  LoadScripts;
   { Dynamic sectors come from the map's original specials (a saved game may
     have cleared some, but their sectors can still be moving). }
   ComputeDynamicSectors;
@@ -1530,7 +1576,9 @@ begin
   PlayerTurn := 0;
   PlayerPushVX := 0; PlayerPushVY := 0; PlayerPushDX := 0; PlayerPushDY := 0;
   if State <> nil then
-    RestoreDynamicState(State);
+    RestoreDynamicState(State)
+  else if FAcs <> nil then
+    FAcs.StartLevel;
   Profiler.Stop(ProfLoad, true);
 end;
 
@@ -2053,6 +2101,8 @@ begin
   FGraphics.AnimationTic(FTic);
   Lap(0);
   TicMovers;
+  if FAcs <> nil then
+    FAcs.Tic;
   Lap(1);
   TicLights;
   TicButtons;
@@ -4585,6 +4635,8 @@ begin
     Player.Dead := true;
     FSounds.Play('DSPLDETH');
     ShowMessage('You died. Press USE to try again.');
+    if FAcs <> nil then
+      FAcs.StartType(AcsDeath, aaPlayer);
   end else
     FSounds.Play('DSPLPAIN');
 end;
@@ -5694,6 +5746,7 @@ function TDoomWorld.UseSpecialLine(const Line, Side: Integer; const ByMonster: B
 begin
   Result := false;
   if (Side <> 0) and not ByMonster then Exit;
+  FActivationSide := Side;
   Result := ApplySpecial(Line, acUse, ByMonster);
 end;
 
@@ -5702,6 +5755,7 @@ begin
   { Teleporters only work from the front side. }
   if ((FMap.Linedefs[Line].Special in [39, 97, 207, 208, 243, 244]) or (FMap.Linedefs[Line].Special = 262) or
       (FMap.Linedefs[Line].Special = 263)) and (Side <> 0) then Exit(false);
+  FActivationSide := Side;
   Result := ApplySpecial(Line, acCross, false);
 end;
 
@@ -6738,6 +6792,7 @@ end;
 {$I doomworld_save.inc}
 {$I doomworld_generalized.inc}
 {$I doomworld_udmf.inc}
+{$I doomworld_acs.inc}
 
 initialization
   InitEffectInfos;
