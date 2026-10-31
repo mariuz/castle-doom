@@ -256,13 +256,14 @@ def tests_program(layout):
     return code, scripts, funcs, S
 
 
-SPAWN_STRINGS = ['ShotgunGuy', 'Medikit', 'Spawned ']
+SPAWN_STRINGS = ['ShotgunGuy', 'Medikit', 'Spawned ', 'Shotgun', 'Shell', 'Shells ']
 
 
 def spawn_program(layout):
     """udmf-things.wad's open script: SpawnSpot("ShotgunGuy", 20, 30, 0),
     Spawn("Medikit", -352.0, 192.0, 0, 31, 0), then prints "Spawned N"
-    (ThingCount(0, 30) + ThingCount(0, 31))."""
+    (ThingCount(0, 30) + ThingCount(0, 31)); GiveInventory("Shotgun", 1),
+    GiveInventory("Shell", 20), prints "Shells N" (CheckInventory)."""
     a = Asm(layout)
     S = SPAWN_STRINGS
     a.label('s1')
@@ -287,6 +288,18 @@ def spawn_program(layout):
     a.push(31)
     a.op('THINGCOUNT')
     a.op('ADD')
+    a.op('PRINTNUMBER')
+    a.op('ENDPRINT')
+    a.push(S.index('Shotgun'))
+    a.push(1)
+    a.op('GIVEINVENTORY')
+    a.push(S.index('Shell'))
+    a.push(20)
+    a.op('GIVEINVENTORY')
+    a.op('BEGINPRINT')
+    a.print_str('Shells ', S)
+    a.push(S.index('Shell'))
+    a.op('CHECKINVENTORY')
     a.op('PRINTNUMBER')
     a.op('ENDPRINT')
     a.op('TERMINATE')

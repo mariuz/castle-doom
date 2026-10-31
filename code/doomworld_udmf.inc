@@ -91,6 +91,27 @@ begin
           H := L.Args[2];
         DoCeiling(S, H, Speed, false);
       end;
+    UdmfPillarBuild:
+      while NextSector(S) do
+      begin
+        if L.Args[2] = 0 then
+          H := (FMap.Sectors[S].FloorHeight + FMap.Sectors[S].CeilingHeight) / 2
+        else
+          H := Min(FMap.Sectors[S].CeilingHeight, FMap.Sectors[S].FloorHeight + L.Args[2]);
+        DoPillar(S, H, H, Speed);
+      end;
+    UdmfPillarOpen:
+      while NextSector(S) do
+      begin
+        if L.Args[2] = 0 then
+          H := FMap.LowestFloorSurrounding(S)
+        else
+          H := FMap.Sectors[S].FloorHeight - L.Args[2];
+        if L.Args[3] = 0 then
+          DoPillar(S, H, FMap.HighestCeilingSurrounding(S), Speed)
+        else
+          DoPillar(S, H, FMap.Sectors[S].CeilingHeight + L.Args[3], Speed);
+      end;
     UdmfLightToValue:
       while NextSector(S) do
         DoLight(S, Max(0, Min(255, L.Args[1])));

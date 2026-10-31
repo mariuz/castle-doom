@@ -950,8 +950,11 @@ autotest only checks the library loads.
   `LINE:1052` spawn and remove a zombieman, line 898 makes sector 141's
   floor carry east (`Scroll_Floor`) and its open script spawns a
   shotgun guy (`SpawnSpot`, id 30) and a medikit (`Spawn`, id 31; log
-  `Message: Spawned 2`). Saves keep actors' ids (`tid`); autotest
-  `udmf-things` (golden).
+  `Message: Spawned 2`), then gives a shotgun and 20 shells
+  (`Message: Shells 20`); `LINE:830` builds a pillar in sector 99 (id
+  12: floor and ceiling meet at 46), which also has friction and wind
+  (log `1 friction lines, 1 pushers`). Saves keep actors' ids (`tid`)
+  and pillars' ceiling targets; autotest `udmf-things` (golden).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

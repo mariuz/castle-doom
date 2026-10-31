@@ -2457,8 +2457,8 @@ procedure TDoomMap.BuildFrictionAndPushers;
 const
   DoomFriction = $E800 / $10000;
 var
-  I, S, T, FrictionLines, N: Integer;
-  Len, F, MF, DX, DY: Single;
+  I, S, T, FrictionLines, N, Tag, Special: Integer;
+  Len, F, MF, DX, DY, Angle: Single;
   Kind: TPusherKind;
 begin
   SetLength(Friction, Length(Sectors));
@@ -2474,11 +2474,36 @@ begin
   begin
     DX := Vertices[Linedefs[I].V2].X - Vertices[Linedefs[I].V1].X;
     DY := Vertices[Linedefs[I].V2].Y - Vertices[Linedefs[I].V1].Y;
-    case Linedefs[I].Special of
+    { UDMF's Sector_SetFriction / Wind / Current: the amount and angle
+      given (or the line itself), on the tag in Args[0]. }
+    Tag := Linedefs[I].Tag;
+    Special := Linedefs[I].Special;
+    case Special of
+      UdmfFriction:
+        begin
+          Special := 223;
+          Tag := Linedefs[I].Args[0];
+        end;
+      UdmfWind, UdmfCurrent:
+        begin
+          if Special = UdmfWind then Special := 224 else Special := 225;
+          Tag := Linedefs[I].Args[0];
+          if Linedefs[I].Args[3] = 0 then
+          begin
+            Angle := DegToRad(Linedefs[I].Args[2] * 360 / 256);
+            DX := Linedefs[I].Args[1] * Cos(Angle);
+            DY := Linedefs[I].Args[1] * Sin(Angle);
+          end;
+        end;
+    end;
+    case Special of
       223:
         begin
           { The longer the line, the slipperier: 0xD000 (mud) up to 1. }
-          Len := Sqrt(Sqr(DX) + Sqr(DY));
+          if Linedefs[I].Special = UdmfFriction then
+            Len := Max(0, Min(200, Linedefs[I].Args[1]))
+          else
+            Len := Sqrt(Sqr(DX) + Sqr(DY));
           F := ($1EB8 * Len / $80 + $D000) / $10000;
           F := Min(1, Max(0, F));
           { Boom's movefactor (in 1/2048ths of Doom's thrust). }
@@ -2490,7 +2515,7 @@ begin
           Inc(FrictionLines);
           S := -1;
           repeat
-            S := FindSectorFromTag(Linedefs[I].Tag, S);
+            S := FindSectorFromTag(Tag, S);
             if S < 0 then Break;
             Friction[S] := F;
             MoveFactor[S] := MF;
@@ -2498,10 +2523,10 @@ begin
         end;
       224, 225:
         begin
-          if Linedefs[I].Special = 224 then Kind := pkWind else Kind := pkCurrent;
+          if Special = 224 then Kind := pkWind else Kind := pkCurrent;
           S := -1;
           repeat
-            S := FindSectorFromTag(Linedefs[I].Tag, S);
+            S := FindSectorFromTag(Tag, S);
             if S < 0 then Break;
             N := Length(Pushers);
             SetLength(Pushers, N + 1);

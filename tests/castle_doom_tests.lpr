@@ -1387,6 +1387,12 @@ begin
   AssertEquals('Scroll_Floor (static)', UdmfScrollFloor, H.Special);
   AssertEquals('Scroll_Floor: nothing unsupported', '', H.Unsupported);
   AssertEquals('Scroll_Ceiling', UdmfScrollCeiling, TranslateHexenLine(224, [9, 0, 32], 0).Special);
+  AssertEquals('Sector_SetFriction', UdmfFriction, TranslateHexenLine(219, [12, 200], 0).Special);
+  AssertEquals('Sector_SetWind', UdmfWind, TranslateHexenLine(218, [12, 32, 64], 0).Special);
+  H := TranslateHexenLine(29, [12, 16, 0], UaPlayerUse);
+  AssertEquals('Pillar_Build', UdmfPillarBuild, H.Special);
+  AssertEquals('Pillar_Build: sector tag', 12, H.Tag);
+  AssertEquals('Pillar_Open', UdmfPillarOpen, TranslateHexenLine(30, [12, 16], UaPlayerUse).Special);
   { Sector types: Doom's light types, secret, damage. }
   AssertEquals('flicker', 1, TranslateZDoomSectorSpecial(65));
   AssertEquals('secret', 128, TranslateZDoomSectorSpecial(1024));

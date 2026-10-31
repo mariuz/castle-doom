@@ -305,6 +305,11 @@ begin
     MJ.Add('changeSpecial', M.ChangeSpecial);
     MJ.Add('newSpecial', M.NewSpecial);
     MJ.Add('gap', Double(M.Gap));
+    if M.Kind = mkPillar then
+    begin
+      MJ.Add('ceilTarget', Double(M.CeilTarget));
+      MJ.Add('ceilSpeed', Double(M.CeilSpeed));
+    end;
     Arr.Add(MJ);
   end;
   Result.Add('movers', Arr);
@@ -598,6 +603,8 @@ begin
       M.ChangeSpecial := MJ.Get('changeSpecial', false);
       M.NewSpecial := MJ.Get('newSpecial', 0);
       M.Gap := MJ.Get('gap', 0.0);
+      M.CeilTarget := MJ.Get('ceilTarget', 0.0);
+      M.CeilSpeed := MJ.Get('ceilSpeed', 0.0);
       FMap.Sectors[Sec].Mover := M;
       FMovers.Add(M);
     end;

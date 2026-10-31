@@ -81,6 +81,12 @@ const
     carry things, 2 both). }
   UdmfScrollFloor = UdmfSpecialBase + 52;
   UdmfScrollCeiling = UdmfSpecialBase + 53;
+  { Static: Sector_SetFriction (Args tag, amount: Boom's line length),
+    Sector_SetWind / Sector_SetCurrent (tag, strength, byte angle, 1: the
+    line's own vector instead). }
+  UdmfFriction = UdmfSpecialBase + 54;
+  UdmfWind = UdmfSpecialBase + 55;
+  UdmfCurrent = UdmfSpecialBase + 56;
   { ACS scripts (DoomAcs). Args as Hexen's: script, map (0 = this one),
     the script's arguments; ACS_ExecuteWithResult: script and four
     arguments; the locked ones: the lock in Args[4]. }
@@ -102,6 +108,11 @@ const
   UdmfThingActivate = UdmfSpecialBase + 35;
   UdmfDamageThing = UdmfSpecialBase + 36;
   UdmfHealThing = UdmfSpecialBase + 37;
+  { Pillars: Args tag, speed (eighths), then Build's height above the
+    floor where floor and ceiling meet (0: halfway), Open's floor drop
+    and ceiling rise (0: to the lowest floor / highest ceiling around). }
+  UdmfPillarBuild = UdmfSpecialBase + 7;
+  UdmfPillarOpen = UdmfSpecialBase + 8;
 
   { UDMF line activation flags (TUdmfLine.Activation). }
   UaPlayerCross = 1;
@@ -445,6 +456,11 @@ begin
     UdmfScrollWall: Result := 'scrolling wall';
     UdmfPlaneAlign: Result := 'Plane_Align';
     UdmfScrollFloor: Result := 'Scroll_Floor';
+    UdmfFriction: Result := 'Sector_SetFriction';
+    UdmfWind: Result := 'Sector_SetWind';
+    UdmfCurrent: Result := 'Sector_SetCurrent';
+    UdmfPillarBuild: Result := 'Pillar_Build';
+    UdmfPillarOpen: Result := 'Pillar_Open';
     UdmfScrollCeiling: Result := 'Scroll_Ceiling';
     UdmfThingSpawn: Result := 'Thing_Spawn';
     UdmfThingSpawnNoFog: Result := 'Thing_SpawnNoFog';
@@ -824,7 +840,7 @@ begin
   Trig := GenTrigger;
   Result.Trigger := Trig;
   if Monster then Result.Trigger := Result.Trigger + 8;
-  if not (Cross or Use or Impact) and not (Special in [100..103, 121, 181, 208..211, 223, 224]) then
+  if not (Cross or Use or Impact) and not (Special in [100..103, 121, 181, 208..211, 218..220, 223, 224]) then
   begin
     { No activation (only scripts could trigger it). }
     if Special <> 0 then
@@ -1002,6 +1018,21 @@ begin
           else Result.Special := UdmfHealThing;
         end;
         Result.Tag := 0;
+        for I := 0 to 4 do Result.Args[I] := A[I];
+      end;
+    218, 219, 220:
+      begin
+        case Special of
+          218: Result.Special := UdmfWind;
+          219: Result.Special := UdmfFriction;
+          else Result.Special := UdmfCurrent;
+        end;
+        Result.Tag := 0;
+        for I := 0 to 4 do Result.Args[I] := A[I];
+      end;
+    29, 30, 94:
+      begin
+        if Special = 30 then Result.Special := UdmfPillarOpen else Result.Special := UdmfPillarBuild;
         for I := 0 to 4 do Result.Args[I] := A[I];
       end;
     223, 224:

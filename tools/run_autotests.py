@@ -402,12 +402,14 @@ TESTS = [
     # / Thing_Remove by line, Scroll_Floor carrying the player east.
     ('udmf-things', 'E1M1',
      'Y,W:0.5,SAVE:1,LINE:829,W:0.5,G:-416:256,A:45,S,SAVE:2,LINE:1045,W:1,SAVE:3,LINE:1046,W:0.2,LINE:1052,'
-     'W:0.3,SAVE:4,G:-224:200,W:1,SAVE:5,Q',
+     'W:0.3,SAVE:4,G:-224:200,W:1,SAVE:5,LINE:830,W:2,SAVE:6,Q',
      [r'Acs: SpawnSpot ShotgunGuy at things 20: 1', r'Acs: Spawn Medikit at \(-352, 192\): 1',
       r'Message: Spawned 2', r'Udmf: Thing_Spawn \(20, 5, 64, 21\): 1 things',
       r'Udmf: Thing_Damage \(21, 1000, 0, 0\): 1 things', r'Udmf: Thing_SpawnNoFog \(20, 4, 0, 22\): 1 things',
       r'Udmf: Thing_Remove \(22, 0, 0, 0\): 1 things',
-      r'Map: E1M1: scrollers: 0 walls, 1 floors, 0 ceilings, 1 carrying floors'],
+      r'Map: E1M1: scrollers: 0 walls, 1 floors, 0 ceilings, 1 carrying floors',
+      r'Map: E1M1: 1 friction lines, 1 pushers', r'Message: Shells 20',
+      r'Udmf: line 830: Pillar_Build, tag 12, 16, 0'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad'), '--fixed-step'],
      lambda config: check_udmf_things(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
@@ -712,8 +714,9 @@ def check_slopes(config):
 
 
 def check_udmf_things(config):
-    """tools/testdata/udmf-things.wad: things by thing id in the saves."""
-    saves = [save_json(config, n) for n in range(1, 6)]
+    """tools/testdata/udmf-things.wad: things by thing id, ACS's
+    inventory and a pillar in the saves."""
+    saves = [save_json(config, n) for n in range(1, 7)]
 
     def tid(save, t):
         return [a for a in save['actors'] if a.get('tid') == t]
@@ -725,6 +728,10 @@ def check_udmf_things(config):
     assert tid(saves[2], 21)[0]['health'] <= 0, 'Thing_Damage did not kill the imp'
     assert not tid(saves[3], 22), 'Thing_Remove left the zombieman'
     assert saves[4]['player']['x'] > -224 + 10, 'Scroll_Floor did not carry: x %s' % saves[4]['player']['x']
+    p = saves[0]['player']
+    assert p['ammo'][1] == 20 and p['weapons'] & 4, 'GiveInventory: shells %s, weapons %s' % (p['ammo'][1], p['weapons'])
+    assert (saves[5]['sectorFloor'][99], saves[5]['sectorCeiling'][99]) == (46, 46), \
+        'Pillar_Build: %s / %s' % (saves[5]['sectorFloor'][99], saves[5]['sectorCeiling'][99])
 
 
 def check_carry(config):

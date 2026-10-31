@@ -190,6 +190,10 @@ type
       virtual;
     function SpawnSpot(const ThingClass: String; const SpotTid, Tid: Integer; const Angle: Single;
       const FaceSpot: Boolean): Integer; virtual;
+    { The activator's (the player's) inventory by ZDoom class name:
+      Amount given (> 0) or taken (< 0), or 0 for how many there are.
+      ClearInventory with an empty name. }
+    function Inventory(const Item: String; const Amount: Integer): Integer; virtual;
   end;
 
   { World and global variables (and their arrays): they outlive a map. }
@@ -933,6 +937,11 @@ end;
 
 function TAcsHost.SpawnSpot(const ThingClass: String; const SpotTid, Tid: Integer; const Angle: Single;
   const FaceSpot: Boolean): Integer;
+begin
+  Result := 0;
+end;
+
+function TAcsHost.Inventory(const Item: String; const Amount: Integer): Integer;
 begin
   Result := 0;
 end;
@@ -1951,23 +1960,30 @@ begin
           M.ReadWord(I.PC);
           Skip(0);
         end;
-      PcdClearinventory, PcdCancelfade, PcdEndtranslation: Skip(0);
-      PcdGiveinventory, PcdTakeinventory, PcdSetactorangle, PcdSetactorpitch, PcdSetammocapacity,
-      PcdSetmarineweapon, PcdSetmarinesprite, PcdGrabinput, PcdMovemousepointer, PcdChangesky:
-        Skip(2);
+      PcdCancelfade, PcdEndtranslation: Skip(0);
+      PcdClearinventory: FHost.Inventory('', 0);
+      PcdGiveinventory, PcdTakeinventory:
+        begin
+          B := Pop;
+          A := Pop;
+          if Op = PcdGiveinventory then FHost.Inventory(StringOf(A), Max(0, B))
+          else FHost.Inventory(StringOf(A), -Max(0, B));
+        end;
       PcdGiveinventorydirect, PcdTakeinventorydirect:
         begin
-          Inc(I.PC, 8);
-          Skip(0);
+          A := M.ReadWord(I.PC);
+          B := M.ReadWord(I.PC);
+          if Op = PcdGiveinventorydirect then FHost.Inventory(StringOf(A), Max(0, B))
+          else FHost.Inventory(StringOf(A), -Max(0, B));
         end;
-      PcdCheckinventory, PcdCheckweapon, PcdSetweapon, PcdGetcvar, PcdGetammocapacity, PcdPlayerclass,
+      PcdCheckinventory: Push(FHost.Inventory(StringOf(Pop), 0));
+      PcdCheckinventorydirect: Push(FHost.Inventory(StringOf(M.ReadWord(I.PC)), 0));
+      PcdSetactorangle, PcdSetactorpitch, PcdSetammocapacity,
+      PcdSetmarineweapon, PcdSetmarinesprite, PcdGrabinput, PcdMovemousepointer, PcdChangesky:
+        Skip(2);
+      PcdCheckweapon, PcdSetweapon, PcdGetcvar, PcdGetammocapacity, PcdPlayerclass,
       PcdUseinventory, PcdClassifyactor, PcdCheckplayercamera, PcdGetlevelinfo:
         Skip(1, true);
-      PcdCheckinventorydirect:
-        begin
-          M.ReadWord(I.PC);
-          Skip(0, true);
-        end;
       PcdGetactorproperty, PcdCheckactorinventory, PcdUseactorinventory, PcdCheckactorceilingtexture,
       PcdCheckactorfloortexture, PcdGetplayerinfo, PcdGetplayerinput, PcdUnmorphactor:
         Skip(2, true);

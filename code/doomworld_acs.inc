@@ -35,6 +35,7 @@ type
     function SectorValue(const Tag, What: Integer): Integer; override;
     function Localize(const Name: String): String; override;
     function ThisMap(const N: Integer): Boolean; override;
+    function Inventory(const Item: String; const Amount: Integer): Integer; override;
     function Spawn(const ThingClass: String; const X, Y: Single; const Tid: Integer; const Angle: Single): Integer;
       override;
     function SpawnSpot(const ThingClass: String; const SpotTid, Tid: Integer; const Angle: Single;
@@ -239,6 +240,11 @@ begin
   Result := FWorld.AcsThisMap(N);
 end;
 
+function TWorldAcsHost.Inventory(const Item: String; const Amount: Integer): Integer;
+begin
+  Result := FWorld.AcsInventory(Item, Amount);
+end;
+
 function AcsClassDoomNum(const ThingClass: String): Integer;
 var
   I: Integer;
@@ -313,6 +319,102 @@ begin
       SetLength(Result, Length(Result) + 1);
       Result[High(Result)] := Vector3(FMap.Things[I].X, FMap.Things[I].Y, FMap.Things[I].Angle);
     end;
+end;
+
+{ ZDoom's inventory classes for Doom's player: ammo (counted in rounds),
+  weapons and keys (0 / 1), health and armor items (given as that many
+  pickups, counted as the player's health / armor). }
+function TDoomWorld.AcsInventory(const Item: String; const Amount: Integer): Integer;
+const
+  AmmoNames: array [TAmmoType] of String = ('Clip', 'Shell', 'Cell', 'RocketAmmo', '');
+  WeaponNames: array [TWeapon] of String = ('Fist', 'Pistol', 'Shotgun', 'Chaingun', 'RocketLauncher',
+    'PlasmaRifle', 'BFG9000', 'Chainsaw', 'SuperShotgun');
+  KeyNames: array [TDoomKey] of String = ('BlueCard', 'YellowCard', 'RedCard', 'BlueSkull', 'YellowSkull',
+    'RedSkull');
+var
+  T: TAmmoType;
+  W: TWeapon;
+  K: TDoomKey;
+  N: Integer;
+
+  procedure Heal(const Each, Limit: Integer);
+  begin
+    if Amount > 0 then
+      Player.Health := Max(Player.Health, Min(Limit, Player.Health + Each * Amount));
+  end;
+
+begin
+  Result := 0;
+  if Item = '' then
+  begin
+    { ClearInventory: what a pistol start keeps. }
+    Player.Weapons := [wpFist, wpPistol];
+    Player.Weapon := wpPistol;
+    Player.PendingWeapon := wpPistol;
+    for T := Low(TAmmoType) to High(TAmmoType) do Player.Ammo[T] := 0;
+    Player.Ammo[amClip] := 50;
+    Player.Keys := [];
+    WritelnLog('Acs', 'inventory cleared');
+    Exit;
+  end;
+  for T := Low(TAmmoType) to High(TAmmoType) do
+    if (AmmoNames[T] <> '') and SameText(Item, AmmoNames[T]) then
+    begin
+      Player.Ammo[T] := Max(0, Min(Player.MaxAmmo[T], Player.Ammo[T] + Amount));
+      Exit(Player.Ammo[T]);
+    end;
+  for W := Low(TWeapon) to High(TWeapon) do
+    if SameText(Item, WeaponNames[W]) then
+    begin
+      if Amount > 0 then Include(Player.Weapons, W)
+      else if Amount < 0 then Exclude(Player.Weapons, W);
+      Exit(Ord(W in Player.Weapons));
+    end;
+  for K := Low(TDoomKey) to High(TDoomKey) do
+    if SameText(Item, KeyNames[K]) then
+    begin
+      if Amount > 0 then Include(Player.Keys, K)
+      else if Amount < 0 then Exclude(Player.Keys, K);
+      Exit(Ord(K in Player.Keys));
+    end;
+  N := Amount;
+  if SameText(Item, 'Health') then
+  begin
+    if N <> 0 then Player.Health := Max(1, Player.Health + N);
+    Exit(Player.Health);
+  end;
+  if SameText(Item, 'Stimpack') then begin Heal(10, 100); Exit(Player.Health); end;
+  if SameText(Item, 'Medikit') then begin Heal(25, 100); Exit(Player.Health); end;
+  if SameText(Item, 'HealthBonus') then begin Heal(1, 200); Exit(Player.Health); end;
+  if SameText(Item, 'Soulsphere') then begin Heal(100, 200); Exit(Player.Health); end;
+  if SameText(Item, 'Armor') or SameText(Item, 'BasicArmor') then
+  begin
+    if N <> 0 then Player.Armor := Max(0, Min(200, Player.Armor + N));
+    Exit(Player.Armor);
+  end;
+  if SameText(Item, 'GreenArmor') or SameText(Item, 'BlueArmor') then
+  begin
+    if N > 0 then
+    begin
+      if SameText(Item, 'GreenArmor') then N := 100 else N := 200;
+      if Player.Armor < N then
+      begin
+        Player.Armor := N;
+        Player.ArmorType := N div 100;
+      end;
+    end;
+    Exit(Player.Armor);
+  end;
+  if SameText(Item, 'ArmorBonus') then
+  begin
+    if N > 0 then
+    begin
+      Player.Armor := Min(200, Player.Armor + N);
+      if Player.ArmorType = 0 then Player.ArmorType := 1;
+    end;
+    Exit(Player.Armor);
+  end;
+  AcsLogOnce(Format('Inventory item "%s"', [Item]));
 end;
 
 function TDoomWorld.AcsRandom(const N: Integer): Integer;

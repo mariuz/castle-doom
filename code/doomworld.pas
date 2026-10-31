@@ -94,7 +94,7 @@ type
   { mkElevator: Boom's elevators (227-238), floor and ceiling together;
     mkToggle: Boom's instant plat toggles (211, 212), kept in stasis
     with the original floor in ReturnTarget. }
-  TMoverKind = (mkDoor, mkLift, mkFloor, mkCeiling, mkCrusher, mkElevator, mkToggle);
+  TMoverKind = (mkDoor, mkLift, mkFloor, mkCeiling, mkCrusher, mkElevator, mkToggle, mkPillar);
   { mpStasis: a stopped perpetual lift or crusher (EV_StopPlat,
     EV_CeilingCrushStop) that a new start resumes (P_ActivateInStasis). }
   TMoverPhase = (mpMoving, mpWaiting, mpDone, mpStasis);
@@ -132,6 +132,9 @@ type
     NewSpecial: Integer;
     { Elevators: the ceiling's height above the floor, kept while moving. }
     Gap: Single;
+    { Pillars: where the ceiling goes and how fast (the floor: Target,
+      Speed). }
+    CeilTarget, CeilSpeed: Single;
     constructor Create(const AWorld: TDoomWorld; const ASector: Integer; const AKind: TMoverKind);
     destructor Destroy; override;
     procedure Start;
@@ -266,6 +269,8 @@ type
     procedure AddLightSector(const Sec: Integer);
     { Boom's elevators: floor and ceiling of Sec to floor height Target. }
     procedure DoElevator(const Sec: Integer; const Target: Single);
+    { Hexen's pillars: floor and ceiling to their targets at once. }
+    procedure DoPillar(const Sec: Integer; const FloorTarget, CeilTarget, Speed: Single);
     { Boom's instant plat toggle (EV_DoPlat toggleUpDn): the floor jumps to
       the ceiling, crushing what is there, and back on the next use. }
     procedure DoToggle(const Sec: Integer);
@@ -470,6 +475,7 @@ type
     { For TWorldAcsHost (doomworld_acs.inc). }
     procedure AcsLogOnce(const What: String);
     function AcsThisMap(const N: Integer): Boolean;
+    function AcsInventory(const Item: String; const Amount: Integer): Integer;
     { Spawn Doom thing type DoomNum at (X, Y) on the floor,
       facing Angle (degrees), with thing id Tid; teleport fog when Fog. }
     function SpawnByScript(const DoomNum: Integer; const X, Y, Angle: Single; const Tid: Integer;
@@ -946,6 +952,26 @@ var
   A: TDoomActor;
   Blocked: Boolean;
 begin
+  if (Kind = mkPillar) and (Phase = mpMoving) then
+  begin
+    { T_Pillar: both planes towards their targets, arriving together. }
+    H := World.Map.Sectors[Sector].FloorHeight;
+    if H < Target then NewH := Min(Target, H + Speed) else NewH := Max(Target, H - Speed);
+    World.Map.Sectors[Sector].FloorHeight := NewH;
+    H := World.Map.Sectors[Sector].CeilingHeight;
+    if H < CeilTarget then Limit := Min(CeilTarget, H + CeilSpeed) else Limit := Max(CeilTarget, H - CeilSpeed);
+    World.Map.Sectors[Sector].CeilingHeight := Limit;
+    World.Geometry.SectorChanged(Sector);
+    if (MoveSound <> '') and (World.Tic mod 8 = 0) then
+      World.Sounds.PlayAt(MoveSound, Emitter);
+    if (NewH = Target) and (Limit = CeilTarget) then
+    begin
+      Phase := mpDone;
+      if StopSound <> '' then
+        World.Sounds.PlayAt(StopSound, Emitter);
+    end;
+    Exit;
+  end;
   if (Kind = mkElevator) and (Phase = mpMoving) then
   begin
     { T_MoveElevator: both planes by the same step, nothing blocks them. }
@@ -6047,6 +6073,35 @@ begin
       Inc(Guard);
     until (Next < 0) or (Guard > 200);
   until false;
+end;
+
+procedure TDoomWorld.DoPillar(const Sec: Integer; const FloorTarget, CeilTarget, Speed: Single);
+var
+  M: TSectorMover;
+  DF, DC: Single;
+begin
+  if FMap.Sectors[Sec].Mover <> nil then Exit;
+  DF := Abs(FloorTarget - FMap.Sectors[Sec].FloorHeight);
+  DC := Abs(CeilTarget - FMap.Sectors[Sec].CeilingHeight);
+  if (DF = 0) and (DC = 0) then Exit;
+  M := TSectorMover.Create(Self, Sec, mkPillar);
+  M.MovesCeiling := false;
+  M.Target := FloorTarget;
+  M.CeilTarget := CeilTarget;
+  { The speed is the longer move's; the other one keeps pace. }
+  if DF >= DC then
+  begin
+    M.Speed := Speed;
+    M.CeilSpeed := Speed * DC / DF;
+  end else
+  begin
+    M.CeilSpeed := Speed;
+    M.Speed := Speed * DF / DC;
+  end;
+  M.MoveSound := 'DSSTNMOV';
+  M.StopSound := 'DSPSTOP';
+  FMovers.Add(M);
+  M.Start;
 end;
 
 procedure TDoomWorld.DoElevator(const Sec: Integer; const Target: Single);

@@ -42,7 +42,10 @@ Thing_SpawnNoFog(20, 4, 0, 22) (a zombieman), 1052 a Thing_Remove(22),
 all used; line 898 a Scroll_Floor(9, 64, 0, 2) (sector 141's floor
 scrolls east and carries things); an open ACS script spawns a shotgun
 guy at the spot (SpawnSpot, id 30) and a medikit at (-352, 192) (Spawn,
-id 31) and prints "Spawned 2".
+id 31), prints "Spawned 2", gives a shotgun and 20 shells and prints
+"Shells 20"; sector 99 (id 12) gets a Pillar_Build(12, 16, 0) on line 830
+(floor and ceiling meet at 46), Sector_SetFriction(12, 200) on line 831
+and Sector_SetWind(12, 32, 64, 0) on line 833.
 
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
@@ -93,7 +96,9 @@ SLOPE_SECTORS = {141: {'floorplane_a': '0.0', 'floorplane_b': '-0.25', 'floorpla
 SLOPE_LINES = {836: (181, (0, 1), '')}
 SLOPE_FILL = (99, 141)
 THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
-               1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), '')}
+               1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), ''),
+               830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), '')}
+THING_SECTOR_IDS = {141: 9, 99: 12}
 THING_SPOT = (-320, 320, 9001, 20)
 # Vertex heights: the triangular sector 165 (floor 16) gets its corner
 # (-384, 64) at 0.
@@ -217,7 +222,12 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False):
                 'textureceiling = "%s";' % ct, 'lightlevel = %d;' % light]
         if hexen:
             sp = ZDOOM_SECTOR.get(sp, 0)
-            tag = (ACS_SECTOR_IDS if acs else SECTOR_IDS).get(k, tag)
+            ids = SECTOR_IDS
+            if acs:
+                ids = ACS_SECTOR_IDS
+            if things:
+                ids = THING_SECTOR_IDS
+            tag = ids.get(k, tag)
         if sp:
             body.append('special = %d;' % sp)
         if tag:
