@@ -87,6 +87,9 @@ const
   UdmfFriction = UdmfSpecialBase + 54;
   UdmfWind = UdmfSpecialBase + 55;
   UdmfCurrent = UdmfSpecialBase + 56;
+  { Static: Plane_Copy (Args: the tags whose planes the front floor,
+    front ceiling, back floor and back ceiling copy, 0 none). }
+  UdmfPlaneCopy = UdmfSpecialBase + 57;
   { ACS scripts (DoomAcs). Args as Hexen's: script, map (0 = this one),
     the script's arguments; ACS_ExecuteWithResult: script and four
     arguments; the locked ones: the lock in Args[4]. }
@@ -108,6 +111,9 @@ const
   UdmfThingActivate = UdmfSpecialBase + 35;
   UdmfDamageThing = UdmfSpecialBase + 36;
   UdmfHealThing = UdmfSpecialBase + 37;
+  { Thing_Move: Args the thing id (0 the activator), the id of the spot
+    to move to, 1 = no teleport fog. }
+  UdmfThingMove = UdmfSpecialBase + 38;
   { Pillars: Args tag, speed (eighths), then Build's height above the
     floor where floor and ceiling meet (0: halfway), Open's floor drop
     and ceiling rise (0: to the lowest floor / highest ceiling around). }
@@ -436,7 +442,7 @@ end;
 
 function UdmfThingSpecial(const Special: Integer): Boolean;
 begin
-  Result := (Special >= UdmfThingSpawn) and (Special <= UdmfHealThing);
+  Result := (Special >= UdmfThingSpawn) and (Special <= UdmfThingMove);
 end;
 
 function UdmfAcsSpecial(const Special: Integer): Boolean;
@@ -470,6 +476,8 @@ begin
     UdmfThingActivate: Result := 'Thing_Activate';
     UdmfDamageThing: Result := 'DamageThing';
     UdmfHealThing: Result := 'HealThing';
+    UdmfThingMove: Result := 'Thing_Move';
+    UdmfPlaneCopy: Result := 'Plane_Copy';
     UdmfAcsExecute: Result := 'ACS_Execute';
     UdmfAcsExecuteAlways: Result := 'ACS_ExecuteAlways';
     UdmfAcsExecuteWithResult: Result := 'ACS_ExecuteWithResult';
@@ -580,6 +588,16 @@ begin
     121: Result := 'Line_SetIdentification';
     156: Result := 'Line_SetPortal';
     160: Result := 'Sector_Set3dFloor';
+    73: Result := 'DamageThing';
+    118: Result := 'Plane_Copy';
+    119: Result := 'Thing_Damage';
+    125: Result := 'Thing_Move';
+    130: Result := 'Thing_Activate';
+    132: Result := 'Thing_Remove';
+    133: Result := 'Thing_Destroy';
+    135: Result := 'Thing_Spawn';
+    137: Result := 'Thing_SpawnNoFog';
+    248: Result := 'HealThing';
     181: Result := 'Plane_Align';
     182: Result := 'Line_Mirror';
     190: Result := 'Static_Init';
@@ -840,7 +858,7 @@ begin
   Trig := GenTrigger;
   Result.Trigger := Trig;
   if Monster then Result.Trigger := Result.Trigger + 8;
-  if not (Cross or Use or Impact) and not (Special in [100..103, 121, 181, 208..211, 218..220, 223, 224]) then
+  if not (Cross or Use or Impact) and not (Special in [100..103, 118, 121, 181, 208..211, 218..220, 223, 224]) then
   begin
     { No activation (only scripts could trigger it). }
     if Special <> 0 then
@@ -1005,9 +1023,10 @@ begin
       end;
     121: Result.Tag := 0;
     { Things }
-    135, 137, 132, 133, 119, 130, 73, 248:
+    135, 137, 132, 133, 119, 130, 73, 248, 125:
       begin
         case Special of
+          125: Result.Special := UdmfThingMove;
           135: Result.Special := UdmfThingSpawn;
           137: Result.Special := UdmfThingSpawnNoFog;
           132: Result.Special := UdmfThingRemove;
@@ -1038,6 +1057,12 @@ begin
     223, 224:
       begin
         if Special = 223 then Result.Special := UdmfScrollFloor else Result.Special := UdmfScrollCeiling;
+        Result.Tag := 0;
+        for I := 0 to 4 do Result.Args[I] := A[I];
+      end;
+    118:
+      begin
+        Result.Special := UdmfPlaneCopy;
         Result.Tag := 0;
         for I := 0 to 4 do Result.Args[I] := A[I];
       end;

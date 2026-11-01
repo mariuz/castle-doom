@@ -1469,8 +1469,9 @@ begin
     { Boom's point pusher and puller things are markers (DoomMap.Pushers). }
     if (T.TypeNum = 5001) or (T.TypeNum = 5002) then Continue;
     { ZDoom's map spots (9001, 9013) mark places for scripts and Thing_Spawn
-      (by their thing id, from FMap.Things). }
-    if (T.TypeNum = 9001) or (T.TypeNum = 9013) then Continue;
+      (by their thing id, from FMap.Things); its slope things (9500..9511)
+      act at load (DoomMap.BuildSlopes). }
+    if (T.TypeNum = 9001) or (T.TypeNum = 9013) or ((T.TypeNum >= 9500) and (T.TypeNum <= 9511)) then Continue;
     Info := FindThingInfo(T.TypeNum);
     if Info = nil then
     begin

@@ -1154,8 +1154,12 @@ begin
     W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-slopes.wad')));
     M := TDoomMap.Create(W, 'E1M1');
     try
-      AssertEquals('sloped floors', 2, M.SlopedFloors);
-      AssertEquals('sloped ceilings', 1, M.SlopedCeilings);
+      AssertEquals('sloped floors', 3, M.SlopedFloors);
+      AssertEquals('sloped ceilings', 2, M.SlopedCeilings);
+      { Plane_Copy (line 101) and CopyCeilingPlane (a 9511 in sector 130). }
+      AssertEquals('copied floor', M.FloorAt(141, 1600, 1000), M.FloorAt(173, 1600, 1000), 0.01);
+      AssertTrue('copied floor sloped', M.Sectors[173].FloorSlope.Sloped);
+      AssertEquals('copied ceiling', M.CeilingAt(99, 1670, 1080), M.CeilingAt(130, 1670, 1080), 0.01);
       AssertTrue('141 sloped', M.Sectors[141].FloorSlope.Sloped);
       AssertEquals('141 south end', 0, M.FloorAt(141, -224, 128), 0.01);
       AssertEquals('141 middle', 32, M.FloorAt(141, -224, 256), 0.01);

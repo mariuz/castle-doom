@@ -33,7 +33,9 @@ Plane_Align(0, 1) that slopes the ceiling of sector 99 (east of it) from
 141's 128 at the line down to 99's own 92 at its far side; the walls
 around them get lower and upper textures where they had none; the
 triangular sector 165 (floor 16) slopes down to 0 at its corner
-(-384, 64) by that vertex's zfloor.
+(-384, 64) by that vertex's zfloor; line 101 (Plane_Copy(9)) gives
+sector 173 141's floor plane and a CopyCeilingPlane thing (9511) in
+sector 130 gives it sector 99's (id 13) ceiling.
 
 udmf-things.wad, as udmf.wad with thing actions: a map spot (9001, id 20)
 in the start room at (-320, 320); line 829 a Thing_Spawn(20, 5, 64, 21)
@@ -45,7 +47,8 @@ guy at the spot (SpawnSpot, id 30) and a medikit at (-352, 192) (Spawn,
 id 31), prints "Spawned 2", gives a shotgun and 20 shells and prints
 "Shells 20"; sector 99 (id 12) gets a Pillar_Build(12, 16, 0) on line 830
 (floor and ceiling meet at 46), Sector_SetFriction(12, 200) on line 831
-and Sector_SetWind(12, 32, 64, 0) on line 833.
+and Sector_SetWind(12, 32, 64, 0) on line 833; line 900 is a
+Thing_Move(31, 20) (the medikit to the map spot).
 
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
@@ -93,11 +96,16 @@ ACS_SECTOR_IDS = {141: 9, 140: 10}
 ACS_LINES = {1052: (80, (2, 0, 7), 'u')}
 SLOPE_SECTORS = {141: {'floorplane_a': '0.0', 'floorplane_b': '-0.25', 'floorplane_c': '1.0',
                        'floorplane_d': '32.0'}}
-SLOPE_LINES = {836: (181, (0, 1), '')}
+SLOPE_LINES = {836: (181, (0, 1), ''), 101: (118, (9, 0, 0, 0), '')}
+SLOPE_SECTOR_IDS = {141: 9, 99: 13}
+# CopyCeilingPlane (9511) in sector 130 (the middle of the ring 173):
+# sector 99's (id 13) ceiling.
+SLOPE_THINGS = [(1670, 1080, 0, 9511, 0, (13,))]
 SLOPE_FILL = (99, 141)
 THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
                1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), ''),
-               830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), '')}
+               830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), ''),
+               900: (125, (31, 20, 0), 'u')}
 THING_SECTOR_IDS = {141: 9, 99: 12}
 THING_SPOT = (-320, 320, 9001, 20)
 # Vertex heights: the triangular sector 165 (floor 16) gets its corner
@@ -227,6 +235,8 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False):
                 ids = ACS_SECTOR_IDS
             if things:
                 ids = THING_SECTOR_IDS
+            if slopes:
+                ids = SLOPE_SECTOR_IDS
             tag = ids.get(k, tag)
         if sp:
             body.append('special = %d;' % sp)
@@ -244,8 +254,11 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False):
         things.append((TELEPORT_DEST[0], TELEPORT_DEST[1], 0, 14, 7, TELEPORT_DEST[2]))
     if things_on:
         things.append((THING_SPOT[0], THING_SPOT[1], 0, THING_SPOT[2], 7, THING_SPOT[3]))
-    if look:
-        for (x, y, angle, typ, height, args) in LOOK_LIGHTS:
+    extra = list(LOOK_LIGHTS) if look else []
+    if slopes:
+        extra += SLOPE_THINGS
+    if extra:
+        for (x, y, angle, typ, height, args) in extra:
             out.append('thing\n{\n%s\n}\n' % '\n'.join(
                 ['x = %d.0;' % x, 'y = %d.0;' % y, 'angle = %d;' % angle, 'type = %d;' % typ,
                  'height = %d.0;' % height] + ['arg%d = %d;' % (i, a) for i, a in enumerate(args)] +

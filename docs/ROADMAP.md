@@ -6,6 +6,13 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- UDMF, the rest (more): `Thing_Move` (`UdmfThingMove`: a thing by
+  id, or the player, to the first thing or map spot with the other id,
+  with teleport fog unless told not to) and `Plane_Copy` / ZDoom's
+  `CopyFloorPlane` / `CopyCeilingPlane` things (9510, 9511) in
+  `TDoomMap.BuildSlopes`. `udmf-slopes.wad` and `udmf-things.wad`
+  test them (`TestSlopes`, autotests `slopes`, `udmf-things`).
+
 - UDMF, the rest (more): pillars (`Pillar_Build` / `BuildAndCrush` /
   `Open` as DoomUdmf's `UdmfPillarBuild` / `Open`, a `mkPillar` mover
   taking floor and ceiling to their targets together, saved with
@@ -1385,8 +1392,8 @@ play.
 ## Suggested next three
 
 1. UDMF, the rest (S-M, see Content and formats): `Thing_Projectile`,
-   `Thing_Move`, `Plane_Copy`, the slope things, ACS's ACSF functions
-   and named scripts; polyobjects (L).
+   the slope things 9500-9503, ACS's ACSF functions and named scripts;
+   polyobjects (L).
 2. Rendering, 3D floors (L, `docs/RENDERING_ROADMAP.md` item 5):
    `Sector_Set3dFloor` solid and translucent slabs, drawn and collided.
 3. Map editor on UDMF maps (M): read `TEXTMAP` into `TDoomEditMap`

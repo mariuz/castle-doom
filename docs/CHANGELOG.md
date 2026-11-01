@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- UDMF maps: `Thing_Move`, `Plane_Copy` and ZDoom's plane-copying things (9510, 9511).
+
 ## v0.61.0 (2026-11-01)
 
 - UDMF maps: pillars (`Pillar_Build`, `Pillar_Open`), ice, mud, wind and currents from

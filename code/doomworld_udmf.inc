@@ -247,6 +247,65 @@ begin
           Inc(N);
         end;
       end;
+    UdmfThingMove:
+      begin
+        Spots := nil;
+        for Act in FActors do
+          if (A[1] <> 0) and (Act.Tid = A[1]) and not Act.Removed then
+          begin
+            SetLength(Spots, 1);
+            Spots[0] := Vector2(Act.DoomX, Act.DoomY);
+            Break;
+          end;
+        if Length(Spots) = 0 then
+          for I := 0 to High(FMap.Things) do
+            if (A[1] <> 0) and (FMap.Things[I].Tid = A[1]) then
+            begin
+              SetLength(Spots, 1);
+              Spots[0] := Vector2(FMap.Things[I].X, FMap.Things[I].Y);
+              Break;
+            end;
+        if Length(Spots) = 0 then Exit;
+        I := FMap.SectorAt(Spots[0].X, Spots[0].Y);
+        if I < 0 then Exit;
+        if A[0] = 0 then
+        begin
+          { The activator: the player. }
+          if A[2] = 0 then
+          begin
+            SpawnFog(Player.X, Player.Y, Player.Z, Player.Sector);
+            SpawnFog(Spots[0].X, Spots[0].Y, FMap.FloorAt(I, Spots[0].X, Spots[0].Y), I);
+          end;
+          PlayerTeleported := true;
+          PlayerTeleportX := Spots[0].X;
+          PlayerTeleportY := Spots[0].Y;
+          PlayerTeleportZ := FMap.FloorAt(I, Spots[0].X, Spots[0].Y);
+          PlayerTeleportAngle := Player.Angle;
+          Player.X := Spots[0].X;
+          Player.Y := Spots[0].Y;
+          Player.Z := PlayerTeleportZ;
+          Player.Sector := I;
+          FOldPlayerX := Player.X;
+          FOldPlayerY := Player.Y;
+          N := 1;
+        end else
+          for Act in FActors do
+            if Matches(Act) then
+            begin
+              if A[2] = 0 then
+              begin
+                SpawnFog(Act.DoomX, Act.DoomY, Act.DoomZ, Act.Sector);
+                SpawnFog(Spots[0].X, Spots[0].Y, FMap.FloorAt(I, Spots[0].X, Spots[0].Y), I);
+              end;
+              Act.DoomX := Spots[0].X;
+              Act.DoomY := Spots[0].Y;
+              Act.DoomZ := FMap.FloorAt(I, Spots[0].X, Spots[0].Y);
+              Act.Sector := I;
+              LightActor(Act, I);
+              Act.UpdateTransform;
+              Inc(N);
+            end;
+      end;
     UdmfDamageThing:
       begin
         DamagePlayer(Max(1, A[0]), nil);

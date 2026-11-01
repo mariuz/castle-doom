@@ -1125,6 +1125,24 @@ var
     Height := Z;
   end;
 
+  procedure CopyPlane(const Sec, Tag: Integer; const Ceiling: Boolean);
+  var
+    Src: Integer;
+  begin
+    if (Sec < 0) or (Tag = 0) then Exit;
+    Src := FindSectorFromTag(Tag, -1);
+    if (Src < 0) or (Src = Sec) then Exit;
+    if Ceiling then
+    begin
+      Sectors[Sec].CeilingSlope := Sectors[Src].CeilingSlope;
+      Sectors[Sec].CeilingHeight := Sectors[Src].CeilingHeight;
+    end else
+    begin
+      Sectors[Sec].FloorSlope := Sectors[Src].FloorSlope;
+      Sectors[Sec].FloorHeight := Sectors[Src].FloorHeight;
+    end;
+  end;
+
   procedure AddVertex(const V: Integer);
   var
     J: Integer;
@@ -1201,6 +1219,19 @@ begin
       if Ceiling then Sectors[Sec].CeilingSlope := S else Sectors[Sec].FloorSlope := S;
     end;
   end;
+
+  { Plane_Copy lines and ZDoom's copy things (9510 floor, 9511 ceiling,
+    arg0 the tag): the plane of the first sector with that tag. }
+  for L := 0 to High(Linedefs) do
+    if Linedefs[L].Special = UdmfPlaneCopy then
+      for Which := 0 to 3 do
+      begin
+        if Which < 2 then Sec := Linedefs[L].FrontSector else Sec := Linedefs[L].BackSector;
+        CopyPlane(Sec, Linedefs[L].Args[Which], Odd(Which));
+      end;
+  for I := 0 to High(Things) do
+    if (Things[I].TypeNum = 9510) or (Things[I].TypeNum = 9511) then
+      CopyPlane(SectorAt(Things[I].X, Things[I].Y), Things[I].Args[0], Things[I].TypeNum = 9511);
 
   { Vertex heights: a triangular sector's floor or ceiling through its
     three corners (each at its zfloor / zceiling, else the sector's

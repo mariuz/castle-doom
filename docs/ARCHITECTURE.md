@@ -281,7 +281,9 @@ works unchanged and moves the whole plane. `BuildSlopes` runs after the
 UDMF links: UDMF's plane equations are re-origined at a vertex of the
 sector, `Plane_Align` lines (translated to the static `UdmfPlaneAlign`)
 put the plane through the line at the neighbour's height and through
-the sector's farthest vertex at its own, and a triangular sector with
+the sector's farthest vertex at its own, `Plane_Copy` lines and the
+9510 / 9511 things copy another sector's plane (its gradient and
+origin height), and a triangular sector with
 `zfloor` / `zceiling` on its vertices gets the plane through its
 corners. Everything that needs a height at a place asks
 `FloorAt(Sec, X, Y)` / `CeilingAt`: `DoomGeometry` for each flat
