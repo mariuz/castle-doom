@@ -119,6 +119,13 @@ const
     and ceiling rise (0: to the lowest floor / highest ceiling around). }
   UdmfPillarBuild = UdmfSpecialBase + 7;
   UdmfPillarOpen = UdmfSpecialBase + 8;
+  { Platforms that go and come back: Args tag, speed (eighths), delay
+    (tics), height (eighths of 8 units, by value); up to the highest /
+    the next higher floor around, or down / up by the height. }
+  UdmfPlatUpWaitDown = UdmfSpecialBase + 9;
+  UdmfPlatUpNearestWaitDown = UdmfSpecialBase + 10;
+  UdmfPlatDownByValue = UdmfSpecialBase + 11;
+  UdmfPlatUpByValue = UdmfSpecialBase + 12;
 
   { UDMF line activation flags (TUdmfLine.Activation). }
   UaPlayerCross = 1;
@@ -467,6 +474,10 @@ begin
     UdmfCurrent: Result := 'Sector_SetCurrent';
     UdmfPillarBuild: Result := 'Pillar_Build';
     UdmfPillarOpen: Result := 'Pillar_Open';
+    UdmfPlatUpWaitDown: Result := 'Plat_UpWaitDownStay';
+    UdmfPlatUpNearestWaitDown: Result := 'Plat_UpNearestWaitDownStay';
+    UdmfPlatDownByValue: Result := 'Plat_DownByValue';
+    UdmfPlatUpByValue: Result := 'Plat_UpByValue';
     UdmfScrollCeiling: Result := 'Scroll_Ceiling';
     UdmfThingSpawn: Result := 'Thing_Spawn';
     UdmfThingSpawnNoFog: Result := 'Thing_SpawnNoFog';
@@ -1047,6 +1058,16 @@ begin
           else Result.Special := UdmfCurrent;
         end;
         Result.Tag := 0;
+        for I := 0 to 4 do Result.Args[I] := A[I];
+      end;
+    64, 172, 63, 65:
+      begin
+        case Special of
+          64: Result.Special := UdmfPlatUpWaitDown;
+          172: Result.Special := UdmfPlatUpNearestWaitDown;
+          63: Result.Special := UdmfPlatDownByValue;
+          else Result.Special := UdmfPlatUpByValue;
+        end;
         for I := 0 to 4 do Result.Args[I] := A[I];
       end;
     29, 30, 94:

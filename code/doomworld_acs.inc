@@ -750,6 +750,7 @@ var
   L: TDoomLinedef;
   Act: TAcsActivator;
   Inst: TAcsInstance;
+  Number: Integer;
 begin
   Result := false;
   L := FMap.Linedefs[Line];
@@ -759,6 +760,14 @@ begin
     Exit;
   end;
   if ByMonster then Act := aaMonster else Act := aaPlayer;
+  { UDMF's arg0str: the script by name. }
+  Number := L.Args[0];
+  if (Line <= High(FMap.LineArg0Str)) and (FMap.LineArg0Str[Line] <> '') then
+    if not FAcs.Module.NamedScript(FMap.LineArg0Str[Line], Number) then
+    begin
+      AcsLogOnce(Format('Script "%s" (no such name)', [FMap.LineArg0Str[Line]]));
+      Exit;
+    end;
   if (L.Special <> UdmfAcsExecuteWithResult) and not AcsThisMap(L.Args[1]) then
   begin
     AcsLogOnce('ACS line for another map');
@@ -769,28 +778,28 @@ begin
       begin
         if (L.Special = UdmfAcsLockedExecute) and not AcsCheckLock(Line, L.Args[4]) then Exit;
         if L.Special = UdmfAcsLockedExecute then
-          Inst := FAcs.StartScript(L.Args[0], [L.Args[2], L.Args[3]], Act, Line, FActivationSide = 1, false)
+          Inst := FAcs.StartScript(Number, [L.Args[2], L.Args[3]], Act, Line, FActivationSide = 1, false)
         else
-          Inst := FAcs.StartScript(L.Args[0], [L.Args[2], L.Args[3], L.Args[4]], Act, Line, FActivationSide = 1,
+          Inst := FAcs.StartScript(Number, [L.Args[2], L.Args[3], L.Args[4]], Act, Line, FActivationSide = 1,
             L.Special = UdmfAcsExecuteAlways);
         Result := Inst <> nil;
       end;
     UdmfAcsExecuteWithResult:
-      Result := FAcs.StartScript(L.Args[0], [L.Args[1], L.Args[2], L.Args[3], L.Args[4]], Act, Line,
+      Result := FAcs.StartScript(Number, [L.Args[1], L.Args[2], L.Args[3], L.Args[4]], Act, Line,
         FActivationSide = 1, true) <> nil;
     UdmfAcsTerminate:
       begin
-        FAcs.TerminateScript(L.Args[0]);
+        FAcs.TerminateScript(Number);
         Result := true;
       end;
     UdmfAcsSuspend:
       begin
-        FAcs.SuspendScript(L.Args[0]);
+        FAcs.SuspendScript(Number);
         Result := true;
       end;
   end;
   if Result then
-    WritelnLog('Acs', 'line %d: %s %d', [Line, UdmfSpecialName(L.Special), L.Args[0]]);
+    WritelnLog('Acs', 'line %d: %s %d', [Line, UdmfSpecialName(L.Special), Number]);
 end;
 
 { Sectors scripts can move or re-texture (their constant calls), for

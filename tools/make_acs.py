@@ -256,7 +256,7 @@ def tests_program(layout):
     return code, scripts, funcs, S
 
 
-SPAWN_STRINGS = ['ShotgunGuy', 'Medikit', 'Spawned ', 'Shotgun', 'Shell', 'Shells ']
+SPAWN_STRINGS = ['ShotgunGuy', 'Medikit', 'Spawned ', 'Shotgun', 'Shell', 'Shells ', 'Hello by name']
 
 
 def spawn_program(layout):
@@ -303,7 +303,13 @@ def spawn_program(layout):
     a.op('PRINTNUMBER')
     a.op('ENDPRINT')
     a.op('TERMINATE')
-    return a.finish(), [(1, 1, a.labels['s1'], 0)], [], S
+    # Script "Greet" (named: number -1), closed: prints "Hello by name".
+    a.label('greet')
+    a.op('BEGINPRINT')
+    a.print_str('Hello by name', S)
+    a.op('ENDPRINT')
+    a.op('TERMINATE')
+    return a.finish(), [(1, 1, a.labels['s1'], 0), (-1, 0, a.labels['greet'], 0)], [], S, ['Greet']
 
 
 def chunk(cid, data):
@@ -327,7 +333,9 @@ def string_table(strings, encrypted):
 
 def behavior(layout, program=None):
     """A BEHAVIOR lump of the test program in one layout."""
-    code, scripts, funcs, strings = program or tests_program(layout)
+    program = program or tests_program(layout)
+    code, scripts, funcs, strings = program[:4]
+    names = program[4] if len(program) > 4 else []
     if layout == 'old':
         out = bytearray(b'ACS\0' + b'\0\0\0\0') + code
         str_offs = []
@@ -353,6 +361,15 @@ def behavior(layout, program=None):
     chunks += chunk(b'FUNC', b''.join(struct.pack('<BBBBi', argc, loc, ret, 0, addr)
                                       for (argc, loc, ret, addr) in funcs))
     chunks += string_table(strings, layout == 'E')
+    if names:
+        # SNAM: count, offsets from the chunk's data, the names.
+        head = 4 + 4 * len(names)
+        offs, blob = [], bytearray()
+        for n in names:
+            offs.append(head + len(blob))
+            blob += n.encode('latin-1') + b'\0'
+        chunks += chunk(b'SNAM', struct.pack('<i', len(names)) + b''.join(struct.pack('<i', o) for o in offs) +
+                        bytes(blob))
     # Map variable 1 starts at 100; map variable 2 is a 4-element array.
     chunks += chunk(b'MINI', struct.pack('<ii', 1, 100))
     chunks += chunk(b'ARAY', struct.pack('<ii', 2, 4))

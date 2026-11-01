@@ -394,7 +394,7 @@ TESTS = [
     ('slopes', 'E1M1',
      'Y,W:0.3,G:-416:256,A:0,W:0.3,S,G:-224:150,A:90,W:0.3,SAVE:1,S,F:1,W:0.5,SAVE:2,G:-224:150,A:90,'
      'P:3001:150,W:0.2,SAVE:3,G:-224:256,A:0,LOOK:30,W:0.3,S,Q',
-     [r'Map: E1M1: slopes: 3 floors, 2 ceilings'],
+     [r'Map: E1M1: slopes: 5 floors, 2 ceilings'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-slopes.wad'), '--fixed-step'],
      lambda config: check_slopes(config)),
     # Thing actions and floor scrollers (udmf-things.wad): ACS's SpawnSpot
@@ -402,14 +402,16 @@ TESTS = [
     # / Thing_Remove by line, Scroll_Floor carrying the player east.
     ('udmf-things', 'E1M1',
      'Y,W:0.5,SAVE:1,LINE:829,W:0.5,G:-416:256,A:45,S,SAVE:2,LINE:1045,W:1,SAVE:3,LINE:1046,W:0.2,LINE:1052,'
-     'W:0.3,SAVE:4,G:-224:200,W:1,SAVE:5,LINE:830,W:2,SAVE:6,LINE:900,W:0.3,SAVE:7,Q',
+     'W:0.3,SAVE:4,G:-224:200,W:1,SAVE:5,LINE:830,W:2,SAVE:6,LINE:900,W:0.3,SAVE:7,LINE:1047,W:0.3,LINE:1048,'
+     'W:0.6,SAVE:8,W:3,SAVE:9,Q',
      [r'Acs: SpawnSpot ShotgunGuy at things 20: 1', r'Acs: Spawn Medikit at \(-352, 192\): 1',
       r'Message: Spawned 2', r'Udmf: Thing_Spawn \(20, 5, 64, 21\): 1 things',
       r'Udmf: Thing_Damage \(21, 1000, 0, 0\): 1 things', r'Udmf: Thing_SpawnNoFog \(20, 4, 0, 22\): 1 things',
       r'Udmf: Thing_Remove \(22, 0, 0, 0\): 1 things',
       r'Map: E1M1: scrollers: 0 walls, 1 floors, 0 ceilings, 1 carrying floors',
       r'Map: E1M1: 1 friction lines, 1 pushers', r'Message: Shells 20',
-      r'Udmf: line 830: Pillar_Build, tag 12, 16, 0', r'Udmf: Thing_Move \(31, 20, 0, 0\): 1 things'],
+      r'Udmf: line 830: Pillar_Build, tag 12, 16, 0', r'Udmf: Thing_Move \(31, 20, 0, 0\): 1 things',
+      r'Acs: line 1047: ACS_Execute -1', r'Message: Hello by name', r'Udmf: line 1048: Plat_UpByValue, tag 9'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad'), '--fixed-step'],
      lambda config: check_udmf_things(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
@@ -716,7 +718,7 @@ def check_slopes(config):
 def check_udmf_things(config):
     """tools/testdata/udmf-things.wad: things by thing id, ACS's
     inventory and a pillar in the saves."""
-    saves = [save_json(config, n) for n in range(1, 8)]
+    saves = [save_json(config, n) for n in range(1, 10)]
 
     def tid(save, t):
         return [a for a in save['actors'] if a.get('tid') == t]
@@ -734,6 +736,8 @@ def check_udmf_things(config):
         'Pillar_Build: %s / %s' % (saves[5]['sectorFloor'][99], saves[5]['sectorCeiling'][99])
     kit = tid(saves[6], 31)
     assert kit and (round(kit[0]['x']), round(kit[0]['y'])) == (-320, 320), 'Thing_Move: %s' % kit
+    assert (saves[7]['sectorFloor'][141], saves[8]['sectorFloor'][141]) == (32, 0), \
+        'Plat_UpByValue: %s, %s' % (saves[7]['sectorFloor'][141], saves[8]['sectorFloor'][141])
 
 
 def check_carry(config):

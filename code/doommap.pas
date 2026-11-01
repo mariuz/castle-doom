@@ -315,6 +315,9 @@ type
     Behavior: TBytes;
     { UDMF vertex heights (zfloor / zceiling), NaN where none is given. }
     VertexZFloor, VertexZCeiling: array of Single;
+    { UDMF lines' arg0str (a named ACS script for the ACS_* actions), ''
+      for none. }
+    LineArg0Str: array of String;
     { How many floors and ceilings are sloped. }
     SlopedFloors, SlopedCeilings: Integer;
 
@@ -936,6 +939,11 @@ begin
             Linedefs[NL].Args[J] := H.Args[J];
           Linedefs[NL].Trigger := H.Trigger;
           Linedefs[NL].Activation := Act;
+          if UdmfHas(B^, 'arg0str') then
+          begin
+            if Length(LineArg0Str) < Length(Linedefs) then SetLength(LineArg0Str, Length(Linedefs));
+            LineArg0Str[NL] := UdmfStr(B^, 'arg0str');
+          end;
           if H.Special <> 0 then Inc(Translated);
           if H.Unsupported <> '' then
             Unsupported.Add(H.Unsupported);
@@ -1111,6 +1119,7 @@ var
   Verts: array of Integer;
   P: array [0..2] of TVector3;
   Ceiling, HasZ: Boolean;
+  T: TDoomThing;
 
   procedure Reorigin(var Slope: TSectorSlope; var Height: Single; const Sec: Integer);
   var
@@ -1232,6 +1241,73 @@ begin
   for I := 0 to High(Things) do
     if (Things[I].TypeNum = 9510) or (Things[I].TypeNum = 9511) then
       CopyPlane(SectorAt(Things[I].X, Things[I].Y), Things[I].Args[0], Things[I].TypeNum = 9511);
+
+  { ZDoom's slope things: 9500 / 9501 (SlopeFloorPointLine / Ceiling:
+    the plane of the sector on the thing's side of the lines with id
+    arg0 through those lines at the sector's height and through the
+    thing, its height above the plane), 9502 / 9503 (SetFloorSlope /
+    SetCeilingSlope: through the thing at its height, rising towards its
+    angle by arg0 degrees). }
+  for I := 0 to High(Things) do
+  begin
+    T := Things[I];
+    if (T.TypeNum < 9500) or (T.TypeNum > 9503) then Continue;
+    Ceiling := Odd(T.TypeNum);
+    if T.TypeNum <= 9501 then
+    begin
+      for L := 0 to High(Linedefs) do
+      begin
+        if (Linedefs[L].Id <> T.Args[0]) or (T.Args[0] = 0) then Continue;
+        if PointOnLineSide(T.X, T.Y, L) = 0 then Sec := Linedefs[L].FrontSector else Sec := Linedefs[L].BackSector;
+        if Sec < 0 then Continue;
+        V1 := Vertices[Linedefs[L].V1];
+        V2 := Vertices[Linedefs[L].V2];
+        if Ceiling then
+        begin
+          P[0] := Vector3(V1.X, V1.Y, CeilingAt(Sec, V1.X, V1.Y));
+          P[1] := Vector3(V2.X, V2.Y, CeilingAt(Sec, V2.X, V2.Y));
+          P[2] := Vector3(T.X, T.Y, CeilingAt(Sec, T.X, T.Y) + T.Z);
+        end else
+        begin
+          P[0] := Vector3(V1.X, V1.Y, FloorAt(Sec, V1.X, V1.Y));
+          P[1] := Vector3(V2.X, V2.Y, FloorAt(Sec, V2.X, V2.Y));
+          P[2] := Vector3(T.X, T.Y, FloorAt(Sec, T.X, T.Y) + T.Z);
+        end;
+        if not SlopeFromPoints(P[0], P[1], P[2], S) then Continue;
+        S.OX := T.X;
+        S.OY := T.Y;
+        if Ceiling then
+        begin
+          Sectors[Sec].CeilingSlope := S;
+          Sectors[Sec].CeilingHeight := P[2].Z;
+        end else
+        begin
+          Sectors[Sec].FloorSlope := S;
+          Sectors[Sec].FloorHeight := P[2].Z;
+        end;
+      end;
+    end else
+    begin
+      Sec := SectorAt(T.X, T.Y);
+      if Sec < 0 then Continue;
+      Dist := Tan(DegToRad(Max(-89, Min(89, T.Args[0]))));
+      S := Default(TSectorSlope);
+      S.DX := Dist * Cos(DegToRad(T.Angle));
+      S.DY := Dist * Sin(DegToRad(T.Angle));
+      S.Sloped := Abs(Dist) > 1e-7;
+      S.OX := T.X;
+      S.OY := T.Y;
+      if Ceiling then
+      begin
+        Sectors[Sec].CeilingHeight := CeilingAt(Sec, T.X, T.Y) + T.Z;
+        Sectors[Sec].CeilingSlope := S;
+      end else
+      begin
+        Sectors[Sec].FloorHeight := FloorAt(Sec, T.X, T.Y) + T.Z;
+        Sectors[Sec].FloorSlope := S;
+      end;
+    end;
+  end;
 
   { Vertex heights: a triangular sector's floor or ceiling through its
     three corners (each at its zfloor / zceiling, else the sector's

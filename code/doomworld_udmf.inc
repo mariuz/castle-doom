@@ -91,6 +91,17 @@ begin
           H := L.Args[2];
         DoCeiling(S, H, Speed, false);
       end;
+    UdmfPlatUpWaitDown, UdmfPlatUpNearestWaitDown, UdmfPlatDownByValue, UdmfPlatUpByValue:
+      while NextSector(S) do
+      begin
+        case L.Special of
+          UdmfPlatUpWaitDown: H := Max(FMap.Sectors[S].FloorHeight, FMap.HighestFloorSurrounding(S));
+          UdmfPlatUpNearestWaitDown: H := FMap.NextHighestFloor(S, FMap.Sectors[S].FloorHeight);
+          UdmfPlatDownByValue: H := FMap.Sectors[S].FloorHeight - L.Args[3] * 8;
+          else H := FMap.Sectors[S].FloorHeight + L.Args[3] * 8;
+        end;
+        DoLiftTo(S, H, FMap.Sectors[S].FloorHeight, Speed, Max(1, L.Args[2]), false);
+      end;
     UdmfPillarBuild:
       while NextSector(S) do
       begin

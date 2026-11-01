@@ -6,6 +6,14 @@ L = several days). Items inside a section are in suggested order.
 
 ## Done since the first release
 
+- UDMF, the rest (more): the slope things 9500-9503 (`BuildSlopes`),
+  the returning platforms (`Plat_UpWaitDownStay`,
+  `Plat_UpNearestWaitDownStay`, `Plat_DownByValue`, `Plat_UpByValue`
+  as `UdmfPlat*` lifts) and named ACS scripts (the `SNAM` chunk:
+  numbers -1, -2...; `TAcsModule.NamedScript`; a UDMF line's
+  `arg0str`, `TDoomMap.LineArg0Str`; `SCRIPTWAITNAMED`).
+  `udmf-slopes.wad` and `udmf-things.wad` cover them.
+
 - UDMF, the rest (more): `Thing_Move` (`UdmfThingMove`: a thing by
   id, or the player, to the first thing or map spot with the other id,
   with teleport fog unless told not to) and `Plane_Copy` / ZDoom's
@@ -1347,7 +1355,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; left are ACS's actor functions (`CALLFUNC`'s ACSF functions), named scripts and libraries via `LOADACS`, the Hexen actions still logged as not supported (`Plat_UpWaitDownStay`, `Thing_Projectile`, polyobjects), the slope things 9500-9503, thing specials (a thing's own action on death), the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
+| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; left are ACS's actor functions (`CALLFUNC`'s ACSF functions, `ACS_NamedExecute` from scripts) and libraries via `LOADACS`, the Hexen actions still logged as not supported (`Thing_Projectile`, polyobjects), thing specials (a thing's own action on death), the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
@@ -1392,8 +1400,8 @@ play.
 ## Suggested next three
 
 1. UDMF, the rest (S-M, see Content and formats): `Thing_Projectile`,
-   the slope things 9500-9503, ACS's ACSF functions and named scripts;
-   polyobjects (L).
+   ACS's ACSF functions (`CALLFUNC`) and `ACS_NamedExecute` from
+   scripts; polyobjects (L).
 2. Rendering, 3D floors (L, `docs/RENDERING_ROADMAP.md` item 5):
    `Sector_Set3dFloor` solid and translucent slabs, drawn and collided.
 3. Map editor on UDMF maps (M): read `TEXTMAP` into `TDoomEditMap`

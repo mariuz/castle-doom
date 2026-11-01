@@ -93,6 +93,8 @@ type
     Scripts: array of TAcsScriptInfo;
     Functions: array of TAcsFunction;
     Strings: array of String;
+    { Named scripts (SNAM): name I is script number -1 - I. }
+    ScriptNames: array of String;
     MapVarInit: array [0..AcsMapVarCount - 1] of Integer;
     { Map arrays: ARAY's (map variable, size) pairs and AINI's values. }
     ArrayVar, ArraySize: array of Integer;
@@ -102,6 +104,8 @@ type
     constructor Create(const AData: TBytes);
     function FormatName: String;
     function FindScript(const Number: Integer): Integer;
+    { A named script's number; false when there is none by that name. }
+    function NamedScript(const Name: String; out Number: Integer): Boolean;
     { The p-code reader of this format at Ofs (moved past what it read). }
     function ReadCode(var Ofs: Integer): Integer;
     function ReadByte(var Ofs: Integer): Integer;
@@ -538,6 +542,18 @@ begin
     C := FindChunk('STRE');
     if C >= 0 then ReadStringTable(C, true);
   end;
+  { SNAM: count, offsets from the chunk's data, the names. }
+  C := FindChunk('SNAM');
+  if C >= 0 then
+  begin
+    N := Int(C + 8);
+    if (N >= 0) and (C + 12 + N * 4 <= C + 8 + ChunkSize(C)) then
+    begin
+      SetLength(ScriptNames, N);
+      for I := 0 to N - 1 do
+        ScriptNames[I] := CString(C + 8 + Int(C + 12 + I * 4));
+    end;
+  end;
   C := FindChunk('FUNC');
   if C >= 0 then
   begin
@@ -597,6 +613,20 @@ begin
   for I := 0 to High(Scripts) do
     if Scripts[I].Number = Number then Exit(I);
   Result := -1;
+end;
+
+function TAcsModule.NamedScript(const Name: String; out Number: Integer): Boolean;
+var
+  I: Integer;
+begin
+  for I := 0 to High(ScriptNames) do
+    if SameText(ScriptNames[I], Name) then
+    begin
+      Number := -1 - I;
+      Exit(true);
+    end;
+  Number := 0;
+  Result := false;
 end;
 
 function TAcsModule.RawByte(var Ofs: Integer): Integer;
@@ -1771,9 +1801,14 @@ begin
       { No polyobjects: their waits end at once. }
       PcdPolywait: Drop(1);
       PcdPolywaitdirect: M.ReadWord(I.PC);
-      PcdScriptwait, PcdScriptwaitdirect:
+      PcdScriptwait, PcdScriptwaitdirect, PcdScriptwaitnamed:
         begin
-          if Op = PcdScriptwait then A := Pop else A := M.ReadWord(I.PC);
+          if Op = PcdScriptwait then A := Pop
+          else if Op = PcdScriptwaitnamed then
+          begin
+            if not M.NamedScript(StringOf(Pop), A) then A := 0;
+          end else
+            A := M.ReadWord(I.PC);
           I.StateData := A;
           if Running(A) then I.State := asScriptWait else I.State := asScriptWaitPre;
         end;

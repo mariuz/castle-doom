@@ -35,7 +35,9 @@ around them get lower and upper textures where they had none; the
 triangular sector 165 (floor 16) slopes down to 0 at its corner
 (-384, 64) by that vertex's zfloor; line 101 (Plane_Copy(9)) gives
 sector 173 141's floor plane and a CopyCeilingPlane thing (9511) in
-sector 130 gives it sector 99's (id 13) ceiling.
+sector 130 gives it sector 99's (id 13) ceiling; a 9500 thing slopes
+sector 29's floor from line 1049 (id 50) up to 32 at (-560, 240) and a
+9502 the triangle 169's up eastward at 30 degrees.
 
 udmf-things.wad, as udmf.wad with thing actions: a map spot (9001, id 20)
 in the start room at (-320, 320); line 829 a Thing_Spawn(20, 5, 64, 21)
@@ -48,7 +50,10 @@ id 31), prints "Spawned 2", gives a shotgun and 20 shells and prints
 "Shells 20"; sector 99 (id 12) gets a Pillar_Build(12, 16, 0) on line 830
 (floor and ceiling meet at 46), Sector_SetFriction(12, 200) on line 831
 and Sector_SetWind(12, 32, 64, 0) on line 833; line 900 is a
-Thing_Move(31, 20) (the medikit to the map spot).
+Thing_Move(31, 20) (the medikit to the map spot), line 1047 an
+ACS_Execute of the named script "Greet" (arg0str) and line 1048 a
+Plat_UpByValue(9, 16, 35, 4) (sector 141 up 32 and back after a
+second).
 
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
@@ -100,12 +105,18 @@ SLOPE_LINES = {836: (181, (0, 1), ''), 101: (118, (9, 0, 0, 0), '')}
 SLOPE_SECTOR_IDS = {141: 9, 99: 13}
 # CopyCeilingPlane (9511) in sector 130 (the middle of the ring 173):
 # sector 99's (id 13) ceiling.
-SLOPE_THINGS = [(1670, 1080, 0, 9511, 0, (13,))]
+SLOPE_THINGS = [(1670, 1080, 0, 9511, 0, (13,)),
+                # SlopeFloorPointLine: sector 29 from line 1049 (id 50) up to
+                # 32 above its floor at (-560, 240).
+                (-560, 240, 0, 9500, 32, (50,)),
+                # SetFloorSlope: the triangle 169 rising east at 30 degrees.
+                (-373, 445, 0, 9502, 0, (30,))]
+SLOPE_LINE_IDS = {1049: 50}
 SLOPE_FILL = (99, 141)
 THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
                1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), ''),
                830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), ''),
-               900: (125, (31, 20, 0), 'u')}
+               900: (125, (31, 20, 0), 'u'), 1047: (80, ('Greet',), 'u'), 1048: (65, (9, 16, 35, 4), 'u')}
 THING_SECTOR_IDS = {141: 9, 99: 12}
 THING_SPOT = (-320, 320, 9001, 20)
 # Vertex heights: the triangular sector 165 (floor 16) gets its corner
@@ -160,6 +171,8 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False):
         if sb != 0xFFFF:
             body.append('sideback = %d;' % sb)
         body += ['%s = true;' % n for n in flag_names(fl)]
+        if hexen and slopes and k in SLOPE_LINE_IDS:
+            body.append('id = %d;' % SLOPE_LINE_IDS[k])
         if hexen:
             act = DOOM_TO_HEXEN.get(sp) if sp else None
             if k in EXTRA_LINES:
@@ -175,7 +188,9 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False):
                 body.append('special = %d;' % special)
                 for i, a in enumerate(args):
                     v = tag if a == 'tag' else a
-                    if v:
+                    if isinstance(v, str):
+                        body.append('arg%dstr = "%s";' % (i, v))
+                    elif v:
                         body.append('arg%d = %d;' % (i, v))
                 if 'c' in how:
                     body.append('playercross = true;')

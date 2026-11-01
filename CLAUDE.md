@@ -939,7 +939,9 @@ autotest only checks the library loads.
   (floorplane fields), slopes sector 99's ceiling by a `Plane_Align`
   on line 836 and corner (-384, 64) of the triangular sector 165 by
   `zfloor`, and copies planes to sectors 173 (`Plane_Copy` on line 101)
-  and 130 (a 9511 thing); log `Map: E1M1: slopes: 3 floors, 2 ceilings`.
+  and 130 (a 9511 thing), and slopes sectors 29 (a 9500 thing from line
+  1049, id 50) and 169 (a 9502 thing); log `Map: E1M1: slopes: 5
+  floors, 2 ceilings`.
   `G:-224:150,A:90,F:1` walks up the ramp (the player's `z` in a save
   is about (y - 128) / 4); autotest `slopes` (goldens), unit test
   `TestSlopes`. Code that needs a height at a place uses
@@ -955,7 +957,10 @@ autotest only checks the library loads.
   (`Message: Shells 20`); `LINE:830` builds a pillar in sector 99 (id
   12: floor and ceiling meet at 46), which also has friction and wind
   (log `1 friction lines, 1 pushers`); `LINE:900` moves the medikit
-  to the spot (`Thing_Move`). Saves keep actors' ids (`tid`)
+  to the spot (`Thing_Move`), `LINE:1047` runs the named script
+  "Greet" (`arg0str`; log `Acs: line 1047: ACS_Execute -1`, `Message:
+  Hello by name`) and `LINE:1048` raises sector 141 by 32 and back
+  (`Plat_UpByValue`). Saves keep actors' ids (`tid`)
   and pillars' ceiling targets; autotest `udmf-things` (golden).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's

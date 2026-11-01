@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- UDMF maps: `Thing_Move`, `Plane_Copy` and ZDoom's plane-copying things (9510, 9511).
+- UDMF maps: `Thing_Move`, `Plane_Copy` and ZDoom's plane-copying things (9510, 9511), the
+  slope things 9500-9503, platforms that go up and come back (`Plat_UpWaitDownStay`,
+  `Plat_UpNearestWaitDownStay`, `Plat_DownByValue`, `Plat_UpByValue`), and named ACS
+  scripts (lines naming one in `arg0str`, `ScriptWait` by name).
 
 ## v0.61.0 (2026-11-01)
 
