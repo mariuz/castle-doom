@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.61.0 (2026-11-01)
 
 - UDMF maps: pillars (`Pillar_Build`, `Pillar_Open`), ice, mud, wind and currents from
   `Sector_SetFriction`, `Sector_SetWind` and `Sector_SetCurrent`; ACS scripts give, take and
