@@ -6,6 +6,10 @@
   slope things 9500-9503, platforms that go up and come back (`Plat_UpWaitDownStay`,
   `Plat_UpNearestWaitDownStay`, `Plat_DownByValue`, `Plat_UpByValue`), and named ACS
   scripts (lines naming one in `arg0str`, `ScriptWait` by name).
+- ACS: ZDoom's built-in functions scripts call most (`ACS_NamedExecute` and its kin, `Sqrt`,
+  `FixedSqrt`, `VectorLength`, `Floor` / `Round` / `Ceil`, `strcmp`, `StrLeft` / `StrRight` /
+  `StrMid`, `GetChar`, `CheckSight`, `UniqueTID`, `IsTIDUsed`, actor velocities,
+  `DamageActor`, `GetWeapon`, the forced spawns, `PlaySound`).
 
 ## v0.61.0 (2026-11-01)
 

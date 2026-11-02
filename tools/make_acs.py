@@ -13,7 +13,8 @@ layouts the game reads:
             encrypted table);
 - 'e':      "ACSe", byte p-codes and byte arguments.
 
-tests_program() is the program of tools/testdata/acs.wad (one lump per
+functions_program() is acs.wad's ACS_FUNC (CALLFUNC's functions and a
+named script). tests_program() is the program of tools/testdata/acs.wad (one lump per
 layout, for the unit test TestAcs) and of udmf-acs.wad's BEHAVIOR
 (tools/make_udmf_wad.py):
 
@@ -47,6 +48,16 @@ def pcodes():
 
 
 P = pcodes()
+
+
+def acsf():
+    """CALLFUNC's function numbers (AcsfName -> number) from the include."""
+    path = os.path.join(HERE, '..', 'code', 'doomacs_pcodes.inc')
+    with open(path) as f:
+        return {m.group(1): int(m.group(2)) for m in re.finditer(r'^  Acsf(\w+) = (\d+);', f.read(), re.M)}
+
+
+F = acsf()
 
 
 class Asm:
@@ -86,6 +97,15 @@ class Asm:
             self.code.append(v & 255)
         else:
             self.code += struct.pack('<i', v)
+
+    def nshort(self, v):
+        """NEXTSHORT: 16 bits in ACSe, else 32."""
+        self.code += struct.pack('<h' if self.little else '<i', v)
+
+    def callfunc(self, name, argc):
+        self.op('CALLFUNC')
+        self.nbyte(argc)
+        self.nshort(F[name])
 
     def raw(self, *bs):
         self.code += bytes(b & 255 for b in bs)
@@ -312,6 +332,47 @@ def spawn_program(layout):
     return a.finish(), [(1, 1, a.labels['s1'], 0), (-1, 0, a.labels['greet'], 0)], [], S, ['Greet']
 
 
+FUNC_STRINGS = ['abc', 'abd', 'ABC', 'Hello', 'Other', 'Other ']
+
+
+def functions_program(layout):
+    """acs.wad's ACS_FUNC: an open script printing CALLFUNC results (Sqrt
+    144, FixedSqrt 4.0, VectorLength (3.0, 4.0), strcmp / stricmp, StrMid,
+    Round 2.5: "12", "2", "5", "-10", "ell", "3") and running the named
+    script "Other" with 7 (ACS_NamedExecute), which prints "Other 7"."""
+    a = Asm(layout)
+    S = FUNC_STRINGS
+
+    def show(*steps):
+        a.op('BEGINPRINT')
+        for st in steps:
+            st()
+        a.op('ENDPRINT')
+    a.label('s1')
+    show(lambda: a.push(144), lambda: a.callfunc('Sqrt', 1), lambda: a.op('PRINTNUMBER'))
+    show(lambda: a.op('PUSHNUMBER', 4 << 16), lambda: a.callfunc('FixedSqrt', 1), lambda: a.push(16),
+         lambda: a.op('RSHIFT'), lambda: a.op('PRINTNUMBER'))
+    show(lambda: a.op('PUSHNUMBER', 3 << 16), lambda: a.op('PUSHNUMBER', 4 << 16),
+         lambda: a.callfunc('VectorLength', 2), lambda: a.push(16), lambda: a.op('RSHIFT'),
+         lambda: a.op('PRINTNUMBER'))
+    show(lambda: a.push(S.index('abc')), lambda: a.push(S.index('abd')), lambda: a.callfunc('strcmp', 2),
+         lambda: a.op('PRINTNUMBER'), lambda: a.push(S.index('ABC')), lambda: a.push(S.index('abc')),
+         lambda: a.callfunc('stricmp', 2), lambda: a.op('PRINTNUMBER'))
+    show(lambda: a.push(S.index('Hello')), lambda: a.push(1), lambda: a.push(3), lambda: a.callfunc('StrMid', 3),
+         lambda: a.op('PRINTSTRING'))
+    show(lambda: a.op('PUSHNUMBER', 0x28000), lambda: a.callfunc('Round', 1), lambda: a.push(16),
+         lambda: a.op('RSHIFT'), lambda: a.op('PRINTNUMBER'))
+    for v in (S.index('Other'), 0, 7, 0, 0):
+        a.push(v)
+    a.callfunc('ACSNamedExecute', 5)
+    a.op('DROP')
+    a.op('TERMINATE')
+    a.label('other')
+    show(lambda: a.print_str('Other ', S), lambda: a.var('PUSHSCRIPTVAR', 0), lambda: a.op('PRINTNUMBER'))
+    a.op('TERMINATE')
+    return a.finish(), [(1, 1, a.labels['s1'], 0), (-1, 0, a.labels['other'], 1)], [], S, ['Other']
+
+
 def chunk(cid, data):
     return cid + struct.pack('<i', len(data)) + data
 
@@ -412,7 +473,8 @@ def main():
     outdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, 'testdata')
     os.makedirs(outdir, exist_ok=True)
     write_wad(os.path.join(outdir, 'acs.wad'), [('ACS_OLD', behavior('old')), ('ACS_COMP', behavior('compat')),
-                                                ('ACS_E', behavior('E')), ('ACS_LE', behavior('e'))])
+                                                ('ACS_E', behavior('E')), ('ACS_LE', behavior('e')),
+                                                ('ACS_FUNC', behavior('compat', functions_program('compat')))])
 
 
 if __name__ == '__main__':

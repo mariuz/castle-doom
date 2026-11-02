@@ -470,12 +470,15 @@ type
     procedure LoadScripts;
     procedure AcsMarkDynamic;
     function AcsLineAction(const Line: Integer; const ByMonster: Boolean): Boolean;
-    function AcsCheckLock(const Line, Lock: Integer): Boolean;
   private
     { For TWorldAcsHost (doomworld_acs.inc). }
     procedure AcsLogOnce(const What: String);
     function AcsThisMap(const N: Integer): Boolean;
     function AcsInventory(const Item: String; const Amount: Integer): Integer;
+    function AcsTidUsed(const Tid: Integer): Boolean;
+    function AcsCheckLock(const Line, Lock: Integer): Boolean;
+    function AcsThingAction(const Special: Integer; const Args: array of Integer): Boolean;
+    function AcsCheckSight(const Tid1, Tid2: Integer): Boolean;
     { Spawn Doom thing type DoomNum at (X, Y) on the floor,
       facing Angle (degrees), with thing id Tid; teleport fog when Fog. }
     function SpawnByScript(const DoomNum: Integer; const X, Y, Angle: Single; const Tid: Integer;

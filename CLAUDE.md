@@ -933,7 +933,10 @@ autotest only checks the library loads.
   running scripts as [number, pc, state, ...]; `acsGlobals`). Autotest
   `udmf-acs` (goldens) saves during a delay and loads it. The p-code
   numbers come from ACC's `pcode.h` via `tools/make_acs_pcodes.py`
-  (regenerate rather than edit `doomacs_pcodes.inc`).
+  (regenerate rather than edit `doomacs_pcodes.inc`; GZDoom's
+  `src/playsim/p_acs.cpp` as the third argument adds the `Acsf*`
+  numbers of `CALLFUNC`'s functions). `acs.wad`'s `ACS_FUNC` lump runs
+  them in `TestAcs` (`tools/make_acs.py`'s `functions_program`).
   Slopes: `udmf-slopes.wad` (same script) raises sector 141 (the
   corridor east of the start room) from 0 at y 128 to 64 at y 384
   (floorplane fields), slopes sector 99's ceiling by a `Plane_Align`

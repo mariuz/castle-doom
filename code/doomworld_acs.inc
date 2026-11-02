@@ -36,6 +36,11 @@ type
     function Localize(const Name: String): String; override;
     function ThisMap(const N: Integer): Boolean; override;
     function Inventory(const Item: String; const Amount: Integer): Integer; override;
+    function CheckLock(const Lock: Integer): Boolean; override;
+    function CheckSight(const Inst: TAcsInstance; const Tid1, Tid2: Integer): Boolean; override;
+    function TidUsed(const Tid: Integer): Boolean; override;
+    function DamageThing(const Inst: TAcsInstance; const Tid, Amount: Integer): Integer; override;
+    function WeaponName: String; override;
     function Spawn(const ThingClass: String; const X, Y: Single; const Tid: Integer; const Angle: Single): Integer;
       override;
     function SpawnSpot(const ThingClass: String; const SpotTid, Tid: Integer; const Angle: Single;
@@ -245,6 +250,38 @@ begin
   Result := FWorld.AcsInventory(Item, Amount);
 end;
 
+function TWorldAcsHost.CheckLock(const Lock: Integer): Boolean;
+begin
+  Result := FWorld.AcsCheckLock(0, Lock);
+end;
+
+function TWorldAcsHost.CheckSight(const Inst: TAcsInstance; const Tid1, Tid2: Integer): Boolean;
+begin
+  Result := FWorld.AcsCheckSight(Tid1, Tid2);
+end;
+
+function TWorldAcsHost.TidUsed(const Tid: Integer): Boolean;
+begin
+  Result := FWorld.AcsTidUsed(Tid);
+end;
+
+function TWorldAcsHost.DamageThing(const Inst: TAcsInstance; const Tid, Amount: Integer): Integer;
+var
+  Args: array [0..1] of Integer;
+begin
+  Args[0] := Tid;
+  Args[1] := Amount;
+  Result := Ord(FWorld.AcsThingAction(UdmfThingDamage, Args));
+end;
+
+function TWorldAcsHost.WeaponName: String;
+const
+  Names: array [TWeapon] of String = ('Fist', 'Pistol', 'Shotgun', 'Chaingun', 'RocketLauncher', 'PlasmaRifle',
+    'BFG9000', 'Chainsaw', 'SuperShotgun');
+begin
+  Result := Names[FWorld.Player.Weapon];
+end;
+
 function AcsClassDoomNum(const ThingClass: String): Integer;
 var
   I: Integer;
@@ -415,6 +452,49 @@ begin
     Exit(Player.Armor);
   end;
   AcsLogOnce(Format('Inventory item "%s"', [Item]));
+end;
+
+function TDoomWorld.AcsTidUsed(const Tid: Integer): Boolean;
+var
+  A: TDoomActor;
+begin
+  for A in FActors do
+    if (A.Tid = Tid) and not A.Removed then Exit(true);
+  Result := false;
+end;
+
+function TDoomWorld.AcsThingAction(const Special: Integer; const Args: array of Integer): Boolean;
+begin
+  Result := ThingAction(Special, Args);
+end;
+
+{ CheckSight of things by id (0: the player). }
+function TDoomWorld.AcsCheckSight(const Tid1, Tid2: Integer): Boolean;
+
+  function Find(const Tid: Integer; out X, Y, Z, H: Single; out Sec: Integer): Boolean;
+  var
+    A: TDoomActor;
+  begin
+    if Tid = 0 then
+    begin
+      X := Player.X; Y := Player.Y; Z := Player.Z; H := PlayerHeight; Sec := Player.Sector;
+      Exit(true);
+    end;
+    for A in FActors do
+      if (A.Tid = Tid) and not A.Removed then
+      begin
+        X := A.DoomX; Y := A.DoomY; Z := A.DoomZ; H := A.Info^.Height; Sec := A.Sector;
+        Exit(true);
+      end;
+    Result := false;
+  end;
+
+var
+  X1, Y1, Z1, H1, X2, Y2, Z2, H2: Single;
+  S1, S2: Integer;
+begin
+  Result := Find(Tid1, X1, Y1, Z1, H1, S1) and Find(Tid2, X2, Y2, Z2, H2, S2) and (S1 >= 0) and (S2 >= 0) and
+    CheckSight(X1, Y1, Z1 + H1 * 0.75, S1, X2, Y2, Z2, H2, S2);
 end;
 
 function TDoomWorld.AcsRandom(const N: Integer): Integer;
@@ -633,11 +713,12 @@ end;
 
 function TDoomWorld.AcsActorValue(const Inst: TAcsInstance; const Tid, What: Integer): Integer;
 var
-  X, Y, Z, Angle: Single;
+  X, Y, Z, Angle, VX, VY, VZ: Single;
   Sec: Integer;
   A, Found: TDoomActor;
 begin
   Found := nil;
+  VX := 0; VY := 0; VZ := 0;
   if Tid = 0 then
   begin
     if Inst.Activator <> aaPlayer then Exit(0);
@@ -646,6 +727,8 @@ begin
     Z := Player.Z;
     Angle := Player.Angle;
     Sec := Player.Sector;
+    VX := PlayerWalkVX + PlayerPushVX;
+    VY := PlayerWalkVY + PlayerPushVY;
   end else
   begin
     for A in FActors do
@@ -660,6 +743,9 @@ begin
     Z := Found.DoomZ;
     Angle := Found.Angle;
     Sec := Found.Sector;
+    VX := Found.VelX;
+    VY := Found.VelY;
+    VZ := Found.VelZ;
   end;
   case What of
     0: Result := Round(X * 65536);
@@ -675,6 +761,9 @@ begin
           else Result := FMap.Sectors[Sec].LightLevel;
         end;
       end;
+    7: Result := Round(VX * 65536);
+    8: Result := Round(VY * 65536);
+    9: Result := Round(VZ * 65536);
     else Result := 0;
   end;
 end;

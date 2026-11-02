@@ -1123,6 +1123,22 @@ begin
       AssertEquals(Lumps[L] + ': trace', Expected, Host.Trace.DelimitedText);
       AssertEquals(Lumps[L] + ': world variable', 1, Globals.WorldVars[0]);
     end;
+    { CALLFUNC's functions and a named script (ACS_FUNC). }
+    M := TAcsModule.Create(W.LumpBytes(W.FindLump('ACS_FUNC')));
+    AssertEquals('ACS_FUNC: read', '', M.Error);
+    AssertEquals('ACS_FUNC: named', 'Other', M.ScriptNames[0]);
+    AssertTrue('ACS_FUNC: by name', M.NamedScript('other', T));
+    AssertEquals('ACS_FUNC: number', -1, T);
+    Host.Trace.Clear;
+    VM := TAcsVM.Create(M, Host, Globals);
+    try
+      VM.StartLevel;
+      for T := 1 to 3 do VM.Tic;
+    finally
+      FreeAndNil(VM);
+    end;
+    AssertEquals('ACS_FUNC: trace', 'print 12|print 2|print 5|print -10|print ell|print 3|print Other 7',
+      Host.Trace.DelimitedText);
   finally
     FreeAndNil(Globals);
     FreeAndNil(Host);

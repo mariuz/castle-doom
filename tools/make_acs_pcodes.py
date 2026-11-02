@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Generate code/doomacs_pcodes.inc from ACC's pcode.h.
+"""Generate code/doomacs_pcodes.inc from ACC's pcode.h (and ZDoom's
+p_acs.cpp).
 
 The include holds the ACS p-code numbers as Pascal constants (PCD_ADD ->
-PcdAdd = 14) and their names for the log (AcsPcodeNames). Only the enum
-order is taken from the header; DoomAcs interprets the p-codes itself.
+PcdAdd = 14) and their names for the log (AcsPcodeNames), and, from
+p_acs.cpp's enum, the numbers of the built-in functions CALLFUNC calls
+(ACSF_Sqrt -> AcsfSqrt = 48). Only the numbers are taken; DoomAcs
+interprets them itself.
 
-Usage: make_acs_pcodes.py PCODE_H [OUTFILE]
-  PCODE_H is pcode.h from ACC (https://github.com/ZDoom/acc); OUTFILE
-  defaults to code/doomacs_pcodes.inc next to this tools/ directory.
+Usage: make_acs_pcodes.py PCODE_H [OUTFILE] [P_ACS_CPP]
+  PCODE_H is pcode.h from ACC (https://github.com/ZDoom/acc); P_ACS_CPP
+  is src/playsim/p_acs.cpp from GZDoom (https://github.com/ZDoom/gzdoom);
+  OUTFILE defaults to code/doomacs_pcodes.inc next to this tools/
+  directory.
 """
 import os
 import re
@@ -20,7 +25,7 @@ def main():
         sys.exit(1)
     with open(sys.argv[1], encoding='latin-1') as f:
         text = f.read()
-    out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(
+    out = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else os.path.join(
         os.path.dirname(os.path.abspath(__file__)), '..', 'code', 'doomacs_pcodes.inc')
     body = text[text.index('PCD_NOP'):text.index('PCODE_COMMAND_COUNT')]
     names = re.findall(r'\bPCD_([A-Z0-9_]+)', body)
@@ -39,6 +44,20 @@ def main():
     for i, n in enumerate(names):
         lines.append("    '%s'%s" % (n, ',' if i + 1 < len(names) else ''))
     lines.append('  );')
+    if len(sys.argv) > 3:
+        with open(sys.argv[3], encoding='latin-1') as f:
+            cpp = f.read()
+        i = cpp.index('ACSF_GetLineUDMFInt=1')
+        body = cpp[i:cpp.index('}', i)]
+        n = 0
+        lines.append('')
+        lines.append('  { CALLFUNC\'s functions (ZDoom\'s ACSF_* in p_acs.cpp). }')
+        for m in re.finditer(r'(ACSF_[A-Za-z0-9_]+)\s*(?:=\s*(\d+))?\s*,?', body):
+            if m.group(2):
+                n = int(m.group(2))
+            name = m.group(1)[5:]
+            lines.append('  Acsf%s = %d;' % (name.replace('_', ''), n))
+            n += 1
     with open(out, 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     print('wrote', out, len(names), 'p-codes')

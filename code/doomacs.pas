@@ -179,8 +179,8 @@ type
     { The PLAYERBLUESKULL.. PLAYERSILVERCARD p-codes, 0..12. }
     function PlayerHasKey(const Index: Integer): Boolean; virtual;
     { The actor (tid 0: the activator) as fixed point: 0 x, 1 y, 2 z,
-      3 angle (a turn is 1.0), 4 floor height, 5 ceiling height; 6 its
-      sector's light. }
+      3 angle (a turn is 1.0), 4 floor height, 5 ceiling height, 7..9
+      its velocity (units a tic); 6 its sector's light. }
     function ActorValue(const Inst: TAcsInstance; const Tid, What: Integer): Integer; virtual;
     { The first sector with Tag: 0 floor, 1 ceiling (fixed point), 2 light. }
     function SectorValue(const Tag, What: Integer): Integer; virtual;
@@ -198,6 +198,15 @@ type
       Amount given (> 0) or taken (< 0), or 0 for how many there are.
       ClearInventory with an empty name. }
     function Inventory(const Item: String; const Amount: Integer): Integer; virtual;
+    { ZDoom's lock numbers (ACS_NamedLockedExecute): the player has it. }
+    function CheckLock(const Lock: Integer): Boolean; virtual;
+    { The things with ids Tid1 and Tid2 (0: the activator) see each other. }
+    function CheckSight(const Inst: TAcsInstance; const Tid1, Tid2: Integer): Boolean; virtual;
+    function TidUsed(const Tid: Integer): Boolean; virtual;
+    { Damage things with that id (0: the activator); how many were hurt. }
+    function DamageThing(const Inst: TAcsInstance; const Tid, Amount: Integer): Integer; virtual;
+    { The player's weapon as ZDoom's class name. }
+    function WeaponName: String; virtual;
   end;
 
   { World and global variables (and their arrays): they outlive a map. }
@@ -232,6 +241,9 @@ type
     function StringOf(const Index: Integer): String;
     procedure Stop(const I: TAcsInstance; const Why: String);
     procedure LogOnce(const What: String);
+    function NewString(const S: String): Integer;
+    { CALLFUNC: ZDoom's built-in function Index on Args. }
+    function CallFunc(const I: TAcsInstance; const Index: Integer; const Args: array of Integer): Integer;
     function ActionSpecial(const I: TAcsInstance; const Special: Integer; const Args: TAcsArgs;
       out Value: Integer): Boolean;
   public
@@ -976,6 +988,31 @@ begin
   Result := 0;
 end;
 
+function TAcsHost.CheckLock(const Lock: Integer): Boolean;
+begin
+  Result := true;
+end;
+
+function TAcsHost.CheckSight(const Inst: TAcsInstance; const Tid1, Tid2: Integer): Boolean;
+begin
+  Result := false;
+end;
+
+function TAcsHost.TidUsed(const Tid: Integer): Boolean;
+begin
+  Result := false;
+end;
+
+function TAcsHost.DamageThing(const Inst: TAcsInstance; const Tid, Amount: Integer): Integer;
+begin
+  Result := 0;
+end;
+
+function TAcsHost.WeaponName: String;
+begin
+  Result := '';
+end;
+
 { TAcsGlobals --------------------------------------------------------------- }
 
 procedure TAcsGlobals.Clear;
@@ -1180,6 +1217,129 @@ begin
   if (I >= 0) and (I <= High(FModule.Strings)) then Result := FModule.Strings[I] else Result := '';
 end;
 
+function TAcsVM.NewString(const S: String): Integer;
+begin
+  SetLength(FDynStrings, Length(FDynStrings) + 1);
+  FDynStrings[High(FDynStrings)] := S;
+  Result := AcsDynamicStringBase + High(FDynStrings);
+end;
+
+function TAcsVM.CallFunc(const I: TAcsInstance; const Index: Integer; const Args: array of Integer): Integer;
+var
+  Number, K: Integer;
+  X: TAcsInstance;
+  S, T: String;
+
+  function Arg(const N: Integer): Integer;
+  begin
+    if N <= High(Args) then Result := Args[N] else Result := 0;
+  end;
+
+  { The named script of Arg(0); false (logged) when there is none. }
+  function Named: Boolean;
+  begin
+    Result := FModule.NamedScript(StringOf(Arg(0)), Number);
+    if not Result then
+      WritelnLog('Acs', 'script "%s" not found', [StringOf(Arg(0))]);
+  end;
+
+  function Fixed(const F: Double): Integer;
+  begin
+    Result := Wrap(Round(F * 65536));
+  end;
+
+begin
+  Result := 0;
+  case Index of
+    AcsfACSNamedExecute, AcsfACSNamedExecuteAlways:
+      if Named and FHost.ThisMap(Arg(1)) then
+        Result := Ord(StartScript(Number, [Arg(2), Arg(3), Arg(4)], I.Activator, I.Line, I.BackSide,
+          Index = AcsfACSNamedExecuteAlways) <> nil);
+    AcsfACSNamedLockedExecute, AcsfACSNamedLockedExecuteDoor:
+      if Named and FHost.ThisMap(Arg(1)) and FHost.CheckLock(Arg(4)) then
+        Result := Ord(StartScript(Number, [Arg(2), Arg(3)], I.Activator, I.Line, I.BackSide, false) <> nil);
+    AcsfACSNamedExecuteWithResult:
+      if Named then
+      begin
+        X := StartScript(Number, [Arg(1), Arg(2), Arg(3), Arg(4)], I.Activator, I.Line, I.BackSide, true);
+        if X <> nil then
+        begin
+          Run(X);
+          Result := X.ResultValue;
+        end;
+      end;
+    AcsfACSNamedSuspend:
+      if Named then
+      begin
+        SuspendScript(Number);
+        Result := 1;
+      end;
+    AcsfACSNamedTerminate:
+      if Named then
+      begin
+        TerminateScript(Number);
+        Result := 1;
+      end;
+    AcsfSqrt: Result := Trunc(Sqrt(Max(0, Arg(0))));
+    AcsfFixedSqrt: Result := Fixed(Sqrt(Max(0, Arg(0)) / 65536));
+    AcsfVectorLength: Result := Fixed(Sqrt(Sqr(Arg(0) / 65536) + Sqr(Arg(1) / 65536)));
+    AcsfFloor: Result := Arg(0) and Integer($FFFF0000);
+    AcsfCeil: Result := Wrap((Int64(Arg(0)) + $FFFF) and not Int64($FFFF));
+    AcsfRound: Result := Wrap((Int64(Arg(0)) + $8000) and not Int64($FFFF));
+    Acsfstrcmp, Acsfstricmp:
+      begin
+        S := StringOf(Arg(0));
+        T := StringOf(Arg(1));
+        if High(Args) >= 2 then
+        begin
+          S := Copy(S, 1, Max(0, Arg(2)));
+          T := Copy(T, 1, Max(0, Arg(2)));
+        end;
+        if Index = Acsfstricmp then
+          Result := Sign(CompareText(S, T))
+        else
+          Result := Sign(CompareStr(S, T));
+      end;
+    AcsfStrLeft: Result := NewString(Copy(StringOf(Arg(0)), 1, Max(0, Arg(1))));
+    AcsfStrRight:
+      begin
+        S := StringOf(Arg(0));
+        K := Max(0, Min(Length(S), Arg(1)));
+        Result := NewString(Copy(S, Length(S) - K + 1, K));
+      end;
+    AcsfStrMid: Result := NewString(Copy(StringOf(Arg(0)), Max(0, Arg(1)) + 1, Max(0, Arg(2))));
+    AcsfGetChar:
+      begin
+        S := StringOf(Arg(0));
+        if (Arg(1) >= 0) and (Arg(1) < Length(S)) then Result := Ord(S[Arg(1) + 1]);
+      end;
+    AcsfCheckSight: Result := Ord(FHost.CheckSight(I, Arg(0), Arg(1)));
+    AcsfIsTIDUsed: Result := Ord(FHost.TidUsed(Arg(0)));
+    AcsfUniqueTID:
+      begin
+        K := Max(1, Arg(0));
+        while FHost.TidUsed(K) and (K < 32767) do Inc(K);
+        Result := K;
+      end;
+    AcsfGetActorVelX, AcsfGetActorVelY, AcsfGetActorVelZ:
+      Result := FHost.ActorValue(I, Arg(0), 7 + Index - AcsfGetActorVelX);
+    AcsfDamageActor: Result := FHost.DamageThing(I, Arg(0), Arg(4));
+    AcsfGetWeapon: Result := NewString(FHost.WeaponName);
+    AcsfSpawnForced: Result := FHost.Spawn(StringOf(Arg(0)), Arg(1) / 65536, Arg(2) / 65536, Arg(4),
+      Arg(5) * 360 / 256);
+    AcsfSpawnSpotForced: Result := FHost.SpawnSpot(StringOf(Arg(0)), Arg(1), Arg(2), Arg(3) * 360 / 256, false);
+    AcsfSpawnSpotFacingForced: Result := FHost.SpawnSpot(StringOf(Arg(0)), Arg(1), Arg(2), 0, true);
+    AcsfPlaySound:
+      begin
+        if Length(Args) >= 2 then
+          FHost.PlaySound(I, StringOf(Arg(1)), 127, Arg(0));
+      end;
+    AcsfSetMusicVolume: ;
+    else
+      LogOnce(SysUtils.Format('ACS function %d', [Index]));
+  end;
+end;
+
 function TAcsVM.Running(const Number: Integer): Boolean;
 var
   I: Integer;
@@ -1347,6 +1507,7 @@ var
   Kind: TVarKind;
   VOp: TVarOp;
   LevelName: String;
+  FuncArgs: array of Integer;
 
   procedure Push(const V: Integer);
   begin
@@ -1982,9 +2143,9 @@ begin
         begin
           N := M.ReadByte(I.PC);
           A := M.ReadShort(I.PC);
-          LogOnce(SysUtils.Format('ACS function %d', [A]));
-          Drop(N);
-          Push(0);
+          SetLength(FuncArgs, Max(0, N));
+          for K := N - 1 downto 0 do FuncArgs[K] := Pop;
+          Push(CallFunc(I, A, FuncArgs));
         end;
       { Known, but nothing the game has: their arguments are dropped. }
       PcdSetgravity, PcdSetaircontrol, PcdSetstyle, PcdSetfont, PcdStarttranslation, PcdPlaymovie,
