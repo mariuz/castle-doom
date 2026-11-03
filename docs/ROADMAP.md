@@ -141,9 +141,16 @@ L = several days). Items inside a section are in suggested order.
   control sector makes its targets dynamic. Test map
   `udmf-3dfloor.wad` (a translucent slab over E1M1's start room, a step
   in the corridor east of it), unit test `Test3dFloors`, autotest
-  `3d-floors` (goldens). Left: monsters, missiles, hitscans and sight
-  ignore the slabs, things spawn at the sector floor, no light under
-  them, no swimmable, vertex-height or sloped slabs.
+  `3d-floors` (goldens). Stage 2: the simulation sees solid slabs.
+  `TDoomMap.FloorAtZ` / `CeilingAtZ` give the floor and ceiling on an
+  actor's side of each slab (`TDoomWorld.SlabSideZ`: feet + 24, a
+  flyer's middle), used by moves (`LineOpening`'s `Z`), standing,
+  floating and charging skulls; `SlabHit` stops missiles, hitscans
+  (the puff at the slab), autoaim and sight (seen when the target's
+  middle or top is clear); map things spawn on the slab their UDMF
+  height reaches. The `3d-floors` autotest shoots up into the slab and
+  spawns an imp onto the step. Left: light under slabs, swimmable,
+  vertex-height and sloped slabs, sounds through slabs.
 
 - ACS scripts (UDMF, the rest): `DoomAcs` reads a UDMF map's
   `BEHAVIOR` lump in Hexen's `ACS\0`, ZDoom's `ACSE` / `ACSe` layouts

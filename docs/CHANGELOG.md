@@ -23,6 +23,9 @@
   use their map variables, arrays, functions and scripts (named ones too); a `LOADACS` lump
   loads libraries whose open scripts run on every map, Doom-format maps included. Their
   variables are in saves.
+- 3D floors, stage 2: monsters walk on and under solid slabs (and step onto low ones),
+  missiles, shots, autoaim and sight stop at them, and map things spawn on the slab their
+  height reaches.
 - UDMF things' own actions (`special` and its arguments) run once when a monster dies or an
   item is picked up, scripts (`ACS_Execute`) included.
 

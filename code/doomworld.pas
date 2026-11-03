@@ -20,6 +20,8 @@ const
   TicSeconds = 1 / TicRate;
   PlayerRadius = 16;
   PlayerHeight = 56;
+  { LineOpening without a height: 3D floors do not count. }
+  NoSlabZ = -1e30;
   { Player hitscans kept for the debug drawing. }
   MaxShotTrail = 16;
   PlayerViewHeight = 41;
@@ -244,9 +246,14 @@ type
     { The two sides' floor and ceiling heights where (X, Y), projected on
       the line, lies (they differ along a line on slopes), and the
       opening between them. }
+    { Z (not NoSlabZ): the height whose side of the 3D floors counts. }
     procedure LineOpening(const Line: Integer; const X, Y: Single;
-      out OpenBottom, OpenTop, LowFloor: Single; out FloorsDiffer, CeilingsDiffer: Boolean);
+      out OpenBottom, OpenTop, LowFloor: Single; out FloorsDiffer, CeilingsDiffer: Boolean;
+      const Z: Single = NoSlabZ);
     procedure SpawnThings;
+    { The height whose side of a 3D floor an actor is on: its feet plus a
+      step (a flyer's middle). }
+    function SlabSideZ(const A: TDoomActor): Single;
     { LoadMap, optionally restoring a saved game (State <> nil). }
     procedure LoadMapCore(const MapName: String; const KeepInventory: Boolean; const State: TJSONObject);
     procedure RestoreMapState(const State: TJSONObject);
@@ -1223,8 +1230,16 @@ begin
   SetLength(FLightSectors, 0);
 end;
 
+function TDoomWorld.SlabSideZ(const A: TDoomActor): Single;
+begin
+  if A.Info^.Floats then
+    Result := A.DoomZ + A.Info^.Height / 2
+  else
+    Result := A.DoomZ + 24;
+end;
+
 procedure TDoomWorld.LineOpening(const Line: Integer; const X, Y: Single;
-  out OpenBottom, OpenTop, LowFloor: Single; out FloorsDiffer, CeilingsDiffer: Boolean);
+  out OpenBottom, OpenTop, LowFloor: Single; out FloorsDiffer, CeilingsDiffer: Boolean; const Z: Single);
 var
   L: TDoomLinedef;
   V1, V2: TDoomVertex;
@@ -1240,10 +1255,19 @@ begin
     T := Max(0, Min(1, ((X - V1.X) * DX + (Y - V1.Y) * DY) / (Sqr(DX) + Sqr(DY))));
   PX := V1.X + DX * T;
   PY := V1.Y + DY * T;
-  FF := FMap.FloorAt(L.FrontSector, PX, PY);
-  FC := FMap.CeilingAt(L.FrontSector, PX, PY);
-  BF := FMap.FloorAt(L.BackSector, PX, PY);
-  BC := FMap.CeilingAt(L.BackSector, PX, PY);
+  if Z = NoSlabZ then
+  begin
+    FF := FMap.FloorAt(L.FrontSector, PX, PY);
+    FC := FMap.CeilingAt(L.FrontSector, PX, PY);
+    BF := FMap.FloorAt(L.BackSector, PX, PY);
+    BC := FMap.CeilingAt(L.BackSector, PX, PY);
+  end else
+  begin
+    FF := FMap.FloorAtZ(L.FrontSector, PX, PY, Z);
+    FC := FMap.CeilingAtZ(L.FrontSector, PX, PY, Z);
+    BF := FMap.FloorAtZ(L.BackSector, PX, PY, Z);
+    BC := FMap.CeilingAtZ(L.BackSector, PX, PY, Z);
+  end;
   OpenBottom := Max(FF, BF);
   OpenTop := Min(FC, BC);
   LowFloor := Min(FF, BF);
@@ -1525,7 +1549,8 @@ begin
     if Info^.Hanging then
       A.DoomZ := FMap.CeilingAt(Sec, T.X, T.Y) - Info^.Height
     else
-      A.DoomZ := FMap.FloorAt(Sec, T.X, T.Y);
+      { UDMF's height above the floor picks the 3D floor it stands on. }
+      A.DoomZ := FMap.FloorAtZ(Sec, T.X, T.Y, FMap.FloorAt(Sec, T.X, T.Y) + T.Z);
     if Info^.Kind in [tkTeleportDest, tkBossSpot] then
       A.HideSprite;
     if Info^.Num = 2035 then
@@ -2672,7 +2697,7 @@ begin
         else if A.Info^.Floats and (A.Info^.Kind = tkMonster) then
           TicFloat(A)
         else
-          A.DoomZ := FMap.FloorAt(Sec, A.DoomX, A.DoomY);
+          A.DoomZ := FMap.FloorAtZ(Sec, A.DoomX, A.DoomY, SlabSideZ(A));
         LightActor(A, Sec);
       end;
       A.UpdateRotation(Player.X, Player.Y);
@@ -2745,6 +2770,10 @@ begin
     end;
     if TopSlope <= BottomSlope then Exit(false);
   end;
+  { Solid 3D floors between: seen when the middle or the top is clear. }
+  if Length(FMap.Floors3D) > 0 then
+    if FMap.SlabHit(X1, Y1, EyeZ, X2, Y2, Z2 + H2 / 2, T) and FMap.SlabHit(X1, Y1, EyeZ, X2, Y2, Z2 + H2 * 0.9, T) then
+      Exit(false);
   Result := true;
 end;
 
@@ -2851,7 +2880,7 @@ begin
   Corners[0] := 0; { silence warnings }
   Sec := FMap.SectorAt(NX, NY);
   if Sec < 0 then Exit;
-  FloorZ := FMap.FloorAt(Sec, NX, NY);
+  FloorZ := FMap.FloorAtZ(Sec, NX, NY, SlabSideZ(A));
 
   N := FMap.LinesInBox(NX - R - 1, NY - R - 1, NX + R + 1, NY + R + 1, FLinesMove);
   for K := 0 to N - 1 do
@@ -2873,7 +2902,7 @@ begin
       BlockedByLine := I;
       Exit;
     end;
-    LineOpening(I, NX, NY, OpenBottom, OpenTop, LowFloor, FloorsDiffer, CeilingsDiffer);
+    LineOpening(I, NX, NY, OpenBottom, OpenTop, LowFloor, FloorsDiffer, CeilingsDiffer, SlabSideZ(A));
     if OpenTop - OpenBottom < H then
     begin
       BlockedByLine := I;
@@ -3196,8 +3225,8 @@ var
   TX, TY, TZ, TR, DX, DY, Dist, Delta, Floor, Top: Single;
 begin
   Sec := A.Sector;
-  Floor := FMap.FloorAt(Sec, A.DoomX, A.DoomY);
-  Top := Max(Floor, FMap.CeilingAt(Sec, A.DoomX, A.DoomY) - A.Info^.Height);
+  Floor := FMap.FloorAtZ(Sec, A.DoomX, A.DoomY, SlabSideZ(A));
+  Top := Max(Floor, FMap.CeilingAtZ(Sec, A.DoomX, A.DoomY, SlabSideZ(A)) - A.Info^.Height);
   if A.State in [asDying, asDead] then
   begin
     { P_KillMobj clears MF_NOGRAVITY except for lost souls: the corpse
@@ -3273,7 +3302,7 @@ begin
       MonsterCrossLines(A, OldX, OldY);
   end;
   { No friction in the air: a flyer knocked back drifts until it hits a wall. }
-  if (A.Sector >= 0) and (A.DoomZ > FMap.FloorAt(A.Sector, A.DoomX, A.DoomY)) then Exit;
+  if (A.Sector >= 0) and (A.DoomZ > FMap.FloorAtZ(A.Sector, A.DoomX, A.DoomY, SlabSideZ(A))) then Exit;
   if (Abs(A.VelX) < StopSpeed) and (Abs(A.VelY) < StopSpeed) then
   begin
     A.VelX := 0;
@@ -3739,13 +3768,13 @@ begin
   Sec := A.Sector;
   if Sec >= 0 then
   begin
-    if A.DoomZ < FMap.FloorAt(Sec, A.DoomX, A.DoomY) then
+    if A.DoomZ < FMap.FloorAtZ(Sec, A.DoomX, A.DoomY, OldZ + A.Info^.Height / 2) then
     begin
-      A.DoomZ := FMap.FloorAt(Sec, A.DoomX, A.DoomY);
+      A.DoomZ := FMap.FloorAtZ(Sec, A.DoomX, A.DoomY, OldZ + A.Info^.Height / 2);
       A.VelZ := -A.VelZ;
-    end else if A.DoomZ + A.Info^.Height > FMap.CeilingAt(Sec, A.DoomX, A.DoomY) then
+    end else if A.DoomZ + A.Info^.Height > FMap.CeilingAtZ(Sec, A.DoomX, A.DoomY, OldZ + A.Info^.Height / 2) then
     begin
-      A.DoomZ := FMap.CeilingAt(Sec, A.DoomX, A.DoomY) - A.Info^.Height;
+      A.DoomZ := FMap.CeilingAtZ(Sec, A.DoomX, A.DoomY, OldZ + A.Info^.Height / 2) - A.Info^.Height;
       A.VelZ := -A.VelZ;
     end;
   end;
@@ -4368,6 +4397,14 @@ begin
     HitWall := true;
   end;
 
+  { Solid 3D floors stop the shot where it reaches one. }
+  if (Length(FMap.Floors3D) > 0) and
+     FMap.SlabHit(X, Y, Z, X + DX * Best, Y + DY * Best, Z + Slope * Best, T) then
+  begin
+    Best := T * Best;
+    HitWall := true;
+  end;
+
   { Bodies: the nearest one whose box the 2D line crosses at a height
     inside it (PTR_ShootTraverse for things). }
   for O in FActors do
@@ -4554,6 +4591,15 @@ begin
           Break;
         end;
     end;
+  end;
+  { Solid 3D floors on the way. }
+  if (not Hit) and (Length(FMap.Floors3D) > 0) and
+     FMap.SlabHit(A.DoomX, A.DoomY, A.DoomZ + A.Info^.Height / 2, NX, NY, NZ + A.Info^.Height / 2, T) then
+  begin
+    Hit := true;
+    NX := A.DoomX + (NX - A.DoomX) * T;
+    NY := A.DoomY + (NY - A.DoomY) * T;
+    NZ := A.DoomZ + (NZ - A.DoomZ) * T;
   end;
   if not Hit then
   begin
@@ -5227,6 +5273,9 @@ begin
     end else
     begin
       O := Intercepts[I].Actor;
+      { Behind a solid 3D floor: not aimed at. }
+      if (Length(FMap.Floors3D) > 0) and
+         FMap.SlabHit(X, Y, Z, O.DoomX, O.DoomY, O.DoomZ + O.Info^.Height / 2, T) then Continue;
       ThingTop := (O.DoomZ + O.Info^.Height - Z) / Along;
       if ThingTop < BottomSlope then Continue; { shot over the thing }
       ThingBottom := (O.DoomZ - Z) / Along;

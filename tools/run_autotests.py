@@ -418,10 +418,13 @@ TESTS = [
      lambda config: check_udmf_things(config)),
     # 3D floors (udmf-3dfloor.wad): a translucent slab over the start
     # room the player walks under and a solid step in the corridor east
-    # of it (sector 141) the player climbs onto.
+    # of it (sector 141) the player climbs onto; a shot up into the slab
+    # stops at its bottom (64) and an imp spawned in the corridor stands
+    # on the step (save 3).
     ('3d-floors', 'E1M1',
-     'Y,W:0.3,G:-416:256,A:0,W:0.3,SAVE:1,S,F:0.8,W:1,SAVE:2,S,A:180,W:0.3,S,Q',
-     [r'Map: E1M1: 2 3D floors'],
+     'Y,W:0.3,G:-416:256,A:0,W:0.3,SAVE:1,S,F:0.8,W:1,SAVE:2,S,A:180,W:0.3,S,'
+     'SHOTS,G:-416:256,A:0,LOOK:45,W:0.3,X,W:0.3,G:-224:120,A:90,LOOK:0,W:0.2,P:3001:130,W:1,SAVE:3,Q',
+     [r'Map: E1M1: 2 3D floors', r'Shot: angle 0\.0 slope 1\.000 range 2048: wall at \(-39\d, 256, 6\d\)'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-3dfloor.wad'), '--fixed-step'],
      lambda config: check_3d_floors(config)),
     # ACS libraries (udmf-acslib.wad): the map's imports from TESTLIB,
@@ -774,6 +777,8 @@ def check_3d_floors(config):
     assert abs(a['player']['z']) < 4, 'under the slab: z %s' % a['player']['z']
     assert b['player']['x'] > -256 and abs(b['player']['z'] - 24) < 3, \
         'on the step: %s, %s, z %s' % (b['player']['x'], b['player']['y'], b['player']['z'])
+    imps = [t for t in save_json(config, 3)['actors'] if t.get('type') == 3001 and abs(t['x'] + 224) < 40]
+    assert imps and abs(imps[0]['z'] - 24) < 0.5, 'imp not on the step: %s' % imps
 
 
 def check_udmf_things(config):

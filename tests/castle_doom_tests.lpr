@@ -1366,6 +1366,7 @@ var
   W: TDoomWad;
   M: TDoomMap;
   I, S: Integer;
+  F: Single;
 begin
   Dir := 'tools/testdata/';
   if not FileExists(Dir + 'udmf-3dfloor.wad') then Dir := '../tools/testdata/';
@@ -1397,6 +1398,19 @@ begin
           AssertEquals('step opaque', 1, M.Floors3D[I].Alpha, 0.01);
         end;
       end;
+      { Heights around the slabs: under the start room's (64..80) the
+        ceiling is its bottom, above it the floor is its top. }
+      AssertEquals('under: floor', 0, M.FloorAtZ(140, -416, 256, 10), 0.01);
+      AssertEquals('under: ceiling', 64, M.CeilingAtZ(140, -416, 256, 10), 0.01);
+      AssertEquals('above: floor', 80, M.FloorAtZ(140, -416, 256, 75), 0.01);
+      AssertTrue('above: ceiling', M.CeilingAtZ(140, -416, 256, 75) > 80);
+      AssertEquals('step: floor', 24, M.FloorAtZ(141, -224, 256, 24), 0.01);
+      AssertEquals('no slab', M.FloorAt(99, -150, 256), M.FloorAtZ(99, -150, 256, 50), 0.01);
+      { A ray straight up from 40 under the slab enters it at 64. }
+      AssertTrue('up: hit', M.SlabHit(-416, 256, 40, -416, 256, 120, F));
+      AssertEquals('up: where', (64 - 40) / 80, F, 0.02);
+      AssertFalse('below: clear', M.SlabHit(-460, 256, 10, -380, 256, 50, F));
+      AssertTrue('through: hit', M.SlabHit(-460, 256, 70, -380, 256, 70, F));
       AssertEquals('140 has one', 1, Length(M.SectorFloors3D[140]));
       AssertEquals('141 has one', 1, Length(M.SectorFloors3D[141]));
       AssertEquals('99 has none', 0, Length(M.SectorFloors3D[99]));

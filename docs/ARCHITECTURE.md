@@ -311,8 +311,12 @@ when alpha < 1, collidable when solid), `Emit3dFloorSides` the sides
 wherever a neighbour does not hold the same slab (the control line's
 middle texture, clipped to the opening), and `AssignChunks` makes the
 control sectors dependencies of those chunks. The player stands on
-the slabs through the walk navigation's collision; the simulation
-(monsters, missiles, hitscans, sight, spawns) does not see them yet.
+the slabs through the walk navigation's collision. The simulation asks
+`FloorAtZ` / `CeilingAtZ` with the height whose side counts (an
+actor's feet + 24, `SlabSideZ`: a slab whose middle is below is a
+floor, above a ceiling; `LineOpening` takes that height for moves)
+and `SlabHit` (a segment sampled every 8 units against the slabs of
+the sectors it passes) for missiles, hitscans, autoaim and sight.
 
 ### ACS scripts (`DoomAcs`, `doomworld_acs.inc`)
 

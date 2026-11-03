@@ -962,8 +962,11 @@ autotest only checks the library loads.
   in sector 141 (log `Map: E1M1: 2 3D floors`);
   `Y,G:-416:256,A:0,W:0.3,SAVE:1,F:0.8,W:1,SAVE:2` walks under the
   first onto the second (save 2's `z` about 24; autotest `3d-floors`
-  with goldens, unit test `Test3dFloors`). Only the player collides
-  with slabs (through the drawn geometry); the simulation ignores them.
+  with goldens, unit test `Test3dFloors`). The player collides with
+  slabs through the drawn geometry, the simulation through
+  `FloorAtZ` / `CeilingAtZ` / `SlabHit`: the test's `SHOTS,...,LOOK:45,X`
+  under the slab logs `wall at (-391, 256, 60)` and `P:3001:130` in the
+  corridor stands on the step (z 24 in save 3).
   Thing actions: `udmf-things.wad` (same script) has a map spot (id 20)
   at (-320, 320); `LINE:829` spawns an imp there (`Thing_Spawn`, id
   21), `LINE:1045` kills it (`Thing_Damage`), `LINE:1046` /

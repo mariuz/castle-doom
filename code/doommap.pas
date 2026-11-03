@@ -348,6 +348,15 @@ type
       on a slope the plane's height there. }
     function FloorAt(const Sec: Integer; const X, Y: Single): Single;
     function CeilingAt(const Sec: Integer; const X, Y: Single): Single;
+    { The floor and ceiling around height Z, with the sector's solid 3D
+      floors: a slab whose middle is below Z is a floor (its top), one
+      whose middle is above Z a ceiling (its bottom). Without slabs the
+      same as FloorAt / CeilingAt. }
+    function FloorAtZ(const Sec: Integer; const X, Y, Z: Single): Single;
+    function CeilingAtZ(const Sec: Integer; const X, Y, Z: Single): Single;
+    { The segment from (X1, Y1, Z1) to (X2, Y2, Z2) passes through a solid
+      3D floor; Frac is how far along (0..1) it enters one. }
+    function SlabHit(const X1, Y1, Z1, X2, Y2, Z2: Single; out Frac: Single): Boolean;
     { The lowest and highest height a slope reaches over its sector's
       vertices (the height itself when flat). }
     function FloorRange(const Sec: Integer; out Lowest, Highest: Single): Boolean;
@@ -1069,6 +1078,77 @@ begin
     Result := H + S.DX * (X - S.OX) + S.DY * (Y - S.OY)
   else
     Result := H;
+end;
+
+function TDoomMap.FloorAtZ(const Sec: Integer; const X, Y, Z: Single): Single;
+var
+  K: Integer;
+  Bottom, Top: Single;
+begin
+  Result := FloorAt(Sec, X, Y);
+  if (Sec < 0) or (Sec > High(SectorFloors3D)) then Exit;
+  for K in SectorFloors3D[Sec] do
+    if Floors3D[K].Solid then
+    begin
+      Bottom := Sectors[Floors3D[K].Control].FloorHeight;
+      Top := Sectors[Floors3D[K].Control].CeilingHeight;
+      if (Z >= (Bottom + Top) / 2) and (Top > Result) then Result := Top;
+    end;
+end;
+
+function TDoomMap.CeilingAtZ(const Sec: Integer; const X, Y, Z: Single): Single;
+var
+  K: Integer;
+  Bottom, Top: Single;
+begin
+  Result := CeilingAt(Sec, X, Y);
+  if (Sec < 0) or (Sec > High(SectorFloors3D)) then Exit;
+  for K in SectorFloors3D[Sec] do
+    if Floors3D[K].Solid then
+    begin
+      Bottom := Sectors[Floors3D[K].Control].FloorHeight;
+      Top := Sectors[Floors3D[K].Control].CeilingHeight;
+      if (Z < (Bottom + Top) / 2) and (Bottom < Result) then Result := Bottom;
+    end;
+end;
+
+function TDoomMap.SlabHit(const X1, Y1, Z1, X2, Y2, Z2: Single; out Frac: Single): Boolean;
+const
+  StepLength = 8;
+var
+  I, Steps, S, K: Integer;
+  T, X, Y, Z, PrevZ, Bottom, Top, Enter: Single;
+begin
+  Result := false;
+  Frac := 1;
+  if Length(Floors3D) = 0 then Exit;
+  Steps := Max(1, Ceil(Sqrt(Sqr(X2 - X1) + Sqr(Y2 - Y1) + Sqr(Z2 - Z1)) / StepLength));
+  PrevZ := Z1;
+  for I := 1 to Steps do
+  begin
+    T := I / Steps;
+    X := X1 + (X2 - X1) * T;
+    Y := Y1 + (Y2 - Y1) * T;
+    Z := Z1 + (Z2 - Z1) * T;
+    S := SectorAt(X, Y);
+    if (S >= 0) and (S <= High(SectorFloors3D)) then
+      for K in SectorFloors3D[S] do
+        if Floors3D[K].Solid then
+        begin
+          Bottom := Sectors[Floors3D[K].Control].FloorHeight;
+          Top := Sectors[Floors3D[K].Control].CeilingHeight;
+          if (Min(PrevZ, Z) < Top) and (Max(PrevZ, Z) > Bottom) then
+          begin
+            { Where in this step the segment reaches the slab's height. }
+            Enter := 0;
+            if (PrevZ >= Top) and (PrevZ <> Z) then Enter := (PrevZ - Top) / (PrevZ - Z)
+            else if (PrevZ <= Bottom) and (PrevZ <> Z) then Enter := (Bottom - PrevZ) / (Z - PrevZ);
+            Frac := (I - 1 + Max(0, Min(1, Enter))) / Steps;
+            Exit(true);
+          end;
+        end;
+    PrevZ := Z;
+  end;
 end;
 
 function TDoomMap.FloorAt(const Sec: Integer; const X, Y: Single): Single;
