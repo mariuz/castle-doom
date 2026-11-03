@@ -352,6 +352,9 @@ one that started the script, else line 0) whose record is put back
 afterwards; a teleport to a thing id tags the destination's sector for
 the call. `ACS_Execute` and its kin are the world's `UdmfAcs*` line
 types (`AcsLineAction`), and from scripts the VM runs them itself.
+The same borrowing (`TDoomWorld.RunHexenSpecial`) runs a UDMF thing's
+own special once when the monster dies or the item is picked up
+(`RunThingSpecial`), where ACS_* actions are allowed too.
 Random numbers come from `TDoomWorld.Random`, so demos replay. Map
 variables and arrays live in the VM (with the user variables of
 things by thing id, `userVars`), world and global ones in

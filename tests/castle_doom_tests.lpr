@@ -71,6 +71,7 @@ type
     procedure TestAcsLibraries;
     procedure TestSlopes;
     procedure Test3dFloors;
+    procedure TestThingSpecials;
     procedure TestDynScrollers;
     procedure TestDeepWater;
     procedure TestSectorSkies;
@@ -1310,6 +1311,45 @@ begin
       AssertEquals('moved north end', 72, M.FloorAt(141, -224, 384), 0.01);
       AssertFalse('flat sector', M.Sectors[140].FloorSlope.Sloped);
       AssertEquals('flat', 0, M.FloorAt(140, -416, 256), 0.01);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ UDMF things' specials in tools/testdata/udmf-things.wad: E1M1's imp 81
+  and shells 110 carry Light_ChangeToValue (112). }
+procedure TTestMap.TestThingSpecials;
+var
+  Dir: String;
+  W: TDoomWad;
+  M: TDoomMap;
+  I, N: Integer;
+begin
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf-things.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf-things.wad') then
+  begin
+    WriteLn('TestThingSpecials: no udmf-things.wad (python3 tools/make_udmf_wad.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-things.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('imp', 3001, M.Things[81].TypeNum);
+      AssertEquals('imp special', 112, M.Things[81].Special);
+      AssertEquals('imp tag', 9, M.Things[81].Args[0]);
+      AssertEquals('imp light', 64, M.Things[81].Args[1]);
+      AssertEquals('shells', 2008, M.Things[110].TypeNum);
+      AssertEquals('shells light', 220, M.Things[110].Args[1]);
+      N := 0;
+      for I := 0 to High(M.Things) do
+        if M.Things[I].Special <> 0 then Inc(N);
+      AssertEquals('things with specials', 2, N);
     finally
       FreeAndNil(M);
     end;

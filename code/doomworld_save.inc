@@ -35,6 +35,15 @@ begin
     Result.Add(Double(V));
 end;
 
+function JsonIntArray(const Values: array of Integer): TJSONArray;
+var
+  V: Integer;
+begin
+  Result := TJSONArray.Create;
+  for V in Values do
+    Result.Add(V);
+end;
+
 function ArrayItemFloat(const Arr: TJSONArray; const I: Integer; const Default: Single): Single;
 begin
   if (Arr = nil) or (I < 0) or (I >= Arr.Count) then Exit(Default);
@@ -358,6 +367,9 @@ begin
       AJ.Add('mapFlags', A.MapFlags);
       if A.Tid <> 0 then
         AJ.Add('tid', A.Tid);
+      if A.ThingSpecial <> 0 then
+        AJ.Add('thingSpecial', JsonIntArray([A.ThingSpecial, A.ThingArgs[0], A.ThingArgs[1], A.ThingArgs[2],
+          A.ThingArgs[3], A.ThingArgs[4]]));
       AJ.Add('velocity', JsonFloatArray([A.VelX, A.VelY, A.VelZ]));
       AJ.Add('damageDice', A.MissileDamageDice);
       AJ.Add('damageFaces', A.MissileDamageFaces);
@@ -668,6 +680,9 @@ begin
             A.ReactionTics := AJ.Get('reaction', 0);
             A.MapFlags := AJ.Get('mapFlags', 0);
             A.Tid := AJ.Get('tid', 0);
+            A.ThingSpecial := ArrayItemInt(ObjArray(AJ, 'thingSpecial'), 0, 0);
+            for Num := 0 to 4 do
+              A.ThingArgs[Num] := ArrayItemInt(ObjArray(AJ, 'thingSpecial'), Num + 1, 0);
             A.VelX := ArrayItemFloat(ObjArray(AJ, 'velocity'), 0, 0);
             A.VelY := ArrayItemFloat(ObjArray(AJ, 'velocity'), 1, 0);
             A.VelZ := ArrayItemFloat(ObjArray(AJ, 'velocity'), 2, 0);

@@ -492,6 +492,12 @@ type
     function AcsSpots(const Tid: Integer): TAcsSpots;
     function AcsRandom(const N: Integer): Integer;
     function AcsLineSpecial(const Inst: TAcsInstance; const Special: Integer; const Args: TAcsArgs): Integer;
+    { Hexen's action Special on Line (borrowed for the call, 0 when -1);
+      ACS_* actions too when AllowAcs. What says who for the log. }
+    function RunHexenSpecial(const Special: Integer; const Args: TAcsArgs; const Line: Integer;
+      const What: String; const AllowAcs: Boolean): Integer;
+    { A thing's own action (UDMF special) when it dies or is picked up. }
+    procedure RunThingSpecial(const A: TDoomActor);
     function AcsTagBusy(const Tag: Integer): Boolean;
     function AcsThingCount(const DoomNum, Tid: Integer): Integer;
     procedure AcsChangeFlat(const Tag: Integer; const Name: String; const Ceiling: Boolean);
@@ -1452,7 +1458,7 @@ end;
 
 procedure TDoomWorld.SpawnThings;
 var
-  I, N: Integer;
+  I, N, K: Integer;
   T: TDoomThing;
   Info: PThingInfo;
   A: TDoomActor;
@@ -1514,6 +1520,8 @@ begin
     A.Sector := Sec;
     A.MapFlags := T.Flags;
     A.Tid := T.Tid;
+    A.ThingSpecial := T.Special;
+    for K := 0 to 4 do A.ThingArgs[K] := T.Args[K];
     if Info^.Hanging then
       A.DoomZ := FMap.CeilingAt(Sec, T.X, T.Y) - Info^.Height
     else
@@ -4835,6 +4843,7 @@ begin
   A.State := asDying;
   A.Collides := false;
   A.Pickable := false;
+  RunThingSpecial(A);
   { P_KillMobj: overkill below -spawnhealth gibs (XDEATH, A_XScream). }
   if (A.Info^.XDeathFrames <> '') and (A.Health < -A.Info^.Health) then
   begin
@@ -5699,6 +5708,7 @@ begin
       FSounds.Play(Sound);
       Player.BonusCount := Player.BonusCount + 6; { BONUSADD }
       A.Removed := true;
+      RunThingSpecial(A);
     end;
   end;
 end;

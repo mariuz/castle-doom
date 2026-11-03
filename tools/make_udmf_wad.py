@@ -56,7 +56,9 @@ Plat_UpByValue(9, 16, 35, 4) (sector 141 up 32 and back after a
 second); a second map spot (id 40) 32 above the floor at (-416, 320)
 fires a rocket north from line 1050 (Thing_Projectile(40, 127, 64, 80))
 and a falling imp ball from line 1051 (Thing_ProjectileGravity(40, 10,
-64, 40, 48)).
+64, 40, 48)); the imp 81 and the shells 110 have thing specials
+(THING_SPECIALS) that light sectors 141 and 99 when it dies and they are
+picked up.
 
 udmf-3dfloor.wad, as udmf.wad with two 3D floors (Sector_Set3dFloor)
 from control sectors added outside the map: a solid slab at 64..80, 160
@@ -140,6 +142,10 @@ THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
                1050: (134, (40, 127, 64, 80, 0), 'u'), 1051: (136, (40, 10, 64, 40, 48), 'u')}
 THING_SECTOR_IDS = {141: 9, 99: 12}
 THING_SPOT = (-320, 320, 9001, 20)
+# Thing specials (run when the thing dies or is picked up): E1M1's imp
+# 81 at (848, 1056) sets sector 141's light to 64, the shells 110 at
+# (416, 864) sector 99's to 220 (Light_ChangeToValue).
+THING_SPECIALS = {81: (112, (9, 64)), 110: (112, (12, 220))}
 # A second map spot, 32 above the floor, for the projectiles.
 PROJECTILE_SPOT = (-416, 320, 9001, 40, 32)
 # Vertex heights: the triangular sector 165 (floor 16) gets its corner
@@ -305,9 +311,12 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
                 ['x = %d.0;' % x, 'y = %d.0;' % y, 'angle = %d;' % angle, 'type = %d;' % typ,
                  'height = %d.0;' % height] + ['arg%d = %d;' % (i, a) for i, a in enumerate(args)] +
                 ['skill%d = true;' % k for k in range(1, 6)] + ['single = true;']))
-    for t in things:
+    for k, t in enumerate(things):
         x, y, angle, typ, fl = t[:5]
         body = ['x = %d.0;' % x, 'y = %d.0;' % y, 'angle = %d;' % angle, 'type = %d;' % typ]
+        if things_on and k in THING_SPECIALS:
+            special, args = THING_SPECIALS[k]
+            body += ['special = %d;' % special] + ['arg%d = %d;' % (i, a) for i, a in enumerate(args)]
         if len(t) > 5:
             body.append('id = %d;' % t[5])
         if len(t) > 6:

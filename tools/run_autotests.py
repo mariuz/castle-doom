@@ -434,6 +434,14 @@ TESTS = [
       r'Message: Named in library', r'Message: Autoloaded', r'Load: E1M2'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-acslib.wad'), '--fixed-step'],
      lambda config: check_acs_libraries(config)),
+    # Thing specials (udmf-things.wad): the imp 81 lights sector 141 when
+    # it dies, the shells 110 sector 99 when picked up; a load keeps the
+    # shells' special.
+    ('thing-specials', 'E1M1', 'Y,W:0.3,SAVE:1,D,W:0.5,SAVE:2,G:416:864,W:0.3,SAVE:3,LOAD:2,W:0.3,SAVE:4,Q',
+     [r'Acs: TROO \(thing id 0\): Light_ChangeToValue \(9, 64, 0, 0, 0\)',
+      r'Acs: SHEL \(thing id 0\): Light_ChangeToValue \(12, 220, 0, 0, 0\)'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad'), '--fixed-step'],
+     lambda config: check_thing_specials(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -746,6 +754,17 @@ def check_acs_libraries(config):
         got = libs(saves[n])
         assert got.get('TESTLIB', [])[:2] == [101, 65537] and 'AUTOLIB' in got, 'save %d: %s' % (n + 1, got)
     assert saves[1]['map'] == 'E1M2' and list(libs(saves[1])) == ['AUTOLIB'], 'E1M2: %s' % libs(saves[1])
+
+
+def check_thing_specials(config):
+    """tools/testdata/udmf-things.wad: sector lights after the imp's death
+    (141: 64) and the shells' pickup (99: 220); each special runs once."""
+    saves = [save_json(config, n) for n in (1, 2, 3, 4)]
+    lights = [(s['sectorLight'][141], s['sectorLight'][99]) for s in saves]
+    assert lights[0][0] != 64 and lights[0][1] != 220, 'lit before: %s' % lights
+    assert lights[1] == (64, lights[0][1]) and lights[2] == (64, 220) and lights[3] == lights[1], lights
+    left = [[a['thingSpecial'] for a in s['actors'] if a.get('thingSpecial')] for s in saves]
+    assert len(left[0]) == 2 and left[1] == [[112, 12, 220, 0, 0, 0]] and left[2] == [] and left[3] == left[1], left
 
 
 def check_3d_floors(config):

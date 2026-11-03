@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 58 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 59 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -980,7 +980,11 @@ autotest only checks the library loads.
   (`Plat_UpByValue`); from `G:-416:200,A:90`, `LINE:1050` fires a
   rocket north from map spot 40 (32 above the floor, `Thing_Projectile`)
   and `LINE:1051` a falling imp ball (`Thing_ProjectileGravity`; the
-  saves' actors with `effect` 7 / 4 and `missileGravity`). Saves keep actors' ids (`tid`)
+  saves' actors with `effect` 7 / 4 and `missileGravity`). Thing
+  specials: the imp 81 at (848, 1056) lights sector 141 to 64 when it
+  dies (`D`) and the shells at `G:416:864` sector 99 to 220 (log `Acs:
+  TROO (thing id 0): Light_ChangeToValue (9, 64, 0, 0, 0)`; autotest
+  `thing-specials`, unit test `TestThingSpecials`). Saves keep actors' ids (`tid`)
   and pillars' ceiling targets; autotest `udmf-things` (golden).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's

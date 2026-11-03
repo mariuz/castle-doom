@@ -27,6 +27,15 @@ L = several days). Items inside a section are in suggested order.
   `arg0str`, `TDoomMap.LineArg0Str`; `SCRIPTWAITNAMED`).
   `udmf-slopes.wad` and `udmf-things.wad` cover them.
 
+- Thing specials (UDMF): a thing's `special` and `arg0..4`
+  (`TDoomThing.Special`, `TDoomActor.ThingSpecial` / `ThingArgs`, saved
+  as `thingSpecial`) run once through `TDoomWorld.RunThingSpecial` when
+  a monster dies (`KillActor`) or an item is picked up
+  (`CheckPickups`): `RunHexenSpecial`, what scripts' line actions use,
+  on a borrowed line, ACS_* actions included. `udmf-things.wad` gives
+  E1M1's imp 81 and shells 110 `Light_ChangeToValue` (unit test
+  `TestThingSpecials`, autotest `thing-specials`).
+
 - ACS libraries: `TAcsVM` holds several modules (`TAcsLoaded`: the
   map's BEHAVIOR first, then libraries from its `LOAD` chunk and the
   WADs' `LOADACS` lumps, found by lump name through
@@ -1415,7 +1424,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile` and ACS libraries (`LOAD`, `LOADACS`) done too; left are polyobjects, thing specials (a thing's own action on death), the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
+| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile`, ACS libraries (`LOAD`, `LOADACS`) and thing specials done too; left are polyobjects, the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
@@ -1459,8 +1468,9 @@ play.
 
 ## Suggested next three
 
-1. UDMF, the rest (S-M, see Content and formats): thing specials (a
-   thing's own action on death); polyobjects (L).
+1. UDMF, the rest: polyobjects (L, `Polyobj_StartLine` /
+   `ExplicitLine`, the anchor and start spot things, rotating and
+   sliding doors drawn as moving geometry).
 2. 3D floors, stage 2 (M, `docs/RENDERING_ROADMAP.md` item 5):
    monsters, missiles, hitscans and sight against the slabs (a list of
    floors and ceilings per sector in `TDoomWorld`), things spawned on

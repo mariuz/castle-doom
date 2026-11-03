@@ -109,6 +109,10 @@ type
     MapFlags: Integer;
     { UDMF: the thing id (ACS's tid), 0 none. }
     Tid: Integer;
+    { UDMF: the Hexen action (and its arguments) run once when the thing
+      dies or is picked up, 0 none. }
+    ThingSpecial: Integer;
+    ThingArgs: array [0..4] of Integer;
     { Missiles: velocity in Doom units per tic and damage dice. }
     VelX, VelY, VelZ: Single;
     MissileDamageDice, MissileDamageFaces: Integer;

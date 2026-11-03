@@ -136,6 +136,8 @@ type
     Tid: Integer;
     Z: Single;
     Args: array [0..4] of Integer;
+    { UDMF: the Hexen action run when the thing dies or is picked up. }
+    Special: Integer;
   end;
 
   { A UDMF light thing (ZDoom's 9800-9830): where it shines from (its
@@ -895,6 +897,7 @@ begin
         if (Things[NT].TypeNum = 9043) or (Things[NT].TypeNum = 9044) then
           Things[NT].TypeNum := 14;
         Things[NT].Tid := UdmfInt(B^, 'id');
+        Things[NT].Special := UdmfInt(B^, 'special');
         for J := 0 to 4 do
           Things[NT].Args[J] := UdmfInt(B^, 'arg' + IntToStr(J));
         Things[NT].Flags := 0;

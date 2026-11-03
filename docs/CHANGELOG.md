@@ -23,6 +23,8 @@
   use their map variables, arrays, functions and scripts (named ones too); a `LOADACS` lump
   loads libraries whose open scripts run on every map, Doom-format maps included. Their
   variables are in saves.
+- UDMF things' own actions (`special` and its arguments) run once when a monster dies or an
+  item is picked up, scripts (`ACS_Execute`) included.
 
 ## v0.61.0 (2026-11-01)
 

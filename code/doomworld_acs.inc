@@ -602,10 +602,30 @@ begin
 end;
 
 function TDoomWorld.AcsLineSpecial(const Inst: TAcsInstance; const Special: Integer; const Args: TAcsArgs): Integer;
+begin
+  Result := RunHexenSpecial(Special, Args, Inst.Line, Format('script %d', [Inst.Number]), false);
+end;
+
+procedure TDoomWorld.RunThingSpecial(const A: TDoomActor);
+var
+  Args: TAcsArgs;
+  K, Special: Integer;
+begin
+  if A.ThingSpecial = 0 then Exit;
+  Special := A.ThingSpecial;
+  { Once: a dead monster or a picked item does not run it again. }
+  A.ThingSpecial := 0;
+  for K := 0 to 4 do Args[K] := A.ThingArgs[K];
+  RunHexenSpecial(Special, Args, -1, Format('%s (thing id %d)', [A.Info^.Sprite, A.Tid]), true);
+end;
+
+function TDoomWorld.RunHexenSpecial(const Special: Integer; const Args: TAcsArgs; const Line: Integer;
+  const What: String; const AllowAcs: Boolean): Integer;
 var
   H: THexenLine;
-  Line, DestSec, OldSecTag, T: Integer;
+  DestSec, OldSecTag, T, UseLine: Integer;
   Saved: TDoomLinedef;
+  SavedStr: String;
   A: TDoomActor;
 begin
   Result := 0;
@@ -616,14 +636,21 @@ begin
     AcsLogOnce('Script action ' + H.Unsupported);
     Exit;
   end;
-  if (H.Special = 0) or UdmfAcsSpecial(H.Special) then Exit;
-  Line := Inst.Line;
-  if (Line < 0) or (Line > High(FMap.Linedefs)) then Line := 0;
-  Saved := FMap.Linedefs[Line];
-  FMap.Linedefs[Line].Special := H.Special;
-  FMap.Linedefs[Line].Tag := H.Tag;
-  FMap.Linedefs[Line].Args := H.Args;
-  FMap.Linedefs[Line].Trigger := H.Trigger;
+  if (H.Special = 0) or (UdmfAcsSpecial(H.Special) and not AllowAcs) then Exit;
+  UseLine := Line;
+  if (UseLine < 0) or (UseLine > High(FMap.Linedefs)) then UseLine := 0;
+  Saved := FMap.Linedefs[UseLine];
+  { A borrowed line names no script (UDMF's arg0str). }
+  SavedStr := '';
+  if UseLine <= High(FMap.LineArg0Str) then
+  begin
+    SavedStr := FMap.LineArg0Str[UseLine];
+    FMap.LineArg0Str[UseLine] := '';
+  end;
+  FMap.Linedefs[UseLine].Special := H.Special;
+  FMap.Linedefs[UseLine].Tag := H.Tag;
+  FMap.Linedefs[UseLine].Args := H.Args;
+  FMap.Linedefs[UseLine].Trigger := H.Trigger;
   { A teleport to a thing id: the sector its destination stands in,
     tagged for the call when it has no tag. }
   DestSec := -1;
@@ -640,16 +667,18 @@ begin
           T := 32000;
           FMap.Sectors[DestSec].Tag := T;
         end;
-        FMap.Linedefs[Line].Tag := T;
+        FMap.Linedefs[UseLine].Tag := T;
         Break;
       end;
-  WritelnLog('Acs', 'script %d: %s (%d, %d, %d, %d, %d)', [Inst.Number, HexenActionName(Special), Args[0], Args[1],
+  WritelnLog('Acs', '%s: %s (%d, %d, %d, %d, %d)', [What, HexenActionName(Special), Args[0], Args[1],
     Args[2], Args[3], Args[4]]);
   { As a player's action: monsters may only set off doors themselves, a
     script they started may do anything. }
-  Result := Ord(ApplySpecial(Line, acCross, false));
-  if (Line >= 0) and (Line <= High(FMap.Linedefs)) then
-    FMap.Linedefs[Line] := Saved;
+  Result := Ord(ApplySpecial(UseLine, acCross, false));
+  if (UseLine >= 0) and (UseLine <= High(FMap.Linedefs)) then
+    FMap.Linedefs[UseLine] := Saved;
+  if UseLine <= High(FMap.LineArg0Str) then
+    FMap.LineArg0Str[UseLine] := SavedStr;
   if DestSec >= 0 then
     FMap.Sectors[DestSec].Tag := OldSecTag;
 end;
