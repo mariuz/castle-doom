@@ -14,31 +14,42 @@ uses SysUtils, Classes,
   DoomWad;
 
 type
+  { UDMF maps: each record keeps the assignments the editor has no field
+    for ("key = value;" lines), written back as they were. }
   TEditVertex = record
     X, Y: Integer;
+    { UDMF: the coordinates as written (fractions), used while X, Y are
+      still their rounding. }
+    XText, YText: String;
   end;
 
   TEditLine = record
     V1, V2: Integer;
+    { Doom's flag bits; UDMF's booleans map to them. In UDMF maps with
+      Hexen's specials, Tag is the first argument (arg0), else the id. }
     Flags, Special, Tag: Integer;
     { Sidedefs, -1 when absent: [0] front (right of V1 -> V2), [1] back. }
     Side: array [0..1] of Integer;
+    Udmf: String;
   end;
 
   TEditSide = record
     XOffset, YOffset: Integer;
     Upper, Lower, Middle: String;
     Sector: Integer;
+    Udmf: String;
   end;
 
   TEditSector = record
     Floor, Ceiling: Integer;
     FloorTex, CeilingTex: String;
     Light, Special, Tag: Integer;
+    Udmf: String;
   end;
 
   TEditThing = record
     X, Y, Angle, TypeNum, Flags: Integer;
+    Udmf: String;
   end;
 
   TEditPoint = record
@@ -97,7 +108,16 @@ type
     procedure AddVerticesOnEdge(const A, B: TEditPoint; var Q: TEditPoints);
     procedure MakeOneSided(const L: Integer);
     procedure FlipLine(const L: Integer);
+    function LoadUdmf(const Text: String; out Error: String): Boolean;
+    function UdmfText: String;
   public
+    { The map came from a TEXTMAP (UDMF) and is written back as one, in
+      this namespace; Behavior is its BEHAVIOR lump, kept. }
+    Udmf: Boolean;
+    Namespace: String;
+    Behavior: TBytes;
+    { UDMF: vertices whose fractions were rounded away on reading. }
+    RoundedVertices: Integer;
     { The map lump name (E1M1, MAP01...). }
     Name: String;
     Vertices: TEditVertexArray;
@@ -108,10 +128,14 @@ type
     { Used by new rooms when the map has nothing to copy. }
     DefaultWall, DefaultFloor, DefaultCeiling: String;
     constructor Create;
+    { UDMF with Hexen's line specials (zdoom, hexen...): a line's Tag is
+      its arg0. }
+    function HexenNamespace: Boolean;
     { An empty map named AName. }
     procedure Clear(const AName: String);
-    { Read a map of the loaded WADs (the last one with that name). False
-      with Error for a missing map or one in the Hexen or UDMF format. }
+    { Read a map of the loaded WADs (the last one with that name), Doom's
+      binary lumps or UDMF's TEXTMAP. False with Error for a missing map
+      or one in the Hexen format. }
     function LoadFromWad(const Wad: TDoomWad; const MapName: String; out Error: String): Boolean;
     { The map's lumps after its marker (THINGS ... BLOCKMAP, nodes built),
       added to Names / Data (TMemoryStream each, the caller frees them). }
@@ -236,7 +260,7 @@ function EditedWadData(const MapName: String): TMemoryStream;
 
 implementation
 
-uses Math, DoomNodeBuilder, DoomWadWriter;
+uses Math, DoomNodeBuilder, DoomWadWriter, DoomUdmf;
 
 const
   ML_BLOCKING = 1;
@@ -388,6 +412,10 @@ begin
   FUndo := nil;
   FRedo := nil;
   FModified := false;
+  Udmf := false;
+  Namespace := '';
+  Behavior := nil;
+  RoundedVertices := 0;
 end;
 
 function TDoomEditMap.LoadFromWad(const Wad: TDoomWad; const MapName: String; out Error: String): Boolean;
@@ -404,6 +432,15 @@ var
   begin
     J := Lumps.IndexOf(LumpName);
     if J < 0 then Result := -1 else Result := PtrInt(Lumps.Objects[J]);
+  end;
+
+  function LumpText(const Index: Integer): String;
+  var
+    Bytes: TBytes;
+  begin
+    Bytes := Wad.LumpBytes(Index);
+    SetLength(Result, Length(Bytes));
+    if Length(Bytes) > 0 then Move(Bytes[0], Result[1], Length(Bytes));
   end;
 
 begin
@@ -425,92 +462,96 @@ begin
     end;
     if Lump('TEXTMAP') >= 0 then
     begin
-      Error := Format('%s is a UDMF map, which the editor cannot read', [UpperCase(MapName)]);
-      Exit;
-    end;
+      Clear(MapName);
+      if not LoadUdmf(LumpText(Lump('TEXTMAP')), Error) then Exit;
+      if Lump('BEHAVIOR') >= 0 then
+        Behavior := Wad.LumpBytes(Lump('BEHAVIOR'));
+    end else
     if Lump('BEHAVIOR') >= 0 then
     begin
       Error := Format('%s is a Hexen-format map, which the editor cannot read', [UpperCase(MapName)]);
       Exit;
-    end;
+    end else
     if (Lump('VERTEXES') < 0) or (Lump('LINEDEFS') < 0) or (Lump('SIDEDEFS') < 0) or
        (Lump('SECTORS') < 0) or (Lump('THINGS') < 0) then
     begin
       Error := Format('%s lacks map lumps', [UpperCase(MapName)]);
       Exit;
-    end;
-    Clear(MapName);
-
-    L := Lump('VERTEXES');
-    P := Wad.LumpPointer(L);
-    N := Wad.LumpSize(L) div 4;
-    SetLength(Vertices, N);
-    for I := 0 to N - 1 do
+    end else
     begin
-      Vertices[I].X := PInt16(P + I * 4)^;
-      Vertices[I].Y := PInt16(P + I * 4 + 2)^;
-    end;
+      Clear(MapName);
 
-    L := Lump('SECTORS');
-    P := Wad.LumpPointer(L);
-    N := Wad.LumpSize(L) div 26;
-    SetLength(Sectors, N);
-    for I := 0 to N - 1 do
-    begin
-      Sectors[I].Floor := PInt16(P + I * 26)^;
-      Sectors[I].Ceiling := PInt16(P + I * 26 + 2)^;
-      Sectors[I].FloorTex := DoomName(P + I * 26 + 4);
-      Sectors[I].CeilingTex := DoomName(P + I * 26 + 12);
-      Sectors[I].Light := PInt16(P + I * 26 + 20)^;
-      Sectors[I].Special := PInt16(P + I * 26 + 22)^;
-      Sectors[I].Tag := PInt16(P + I * 26 + 24)^;
-    end;
+      L := Lump('VERTEXES');
+      P := Wad.LumpPointer(L);
+      N := Wad.LumpSize(L) div 4;
+      SetLength(Vertices, N);
+      for I := 0 to N - 1 do
+      begin
+        Vertices[I].X := PInt16(P + I * 4)^;
+        Vertices[I].Y := PInt16(P + I * 4 + 2)^;
+      end;
 
-    L := Lump('SIDEDEFS');
-    P := Wad.LumpPointer(L);
-    N := Wad.LumpSize(L) div 30;
-    SetLength(Sides, N);
-    for I := 0 to N - 1 do
-    begin
-      Sides[I].XOffset := PInt16(P + I * 30)^;
-      Sides[I].YOffset := PInt16(P + I * 30 + 2)^;
-      Sides[I].Upper := DoomName(P + I * 30 + 4);
-      Sides[I].Lower := DoomName(P + I * 30 + 12);
-      Sides[I].Middle := DoomName(P + I * 30 + 20);
-      Sides[I].Sector := PUInt16(P + I * 30 + 28)^;
-      if Sides[I].Sector >= Length(Sectors) then Sides[I].Sector := 0;
-    end;
+      L := Lump('SECTORS');
+      P := Wad.LumpPointer(L);
+      N := Wad.LumpSize(L) div 26;
+      SetLength(Sectors, N);
+      for I := 0 to N - 1 do
+      begin
+        Sectors[I].Floor := PInt16(P + I * 26)^;
+        Sectors[I].Ceiling := PInt16(P + I * 26 + 2)^;
+        Sectors[I].FloorTex := DoomName(P + I * 26 + 4);
+        Sectors[I].CeilingTex := DoomName(P + I * 26 + 12);
+        Sectors[I].Light := PInt16(P + I * 26 + 20)^;
+        Sectors[I].Special := PInt16(P + I * 26 + 22)^;
+        Sectors[I].Tag := PInt16(P + I * 26 + 24)^;
+      end;
 
-    L := Lump('LINEDEFS');
-    P := Wad.LumpPointer(L);
-    N := Wad.LumpSize(L) div 14;
-    SetLength(Lines, N);
-    for I := 0 to N - 1 do
-    begin
-      Lines[I].V1 := PUInt16(P + I * 14)^;
-      Lines[I].V2 := PUInt16(P + I * 14 + 2)^;
-      Lines[I].Flags := PUInt16(P + I * 14 + 4)^;
-      Lines[I].Special := PUInt16(P + I * 14 + 6)^;
-      Lines[I].Tag := PInt16(P + I * 14 + 8)^;
-      Lines[I].Side[0] := PUInt16(P + I * 14 + 10)^;
-      Lines[I].Side[1] := PUInt16(P + I * 14 + 12)^;
-      if Lines[I].Side[0] >= Length(Sides) then Lines[I].Side[0] := -1;
-      if Lines[I].Side[1] >= Length(Sides) then Lines[I].Side[1] := -1;
-      if Lines[I].V1 >= Length(Vertices) then Lines[I].V1 := 0;
-      if Lines[I].V2 >= Length(Vertices) then Lines[I].V2 := 0;
-    end;
+      L := Lump('SIDEDEFS');
+      P := Wad.LumpPointer(L);
+      N := Wad.LumpSize(L) div 30;
+      SetLength(Sides, N);
+      for I := 0 to N - 1 do
+      begin
+        Sides[I].XOffset := PInt16(P + I * 30)^;
+        Sides[I].YOffset := PInt16(P + I * 30 + 2)^;
+        Sides[I].Upper := DoomName(P + I * 30 + 4);
+        Sides[I].Lower := DoomName(P + I * 30 + 12);
+        Sides[I].Middle := DoomName(P + I * 30 + 20);
+        Sides[I].Sector := PUInt16(P + I * 30 + 28)^;
+        if Sides[I].Sector >= Length(Sectors) then Sides[I].Sector := 0;
+      end;
 
-    L := Lump('THINGS');
-    P := Wad.LumpPointer(L);
-    N := Wad.LumpSize(L) div 10;
-    SetLength(Things, N);
-    for I := 0 to N - 1 do
-    begin
-      Things[I].X := PInt16(P + I * 10)^;
-      Things[I].Y := PInt16(P + I * 10 + 2)^;
-      Things[I].Angle := PInt16(P + I * 10 + 4)^;
-      Things[I].TypeNum := PInt16(P + I * 10 + 6)^;
-      Things[I].Flags := PInt16(P + I * 10 + 8)^;
+      L := Lump('LINEDEFS');
+      P := Wad.LumpPointer(L);
+      N := Wad.LumpSize(L) div 14;
+      SetLength(Lines, N);
+      for I := 0 to N - 1 do
+      begin
+        Lines[I].V1 := PUInt16(P + I * 14)^;
+        Lines[I].V2 := PUInt16(P + I * 14 + 2)^;
+        Lines[I].Flags := PUInt16(P + I * 14 + 4)^;
+        Lines[I].Special := PUInt16(P + I * 14 + 6)^;
+        Lines[I].Tag := PInt16(P + I * 14 + 8)^;
+        Lines[I].Side[0] := PUInt16(P + I * 14 + 10)^;
+        Lines[I].Side[1] := PUInt16(P + I * 14 + 12)^;
+        if Lines[I].Side[0] >= Length(Sides) then Lines[I].Side[0] := -1;
+        if Lines[I].Side[1] >= Length(Sides) then Lines[I].Side[1] := -1;
+        if Lines[I].V1 >= Length(Vertices) then Lines[I].V1 := 0;
+        if Lines[I].V2 >= Length(Vertices) then Lines[I].V2 := 0;
+      end;
+
+      L := Lump('THINGS');
+      P := Wad.LumpPointer(L);
+      N := Wad.LumpSize(L) div 10;
+      SetLength(Things, N);
+      for I := 0 to N - 1 do
+      begin
+        Things[I].X := PInt16(P + I * 10)^;
+        Things[I].Y := PInt16(P + I * 10 + 2)^;
+        Things[I].Angle := PInt16(P + I * 10 + 4)^;
+        Things[I].TypeNum := PInt16(P + I * 10 + 6)^;
+        Things[I].Flags := PInt16(P + I * 10 + 8)^;
+      end;
     end;
   finally
     FreeAndNil(Lumps);
@@ -546,6 +587,287 @@ begin
     DefaultCeiling := Sectors[0].CeilingTex;
   end;
   Result := true;
+end;
+
+{ UDMF ------------------------------------------------------------------------- }
+
+const
+  { UDMF's line booleans for Doom's flag bits 1, 2, 4... 512. }
+  UdmfLineFlagKeys: array [0..9] of String = ('blocking', 'blockmonsters', 'twosided', 'dontpegtop',
+    'dontpegbottom', 'secret', 'blocksound', 'dontdraw', 'mapped', 'passuse');
+
+function UdmfQuote(const S: String): String;
+begin
+  Result := '"' + StringReplace(StringReplace(S, '\', '\\', [rfReplaceAll]), '"', '\"', [rfReplaceAll]) + '"';
+end;
+
+function UdmfNumber(const V: Double): String;
+begin
+  if Frac(V) = 0 then
+    Result := Format('%d.0', [Round(V)])
+  else
+    Result := FloatToStr(V, DefaultFormatSettings);
+  Result := StringReplace(Result, DefaultFormatSettings.DecimalSeparator, '.', []);
+end;
+
+function TDoomEditMap.LoadUdmf(const Text: String; out Error: String): Boolean;
+var
+  M: TUdmfMap;
+  I, K, NV, NL, NS, NSec, NT, Rounded: Integer;
+  B: PUdmfBlock;
+  Hexen: Boolean;
+  Key: String;
+  X, Y: Double;
+
+  function Keep(const Typed: array of String): String;
+  var
+    J, T: Integer;
+    Known: Boolean;
+  begin
+    Result := '';
+    for J := 0 to B^.Count - 1 do
+    begin
+      Known := false;
+      for T := 0 to High(Typed) do
+        if B^.Keys[J] = Typed[T] then Known := true;
+      if Known then Continue;
+      if B^.Quoted[J] then
+        Result := Result + B^.Keys[J] + ' = ' + UdmfQuote(B^.Values[J]) + ';' + #10
+      else
+        Result := Result + B^.Keys[J] + ' = ' + B^.Values[J] + ';' + #10;
+    end;
+  end;
+
+begin
+  Result := false;
+  M := TUdmfMap.Create(Text);
+  try
+    if M.Error <> '' then
+    begin
+      Error := 'TEXTMAP: ' + M.Error;
+      Exit;
+    end;
+    Udmf := true;
+    Namespace := M.Namespace;
+    if Namespace = '' then Namespace := 'doom';
+    Hexen := M.HexenSpecials;
+    NV := 0; NL := 0; NS := 0; NSec := 0; NT := 0;
+    for I := 0 to M.BlockCount - 1 do
+      case M.Blocks[I].Kind of
+        'vertex': Inc(NV);
+        'linedef': Inc(NL);
+        'sidedef': Inc(NS);
+        'sector': Inc(NSec);
+        'thing': Inc(NT);
+      end;
+    SetLength(Vertices, NV);
+    SetLength(Lines, NL);
+    SetLength(Sides, NS);
+    SetLength(Sectors, NSec);
+    SetLength(Things, NT);
+    NV := 0; NL := 0; NS := 0; NSec := 0; NT := 0;
+    Rounded := 0;
+    for I := 0 to M.BlockCount - 1 do
+    begin
+      B := @M.Blocks[I];
+      if B^.Kind = 'vertex' then
+      begin
+        X := UdmfFloat(B^, 'x');
+        Y := UdmfFloat(B^, 'y');
+        Vertices[NV].X := Round(X);
+        Vertices[NV].Y := Round(Y);
+        if (Frac(X) <> 0) or (Frac(Y) <> 0) then Inc(Rounded);
+        Vertices[NV].XText := UdmfStr(B^, 'x');
+        Vertices[NV].YText := UdmfStr(B^, 'y');
+        Inc(NV);
+      end else
+      if B^.Kind = 'linedef' then
+      begin
+        Lines[NL].V1 := EnsureRange(UdmfInt(B^, 'v1'), 0, Max(0, Length(Vertices) - 1));
+        Lines[NL].V2 := EnsureRange(UdmfInt(B^, 'v2'), 0, Max(0, Length(Vertices) - 1));
+        Lines[NL].Side[0] := UdmfInt(B^, 'sidefront', -1);
+        Lines[NL].Side[1] := UdmfInt(B^, 'sideback', -1);
+        if Lines[NL].Side[0] >= Length(Sides) then Lines[NL].Side[0] := -1;
+        if Lines[NL].Side[1] >= Length(Sides) then Lines[NL].Side[1] := -1;
+        Lines[NL].Special := UdmfInt(B^, 'special');
+        Lines[NL].Flags := 0;
+        for K := 0 to High(UdmfLineFlagKeys) do
+          if UdmfBool(B^, UdmfLineFlagKeys[K]) then
+            Lines[NL].Flags := Lines[NL].Flags or (1 shl K);
+        if Hexen then Key := 'arg0' else Key := 'id';
+        Lines[NL].Tag := UdmfInt(B^, Key);
+        Lines[NL].Udmf := Keep(['v1', 'v2', 'sidefront', 'sideback', 'special', Key, 'blocking', 'blockmonsters',
+          'twosided', 'dontpegtop', 'dontpegbottom', 'secret', 'blocksound', 'dontdraw', 'mapped', 'passuse']);
+        Inc(NL);
+      end else
+      if B^.Kind = 'sidedef' then
+      begin
+        Sides[NS].XOffset := Round(UdmfFloat(B^, 'offsetx'));
+        Sides[NS].YOffset := Round(UdmfFloat(B^, 'offsety'));
+        Sides[NS].Upper := UpperCase(UdmfStr(B^, 'texturetop', '-'));
+        Sides[NS].Lower := UpperCase(UdmfStr(B^, 'texturebottom', '-'));
+        Sides[NS].Middle := UpperCase(UdmfStr(B^, 'texturemiddle', '-'));
+        Sides[NS].Sector := Max(0, UdmfInt(B^, 'sector'));
+        Sides[NS].Udmf := Keep(['offsetx', 'offsety', 'texturetop', 'texturebottom', 'texturemiddle', 'sector']);
+        Inc(NS);
+      end else
+      if B^.Kind = 'sector' then
+      begin
+        Sectors[NSec].Floor := Round(UdmfFloat(B^, 'heightfloor'));
+        Sectors[NSec].Ceiling := Round(UdmfFloat(B^, 'heightceiling'));
+        Sectors[NSec].FloorTex := UpperCase(UdmfStr(B^, 'texturefloor', '-'));
+        Sectors[NSec].CeilingTex := UpperCase(UdmfStr(B^, 'textureceiling', '-'));
+        Sectors[NSec].Light := UdmfInt(B^, 'lightlevel', 160);
+        Sectors[NSec].Special := UdmfInt(B^, 'special');
+        Sectors[NSec].Tag := UdmfInt(B^, 'id');
+        Sectors[NSec].Udmf := Keep(['heightfloor', 'heightceiling', 'texturefloor', 'textureceiling', 'lightlevel',
+          'special', 'id']);
+        Inc(NSec);
+      end else
+      if B^.Kind = 'thing' then
+      begin
+        Things[NT].X := Round(UdmfFloat(B^, 'x'));
+        Things[NT].Y := Round(UdmfFloat(B^, 'y'));
+        Things[NT].Angle := UdmfInt(B^, 'angle');
+        Things[NT].TypeNum := UdmfInt(B^, 'type');
+        Things[NT].Flags := 0;
+        if UdmfBool(B^, 'skill1') or UdmfBool(B^, 'skill2') then Things[NT].Flags := Things[NT].Flags or 1;
+        if UdmfBool(B^, 'skill3') then Things[NT].Flags := Things[NT].Flags or 2;
+        if UdmfBool(B^, 'skill4') or UdmfBool(B^, 'skill5') then Things[NT].Flags := Things[NT].Flags or 4;
+        if UdmfBool(B^, 'ambush') then Things[NT].Flags := Things[NT].Flags or 8;
+        if not UdmfBool(B^, 'single') then Things[NT].Flags := Things[NT].Flags or 16;
+        Things[NT].Udmf := Keep(['x', 'y', 'angle', 'type', 'skill1', 'skill2', 'skill3', 'skill4', 'skill5',
+          'ambush', 'single']);
+        Inc(NT);
+      end;
+    end;
+    for I := 0 to High(Sides) do
+      if Sides[I].Sector >= Length(Sectors) then Sides[I].Sector := 0;
+    for I := 0 to High(Lines) do
+      for K := 0 to 1 do
+        if Lines[I].Side[K] >= Length(Sides) then Lines[I].Side[K] := -1;
+    RoundedVertices := Rounded;
+    Result := true;
+  finally
+    FreeAndNil(M);
+  end;
+end;
+
+function TDoomEditMap.HexenNamespace: Boolean;
+begin
+  Result := (Namespace = 'hexen') or (Namespace = 'zdoom') or (Namespace = 'eternity') or (Namespace = 'vavoom');
+end;
+
+function TDoomEditMap.UdmfText: String;
+var
+  Sb: TStringBuilder;
+  I, K: Integer;
+  Hexen: Boolean;
+
+  procedure Block(const Kind: String; const Index: Integer);
+  begin
+    Sb.Append(Kind).Append(' // ').Append(IntToStr(Index)).Append(#10).Append('{').Append(#10);
+  end;
+
+  procedure Put(const Key, Value: String);
+  begin
+    Sb.Append(Key).Append(' = ').Append(Value).Append(';').Append(#10);
+  end;
+
+  procedure EndBlock(const Extra: String);
+  begin
+    Sb.Append(Extra).Append('}').Append(#10).Append(#10);
+  end;
+
+  { A coordinate as read while it still rounds to V, else V. }
+  function Coord(const Text: String; const V: Integer): String;
+  var
+    F: Double;
+    Fs: TFormatSettings;
+  begin
+    Fs := DefaultFormatSettings;
+    Fs.DecimalSeparator := '.';
+    if (Text <> '') and TryStrToFloat(Text, F, Fs) and (Round(F) = V) then
+      Result := Text
+    else
+      Result := UdmfNumber(V);
+  end;
+
+begin
+  Hexen := HexenNamespace;
+  Sb := TStringBuilder.Create;
+  try
+    Sb.Append('namespace = ').Append(UdmfQuote(Namespace)).Append(';').Append(#10).Append(#10);
+    for I := 0 to High(Vertices) do
+    begin
+      Block('vertex', I);
+      Put('x', Coord(Vertices[I].XText, Vertices[I].X));
+      Put('y', Coord(Vertices[I].YText, Vertices[I].Y));
+      EndBlock('');
+    end;
+    for I := 0 to High(Lines) do
+    begin
+      Block('linedef', I);
+      Put('v1', IntToStr(Lines[I].V1));
+      Put('v2', IntToStr(Lines[I].V2));
+      if Lines[I].Side[0] >= 0 then Put('sidefront', IntToStr(Lines[I].Side[0]));
+      if Lines[I].Side[1] >= 0 then Put('sideback', IntToStr(Lines[I].Side[1]));
+      for K := 0 to High(UdmfLineFlagKeys) do
+        if (Lines[I].Flags and (1 shl K)) <> 0 then Put(UdmfLineFlagKeys[K], 'true');
+      if Lines[I].Special <> 0 then Put('special', IntToStr(Lines[I].Special));
+      if Lines[I].Tag <> 0 then
+        if Hexen then Put('arg0', IntToStr(Lines[I].Tag)) else Put('id', IntToStr(Lines[I].Tag));
+      EndBlock(Lines[I].Udmf);
+    end;
+    for I := 0 to High(Sides) do
+    begin
+      Block('sidedef', I);
+      if Sides[I].XOffset <> 0 then Put('offsetx', IntToStr(Sides[I].XOffset));
+      if Sides[I].YOffset <> 0 then Put('offsety', IntToStr(Sides[I].YOffset));
+      if Sides[I].Upper <> '-' then Put('texturetop', UdmfQuote(Sides[I].Upper));
+      if Sides[I].Lower <> '-' then Put('texturebottom', UdmfQuote(Sides[I].Lower));
+      if Sides[I].Middle <> '-' then Put('texturemiddle', UdmfQuote(Sides[I].Middle));
+      Put('sector', IntToStr(Sides[I].Sector));
+      EndBlock(Sides[I].Udmf);
+    end;
+    for I := 0 to High(Sectors) do
+    begin
+      Block('sector', I);
+      Put('heightfloor', IntToStr(Sectors[I].Floor));
+      Put('heightceiling', IntToStr(Sectors[I].Ceiling));
+      Put('texturefloor', UdmfQuote(Sectors[I].FloorTex));
+      Put('textureceiling', UdmfQuote(Sectors[I].CeilingTex));
+      Put('lightlevel', IntToStr(Sectors[I].Light));
+      if Sectors[I].Special <> 0 then Put('special', IntToStr(Sectors[I].Special));
+      if Sectors[I].Tag <> 0 then Put('id', IntToStr(Sectors[I].Tag));
+      EndBlock(Sectors[I].Udmf);
+    end;
+    for I := 0 to High(Things) do
+    begin
+      Block('thing', I);
+      Put('x', UdmfNumber(Things[I].X));
+      Put('y', UdmfNumber(Things[I].Y));
+      Put('angle', IntToStr(Things[I].Angle));
+      Put('type', IntToStr(Things[I].TypeNum));
+      if (Things[I].Flags and 1) <> 0 then
+      begin
+        Put('skill1', 'true');
+        Put('skill2', 'true');
+      end;
+      if (Things[I].Flags and 2) <> 0 then Put('skill3', 'true');
+      if (Things[I].Flags and 4) <> 0 then
+      begin
+        Put('skill4', 'true');
+        Put('skill5', 'true');
+      end;
+      if (Things[I].Flags and 8) <> 0 then Put('ambush', 'true');
+      if (Things[I].Flags and 16) = 0 then Put('single', 'true');
+      EndBlock(Things[I].Udmf);
+    end;
+    Result := Sb.ToString;
+  finally
+    FreeAndNil(Sb);
+  end;
 end;
 
 function TDoomEditMap.MostCommonWall: String;
@@ -588,6 +910,7 @@ var
   SideSectors: array of Integer;
   BmLines: array of TBlockmapLine;
   I, J: Integer;
+  UdmfBytes: String;
 
   procedure Lump(const AName: String);
   begin
@@ -607,6 +930,21 @@ var
   end;
 
 begin
+  { UDMF: the text, the scripts as they were, the end marker; ports build
+    the nodes. }
+  if Udmf then
+  begin
+    Lump('TEXTMAP');
+    UdmfBytes := UdmfText;
+    if UdmfBytes <> '' then S.WriteBuffer(UdmfBytes[1], Length(UdmfBytes));
+    if Length(Behavior) > 0 then
+    begin
+      Lump('BEHAVIOR');
+      S.WriteBuffer(Behavior[0], Length(Behavior));
+    end;
+    Lump('ENDMAP');
+    Exit;
+  end;
   SetLength(NbVerts, Length(Vertices));
   for I := 0 to High(Vertices) do
   begin
@@ -751,6 +1089,12 @@ function TDoomEditMap.Summary: String;
 begin
   Result := Format('%s: %d vertices, %d lines, %d sides, %d sectors, %d things', [
     Name, Length(Vertices), Length(Lines), Length(Sides), Length(Sectors), Length(Things)]);
+  if Udmf then
+  begin
+    Result := Result + Format(', UDMF namespace "%s"', [Namespace]);
+    if Length(Behavior) > 0 then Result := Result + ' with scripts';
+    if RoundedVertices > 0 then Result := Result + Format(', %d vertices rounded', [RoundedVertices]);
+  end;
 end;
 
 { Queries ------------------------------------------------------------------------ }
@@ -2138,7 +2482,16 @@ begin
         T := Lines[I].V1; Lines[I].V1 := Lines[I].V2; Lines[I].V2 := T;
         T := Lines[I].Side[0]; Lines[I].Side[0] := Lines[I].Side[1]; Lines[I].Side[1] := T;
       end;
-      Lines[I].Special := 1;
+      if Udmf and HexenNamespace then
+      begin
+        { Door_Raise (12): tag 0 is the sector behind, speed 16, 150 tics,
+          used by players and monsters, again and again. }
+        Lines[I].Special := 12;
+        Lines[I].Tag := 0;
+        Lines[I].Udmf := 'arg1 = 16;' + #10 + 'arg2 = 150;' + #10 + 'playeruse = true;' + #10 +
+          'monsteruse = true;' + #10 + 'repeatspecial = true;' + #10;
+      end else
+        Lines[I].Special := 1;
       Outside := Lines[I].Side[0];
       Sides[Outside].Upper := 'DOOR3';
     end;

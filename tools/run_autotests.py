@@ -596,6 +596,18 @@ TESTS = [
     # The properties panel (E: typed floor and light), sectors copied and
     # pasted twice (Ctrl+C / Ctrl+V in sectors mode), two-sided lines
     # flipped (F) and a typed texture offset.
+    # The editor on a UDMF map (udmf-things.wad): the start room (140)
+    # raised to 24, a line's arg0 set, exported as TEXTMAP with its
+    # BEHAVIOR and play-tested (the scripts run, the player stands at 24).
+    ('editor-udmf', 'E1M1',
+     'VIEW:-416:256:0.5,MODE:s,CLICK:-416:240,KEY:E,TYPE:24,KEY:Enter,KEY:E,MODE:l,CLICK:-512:192,KEY:E,KEY:Down,'
+     'TYPE:7,KEY:Enter,S,EXPORT,PLAY,W:1.5,SAVE:1,Q',
+     [r'Editor: Imported E1M1: \d+ vertices, 1175 lines, \d+ sides, 182 sectors, \d+ things, '
+      r'UDMF namespace "zdoom" with scripts', r'Editor: Sector 140: Floor height 24',
+      r'Editor: Line 829: Arg 0 7', r'Editor: Exported E1M1', r'Editor: Play-test E1M1',
+      r'Map: E1M1: UDMF, namespace "zdoom"', r'Message: Spawned 2'],
+     ['--edit', '-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad')],
+     lambda config: check_editor_udmf(config)),
     ('editor-props', 'E1M1',
      'VIEW:-416:256:0.5,DRAW:-480:192:-352:192:-352:288:-480:288,MODE:s,CLICK:-416:240,KEY:E,TYPE:24,KEY:Enter,'
      'KEY:Down,KEY:Down,TYPE:255,KEY:Enter,S,KEY:E,KEY:Ctrl+C,MOUSE:-416:-300,KEY:Ctrl+V,MOUSE:-900:256,KEY:Ctrl+V,S,'
@@ -1142,6 +1154,25 @@ def check_editor_copy(config):
     assert inner == 2, 'ring has %d inner lines' % inner
 
 
+def check_editor_udmf(config):
+    """The exported UDMF map: TEXTMAP, the BEHAVIOR kept, sector 140's
+    floor 24, line 829's arg0 7 with its Thing_Spawn kept, the map spot's
+    id and the thing specials; the play-test stands on the raised floor."""
+    import re
+    lumps = read_wad(os.path.join(os.path.dirname(config), 'editor-udmf_e1m1.wad'))
+    assert [n for n, _ in lumps] == ['E1M1', 'TEXTMAP', 'BEHAVIOR', 'ENDMAP'], [n for n, _ in lumps]
+    text = lumps[1][1].decode('latin-1')
+    assert text.startswith('namespace = "zdoom";'), text[:40]
+    blocks = re.findall(r'(\w+) // (\d+)\n\{\n(.*?)\}', text, re.S)
+    sec = [b for k, n, b in blocks if k == 'sector' and n == '140'][0]
+    assert 'heightfloor = 24;' in sec, sec
+    line = [b for k, n, b in blocks if k == 'linedef' and n == '829'][0]
+    assert 'special = 135;' in line and 'arg0 = 7;' in line and 'arg1 = 5;' in line and 'playeruse = true;' in line, line
+    assert 'id = 20;' in text and text.count('special = 112;') == 2, 'thing ids or specials lost'
+    p = save_json(config, 1)['player']
+    assert abs(p['z'] - 24) < 2, 'play-test not on the raised floor: %s' % p
+
+
 def check_editor_props(config):
     """Typed values, pasted sectors and a flipped line in the exported PWAD:
     sector 182 (floor 24, light 255) and its two copies, line 1176 turned
@@ -1296,7 +1327,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'editor-udmf_edit_1.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
 ]

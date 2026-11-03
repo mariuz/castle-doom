@@ -131,6 +131,7 @@ type
     procedure TestEditWalls;
     procedure TestEditCutDelete;
     procedure TestEditFlipOutline;
+    procedure TestEditUdmf;
   end;
 
   TTestStates = class(TTestCase)
@@ -3410,6 +3411,94 @@ begin
   finally
     FreeAndNil(E);
     FreeAndNil(W);
+  end;
+end;
+
+{ UDMF maps in the editor (tools/testdata/udmf-*.wad): read from TEXTMAP,
+  sector 140 raised by 24, written back as TEXTMAP (with BEHAVIOR) and
+  read by DoomMap again: the same lines, specials, things, scripts and
+  the fields the editor has no place for. }
+procedure TTestEditor.TestEditUdmf;
+const
+  Files: array [0..2] of String = ('udmf-things.wad', 'udmf-doom.wad', 'udmf-look.wad');
+  Spaces: array [0..2] of String = ('zdoom', 'doom', 'zdoom');
+var
+  Dir, Error, F: String;
+  W, W2: TDoomWad;
+  E: TDoomEditMap;
+  M, M2: TDoomMap;
+  Data: TMemoryStream;
+  I, K: Integer;
+begin
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf-things.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf-things.wad') then
+  begin
+    WriteLn('TestEditUdmf: no udmf-things.wad (python3 tools/make_udmf_wad.py), skipped');
+    Exit;
+  end;
+  Error := '';
+  for K := 0 to High(Files) do
+  begin
+    F := FilenameToUriSafe(ExpandFileName(Dir + Files[K]));
+    W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+    E := TDoomEditMap.Create;
+    M := nil;
+    try
+      W.AddFile(F);
+      AssertTrue(Files[K] + ': read: ' + Error, E.LoadFromWad(W, 'E1M1', Error));
+      AssertTrue(Files[K] + ': UDMF', E.Udmf);
+      AssertEquals(Files[K] + ': namespace', Spaces[K], E.Namespace);
+      M := TDoomMap.Create(W, 'E1M1');
+      AssertEquals(Files[K] + ': lines', Length(M.Linedefs), Length(E.Lines));
+      AssertEquals(Files[K] + ': things', Length(M.Things), Length(E.Things));
+      E.ChangeSector(140, 24, 0, 0);
+      Data := E.SaveToWad;
+      try
+        RegisterEditedWad('E1M1', Data);
+      finally
+        FreeAndNil(Data);
+      end;
+      W2 := TDoomWad.Create(WadUrl('freedoom1.wad'));
+      try
+        W2.AddFile(F);
+        W2.AddFile(EditedWadUrl('E1M1'));
+        M2 := TDoomMap.Create(W2, 'E1M1');
+        try
+          AssertTrue(Files[K] + ': still UDMF', M2.Udmf);
+          AssertEquals(Files[K] + ': lines back', Length(M.Linedefs), Length(M2.Linedefs));
+          AssertEquals(Files[K] + ': sectors back', Length(M.Sectors), Length(M2.Sectors));
+          AssertEquals(Files[K] + ': raised', M.Sectors[140].FloorHeight + 24, M2.Sectors[140].FloorHeight, 0.01);
+          for I := 0 to High(M.Linedefs) do
+          begin
+            AssertEquals(Files[K] + ': special of ' + IntToStr(I), M.Linedefs[I].Special, M2.Linedefs[I].Special);
+            AssertEquals(Files[K] + ': tag of ' + IntToStr(I), M.Linedefs[I].Tag, M2.Linedefs[I].Tag);
+            AssertEquals(Files[K] + ': trigger of ' + IntToStr(I), M.Linedefs[I].Trigger, M2.Linedefs[I].Trigger);
+            AssertEquals(Files[K] + ': flags of ' + IntToStr(I), M.Linedefs[I].Flags, M2.Linedefs[I].Flags);
+          end;
+          for I := 0 to High(M.Things) do
+          begin
+            AssertEquals(Files[K] + ': thing type', M.Things[I].TypeNum, M2.Things[I].TypeNum);
+            AssertEquals(Files[K] + ': thing id', M.Things[I].Tid, M2.Things[I].Tid);
+            AssertEquals(Files[K] + ': thing special', M.Things[I].Special, M2.Things[I].Special);
+            AssertEquals(Files[K] + ': thing flags', M.Things[I].Flags, M2.Things[I].Flags);
+            AssertEquals(Files[K] + ': thing height', M.Things[I].Z, M2.Things[I].Z, 0.01);
+          end;
+          AssertEquals(Files[K] + ': scripts kept', Length(M.Behavior), Length(M2.Behavior));
+          AssertEquals(Files[K] + ': polygon area', PolygonArea(M), PolygonArea(M2), PolygonArea(M) * 0.001);
+        finally
+          FreeAndNil(M2);
+        end;
+      finally
+        FreeAndNil(W2);
+      end;
+      if K = 2 then
+        AssertTrue('look fields kept', Pos('lightcolor', E.Sectors[140].Udmf) > 0);
+    finally
+      FreeAndNil(M);
+      FreeAndNil(E);
+      FreeAndNil(W);
+    end;
   end;
 end;
 

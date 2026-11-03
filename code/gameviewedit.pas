@@ -275,7 +275,7 @@ uses Math, StrUtils,
   CastleFilesUtils, CastleRectangles, CastleRenderOptions, CastleFonts,
   {$ifdef WASI} Job.Js, CastleInternalJobWeb, {$endif}
   CastleCameras, CastleTimeUtils,
-  DoomThings, DoomMap, DoomMapTransform, GameViewPlay, GameViewMenu, GameSaveStorage, DoomExport;
+  DoomThings, DoomMap, DoomMapTransform, GameViewPlay, GameViewMenu, GameSaveStorage, DoomExport, DoomUdmf;
 
 type
   TThingChoice = record
@@ -666,6 +666,13 @@ begin
         L := FEdit.Lines[FSelected];
         Side := 'one-sided';
         if L.Side[1] >= 0 then Side := 'two-sided';
+        { UDMF maps with Hexen's specials: the action's name, arg0. }
+        if FEdit.Udmf and FEdit.HexenNamespace then
+          Result := Result + Format('Line %d (%s), length %d, special %d %s, arg0 %d, flags %d', [FSelected, Side,
+            Round(Sqrt(Sqr(FEdit.Vertices[L.V2].X - FEdit.Vertices[L.V1].X) + Sqr(FEdit.Vertices[L.V2].Y - FEdit.Vertices[L.V1].Y))),
+            L.Special, HexenActionName(L.Special), L.Tag, L.Flags]) + #10 +
+            '  front: ' + SideText(L.Side[0]) + #10 + '  back: ' + SideText(L.Side[1])
+        else
         Result := Result + Format('Line %d (%s), length %d, special %s, tag %d, flags %d', [FSelected, Side,
           Round(Sqrt(Sqr(FEdit.Vertices[L.V2].X - FEdit.Vertices[L.V1].X) + Sqr(FEdit.Vertices[L.V2].Y - FEdit.Vertices[L.V1].Y))),
           ChoiceName(LineSpecials, L.Special), L.Tag, L.Flags]) + #10 +
@@ -1258,6 +1265,9 @@ begin
     emThings: Result := ThingProps[Field];
     else Result := VertexProps[Field];
   end;
+  { Hexen's line specials take the sector tag (most of them) as arg0. }
+  if (FMode = emLines) and (Field = 1) and FEdit.Udmf and FEdit.HexenNamespace then
+    Result := 'Arg 0';
 end;
 
 function TViewEdit.PropValue(const Index, Field: Integer): Integer;

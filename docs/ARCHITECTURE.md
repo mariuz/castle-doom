@@ -449,7 +449,11 @@ map number, independent of `System.Random`.
 `TDoomEditMap` holds a map as the WAD's own records in plain arrays
 (`Vertices`, `Lines`, `Sides`, `Sectors`, `Things`, whole units), read
 by `LoadFromWad` straight from the map's lumps (the node builder's split
-vertices dropped; Hexen and UDMF maps refused) and changed by the
+vertices dropped; Hexen-format maps refused) or from a UDMF map's
+TEXTMAP (`LoadUdmf`: the fields the records have, Doom's flag bits from
+UDMF's booleans, a Hexen namespace's arg0 as the line's Tag; every
+other assignment kept as text in the record's `Udmf`, so `WriteLumps`
+writes the map back as TEXTMAP + BEHAVIOR + ENDMAP), and changed by the
 editor's operations, each of which first pushes a copy of all five
 arrays on the undo stack (`Snapshot`; dynamic arrays of records copy
 cheaply). Its queries are Doom Builder's: `SectorAt` casts a ray to the

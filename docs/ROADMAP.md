@@ -27,6 +27,20 @@ L = several days). Items inside a section are in suggested order.
   `arg0str`, `TDoomMap.LineArg0Str`; `SCRIPTWAITNAMED`).
   `udmf-slopes.wad` and `udmf-things.wad` cover them.
 
+- The map editor on UDMF maps: `TDoomEditMap.LoadFromWad` reads a
+  TEXTMAP (`LoadUdmf`, DoomUdmf's parser, which now remembers quoted
+  values) into the same records: Doom's flag bits from UDMF's line and
+  thing booleans, a line's Tag from arg0 in Hexen-special namespaces
+  (`HexenNamespace`; the panel says "Arg 0") or from its id, heights
+  and coordinates rounded (`RoundedVertices`; an unmoved vertex keeps
+  its written fraction, `XText` / `YText`). Every other assignment stays
+  as text on its record (`Udmf`) and `WriteLumps` writes TEXTMAP
+  (`UdmfText`), the map's BEHAVIOR unchanged and ENDMAP; ports build
+  the nodes. `MakeDoor` makes `Door_Raise` in Hexen namespaces. Unit
+  test `TestEditUdmf` (three namespaces read, edited, written and read
+  back by DoomMap), autotest `editor-udmf` (a raised room, arg0, the
+  exported TEXTMAP checked, a play-test running the scripts).
+
 - Thing specials (UDMF): a thing's `special` and `arg0..4`
   (`TDoomThing.Special`, `TDoomActor.ThingSpecial` / `ThingArgs`, saved
   as `thingSpecial`) run once through `TDoomWorld.RunThingSpecial` when
@@ -1431,7 +1445,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile`, ACS libraries (`LOAD`, `LOADACS`) and thing specials done too; left are polyobjects, the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
+| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile`, ACS libraries (`LOAD`, `LOADACS`) and thing specials done too; left are polyobjects, editing the UDMF-only fields in the map editor (it reads and writes UDMF maps now, keeping them), and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
@@ -1471,19 +1485,21 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels, the menu, cheats, the browser, ghosts and the compact format are done (see above); left are choosing between several kept demos in the browser, a ghost picked from the menu (Options -> Race ghost...), the ghost's time on the intermission screen, and ghosts of random maps and PWADs (the race loads the IWAD's map today). | Replays; races. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | S |
-| **Map editor, the rest**: done (see above: the 2D editor, play-test, exports with things and sky, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors with holes, the 3D preview, opening PWADs, picking in 3D, the map list, texture alignment). Left, for UZDoom maps: editing UDMF maps (the editor refuses them). | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M |
+| **Map editor, the rest**: done (see above: the 2D editor, play-test, exports with things and sky, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors with holes, the 3D preview, opening PWADs, picking in 3D, the map list, texture alignment). UDMF maps load and save as UDMF (see above); left: editing the UDMF-only fields. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M |
 
 ## Suggested next three
 
 1. UDMF, the rest: polyobjects (L, `Polyobj_StartLine` /
    `ExplicitLine`, the anchor and start spot things, rotating and
    sliding doors drawn as moving geometry).
-2. 3D floors, stage 2 (M, `docs/RENDERING_ROADMAP.md` item 5):
-   monsters, missiles, hitscans and sight against the slabs (a list of
-   floors and ceilings per sector in `TDoomWorld`), things spawned on
-   them, light under them, swimmable and sloped slabs.
-3. Map editor on UDMF maps (M): read `TEXTMAP` into `TDoomEditMap`
-   (with its UDMF fields kept) and write it back.
+2. 3D floors, stage 3 (M, `docs/RENDERING_ROADMAP.md` item 5): light
+   under slabs (the control sector's light below the slab), swimmable
+   slabs (water: the view tinted inside, the player swims), sloped and
+   vertex-height slabs, sounds blocked by them.
+3. Map editor, UDMF fields (S-M): edit what is kept as text today
+   (arg1..arg4, line and thing ids, activation flags, thing specials,
+   the look fields) in the properties panel, and keep fractional
+   vertices through moves.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

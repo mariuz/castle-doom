@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 59 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 60 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -723,7 +723,11 @@ the picker on that part only), `KEY:M` the map list (`Editor: Map list:
 36 maps`); a PWAD with several maps for tests is `--random-wad FILE`'s
 (harness `editor-pick`). `ALIGN3D:fx:fy` is `O` there (align that wall:
 `KEY:Left` / `KEY:Shift+Up`... log `Editor: Line 919 front offsets
-115, 8`, `KEY:Enter` ends; autotest `editor-align`). A clear spot in E1M1's start room for a
+115, 8`, `KEY:Enter` ends; autotest `editor-align`). UDMF maps open too
+(`--edit -file tools/testdata/udmf-things.wad`; log `Editor: Imported
+E1M1: ..., UDMF namespace "zdoom" with scripts`) and export as TEXTMAP +
+BEHAVIOR + ENDMAP with every field kept (autotest `editor-udmf`, unit
+test `TestEditUdmf`). A clear spot in E1M1's start room for a
 room: `DRAW:-480:192:-352:192:-352:288:-480:288` (autotest `editor`
 raises it to 24 and play-tests standing on it; its exported WAD is
 checked with Python `struct`, `check_map_wad`). `--export-map MAP FILE`,

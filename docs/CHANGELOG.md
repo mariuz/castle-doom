@@ -26,6 +26,9 @@
 - 3D floors, stage 2: monsters walk on and under solid slabs (and step onto low ones),
   missiles, shots, autoaim and sight stop at them, and map things spawn on the slab their
   height reaches.
+- Map editor: UDMF maps open, edit and export as UDMF (TEXTMAP with the map's scripts),
+  keeping every field the editor does not show; in Hexen-special namespaces a line's tag
+  field is its first argument.
 - UDMF things' own actions (`special` and its arguments) run once when a monster dies or an
   item is picked up, scripts (`ACS_Execute`) included.
 

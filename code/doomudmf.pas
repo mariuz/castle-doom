@@ -26,6 +26,8 @@ type
     { Lower case: vertex, linedef, sidedef, sector, thing (others kept). }
     Kind: String;
     Keys, Values: array of String;
+    { The value was a quoted string (the map editor writes it back so). }
+    Quoted: array of Boolean;
     Count: Integer;
   end;
   PUdmfBlock = ^TUdmfBlock;
@@ -304,15 +306,17 @@ var
     Inc(BlockCount);
   end;
 
-  procedure AddValue(var B: TUdmfBlock; const Key, Value: String);
+  procedure AddValue(var B: TUdmfBlock; const Key, Value: String; const IsString: Boolean);
   begin
     if B.Count >= Length(B.Keys) then
     begin
       SetLength(B.Keys, Max(8, 2 * B.Count));
       SetLength(B.Values, Length(B.Keys));
+      SetLength(B.Quoted, Length(B.Keys));
     end;
     B.Keys[B.Count] := LowerCase(Key);
     B.Values[B.Count] := Value;
+    B.Quoted[B.Count] := IsString;
     Inc(B.Count);
   end;
 
@@ -366,7 +370,7 @@ begin
           Fail(Format('expected a value for "%s"', [Name]));
           Break;
         end;
-        AddValue(Blocks[BlockCount - 1], Name, Tok);
+        AddValue(Blocks[BlockCount - 1], Name, Tok, TokKind = 'str');
         Next;
         if TokKind <> ';' then
         begin
