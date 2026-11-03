@@ -11,6 +11,10 @@
   `StrMid`, `GetChar`, `CheckSight`, `UniqueTID`, `IsTIDUsed`, actor velocities,
   `DamageActor`, `GetWeapon`, the forced spawns, `PlaySound`).
 
+- 3D floors in UDMF maps (`Sector_Set3dFloor`, first stage): solid slabs taken from a
+  control sector, opaque or translucent, drawn with their top, bottom and sides in the
+  sectors they are tagged to; the player stands on them and walks under them.
+
 ## v0.61.0 (2026-11-01)
 
 - UDMF maps: pillars (`Pillar_Build`, `Pillar_Open`), ice, mud, wind and currents from

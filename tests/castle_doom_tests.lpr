@@ -69,6 +69,7 @@ type
     procedure TestGldefs;
     procedure TestAcs;
     procedure TestSlopes;
+    procedure Test3dFloors;
     procedure TestDynScrollers;
     procedure TestDeepWater;
     procedure TestSectorSkies;
@@ -1211,6 +1212,56 @@ begin
       AssertEquals('moved north end', 72, M.FloorAt(141, -224, 384), 0.01);
       AssertFalse('flat sector', M.Sectors[140].FloorSlope.Sloped);
       AssertEquals('flat', 0, M.FloorAt(140, -416, 256), 0.01);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ Sector_Set3dFloor in tools/testdata/udmf-3dfloor.wad: a translucent
+  slab (64..80) in the start room (140) and a solid step (0..24) in 141. }
+procedure TTestMap.Test3dFloors;
+var
+  Dir: String;
+  W: TDoomWad;
+  M: TDoomMap;
+  I, S: Integer;
+begin
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf-3dfloor.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf-3dfloor.wad') then
+  begin
+    WriteLn('Test3dFloors: no udmf-3dfloor.wad (python3 tools/make_udmf_wad.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-3dfloor.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('3D floors', 2, Length(M.Floors3D));
+      for I := 0 to High(M.Floors3D) do
+      begin
+        S := M.Floors3D[I].Control;
+        AssertTrue('a control sector', (S >= 0) and (S < Length(M.Sectors)));
+        AssertTrue('a solid slab', M.Floors3D[I].Solid);
+        if M.Floors3D[I].Target = 140 then
+        begin
+          AssertEquals('slab bottom', 64, M.Sectors[S].FloorHeight, 0.01);
+          AssertEquals('slab top', 80, M.Sectors[S].CeilingHeight, 0.01);
+          AssertEquals('slab alpha', 160 / 255, M.Floors3D[I].Alpha, 0.01);
+        end else
+        begin
+          AssertEquals('step target', 141, M.Floors3D[I].Target);
+          AssertEquals('step top', 24, M.Sectors[S].CeilingHeight, 0.01);
+          AssertEquals('step opaque', 1, M.Floors3D[I].Alpha, 0.01);
+        end;
+      end;
+      AssertEquals('140 has one', 1, Length(M.SectorFloors3D[140]));
+      AssertEquals('141 has one', 1, Length(M.SectorFloors3D[141]));
+      AssertEquals('99 has none', 0, Length(M.SectorFloors3D[99]));
     finally
       FreeAndNil(M);
     end;

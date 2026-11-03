@@ -55,6 +55,12 @@ ACS_Execute of the named script "Greet" (arg0str) and line 1048 a
 Plat_UpByValue(9, 16, 35, 4) (sector 141 up 32 and back after a
 second).
 
+udmf-3dfloor.wad, as udmf.wad with two 3D floors (Sector_Set3dFloor)
+from control sectors added outside the map: a solid slab at 64..80, 160
+opaque, over the start room (140, id 15), which the player stands under,
+and a solid step at 0..24 filling the corridor east of it (141, id 9),
+which the player walks onto.
+
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
 
@@ -113,6 +119,10 @@ SLOPE_THINGS = [(1670, 1080, 0, 9511, 0, (13,)),
                 (-373, 445, 0, 9502, 0, (30,))]
 SLOPE_LINE_IDS = {1049: 50}
 SLOPE_FILL = (99, 141)
+FLOOR3D_IDS = {140: 15, 141: 9}
+# Control sectors (x, y of the corner, floor, ceiling, Sector_Set3dFloor
+# args): a 64-unit square each, far from the map.
+FLOOR3D_CONTROLS = [(-3000, -3000, 64, 80, (15, 1, 0, 160)), (-2800, -3000, 0, 24, (9, 1, 0, 255))]
 THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
                1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), ''),
                830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), ''),
@@ -153,7 +163,7 @@ def flag_names(flags):
     return names
 
 
-def textmap(hexen, look=False, acs=False, slopes=False, things=False):
+def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=False):
     out = ['namespace = "%s";' % ('zdoom' if hexen else 'doom'), '']
     V = lump('VERTEXES')
     for k in range(len(V) // 4):
@@ -252,6 +262,8 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False):
                 ids = THING_SECTOR_IDS
             if slopes:
                 ids = SLOPE_SECTOR_IDS
+            if floors3d:
+                ids = FLOOR3D_IDS
             tag = ids.get(k, tag)
         if sp:
             body.append('special = %d;' % sp)
@@ -295,6 +307,26 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False):
             body.append('single = true;')
         body += ['coop = true;', 'dm = true;']
         out.append('thing\n{\n%s\n}\n' % '\n'.join(body))
+    if floors3d:
+        nv, nl, ns, nsec = len(V) // 4, len(L) // 14, len(S) // 30, len(SE) // 26
+        for (x, y, fh, ch, args) in FLOOR3D_CONTROLS:
+            corners = [(x, y), (x, y + 64), (x + 64, y + 64), (x + 64, y)]
+            for (cx, cy) in corners:
+                out.append('vertex\n{\nx = %d.0;\ny = %d.0;\n}\n' % (cx, cy))
+            for k in range(4):
+                body = ['v1 = %d;' % (nv + k), 'v2 = %d;' % (nv + (k + 1) % 4), 'sidefront = %d;' % (ns + k),
+                        'blocking = true;']
+                if k == 0:
+                    body.append('special = 160;')
+                    body += ['arg%d = %d;' % (i, a) for i, a in enumerate(args) if a]
+                out.append('linedef\n{\n%s\n}\n' % '\n'.join(body))
+                out.append('sidedef\n{\nsector = %d;\ntexturemiddle = "STARTAN3";\n}\n' % nsec)
+            out.append('sector\n{\nheightfloor = %d;\nheightceiling = %d;\ntexturefloor = "FLOOR7_2";\n'
+                       'textureceiling = "FLOOR7_2";\nlightlevel = 160;\n}\n' % (fh, ch))
+            nv += 4
+            nl += 4
+            ns += 4
+            nsec += 1
     return '\n'.join(out).encode('ascii')
 
 
@@ -328,6 +360,8 @@ def main():
     write_wad(os.path.join(outdir, 'udmf-things.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, things=True)),
                ('BEHAVIOR', make_acs.behavior('compat', make_acs.spawn_program('compat'))), ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-3dfloor.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, floors3d=True)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-doom.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(False)), ('ZNODES', b'XGLN' + zn.gl(False, False)),
                ('ENDMAP', b'')])

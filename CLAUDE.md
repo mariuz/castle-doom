@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 56 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 57 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -950,6 +950,13 @@ autotest only checks the library loads.
   `TestSlopes`. Code that needs a height at a place uses
   `TDoomMap.FloorAt` / `CeilingAt`, and a line's opening at a point
   `TDoomWorld.LineOpening`, not `Sectors[S].FloorHeight`.
+  3D floors: `udmf-3dfloor.wad` (same script) puts a translucent slab
+  (64..80, alpha 160) over the start room (140) and a solid step (0..24)
+  in sector 141 (log `Map: E1M1: 2 3D floors`);
+  `Y,G:-416:256,A:0,W:0.3,SAVE:1,F:0.8,W:1,SAVE:2` walks under the
+  first onto the second (save 2's `z` about 24; autotest `3d-floors`
+  with goldens, unit test `Test3dFloors`). Only the player collides
+  with slabs (through the drawn geometry); the simulation ignores them.
   Thing actions: `udmf-things.wad` (same script) has a map spot (id 20)
   at (-320, 320); `LINE:829` spawns an imp there (`Thing_Spawn`, id
   21), `LINE:1045` kills it (`Thing_Damage`), `LINE:1046` /

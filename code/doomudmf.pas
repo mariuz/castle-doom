@@ -90,6 +90,10 @@ const
   { Static: Plane_Copy (Args: the tags whose planes the front floor,
     front ceiling, back floor and back ceiling copy, 0 none). }
   UdmfPlaneCopy = UdmfSpecialBase + 57;
+  { Static: Sector_Set3dFloor (Args tag, type (low 2 bits: 0 Vavoom, 1
+    solid, 2 swimmable, 3 not solid), flags, opacity 0..255, high byte
+    of the tag); the line's front sector is the slab's control sector. }
+  UdmfSet3dFloor = UdmfSpecialBase + 58;
   { ACS scripts (DoomAcs). Args as Hexen's: script, map (0 = this one),
     the script's arguments; ACS_ExecuteWithResult: script and four
     arguments; the locked ones: the lock in Args[4]. }
@@ -489,6 +493,7 @@ begin
     UdmfHealThing: Result := 'HealThing';
     UdmfThingMove: Result := 'Thing_Move';
     UdmfPlaneCopy: Result := 'Plane_Copy';
+    UdmfSet3dFloor: Result := 'Sector_Set3dFloor';
     UdmfAcsExecute: Result := 'ACS_Execute';
     UdmfAcsExecuteAlways: Result := 'ACS_ExecuteAlways';
     UdmfAcsExecuteWithResult: Result := 'ACS_ExecuteWithResult';
@@ -869,7 +874,7 @@ begin
   Trig := GenTrigger;
   Result.Trigger := Trig;
   if Monster then Result.Trigger := Result.Trigger + 8;
-  if not (Cross or Use or Impact) and not (Special in [100..103, 118, 121, 181, 208..211, 218..220, 223, 224]) then
+  if not (Cross or Use or Impact) and not (Special in [100..103, 118, 121, 160, 181, 208..211, 218..220, 223, 224]) then
   begin
     { No activation (only scripts could trigger it). }
     if Special <> 0 then
@@ -1078,6 +1083,12 @@ begin
     223, 224:
       begin
         if Special = 223 then Result.Special := UdmfScrollFloor else Result.Special := UdmfScrollCeiling;
+        Result.Tag := 0;
+        for I := 0 to 4 do Result.Args[I] := A[I];
+      end;
+    160:
+      begin
+        Result.Special := UdmfSet3dFloor;
         Result.Tag := 0;
         for I := 0 to 4 do Result.Args[I] := A[I];
       end;

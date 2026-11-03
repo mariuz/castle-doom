@@ -298,6 +298,22 @@ geometry (CGE's walk navigation), so ramps need no more code there.
 Movers' targets (`LowestFloorSurrounding`...) still read the sectors'
 heights, which on a slope are the origins'.
 
+### 3D floors (`TDoomMap.Build3dFloors`, `Floors3D`)
+
+A `Sector_Set3dFloor` line (DoomUdmf's static `UdmfSet3dFloor`, args
+kept) puts a slab in every sector tagged `arg0 + arg4 * 256`: its
+bottom is the line's front sector's (the control's) floor, its top the
+control's ceiling. `Floors3D` lists them (target, control, line, solid
+for types 0 and 1, alpha from `arg3`) and `SectorFloors3D[S]` indexes
+them per target. `DoomGeometry.EmitFlats` adds the slab's top and
+bottom faces to the target's flats in the target's light (translucent
+when alpha < 1, collidable when solid), `Emit3dFloorSides` the sides
+wherever a neighbour does not hold the same slab (the control line's
+middle texture, clipped to the opening), and `AssignChunks` makes the
+control sectors dependencies of those chunks. The player stands on
+the slabs through the walk navigation's collision; the simulation
+(monsters, missiles, hitscans, sight, spawns) does not see them yet.
+
 ### ACS scripts (`DoomAcs`, `doomworld_acs.inc`)
 
 A UDMF map's `BEHAVIOR` lump (`TDoomMap.Behavior`) holds ACC's compiled

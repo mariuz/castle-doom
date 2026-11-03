@@ -89,6 +89,21 @@ L = several days). Items inside a section are in suggested order.
   (`tools/make_udmf_wad.py`), unit test `TestSlopes`, autotest `slopes`
   (goldens). Left: `Plane_Copy`, slope things, sloped 3D floors.
 
+- 3D floors (UDMF, stage 1): `Sector_Set3dFloor` (160, DoomUdmf's
+  static `UdmfSet3dFloor`) lines make `TDoomMap.Floors3D` (target sector
+  by tag, the line's front sector as the control, solid or not, alpha);
+  `DoomGeometry` draws each slab's top (the control's ceiling and
+  ceiling flat), bottom (its floor and floor flat) and the sides where a
+  neighbour lacks the slab (the control line's middle texture), opaque
+  or translucent, in the target's light; the player stands on and walks
+  under them through the walk navigation's collision, and a moving
+  control sector makes its targets dynamic. Test map
+  `udmf-3dfloor.wad` (a translucent slab over E1M1's start room, a step
+  in the corridor east of it), unit test `Test3dFloors`, autotest
+  `3d-floors` (goldens). Left: monsters, missiles, hitscans and sight
+  ignore the slabs, things spawn at the sector floor, no light under
+  them, no swimmable, vertex-height or sloped slabs.
+
 - ACS scripts (UDMF, the rest): `DoomAcs` reads a UDMF map's
   `BEHAVIOR` lump in Hexen's `ACS\0`, ZDoom's `ACSE` / `ACSe` layouts
   (also behind an `ACS\0` header as ACC writes them; `SPTR`, `STRL` /
@@ -1415,8 +1430,10 @@ play.
 1. UDMF, the rest (S-M, see Content and formats): `Thing_Projectile`,
    the rarer ACSF functions (user variables, HUD clipping, CVars);
    polyobjects (L).
-2. Rendering, 3D floors (L, `docs/RENDERING_ROADMAP.md` item 5):
-   `Sector_Set3dFloor` solid and translucent slabs, drawn and collided.
+2. 3D floors, stage 2 (M, `docs/RENDERING_ROADMAP.md` item 5):
+   monsters, missiles, hitscans and sight against the slabs (a list of
+   floors and ceilings per sector in `TDoomWorld`), things spawned on
+   them, light under them, swimmable and sloped slabs.
 3. Map editor on UDMF maps (M): read `TEXTMAP` into `TDoomEditMap`
    (with its UDMF fields kept) and write it back.
 

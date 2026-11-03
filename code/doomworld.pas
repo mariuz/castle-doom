@@ -1402,6 +1402,11 @@ begin
     if FMap.HeightSec[I] >= 0 then
       FDynamic[I] := true;
   AcsMarkDynamic;
+  { 3D floors follow their control sectors: a moving one makes the
+    sectors holding its slab dynamic. }
+  for I := 0 to High(FMap.Floors3D) do
+    if FDynamic[FMap.Floors3D[I].Control] then
+      FDynamic[FMap.Floors3D[I].Target] := true;
   { Boom's light transfers: a sector showing a dynamic sector's light
     changes with it, so it needs its own chunk too. }
   for I := 0 to High(FDynamic) do

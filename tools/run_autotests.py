@@ -414,6 +414,14 @@ TESTS = [
       r'Acs: line 1047: ACS_Execute -1', r'Message: Hello by name', r'Udmf: line 1048: Plat_UpByValue, tag 9'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad'), '--fixed-step'],
      lambda config: check_udmf_things(config)),
+    # 3D floors (udmf-3dfloor.wad): a translucent slab over the start
+    # room the player walks under and a solid step in the corridor east
+    # of it (sector 141) the player climbs onto.
+    ('3d-floors', 'E1M1',
+     'Y,W:0.3,G:-416:256,A:0,W:0.3,SAVE:1,S,F:0.8,W:1,SAVE:2,S,A:180,W:0.3,S,Q',
+     [r'Map: E1M1: 2 3D floors'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-3dfloor.wad'), '--fixed-step'],
+     lambda config: check_3d_floors(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -713,6 +721,15 @@ def check_slopes(config):
     imps = [t for t in c['actors'] if t.get('type') == 3001 and abs(t['x'] + 224) < 40]
     assert imps, 'no imp on the ramp'
     assert abs(imps[0]['z'] - (imps[0]['y'] - 128) / 4) < 1, 'imp at z %s, y %s' % (imps[0]['z'], imps[0]['y'])
+
+
+def check_3d_floors(config):
+    """tools/testdata/udmf-3dfloor.wad: the player stays on the floor under
+    the start room's slab (64..80) and stands on the step (0..24) in 141."""
+    a, b = save_json(config, 1), save_json(config, 2)
+    assert abs(a['player']['z']) < 4, 'under the slab: z %s' % a['player']['z']
+    assert b['player']['x'] > -256 and abs(b['player']['z'] - 24) < 3, \
+        'on the step: %s, %s, z %s' % (b['player']['x'], b['player']['y'], b['player']['z'])
 
 
 def check_udmf_things(config):
@@ -1216,7 +1233,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
 ]

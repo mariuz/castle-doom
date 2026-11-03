@@ -91,6 +91,15 @@ type
     DX, DY, OX, OY: Single;
   end;
 
+  { A 3D floor (UZDoom's Sector_Set3dFloor): a slab in sector Target
+    from Control's floor to its ceiling, its top and bottom in Control's
+    flats, its sides in Line's front middle texture. }
+  TFloor3D = record
+    Target, Control, Line: Integer;
+    Solid: Boolean;
+    Alpha: Single;
+  end;
+
   TDoomSector = record
     { Current heights, changed by doors / lifts / floors (on a slope:
       the height at the slope's origin). }
@@ -223,6 +232,7 @@ type
     procedure LogUdmfLook;
     procedure ResolveUdmfLinks;
     procedure BuildSlopes;
+    procedure Build3dFloors;
     procedure BuildLineGrid;
     procedure NextMark;
     procedure AddCellRow(const Row, Col0, Col1: Integer; var Found: TLineList; var Count: Integer);
@@ -318,6 +328,9 @@ type
     { UDMF lines' arg0str (a named ACS script for the ACS_* actions), ''
       for none. }
     LineArg0Str: array of String;
+    { 3D floors, and the ones each sector holds (indices into Floors3D). }
+    Floors3D: array of TFloor3D;
+    SectorFloors3D: array of array of Integer;
     { How many floors and ceilings are sloped. }
     SlopedFloors, SlopedCeilings: Integer;
 
@@ -502,10 +515,12 @@ begin
     LoadLumps(Marker);
   BuildSectorLists;
   BuildSubsectorPolygons;
+  SetLength(SectorFloors3D, Length(Sectors));
   if FUdmf then
   begin
     ResolveUdmfLinks;
     BuildSlopes;
+    Build3dFloors;
   end;
   BuildLineGrid;
   BuildScrollers;
@@ -1373,6 +1388,44 @@ begin
   end;
   if SlopedFloors + SlopedCeilings > 0 then
     WritelnLog('Map', '%s: slopes: %d floors, %d ceilings', [FName, SlopedFloors, SlopedCeilings]);
+end;
+
+{ Sector_Set3dFloor lines (UdmfSet3dFloor): a slab from the line's front
+  sector in every sector with the tag. }
+procedure TDoomMap.Build3dFloors;
+var
+  L, S, Tag, Control, N, Kind: Integer;
+  F: TFloor3D;
+begin
+  Floors3D := nil;
+  SetLength(SectorFloors3D, Length(Sectors));
+  for L := 0 to High(Linedefs) do
+  begin
+    if Linedefs[L].Special <> UdmfSet3dFloor then Continue;
+    Control := Linedefs[L].FrontSector;
+    if Control < 0 then Continue;
+    Tag := Linedefs[L].Args[0] + Linedefs[L].Args[4] * 256;
+    if Tag = 0 then Continue;
+    Kind := Linedefs[L].Args[1] and 3;
+    F.Control := Control;
+    F.Line := L;
+    F.Solid := Kind in [0, 1];
+    if Linedefs[L].Args[3] > 0 then F.Alpha := Min(255, Linedefs[L].Args[3]) / 255 else F.Alpha := 1;
+    S := -1;
+    repeat
+      S := FindSectorFromTag(Tag, S);
+      if S < 0 then Break;
+      if S = Control then Continue;
+      F.Target := S;
+      N := Length(Floors3D);
+      SetLength(Floors3D, N + 1);
+      Floors3D[N] := F;
+      SetLength(SectorFloors3D[S], Length(SectorFloors3D[S]) + 1);
+      SectorFloors3D[S][High(SectorFloors3D[S])] := N;
+    until false;
+  end;
+  if Length(Floors3D) > 0 then
+    WritelnLog('Map', '%s: %d 3D floors', [FName, Length(Floors3D)]);
 end;
 
 { How many sectors and sides use UDMF's rendering fields, for the log. }

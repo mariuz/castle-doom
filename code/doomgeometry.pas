@@ -145,6 +145,8 @@ type
       const SwitchLine: Integer = -1; const Alpha: Single = 1;
       const DynTarget: TScrollTarget = stSide; const DynIndex: Integer = -1): TGeomBatch;
     procedure EmitLineSide(const Line, Side: Integer);
+    procedure Emit3dFloorSides(const Line, Side, Sec, Other: Integer; const VA, VB: TDoomVertex;
+      const U0, U1: Single; const Light: TVector2);
     procedure EmitFlats(const Sub: Integer);
     { A wall quad from A to B, its bottom and top at each end (they
       differ on slopes; a top below its bottom is clamped to it). }
@@ -817,6 +819,46 @@ begin
       Min(OpenTopB, ZT), U0 + Sd.PartOffsetX[1], U1 + Sd.PartOffsetX[1], TexTopZ, Img, Light,
       ScaleOr1(Sd.PartScaleX[1]), ScaleOr1(Sd.PartScaleY[1]));
   end;
+  Emit3dFloorSides(Line, Side, Sec, Other, VA, VB, U0, U1, Light);
+end;
+
+{ The sides of the neighbour's 3D floors this sector does not share, seen
+  from this side: the control line's front middle texture, from the
+  slab's bottom to its top within the opening. }
+procedure TMapChunk.Emit3dFloorSides(const Line, Side, Sec, Other: Integer; const VA, VB: TDoomVertex;
+  const U0, U1: Single; const Light: TVector2);
+var
+  Map: TDoomMap;
+  F, G, Ctl, CtlSide: Integer;
+  Shared: Boolean;
+  Img: TDoomImage;
+  B: TGeomBatch;
+  Bottom, Top, LowA, LowB, HighA, HighB: Single;
+begin
+  Map := FOwner.Map;
+  if (Other < 0) or (Length(Map.SectorFloors3D[Other]) = 0) then Exit;
+  LowA := Max(Map.FloorAt(Sec, VA.X, VA.Y), Map.FloorAt(Other, VA.X, VA.Y));
+  LowB := Max(Map.FloorAt(Sec, VB.X, VB.Y), Map.FloorAt(Other, VB.X, VB.Y));
+  HighA := Min(Map.CeilingAt(Sec, VA.X, VA.Y), Map.CeilingAt(Other, VA.X, VA.Y));
+  HighB := Min(Map.CeilingAt(Sec, VB.X, VB.Y), Map.CeilingAt(Other, VB.X, VB.Y));
+  for F in Map.SectorFloors3D[Other] do
+  begin
+    Ctl := Map.Floors3D[F].Control;
+    Shared := false;
+    for G in Map.SectorFloors3D[Sec] do
+      if Map.Floors3D[G].Control = Ctl then Shared := true;
+    if Shared then Continue;
+    CtlSide := Map.Linedefs[Map.Floors3D[F].Line].Side[0];
+    if CtlSide < 0 then Continue;
+    Img := FOwner.Graphics.Texture(Map.Sidedefs[CtlSide].MiddleTex);
+    if Img = nil then Continue;
+    Bottom := Map.Sectors[Ctl].FloorHeight;
+    Top := Map.Sectors[Ctl].CeilingHeight;
+    B := Batch(Img, not Map.Floors3D[F].Solid, TVector2.Zero, -1, Map.Floors3D[F].Alpha, stSide, -1);
+    SetLook(B, Sec);
+    EmitWall(B, VA.X, VA.Y, VB.X, VB.Y, Max(Bottom, LowA), Max(Bottom, LowB), Min(Top, HighA), Min(Top, HighB),
+      U0, U1, Top, Img, Light);
+  end;
 end;
 
 { A flat's texture coordinates at P (64-unit tiles) with UDMF's
@@ -849,7 +891,7 @@ var
   SkyName: String;
   SkyFlip: Boolean;
   Tex: array of TVector2;
-  I, N: Integer;
+  I, N, F, Ctl: Integer;
   Z: Single;
 begin
   Map := FOwner.Map;
@@ -922,6 +964,40 @@ begin
       end;
       if Map.CeilingDynamic[Sec] then DynSec := Sec else DynSec := -1;
       B := Batch(Img, false, FlatScroll(Map.CeilingScroll[Sec], Img), -1, 1, stCeiling, DynSec);
+      SetLook(B, Sec);
+      B.AddPolygon(Pts, Tex, BrightLight(Light, Img), TileOf(B, Img));
+    end;
+  end;
+
+  { 3D floors: each slab's top (its control sector's ceiling, facing up)
+    and bottom (the control's floor, facing down), in the sector's light. }
+  Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightPlane);
+  for F in Map.SectorFloors3D[Sec] do
+  begin
+    Ctl := Map.Floors3D[F].Control;
+    Img := FOwner.Graphics.Flat(Map.Sectors[Ctl].CeilingTex);
+    if Img <> nil then
+    begin
+      Z := Map.Sectors[Ctl].CeilingHeight;
+      for I := 0 to N - 1 do
+      begin
+        Pts[I] := DoomToCge(S.Poly[I].X, S.Poly[I].Y, Z);
+        Tex[I] := FlatTexCoord(S.Poly[I], Map.Sectors[Ctl].CeilingLook);
+      end;
+      B := Batch(Img, not Map.Floors3D[F].Solid, TVector2.Zero, -1, Map.Floors3D[F].Alpha, stFloor, -1);
+      SetLook(B, Sec);
+      B.AddPolygon(Pts, Tex, BrightLight(Light, Img), TileOf(B, Img));
+    end;
+    Img := FOwner.Graphics.Flat(Map.Sectors[Ctl].FloorTex);
+    if Img <> nil then
+    begin
+      Z := Map.Sectors[Ctl].FloorHeight;
+      for I := 0 to N - 1 do
+      begin
+        Pts[I] := DoomToCge(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y, Z);
+        Tex[I] := FlatTexCoord(S.Poly[N - 1 - I], Map.Sectors[Ctl].FloorLook);
+      end;
+      B := Batch(Img, not Map.Floors3D[F].Solid, TVector2.Zero, -1, Map.Floors3D[F].Alpha, stCeiling, -1);
       SetLook(B, Sec);
       B.AddPolygon(Pts, Tex, BrightLight(Light, Img), TileOf(B, Img));
     end;
@@ -1203,7 +1279,7 @@ procedure TDoomGeometry.AssignChunks;
   end;
 
 var
-  I, Side, Sec, Front, Back: Integer;
+  I, Side, Sec, Front, Back, F: Integer;
   C: TMapChunk;
 begin
   FStaticChunk := TMapChunk.Create(Self, 'static');
@@ -1229,6 +1305,8 @@ begin
     if FMap.CeilingLightSector[Sec] >= 0 then Dependency(FMap.CeilingLightSector[Sec], C);
     { Deep water: drawn at the control sector's heights. }
     if FMap.HeightSec[Sec] >= 0 then Dependency(FMap.HeightSec[Sec], C);
+    { 3D floors: their control sectors' heights. }
+    for F in FMap.SectorFloors3D[Sec] do Dependency(FMap.Floors3D[F].Control, C);
   end;
 
   { Each line side goes to the chunk of the first dynamic sector it touches
@@ -1254,6 +1332,10 @@ begin
       Dependency(Back, C);
       if (Front >= 0) and (FMap.HeightSec[Front] >= 0) then Dependency(FMap.HeightSec[Front], C);
       if (Back >= 0) and (FMap.HeightSec[Back] >= 0) then Dependency(FMap.HeightSec[Back], C);
+      if Front >= 0 then
+        for F in FMap.SectorFloors3D[Front] do Dependency(FMap.Floors3D[F].Control, C);
+      if Back >= 0 then
+        for F in FMap.SectorFloors3D[Back] do Dependency(FMap.Floors3D[F].Control, C);
     end;
   end;
 end;
