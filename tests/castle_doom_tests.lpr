@@ -68,6 +68,7 @@ type
     procedure TestUdmf;
     procedure TestGldefs;
     procedure TestAcs;
+    procedure TestAcsLibraries;
     procedure TestSlopes;
     procedure Test3dFloors;
     procedure TestDynScrollers;
@@ -991,6 +992,10 @@ type
     function ThingCount(const SpawnNum, Tid: Integer): Integer; override;
     procedure ChangeFlat(const Tag: Integer; const Name: String; const Ceiling: Boolean); override;
     function SectorValue(const Tag, What: Integer): Integer; override;
+    function LibraryData(const Name: String): TBytes; override;
+  public
+    { Where LibraryData finds libraries. }
+    LibWad: TDoomWad;
   end;
 
 constructor TTestAcsHost.Create;
@@ -1038,6 +1043,86 @@ end;
 function TTestAcsHost.SectorValue(const Tag, What: Integer): Integer;
 begin
   if (Tag = 10) and (What = 0) then Result := 32 shl 16 else Result := 0;
+end;
+
+function TTestAcsHost.LibraryData(const Name: String): TBytes;
+begin
+  Result := nil;
+  if (LibWad <> nil) and (LibWad.FindLump(UpperCase(Name)) >= 0) then
+    Result := LibWad.LumpBytes(LibWad.FindLump(UpperCase(Name)));
+end;
+
+{ DoomAcs: ACS libraries in tools/testdata/udmf-acslib.wad: the map's
+  BEHAVIOR loads TESTLIB (LOAD), imports its variables and function,
+  runs its named script; AUTOLIB as LOADACS would load it. }
+procedure TTestMap.TestAcsLibraries;
+var
+  Dir: String;
+  W: TDoomWad;
+  Host: TTestAcsHost;
+  Globals: TAcsGlobals;
+  VM: TAcsVM;
+  T, M, S: Integer;
+  State: TJSONObject;
+begin
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf-acslib.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf-acslib.wad') then
+  begin
+    WriteLn('TestAcsLibraries: no udmf-acslib.wad (python3 tools/make_udmf_wad.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-acslib.wad')));
+  Host := TTestAcsHost.Create;
+  Host.LibWad := W;
+  Host.Trace.Delimiter := '|';
+  Host.Trace.StrictDelimiter := true;
+  Globals := TAcsGlobals.Create;
+  try
+    VM := TAcsVM.Create(TAcsModule.Create(W.LumpBytes(W.FindLump('BEHAVIOR'))), Host, Globals);
+    try
+      AssertEquals('modules', 2, VM.ModuleCount);
+      AssertEquals('library name', 'TESTLIB', VM.Mods(1).Name);
+      AssertEquals('LOADACS library', 2, VM.LoadLibrary('autolib'));
+      AssertEquals('loaded once', 1, VM.LoadLibrary('TestLib'));
+      AssertEquals('missing library', -1, VM.LoadLibrary('NOSUCH'));
+      { The imports point into TESTLIB. }
+      AssertEquals('imported variable', 1, VM.Mods(0).VarModule[0]);
+      AssertEquals('imported string variable', 1, VM.Mods(0).VarIndex[1]);
+      AssertEquals('imported function', 1, VM.Mods(0).FuncModule[0]);
+      AssertTrue('named across modules', VM.NamedScript('libnamed', T));
+      AssertEquals('named number', -1, T);
+      AssertTrue('found', VM.FindScript(T, M, S));
+      AssertEquals('named module', 1, M);
+      AssertTrue('library script by number', VM.FindScript(20, M, S));
+      AssertEquals('library of 20', 2, M);
+      VM.StartLevel;
+      for T := 1 to 3 do VM.Tic;
+      AssertEquals('trace', 'print Sum 12|print Count 101|print Library string|print Library open|' +
+        'print Autoloaded|print Named in library', Host.Trace.DelimitedText);
+      AssertEquals('library variable', 101, VM.Mods(1).MapVars[0]);
+      State := VM.SaveState;
+    finally
+      FreeAndNil(VM);
+    end;
+    { A new VM (the map loaded again) takes the libraries' variables back. }
+    VM := TAcsVM.Create(TAcsModule.Create(W.LumpBytes(W.FindLump('BEHAVIOR'))), Host, Globals);
+    try
+      VM.LoadLibrary('AUTOLIB');
+      AssertEquals('fresh', 1, VM.Mods(1).MapVars[0]);
+      VM.LoadState(State);
+      AssertEquals('restored', 101, VM.Mods(1).MapVars[0]);
+      AssertEquals('restored string', 1 or (1 shl 16), VM.Mods(1).MapVars[1]);
+    finally
+      FreeAndNil(VM);
+      FreeAndNil(State);
+    end;
+  finally
+    FreeAndNil(Globals);
+    FreeAndNil(Host);
+    FreeAndNil(W);
+  end;
 end;
 
 { DoomAcs: the four BEHAVIOR layouts of tools/testdata/acs.wad run the

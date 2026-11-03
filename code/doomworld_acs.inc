@@ -41,6 +41,7 @@ type
     function TidUsed(const Tid: Integer): Boolean; override;
     function DamageThing(const Inst: TAcsInstance; const Tid, Amount: Integer): Integer; override;
     function WeaponName: String; override;
+    function LibraryData(const Name: String): TBytes; override;
     function Spawn(const ThingClass: String; const X, Y: Single; const Tid: Integer; const Angle: Single): Integer;
       override;
     function SpawnSpot(const ThingClass: String; const SpotTid, Tid: Integer; const Angle: Single;
@@ -272,6 +273,16 @@ begin
   Args[0] := Tid;
   Args[1] := Amount;
   Result := Ord(FWorld.AcsThingAction(UdmfThingDamage, Args));
+end;
+
+function TWorldAcsHost.LibraryData(const Name: String): TBytes;
+var
+  L: Integer;
+begin
+  Result := nil;
+  if (FWorld.Map = nil) or (FWorld.Map.Wad = nil) then Exit;
+  L := FWorld.Map.Wad.FindLump(UpperCase(Name));
+  if L >= 0 then Result := FWorld.Map.Wad.LumpBytes(L);
 end;
 
 function TWorldAcsHost.WeaponName: String;
@@ -507,22 +518,75 @@ begin
   Result := TWorldAcsHost.Create(Self);
 end;
 
+{ The library names of every LOADACS lump in the WADs (ZDoom loads them
+  on every map, Doom-format maps too). }
+function LoadAcsNames(const Wad: TDoomWad): TStringArray;
+var
+  L, I: Integer;
+  Text, Word: String;
+  Lines: TStringList;
+  Bytes: TBytes;
+begin
+  Result := nil;
+  L := Wad.FindLumpForward('LOADACS', 0);
+  while L >= 0 do
+  begin
+    Bytes := Wad.LumpBytes(L);
+    SetLength(Text, Length(Bytes));
+    if Length(Bytes) > 0 then Move(Bytes[0], Text[1], Length(Bytes));
+    Lines := TStringList.Create;
+    try
+      Lines.Text := Text;
+      for I := 0 to Lines.Count - 1 do
+      begin
+        Text := Lines[I];
+        if Pos('//', Text) > 0 then Text := Copy(Text, 1, Pos('//', Text) - 1);
+        Text := StringReplace(Text, #9, ' ', [rfReplaceAll]);
+        for Word in Text.Split([' ']) do
+          if Trim(Word) <> '' then
+          begin
+            SetLength(Result, Length(Result) + 1);
+            Result[High(Result)] := Trim(Word);
+          end;
+      end;
+    finally
+      FreeAndNil(Lines);
+    end;
+    L := Wad.FindLumpForward('LOADACS', L + 1);
+  end;
+end;
+
 procedure TDoomWorld.LoadScripts;
 var
   M: TAcsModule;
+  Names: TStringArray;
+  Name: String;
 begin
   FreeAndNil(FAcs);
-  if Length(FMap.Behavior) = 0 then Exit;
-  M := TAcsModule.Create(FMap.Behavior);
-  if M.Error <> '' then
+  Names := nil;
+  if FMap.Wad <> nil then Names := LoadAcsNames(FMap.Wad);
+  if (Length(FMap.Behavior) = 0) and (Length(Names) = 0) then Exit;
+  if Length(FMap.Behavior) > 0 then
   begin
-    WritelnLog('Acs', '%s: BEHAVIOR not loaded: %s', [FMap.Name, M.Error]);
-    FreeAndNil(M);
-    Exit;
-  end;
+    M := TAcsModule.Create(FMap.Behavior);
+    if M.Error <> '' then
+    begin
+      WritelnLog('Acs', '%s: BEHAVIOR not loaded: %s', [FMap.Name, M.Error]);
+      FreeAndNil(M);
+      if Length(Names) = 0 then Exit;
+      M := TAcsModule.CreateEmpty;
+    end else
+      WritelnLog('Acs', '%s: BEHAVIOR in the %s format: %d scripts, %d functions, %d strings', [
+        FMap.Name, M.FormatName, Length(M.Scripts), Length(M.Functions), Length(M.Strings)]);
+  end else
+    M := TAcsModule.CreateEmpty;
   FAcs := TAcsVM.Create(M, FAcsHost, FAcsGlobals);
-  WritelnLog('Acs', '%s: BEHAVIOR in the %s format: %d scripts, %d functions, %d strings', [
-    FMap.Name, M.FormatName, Length(M.Scripts), Length(M.Functions), Length(M.Strings)]);
+  if Length(Names) > 0 then
+  begin
+    WritelnLog('Acs', 'LOADACS: %s', [String.Join(', ', Names)]);
+    for Name in Names do
+      FAcs.LoadLibrary(Name);
+  end;
 end;
 
 procedure TDoomWorld.AcsLogOnce(const What: String);
@@ -852,7 +916,7 @@ begin
   { UDMF's arg0str: the script by name. }
   Number := L.Args[0];
   if (Line <= High(FMap.LineArg0Str)) and (FMap.LineArg0Str[Line] <> '') then
-    if not FAcs.Module.NamedScript(FMap.LineArg0Str[Line], Number) then
+    if not FAcs.NamedScript(FMap.LineArg0Str[Line], Number) then
     begin
       AcsLogOnce(Format('Script "%s" (no such name)', [FMap.LineArg0Str[Line]]));
       Exit;
@@ -912,7 +976,7 @@ var
 
 begin
   if FAcs = nil then Exit;
-  Calls := FAcs.Module.ConstCalls;
+  Calls := FAcs.ConstCalls;
   for C in Calls do
     case C.Special of
       AcsCallChangeFloor, AcsCallChangeCeiling: MarkTag(C.Args[0]);

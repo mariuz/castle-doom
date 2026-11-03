@@ -424,6 +424,16 @@ TESTS = [
      [r'Map: E1M1: 2 3D floors'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-3dfloor.wad'), '--fixed-step'],
      lambda config: check_3d_floors(config)),
+    # ACS libraries (udmf-acslib.wad): the map's imports from TESTLIB,
+    # LOADACS's AUTOLIB on E1M1 and on the IWAD's E1M2, a load that keeps
+    # the library's variables without running its open script again.
+    ('acs-libraries', 'E1M1', 'W:0.3,SAVE:1,E,W:1,U,U,U,U,U,W:2,SAVE:2,LOAD:1,W:0.3,SAVE:3,Q',
+     [r'Acs: library TESTLIB in the ACSe format: 2 scripts, 1 functions, 3 strings', r'Acs: LOADACS: AUTOLIB',
+      r'Acs: library AUTOLIB in the ACSE format', r'Acs: script 10 \(open\) of TESTLIB started',
+      r'Message: Sum 12', r'Message: Count 101', r'Message: Library string', r'Message: Library open',
+      r'Message: Named in library', r'Message: Autoloaded', r'Load: E1M2'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-acslib.wad'), '--fixed-step'],
+     lambda config: check_acs_libraries(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -723,6 +733,19 @@ def check_slopes(config):
     imps = [t for t in c['actors'] if t.get('type') == 3001 and abs(t['x'] + 224) < 40]
     assert imps, 'no imp on the ramp'
     assert abs(imps[0]['z'] - (imps[0]['y'] - 128) / 4) < 1, 'imp at z %s, y %s' % (imps[0]['z'], imps[0]['y'])
+
+
+def check_acs_libraries(config):
+    """tools/testdata/udmf-acslib.wad: the saves keep the libraries'
+    variables (libcount 101, libtext string 1 of library 1) per map."""
+    saves = [save_json(config, n) for n in (1, 2, 3)]
+
+    def libs(save):
+        return {row[0]: row[1] for row in save.get('acs', {}).get('libraries', [])}
+    for n in (0, 2):
+        got = libs(saves[n])
+        assert got.get('TESTLIB', [])[:2] == [101, 65537] and 'AUTOLIB' in got, 'save %d: %s' % (n + 1, got)
+    assert saves[1]['map'] == 'E1M2' and list(libs(saves[1])) == ['AUTOLIB'], 'E1M2: %s' % libs(saves[1])
 
 
 def check_3d_floors(config):

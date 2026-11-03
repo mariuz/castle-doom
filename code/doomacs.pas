@@ -87,6 +87,8 @@ type
     procedure LoadOld(const DirOfs: Integer);
     procedure LoadChunks;
     procedure ReadStringTable(const Chunk: Integer; const Encrypted: Boolean);
+    { A chunk of names: count, offsets from the chunk's data, the names. }
+    function ReadNames(const Id: String): TStringArray;
   public
     Data: TBytes;
     Format: TAcsFormat;
@@ -99,9 +101,31 @@ type
     { Map arrays: ARAY's (map variable, size) pairs and AINI's values. }
     ArrayVar, ArraySize: array of Integer;
     ArrayInit: array of array of Integer;
+    { Libraries: LOAD's lump names; FNAM's function names (imported
+      functions have address 0); MEXP's exported map variable names (by
+      variable number); MIMP's and AIMP's imported variables and arrays
+      (variable number, name); MSTR's map variables and ASTR's arrays
+      holding strings, ATAG's arrays with some string elements (variable,
+      a tag byte per element, 1 a string), all tagged with the library's
+      number when loaded. }
+    Libraries: TStringArray;
+    FunctionNames: TStringArray;
+    VarExports: TStringArray;
+    VarImports, ArrayImports: array of record
+      Index: Integer;
+      Name: String;
+    end;
+    StringVars, StringArrays: array of Integer;
+    ArrayTags: array of record
+      Index: Integer;
+      Tags: TBytes;
+    end;
     { Not empty when the lump could not be read. }
     Error: String;
     constructor Create(const AData: TBytes);
+    { A module without code: a map without BEHAVIOR whose LOADACS
+      libraries run. }
+    constructor CreateEmpty;
     function FormatName: String;
     function FindScript(const Number: Integer): Integer;
     { A named script's number; false when there is none by that name. }
@@ -123,12 +147,17 @@ type
 
   TAcsFrame = record
     ReturnPC, LocalsBase: Integer;
+    { The module to return to. }
+    ReturnModule: Integer;
     Discard: Boolean;
   end;
 
   { A running script. }
   TAcsInstance = class
   public
+    { The module whose code runs now (functions of libraries) and the
+      script's own module, Script its index there. }
+    Module, ScriptModule: Integer;
     Script: Integer;
     Number: Integer;
     PC: Integer;
@@ -207,6 +236,8 @@ type
     function DamageThing(const Inst: TAcsInstance; const Tid, Amount: Integer): Integer; virtual;
     { The player's weapon as ZDoom's class name. }
     function WeaponName: String; virtual;
+    { An ACS library's lump by name (LOAD, LOADACS); empty when missing. }
+    function LibraryData(const Name: String): TBytes; virtual;
   end;
 
   { World and global variables (and their arrays): they outlive a map. }
@@ -231,14 +262,26 @@ type
     procedure LoadState(const J: TJSONObject);
   end;
 
+  { A loaded module (the map's BEHAVIOR first, then the libraries) with
+    its map variables and arrays; imported variables and functions point
+    into other modules (VarModule / VarIndex, FuncModule / FuncIndex). }
+  TAcsLoaded = class
+  public
+    Module: TAcsModule;
+    Name: String;
+    MapVars: array [0..AcsMapVarCount - 1] of Integer;
+    MapArrays: array of array of Integer;
+    VarModule, VarIndex: array [0..AcsMapVarCount - 1] of Integer;
+    FuncModule, FuncIndex: array of Integer;
+    destructor Destroy; override;
+  end;
+
   TAcsVM = class
   strict private
-    FModule: TAcsModule;
+    FMods: TObjectList;
     FHost: TAcsHost;
     FGlobals: TAcsGlobals;
     FInstances: TObjectList;
-    FMapVars: array [0..AcsMapVarCount - 1] of Integer;
-    FMapArrays: array of array of Integer;
     FDynStrings: array of String;
     FLogged: TStringList;
     FStarted: Integer;
@@ -251,6 +294,11 @@ type
     { GetCVar: a value scripts set, else the game's own (skill), else 0. }
     function CVar(const Name: String): Integer;
     function Inst(const I: Integer): TAcsInstance;
+    function AddModule(const AModule: TAcsModule; const AName: String): Integer;
+    { Point imported variables and functions at their libraries. }
+    procedure Link;
+    function StartAt(const ModIndex, ScriptIndex, Number: Integer; const Args: array of Integer;
+      const Activator: TAcsActivator; const Line: Integer; const BackSide: Boolean): TAcsInstance;
     procedure Run(const I: TAcsInstance);
     function StringOf(const Index: Integer): String;
     procedure Stop(const I: TAcsInstance; const Why: String);
@@ -263,6 +311,17 @@ type
   public
     constructor Create(const AModule: TAcsModule; const AHost: TAcsHost; const AGlobals: TAcsGlobals);
     destructor Destroy; override;
+    { Load an ACS library by lump name (LOADACS; LOAD chunks load theirs
+      by themselves); its number, -1 when it could not be loaded. }
+    function LoadLibrary(const Name: String): Integer;
+    function ModuleCount: Integer;
+    function Mods(const Index: Integer): TAcsLoaded;
+    { A script by number (the map's first, then the libraries'; named
+      scripts have negative numbers across all modules). }
+    function FindScript(const Number: Integer; out ModIndex, ScriptIndex: Integer): Boolean;
+    function NamedScript(const Name: String; out Number: Integer): Boolean;
+    { The constant calls of every module's code. }
+    function ConstCalls: TAcsConstCalls;
     { Start script Number (Always: another copy even when one runs; else
       a suspended one resumes and a running one is left alone). }
     function StartScript(const Number: Integer; const Args: array of Integer; const Activator: TAcsActivator;
@@ -281,7 +340,8 @@ type
     procedure LoadState(const J: TJSONObject);
     { Scripts started since the level began (for the log and tests). }
     property Started: Integer read FStarted;
-    property Module: TAcsModule read FModule;
+    { The map's own module. }
+    function Module: TAcsModule;
   end;
 
 function AcsScriptTypeName(const ScriptType: Integer): String;
@@ -401,6 +461,29 @@ begin
     FChunksEnd := Length(Data);
     LoadChunks;
   end;
+end;
+
+constructor TAcsModule.CreateEmpty;
+var
+  I: Integer;
+begin
+  inherited Create;
+  Format := afLittleEnhanced;
+  for I := 0 to AcsMapVarCount - 1 do MapVarInit[I] := 0;
+end;
+
+function TAcsModule.ReadNames(const Id: String): TStringArray;
+var
+  C, N, I: Integer;
+begin
+  Result := nil;
+  C := FindChunk(Id);
+  if C < 0 then Exit;
+  N := Int(C + 8);
+  if (N < 0) or (C + 12 + N * 4 > C + 8 + ChunkSize(C)) then Exit;
+  SetLength(Result, N);
+  for I := 0 to N - 1 do
+    Result[I] := CString(C + 8 + Int(C + 12 + I * 4));
 end;
 
 function TAcsModule.FormatName: String;
@@ -568,17 +651,77 @@ begin
     C := FindChunk('STRE');
     if C >= 0 then ReadStringTable(C, true);
   end;
-  { SNAM: count, offsets from the chunk's data, the names. }
-  C := FindChunk('SNAM');
+  ScriptNames := ReadNames('SNAM');
+  FunctionNames := ReadNames('FNAM');
+  VarExports := ReadNames('MEXP');
+  { LOAD: the library names, each ended by a zero. }
+  C := FindChunk('LOAD');
+  while C >= 0 do
+  begin
+    P := C + 8;
+    while P < C + 8 + ChunkSize(C) do
+    begin
+      if Data[P] <> 0 then
+      begin
+        SetLength(Libraries, Length(Libraries) + 1);
+        Libraries[High(Libraries)] := CString(P);
+        P := P + Length(Libraries[High(Libraries)]);
+      end;
+      Inc(P);
+    end;
+    C := FindChunk('LOAD', C);
+  end;
+  { MIMP: (variable, name) entries; AIMP: count, then (variable, size,
+    name) entries. }
+  C := FindChunk('MIMP');
+  if C >= 0 then
+  begin
+    P := C + 8;
+    while P + 4 < C + 8 + ChunkSize(C) do
+    begin
+      SetLength(VarImports, Length(VarImports) + 1);
+      VarImports[High(VarImports)].Index := Int(P);
+      VarImports[High(VarImports)].Name := CString(P + 4);
+      P := P + 5 + Length(VarImports[High(VarImports)].Name);
+    end;
+  end;
+  C := FindChunk('AIMP');
   if C >= 0 then
   begin
     N := Int(C + 8);
-    if (N >= 0) and (C + 12 + N * 4 <= C + 8 + ChunkSize(C)) then
+    P := C + 12;
+    for I := 1 to N do
     begin
-      SetLength(ScriptNames, N);
-      for I := 0 to N - 1 do
-        ScriptNames[I] := CString(C + 8 + Int(C + 12 + I * 4));
+      if P + 8 >= C + 8 + ChunkSize(C) then Break;
+      SetLength(ArrayImports, Length(ArrayImports) + 1);
+      ArrayImports[High(ArrayImports)].Index := Int(P);
+      ArrayImports[High(ArrayImports)].Name := CString(P + 8);
+      P := P + 9 + Length(ArrayImports[High(ArrayImports)].Name);
     end;
+  end;
+  C := FindChunk('MSTR');
+  if C >= 0 then
+  begin
+    SetLength(StringVars, ChunkSize(C) div 4);
+    for I := 0 to High(StringVars) do StringVars[I] := Int(C + 8 + I * 4);
+  end;
+  C := FindChunk('ASTR');
+  if C >= 0 then
+  begin
+    SetLength(StringArrays, ChunkSize(C) div 4);
+    for I := 0 to High(StringArrays) do StringArrays[I] := Int(C + 8 + I * 4);
+  end;
+  { ATAG: a version byte (0), the array's variable, a byte per element. }
+  C := FindChunk('ATAG');
+  while C >= 0 do
+  begin
+    if (ChunkSize(C) >= 5) and (Data[C + 8] = 0) then
+    begin
+      SetLength(ArrayTags, Length(ArrayTags) + 1);
+      ArrayTags[High(ArrayTags)].Index := Int(C + 9);
+      ArrayTags[High(ArrayTags)].Tags := Copy(Data, C + 13, ChunkSize(C) - 5);
+    end;
+    C := FindChunk('ATAG', C);
   end;
   C := FindChunk('FUNC');
   if C >= 0 then
@@ -1027,6 +1170,11 @@ begin
   Result := '';
 end;
 
+function TAcsHost.LibraryData(const Name: String): TBytes;
+begin
+  Result := nil;
+end;
+
 { TAcsGlobals --------------------------------------------------------------- }
 
 procedure TAcsGlobals.Clear;
@@ -1187,39 +1335,210 @@ end;
 
 { TAcsVM -------------------------------------------------------------------- }
 
+destructor TAcsLoaded.Destroy;
+begin
+  FreeAndNil(Module);
+  inherited;
+end;
+
+{ ZDoom tags a library's strings with its number in the high 16 bits. }
+const
+  AcsMaxModules = 15;
+
 constructor TAcsVM.Create(const AModule: TAcsModule; const AHost: TAcsHost; const AGlobals: TAcsGlobals);
-var
-  I, J: Integer;
 begin
   inherited Create;
-  FModule := AModule;
   FHost := AHost;
   FGlobals := AGlobals;
+  FMods := TObjectList.Create(true);
   FInstances := TObjectList.Create(true);
   FLogged := TStringList.Create;
   FLogged.Sorted := true;
-  for I := 0 to AcsMapVarCount - 1 do FMapVars[I] := FModule.MapVarInit[I];
-  { A map array's variable holds the array's number. }
-  SetLength(FMapArrays, Length(FModule.ArrayVar));
-  for I := 0 to High(FModule.ArrayVar) do
-  begin
-    SetLength(FMapArrays[I], FModule.ArraySize[I]);
-    for J := 0 to FModule.ArraySize[I] - 1 do
-      if J <= High(FModule.ArrayInit[I]) then
-        FMapArrays[I][J] := FModule.ArrayInit[I][J]
-      else
-        FMapArrays[I][J] := 0;
-    if (FModule.ArrayVar[I] >= 0) and (FModule.ArrayVar[I] < AcsMapVarCount) then
-      FMapVars[FModule.ArrayVar[I]] := I;
-  end;
+  AddModule(AModule, '');
+  Link;
 end;
 
 destructor TAcsVM.Destroy;
 begin
   FreeAndNil(FInstances);
   FreeAndNil(FLogged);
-  FreeAndNil(FModule);
+  FreeAndNil(FMods);
   inherited;
+end;
+
+function TAcsVM.Mods(const Index: Integer): TAcsLoaded;
+begin
+  Result := TAcsLoaded(FMods[Index]);
+end;
+
+function TAcsVM.ModuleCount: Integer;
+begin
+  Result := FMods.Count;
+end;
+
+function TAcsVM.Module: TAcsModule;
+begin
+  Result := Mods(0).Module;
+end;
+
+function TAcsVM.AddModule(const AModule: TAcsModule; const AName: String): Integer;
+var
+  L: TAcsLoaded;
+  I, J, K, Tag: Integer;
+begin
+  L := TAcsLoaded.Create;
+  L.Module := AModule;
+  L.Name := AName;
+  Result := FMods.Add(L);
+  Tag := Result shl 16;
+  for I := 0 to AcsMapVarCount - 1 do
+  begin
+    L.MapVars[I] := AModule.MapVarInit[I];
+    L.VarModule[I] := Result;
+    L.VarIndex[I] := I;
+  end;
+  { A map array's variable holds the array's number. }
+  SetLength(L.MapArrays, Length(AModule.ArrayVar));
+  for I := 0 to High(AModule.ArrayVar) do
+  begin
+    SetLength(L.MapArrays[I], AModule.ArraySize[I]);
+    for J := 0 to AModule.ArraySize[I] - 1 do
+      if J <= High(AModule.ArrayInit[I]) then
+        L.MapArrays[I][J] := AModule.ArrayInit[I][J]
+      else
+        L.MapArrays[I][J] := 0;
+  end;
+  { A library's strings in its variables and arrays carry its number. }
+  if Result > 0 then
+  begin
+    for K in AModule.StringVars do
+      if (K >= 0) and (K < AcsMapVarCount) then
+        L.MapVars[K] := L.MapVars[K] or Tag;
+    for I := 0 to High(AModule.ArrayVar) do
+    begin
+      for K in AModule.StringArrays do
+        if K = AModule.ArrayVar[I] then
+          for J := 0 to High(L.MapArrays[I]) do
+            L.MapArrays[I][J] := L.MapArrays[I][J] or Tag;
+      for K := 0 to High(AModule.ArrayTags) do
+        if AModule.ArrayTags[K].Index = AModule.ArrayVar[I] then
+          for J := 0 to Min(High(L.MapArrays[I]), High(AModule.ArrayTags[K].Tags)) do
+            if AModule.ArrayTags[K].Tags[J] = 1 then
+              L.MapArrays[I][J] := L.MapArrays[I][J] or Tag;
+    end;
+  end;
+  for I := 0 to High(AModule.ArrayVar) do
+    if (AModule.ArrayVar[I] >= 0) and (AModule.ArrayVar[I] < AcsMapVarCount) then
+      L.MapVars[AModule.ArrayVar[I]] := I;
+  SetLength(L.FuncModule, Length(AModule.Functions));
+  SetLength(L.FuncIndex, Length(AModule.Functions));
+  for I := 0 to High(AModule.Functions) do
+  begin
+    L.FuncModule[I] := Result;
+    L.FuncIndex[I] := I;
+  end;
+  { The libraries this one loads. }
+  for I := 0 to High(AModule.Libraries) do
+    LoadLibrary(AModule.Libraries[I]);
+end;
+
+function TAcsVM.LoadLibrary(const Name: String): Integer;
+var
+  Data: TBytes;
+  M: TAcsModule;
+  I: Integer;
+begin
+  for I := 1 to FMods.Count - 1 do
+    if SameText(Mods(I).Name, Name) then Exit(I);
+  Result := -1;
+  if FMods.Count > AcsMaxModules then
+  begin
+    WritelnLog('Acs', 'library %s not loaded: more than %d libraries', [Name, AcsMaxModules]);
+    Exit;
+  end;
+  Data := FHost.LibraryData(Name);
+  if Length(Data) = 0 then
+  begin
+    WritelnLog('Acs', 'library %s not found', [Name]);
+    Exit;
+  end;
+  M := TAcsModule.Create(Data);
+  if M.Error <> '' then
+  begin
+    WritelnLog('Acs', 'library %s not loaded: %s', [Name, M.Error]);
+    FreeAndNil(M);
+    Exit;
+  end;
+  WritelnLog('Acs', 'library %s in the %s format: %d scripts, %d functions, %d strings', [UpperCase(Name),
+    M.FormatName, Length(M.Scripts), Length(M.Functions), Length(M.Strings)]);
+  Result := AddModule(M, UpperCase(Name));
+  Link;
+end;
+
+procedure TAcsVM.Link;
+var
+  L, O: TAcsLoaded;
+  I, K, J: Integer;
+  Name: String;
+  Found: Boolean;
+
+  { Function J of L is Name's in O (module K), when O has it. }
+  function LinkFunction(const Other: TAcsLoaded; const K2: Integer; const FuncName: String;
+    const J: Integer): Boolean;
+  var
+    J2: Integer;
+  begin
+    for J2 := 0 to Min(High(Other.Module.FunctionNames), High(Other.Module.Functions)) do
+      if (Other.Module.Functions[J2].Address <> 0) and SameText(Other.Module.FunctionNames[J2], FuncName) then
+      begin
+        L.FuncModule[J] := K2;
+        L.FuncIndex[J] := J2;
+        Exit(true);
+      end;
+    Result := false;
+  end;
+
+  procedure LinkVar(const Index: Integer; const VarName: String);
+  var
+    K2, J2: Integer;
+  begin
+    if (Index < 0) or (Index >= AcsMapVarCount) then Exit;
+    for K2 := 0 to FMods.Count - 1 do
+      if Mods(K2) <> L then
+        for J2 := 0 to Min(High(Mods(K2).Module.VarExports), AcsMapVarCount - 1) do
+          if SameText(Mods(K2).Module.VarExports[J2], VarName) then
+          begin
+            L.VarModule[Index] := K2;
+            L.VarIndex[Index] := J2;
+            Exit;
+          end;
+    WritelnLog('Acs', 'imported variable %s not found', [VarName]);
+  end;
+
+begin
+  for I := 0 to FMods.Count - 1 do
+  begin
+    L := Mods(I);
+    for K := 0 to High(L.Module.VarImports) do
+      LinkVar(L.Module.VarImports[K].Index, L.Module.VarImports[K].Name);
+    for K := 0 to High(L.Module.ArrayImports) do
+      LinkVar(L.Module.ArrayImports[K].Index, L.Module.ArrayImports[K].Name);
+    { Imported functions: no address, found by name. }
+    for J := 0 to High(L.Module.Functions) do
+    begin
+      if (L.Module.Functions[J].Address <> 0) or (J > High(L.Module.FunctionNames)) then Continue;
+      Name := L.Module.FunctionNames[J];
+      Found := false;
+      for K := 0 to FMods.Count - 1 do
+        if (not Found) and (Mods(K) <> L) then
+        begin
+          O := Mods(K);
+          Found := LinkFunction(O, K, Name, J);
+        end;
+      if not Found then
+        WritelnLog('Acs', 'imported function %s not found', [Name]);
+    end;
+  end;
 end;
 
 function TAcsVM.Inst(const I: Integer): TAcsInstance;
@@ -1238,7 +1557,7 @@ end;
 
 function TAcsVM.MapVar(const Index: Integer): Integer;
 begin
-  if (Index >= 0) and (Index < AcsMapVarCount) then Result := FMapVars[Index] else Result := 0;
+  if (Index >= 0) and (Index < AcsMapVarCount) then Result := Mods(0).MapVars[Index] else Result := 0;
 end;
 
 procedure TAcsVM.LogOnce(const What: String);
@@ -1265,7 +1584,10 @@ begin
     if I <= High(FDynStrings) then Exit(FDynStrings[I]);
     Exit('');
   end;
-  if (I >= 0) and (I <= High(FModule.Strings)) then Result := FModule.Strings[I] else Result := '';
+  Result := '';
+  if (Index shr 16 >= 0) and (Index shr 16 < FMods.Count) then
+    if (I >= 0) and (I <= High(Mods(Index shr 16).Module.Strings)) then
+      Result := Mods(Index shr 16).Module.Strings[I];
 end;
 
 function TAcsVM.NewString(const S: String): Integer;
@@ -1289,7 +1611,7 @@ var
   { The named script of Arg(0); false (logged) when there is none. }
   function Named: Boolean;
   begin
-    Result := FModule.NamedScript(StringOf(Arg(0)), Number);
+    Result := NamedScript(StringOf(Arg(0)), Number);
     if not Result then
       WritelnLog('Acs', 'script "%s" not found', [StringOf(Arg(0))]);
   end;
@@ -1491,14 +1813,82 @@ begin
   Result := false;
 end;
 
+function TAcsVM.FindScript(const Number: Integer; out ModIndex, ScriptIndex: Integer): Boolean;
+var
+  K, N, J: Integer;
+begin
+  Result := false;
+  ModIndex := 0;
+  ScriptIndex := -1;
+  if Number >= 0 then
+  begin
+    for J := 0 to FMods.Count - 1 do
+    begin
+      ScriptIndex := Mods(J).Module.FindScript(Number);
+      if ScriptIndex >= 0 then
+      begin
+        ModIndex := J;
+        Exit(true);
+      end;
+    end;
+    Exit;
+  end;
+  { Named scripts: -1 - their index across the modules' names. }
+  K := -1 - Number;
+  for J := 0 to FMods.Count - 1 do
+  begin
+    N := Length(Mods(J).Module.ScriptNames);
+    if K < N then
+    begin
+      ModIndex := J;
+      ScriptIndex := Mods(J).Module.FindScript(-1 - K);
+      Exit(ScriptIndex >= 0);
+    end;
+    K := K - N;
+  end;
+end;
+
+function TAcsVM.NamedScript(const Name: String; out Number: Integer): Boolean;
+var
+  M, Base, Local: Integer;
+begin
+  Base := 0;
+  for M := 0 to FMods.Count - 1 do
+  begin
+    if Mods(M).Module.NamedScript(Name, Local) then
+    begin
+      Number := Local - Base;
+      Exit(true);
+    end;
+    Base := Base + Length(Mods(M).Module.ScriptNames);
+  end;
+  Number := 0;
+  Result := false;
+end;
+
+function TAcsVM.ConstCalls: TAcsConstCalls;
+var
+  M, K: Integer;
+  C: TAcsConstCalls;
+begin
+  Result := nil;
+  for M := 0 to FMods.Count - 1 do
+  begin
+    C := Mods(M).Module.ConstCalls;
+    K := Length(Result);
+    SetLength(Result, K + Length(C));
+    if Length(C) > 0 then
+      Move(C[0], Result[K], Length(C) * SizeOf(TAcsConstCall));
+  end;
+end;
+
 function TAcsVM.StartScript(const Number: Integer; const Args: array of Integer; const Activator: TAcsActivator;
   const Line: Integer; const BackSide, Always: Boolean): TAcsInstance;
 var
-  S, I, K: Integer;
+  M, S, I: Integer;
 begin
   Result := nil;
-  S := FModule.FindScript(Number);
-  if S < 0 then
+  if not FindScript(Number, M, S) then
   begin
     WritelnLog('Acs', 'script %d not found', [Number]);
     Exit;
@@ -1515,33 +1905,62 @@ begin
         end;
         Exit;
       end;
+  Result := StartAt(M, S, Number, Args, Activator, Line, BackSide);
+end;
+
+function TAcsVM.StartAt(const ModIndex, ScriptIndex, Number: Integer; const Args: array of Integer;
+  const Activator: TAcsActivator; const Line: Integer; const BackSide: Boolean): TAcsInstance;
+var
+  Info: TAcsScriptInfo;
+  K: Integer;
+begin
+  Info := Mods(ModIndex).Module.Scripts[ScriptIndex];
   Result := TAcsInstance.Create;
-  Result.Script := S;
+  Result.Module := ModIndex;
+  Result.ScriptModule := ModIndex;
+  Result.Script := ScriptIndex;
   Result.Number := Number;
-  Result.PC := FModule.Scripts[S].Address;
+  Result.PC := Info.Address;
   Result.State := asRunning;
-  SetLength(Result.Stack, FModule.Scripts[S].VarCount + 64);
+  SetLength(Result.Stack, Info.VarCount + 64);
   for K := 0 to High(Result.Stack) do Result.Stack[K] := 0;
-  for K := 0 to Min(High(Args), FModule.Scripts[S].ArgCount - 1) do
+  for K := 0 to Min(High(Args), Info.ArgCount - 1) do
     Result.Stack[K] := Args[K];
   Result.LocalsBase := 0;
-  Result.SP := FModule.Scripts[S].VarCount;
+  Result.SP := Info.VarCount;
   Result.Activator := Activator;
   Result.Line := Line;
   Result.BackSide := BackSide;
   Result.OptStart := -1;
   FInstances.Add(Result);
   Inc(FStarted);
-  WritelnLog('Acs', 'script %d (%s) started', [Number, AcsScriptTypeName(FModule.Scripts[S].ScriptType)]);
+  if ModIndex = 0 then
+    WritelnLog('Acs', 'script %d (%s) started', [Number, AcsScriptTypeName(Info.ScriptType)])
+  else
+    WritelnLog('Acs', 'script %d (%s) of %s started', [Number, AcsScriptTypeName(Info.ScriptType),
+      Mods(ModIndex).Name]);
 end;
 
 procedure TAcsVM.StartType(const ScriptType: Integer; const Activator: TAcsActivator);
 var
-  I: Integer;
+  M, I, Number, Base, K: Integer;
+  Md: TAcsModule;
 begin
-  for I := 0 to High(FModule.Scripts) do
-    if FModule.Scripts[I].ScriptType = ScriptType then
-      StartScript(FModule.Scripts[I].Number, [], Activator, -1, false, true);
+  Base := 0;
+  for M := 0 to FMods.Count - 1 do
+  begin
+    Md := Mods(M).Module;
+    for I := 0 to High(Md.Scripts) do
+      if Md.Scripts[I].ScriptType = ScriptType then
+      begin
+        Number := Md.Scripts[I].Number;
+        { A named script's number across the modules. }
+        if Number < 0 then Number := Number - Base;
+        K := I;
+        StartAt(M, K, Number, [], Activator, -1, false);
+      end;
+    Base := Base + Length(Md.ScriptNames);
+  end;
 end;
 
 procedure TAcsVM.StartLevel;
@@ -1754,9 +2173,18 @@ var
   { A variable op on Kind's variable Index. }
   procedure VarOp(const Index: Integer);
   var
-    Elem, Value, Old, NewValue, ArrNum: Integer;
+    Elem, Value, Old, NewValue, ArrNum, VI: Integer;
     Ok: Boolean;
+    L: TAcsLoaded;
   begin
+    { Map variables: through the module's imports. }
+    L := Mods(I.Module);
+    VI := Index;
+    if (Kind in [vkMap, vkMapArray]) and (Index >= 0) and (Index < AcsMapVarCount) then
+    begin
+      VI := L.VarIndex[Index];
+      L := Mods(L.VarModule[Index]);
+    end;
     Elem := 0;
     Value := 0;
     if not (VOp in [voPush, voInc, voDec]) then Value := Pop;
@@ -1770,16 +2198,16 @@ var
           Ok := (Index >= 0) and (I.LocalsBase + Index < I.SP);
           if Ok then Old := I.Stack[I.LocalsBase + Index] else Old := 0;
         end;
-      vkMap: begin Ok := (Index >= 0) and (Index < AcsMapVarCount); if Ok then Old := FMapVars[Index] else Old := 0; end;
+      vkMap: begin Ok := (VI >= 0) and (VI < AcsMapVarCount); if Ok then Old := L.MapVars[VI] else Old := 0; end;
       vkWorld: begin Ok := (Index >= 0) and (Index < AcsWorldVarCount); if Ok then Old := FGlobals.WorldVars[Index] else Old := 0; end;
       vkGlobal: begin Ok := (Index >= 0) and (Index < AcsGlobalVarCount); if Ok then Old := FGlobals.GlobalVars[Index] else Old := 0; end;
       vkMapArray:
         begin
-          Ok := (Index >= 0) and (Index < AcsMapVarCount);
-          if Ok then ArrNum := FMapVars[Index];
-          Ok := Ok and (ArrNum >= 0) and (ArrNum <= High(FMapArrays)) and (Elem >= 0) and
-            (Elem <= High(FMapArrays[ArrNum]));
-          if Ok then Old := FMapArrays[ArrNum][Elem] else Old := 0;
+          Ok := (VI >= 0) and (VI < AcsMapVarCount);
+          if Ok then ArrNum := L.MapVars[VI];
+          Ok := Ok and (ArrNum >= 0) and (ArrNum <= High(L.MapArrays)) and (Elem >= 0) and
+            (Elem <= High(L.MapArrays[ArrNum]));
+          if Ok then Old := L.MapArrays[ArrNum][Elem] else Old := 0;
         end;
       vkWorldArray: Old := FGlobals.GetArray(Index, Elem);
       else Old := FGlobals.GetArray(AcsWorldVarCount + Index, Elem);
@@ -1814,10 +2242,10 @@ var
     if not Ok then Exit;
     case Kind of
       vkScript: I.Stack[I.LocalsBase + Index] := NewValue;
-      vkMap: FMapVars[Index] := NewValue;
+      vkMap: L.MapVars[VI] := NewValue;
       vkWorld: FGlobals.WorldVars[Index] := NewValue;
       vkGlobal: FGlobals.GlobalVars[Index] := NewValue;
-      vkMapArray: FMapArrays[ArrNum][Elem] := NewValue;
+      vkMapArray: L.MapArrays[ArrNum][Elem] := NewValue;
       vkWorldArray: FGlobals.SetArray(Index, Elem, NewValue);
       else FGlobals.SetArray(AcsWorldVarCount + Index, Elem, NewValue);
     end;
@@ -1828,13 +2256,23 @@ var
     I.PC := Ofs;
   end;
 
-  procedure CallFunction(const F: Integer; const Discard: Boolean);
+  { Function F of module Lib (an import runs its library's). }
+  procedure CallFunction(const Lib, FuncNum: Integer; const Discard: Boolean);
   var
-    J, Fr: Integer;
+    J, Fr, F, FM: Integer;
+    L: TAcsLoaded;
   begin
-    if (F < 0) or (F > High(M.Functions)) then
+    if (Lib < 0) or (Lib >= FMods.Count) or (FuncNum < 0) or (FuncNum > High(Mods(Lib).FuncModule)) then
     begin
-      Stop(I, SysUtils.Format('function %d not found', [F]));
+      Stop(I, SysUtils.Format('function %d not found', [FuncNum]));
+      Exit;
+    end;
+    FM := Mods(Lib).FuncModule[FuncNum];
+    F := Mods(Lib).FuncIndex[FuncNum];
+    L := Mods(FM);
+    if (F > High(L.Module.Functions)) or (L.Module.Functions[F].Address = 0) then
+    begin
+      Stop(I, SysUtils.Format('function %d not found', [FuncNum]));
       Exit;
     end;
     if Length(I.Frames) >= 1000 then
@@ -1847,9 +2285,12 @@ var
     I.Frames[Fr].ReturnPC := I.PC;
     I.Frames[Fr].LocalsBase := I.LocalsBase;
     I.Frames[Fr].Discard := Discard;
-    I.LocalsBase := Max(0, I.SP - M.Functions[F].ArgCount);
-    for J := 1 to M.Functions[F].LocalCount do Push(0);
-    I.PC := M.Functions[F].Address;
+    I.Frames[Fr].ReturnModule := I.Module;
+    I.LocalsBase := Max(0, I.SP - L.Module.Functions[F].ArgCount);
+    for J := 1 to L.Module.Functions[F].LocalCount do Push(0);
+    I.Module := FM;
+    M := L.Module;
+    I.PC := L.Module.Functions[F].Address;
   end;
 
   procedure ReturnFrom(const Value: Integer);
@@ -1865,6 +2306,8 @@ var
     I.SP := I.LocalsBase;
     I.LocalsBase := I.Frames[Fr].LocalsBase;
     I.PC := I.Frames[Fr].ReturnPC;
+    I.Module := Max(0, Min(FMods.Count - 1, I.Frames[Fr].ReturnModule));
+    M := Mods(I.Module).Module;
     if not I.Frames[Fr].Discard then Push(Value);
     SetLength(I.Frames, Fr);
   end;
@@ -1897,6 +2340,7 @@ var
   procedure PrintArray(const ArrayKind: TVarKind; const Index, Offset: Integer);
   var
     J, C, ArrNum: Integer;
+    L: TAcsLoaded;
   begin
     J := Offset;
     while J - Offset < 4096 do
@@ -1905,9 +2349,10 @@ var
         vkMapArray:
           begin
             if (Index < 0) or (Index >= AcsMapVarCount) then Exit;
-            ArrNum := FMapVars[Index];
-            if (ArrNum < 0) or (ArrNum > High(FMapArrays)) or (J < 0) or (J > High(FMapArrays[ArrNum])) then Exit;
-            C := FMapArrays[ArrNum][J];
+            L := Mods(Mods(I.Module).VarModule[Index]);
+            ArrNum := L.MapVars[Mods(I.Module).VarIndex[Index]];
+            if (ArrNum < 0) or (ArrNum > High(L.MapArrays)) or (J < 0) or (J > High(L.MapArrays[ArrNum])) then Exit;
+            C := L.MapArrays[ArrNum][J];
           end;
         vkWorldArray: C := FGlobals.GetArray(Index, J);
         else C := FGlobals.GetArray(AcsWorldVarCount + Index, J);
@@ -1918,8 +2363,15 @@ var
     end;
   end;
 
+  { A string constant of the running module's code (direct p-codes). }
+  function DirectString(const Index: Integer): String;
+  begin
+    Result := StringOf((Index and $FFFF) or (I.Module shl 16));
+  end;
+
 begin
-  M := FModule;
+  if (I.Module < 0) or (I.Module >= FMods.Count) then I.Module := 0;
+  M := Mods(I.Module).Module;
   Count := 0;
   while I.State = asRunning do
   begin
@@ -1944,7 +2396,13 @@ begin
       PcdNop: ;
       PcdTerminate: I.State := asDone;
       PcdSuspend: I.State := asSuspended;
-      PcdRestart: I.PC := M.Scripts[I.Script].Address;
+      PcdRestart:
+        begin
+          I.Module := I.ScriptModule;
+          M := Mods(I.Module).Module;
+          SetLength(I.Frames, 0);
+          I.PC := M.Scripts[I.Script].Address;
+        end;
       PcdPushnumber: Push(M.ReadWord(I.PC));
       PcdPushbyte: Push(M.RawByte(I.PC));
       PcdPush2bytes..PcdPush5bytes:
@@ -2109,7 +2567,7 @@ begin
           if Op = PcdScriptwait then A := Pop
           else if Op = PcdScriptwaitnamed then
           begin
-            if not M.NamedScript(StringOf(Pop), A) then A := 0;
+            if not NamedScript(StringOf(Pop), A) then A := 0;
           end else
             A := M.ReadWord(I.PC);
           I.StateData := A;
@@ -2125,7 +2583,7 @@ begin
         begin
           A := M.ReadWord(I.PC);
           B := M.ReadWord(I.PC);
-          FHost.ChangeFlat(A, StringOf(B), Op = PcdChangeceilingdirect);
+          FHost.ChangeFlat(A, DirectString(B), Op = PcdChangeceilingdirect);
         end;
       PcdLineside: Push(Ord(I.BackSide));
       PcdClearlinespecial: FHost.ClearLineSpecial(I.Line);
@@ -2169,7 +2627,9 @@ begin
           Push(AcsDynamicStringBase + High(FDynStrings));
         end;
       PcdStrlen: Push(Length(StringOf(Pop)));
-      PcdTagstring: ;
+      PcdTagstring:
+        if I.SP > I.LocalsBase then
+          I.Stack[I.SP - 1] := I.Stack[I.SP - 1] or (I.Module shl 16);
       PcdPlayercount, PcdSingleplayer: Push(1);
       PcdGametype, PcdIsnetworkgame, PcdPlayerteam, PcdPlayerfrags, PcdPlayernumber, PcdBlueteamcount..PcdGetinvasionstate,
       PcdGetsigilpieces:
@@ -2226,7 +2686,7 @@ begin
           A := M.ReadWord(I.PC);
           M.ReadWord(I.PC);
           M.ReadWord(I.PC);
-          FHost.SetMusic(StringOf(A));
+          FHost.SetMusic(DirectString(A));
         end;
       PcdFixedmul: begin B := Pop; A := Pop; Push(Wrap((Int64(A) * B) div 65536)); end;
       PcdFixeddiv:
@@ -2275,9 +2735,13 @@ begin
       PcdGetscreenwidth: Push(640);
       PcdGetscreenheight: Push(480);
       PcdSetresultvalue: I.ResultValue := Pop;
-      PcdCall, PcdCalldiscard: CallFunction(M.ReadByte(I.PC), Op = PcdCalldiscard);
-      PcdCallstack: CallFunction(Pop and $FFFF, false);
-      PcdPushfunction: Push(M.ReadByte(I.PC));
+      PcdCall, PcdCalldiscard: CallFunction(I.Module, M.ReadByte(I.PC), Op = PcdCalldiscard);
+      PcdCallstack:
+        begin
+          A := Pop;
+          CallFunction(A shr 16, A and $FFFF, false);
+        end;
+      PcdPushfunction: Push(M.ReadByte(I.PC) or (I.Module shl 16));
       PcdReturnvoid: ReturnFrom(0);
       PcdReturnval: ReturnFrom(Pop);
       PcdGotostack: Jump(Pop);
@@ -2311,11 +2775,11 @@ begin
         begin
           A := M.ReadWord(I.PC);
           B := M.ReadWord(I.PC);
-          if Op = PcdGiveinventorydirect then FHost.Inventory(StringOf(A), Max(0, B))
-          else FHost.Inventory(StringOf(A), -Max(0, B));
+          if Op = PcdGiveinventorydirect then FHost.Inventory(DirectString(A), Max(0, B))
+          else FHost.Inventory(DirectString(A), -Max(0, B));
         end;
       PcdCheckinventory: Push(FHost.Inventory(StringOf(Pop), 0));
-      PcdCheckinventorydirect: Push(FHost.Inventory(StringOf(M.ReadWord(I.PC)), 0));
+      PcdCheckinventorydirect: Push(FHost.Inventory(DirectString(M.ReadWord(I.PC)), 0));
       PcdSetactorangle, PcdSetactorpitch, PcdSetammocapacity,
       PcdSetmarineweapon, PcdSetmarinesprite, PcdGrabinput, PcdMovemousepointer, PcdChangesky:
         Skip(2);
@@ -2345,7 +2809,7 @@ begin
             Target := Pop;
           end else
           begin
-            Target := M.ReadWord(I.PC);
+            Target := (M.ReadWord(I.PC) and $FFFF) or (I.Module shl 16);
             A := M.ReadWord(I.PC);
             K := M.ReadWord(I.PC);
             M.ReadWord(I.PC);
@@ -2364,7 +2828,7 @@ begin
             Target := Pop;
           end else
           begin
-            Target := M.ReadWord(I.PC);
+            Target := (M.ReadWord(I.PC) and $FFFF) or (I.Module shl 16);
             K := M.ReadWord(I.PC);
             N := M.ReadWord(I.PC);
             B := M.ReadWord(I.PC);
@@ -2412,11 +2876,28 @@ var
   X: TAcsInstance;
 begin
   Result := TJSONObject.Create;
-  Result.Add('mapVars', IntsToJson(FMapVars));
+  Result.Add('mapVars', IntsToJson(Mods(0).MapVars));
   Arr := TJSONArray.Create;
-  for J := 0 to High(FMapArrays) do
-    Arr.Add(IntsToJson(FMapArrays[J]));
+  for J := 0 to High(Mods(0).MapArrays) do
+    Arr.Add(IntsToJson(Mods(0).MapArrays[J]));
   Result.Add('mapArrays', Arr);
+  { The libraries' variables: [name, map variables, map arrays]. }
+  if FMods.Count > 1 then
+  begin
+    Arr := TJSONArray.Create;
+    for J := 1 to FMods.Count - 1 do
+    begin
+      Sub := TJSONArray.Create;
+      Sub.Add(Mods(J).Name);
+      Sub.Add(IntsToJson(Mods(J).MapVars));
+      Fr := TJSONArray.Create;
+      for K := 0 to High(Mods(J).MapArrays) do
+        Fr.Add(IntsToJson(Mods(J).MapArrays[K]));
+      Sub.Add(Fr);
+      Arr.Add(Sub);
+    end;
+    Result.Add('libraries', Arr);
+  end;
   Arr := TJSONArray.Create;
   for J := 0 to High(FDynStrings) do Arr.Add(FDynStrings[J]);
   Result.Add('strings', Arr);
@@ -2460,6 +2941,11 @@ begin
       Fr.Add(X.Frames[K].Discard);
     end;
     Sub.Add(Fr);
+    Sub.Add(X.Module);
+    Sub.Add(X.ScriptModule);
+    Fr := TJSONArray.Create;
+    for K := 0 to High(X.Frames) do Fr.Add(X.Frames[K].ReturnModule);
+    Sub.Add(Fr);
     Arr.Add(Sub);
   end;
   Result.Add('scripts', Arr);
@@ -2468,16 +2954,35 @@ end;
 procedure TAcsVM.LoadState(const J: TJSONObject);
 var
   Arr, Sub, Fr: TJSONArray;
-  K, L, S: Integer;
+  K, L, S, M: Integer;
   X: TAcsInstance;
   D: TJSONData;
 begin
   if J = nil then Exit;
-  IntsFromJson(J.Find('mapVars'), FMapVars);
+  IntsFromJson(J.Find('mapVars'), Mods(0).MapVars);
   D := J.Find('mapArrays');
   if D is TJSONArray then
-    for K := 0 to Min(High(FMapArrays), TJSONArray(D).Count - 1) do
-      IntsFromJson(TJSONArray(D).Items[K], FMapArrays[K]);
+    for K := 0 to Min(High(Mods(0).MapArrays), TJSONArray(D).Count - 1) do
+      IntsFromJson(TJSONArray(D).Items[K], Mods(0).MapArrays[K]);
+  D := J.Find('libraries');
+  if D is TJSONArray then
+    for K := 0 to TJSONArray(D).Count - 1 do
+    begin
+      if not (TJSONArray(D).Items[K] is TJSONArray) then Continue;
+      Sub := TJSONArray(TJSONArray(D).Items[K]);
+      if Sub.Count < 3 then Continue;
+      for S := 1 to FMods.Count - 1 do
+        if SameText(Mods(S).Name, Sub.Strings[0]) then
+        begin
+          IntsFromJson(Sub.Items[1], Mods(S).MapVars);
+          if Sub.Items[2] is TJSONArray then
+          begin
+            Fr := TJSONArray(Sub.Items[2]);
+            for L := 0 to Min(High(Mods(S).MapArrays), Fr.Count - 1) do
+              IntsFromJson(Fr.Items[L], Mods(S).MapArrays[L]);
+          end;
+        end;
+    end;
   D := J.Find('strings');
   SetLength(FDynStrings, 0);
   if D is TJSONArray then
@@ -2508,10 +3013,16 @@ begin
     if not (Arr.Items[K] is TJSONArray) then Continue;
     Sub := TJSONArray(Arr.Items[K]);
     if Sub.Count < 14 then Continue;
-    S := FModule.FindScript(Sub.Integers[0]);
-    if S < 0 then Continue;
+    if not FindScript(Sub.Integers[0], M, S) then Continue;
     X := TAcsInstance.Create;
     X.Script := S;
+    X.ScriptModule := M;
+    X.Module := M;
+    if Sub.Count >= 16 then
+    begin
+      X.Module := EnsureRange(Sub.Integers[14], 0, FMods.Count - 1);
+      X.ScriptModule := EnsureRange(Sub.Integers[15], 0, FMods.Count - 1);
+    end;
     X.Number := Sub.Integers[0];
     X.PC := Sub.Integers[1];
     X.State := TAcsState(EnsureRange(Sub.Integers[2], 0, Ord(High(TAcsState))));
@@ -2541,7 +3052,14 @@ begin
         X.Frames[L].ReturnPC := Fr.Integers[L * 3];
         X.Frames[L].LocalsBase := Fr.Integers[L * 3 + 1];
         X.Frames[L].Discard := Fr.Booleans[L * 3 + 2];
+        X.Frames[L].ReturnModule := X.ScriptModule;
       end;
+    end;
+    if (Sub.Count >= 17) and (Sub.Items[16] is TJSONArray) then
+    begin
+      Fr := TJSONArray(Sub.Items[16]);
+      for L := 0 to Min(High(X.Frames), Fr.Count - 1) do
+        X.Frames[L].ReturnModule := EnsureRange(Fr.Integers[L], 0, FMods.Count - 1);
     end;
     X.LocalsBase := EnsureRange(X.LocalsBase, 0, X.SP);
     FInstances.Add(X);

@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 57 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 58 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -937,6 +937,13 @@ autotest only checks the library loads.
   `src/playsim/p_acs.cpp` as the third argument adds the `Acsf*`
   numbers of `CALLFUNC`'s functions). `acs.wad`'s `ACS_FUNC` lump runs
   them in `TestAcs` (`tools/make_acs.py`'s `functions_program`).
+  ACS libraries: `udmf-acslib.wad` (same script) LOADs TESTLIB and
+  imports its variables and function, and its LOADACS loads AUTOLIB
+  (log `Acs: library TESTLIB in the ACSe format: ...`, `LOADACS:
+  AUTOLIB`, `script 10 (open) of TESTLIB started`; messages `Sum 12`,
+  `Count 101`, `Library string`, `Autoloaded`, also on E1M2); saves
+  hold `acs.libraries` (autotest `acs-libraries`, unit test
+  `TestAcsLibraries`).
   Slopes: `udmf-slopes.wad` (same script) raises sector 141 (the
   corridor east of the start room) from 0 at y 128 to 64 at y 384
   (floorplane fields), slopes sector 99's ceiling by a `Plane_Align`

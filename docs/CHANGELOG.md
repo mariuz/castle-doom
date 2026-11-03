@@ -19,6 +19,10 @@
   kept across levels and in saves), user variables and arrays of things
   (`GetUserVariable`, `SetUserVariable`, `GetUserArray`, `SetUserArray`), and HUD clipping
   calls accepted.
+- ACS libraries: a map's scripts load libraries (`#import`ed ones through the `LOAD` chunk) and
+  use their map variables, arrays, functions and scripts (named ones too); a `LOADACS` lump
+  loads libraries whose open scripts run on every map, Doom-format maps included. Their
+  variables are in saves.
 
 ## v0.61.0 (2026-11-01)
 

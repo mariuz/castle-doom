@@ -332,6 +332,18 @@ are generated from ACC's `pcode.h` (`doomacs_pcodes.inc`, by
 log line, the known ones the game has no use for drop their arguments
 (logged once). Nothing raises: the web build cannot catch exceptions.
 
+Libraries: the VM holds a list of modules (`TAcsLoaded`), the map's
+BEHAVIOR first (an empty one when the map has none), then the
+libraries its `LOAD` chunk names and those of the WADs' `LOADACS`
+lumps (`LoadAcsNames`), read by lump name (`TAcsHost.LibraryData`).
+Each module has its own map variables and arrays; `Link` maps
+imported variables (`MIMP` / `AIMP` against `MEXP`) and functions
+(address 0, by `FNAM` name) to the module that has them. An instance
+runs in `Module` (switched by calls into a library's function and back
+by its frame's `ReturnModule`). A string number's high 16 bits name
+its module, as in ZDoom (`TAGSTRING`; `MSTR`, `ASTR`, `ATAG` tag
+initial values); dynamic strings start at `AcsDynamicStringBase`.
+
 The world is reached through `TAcsHost`: `TWorldAcsHost` forwards to
 `TDoomWorld.Acs*`. A line action from a script (`LSPEC*`) is
 translated like a UDMF line (`TranslateHexenLine`, walk-over and

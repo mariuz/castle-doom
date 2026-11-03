@@ -167,7 +167,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   format of maps made for UZDoom / GZDoom) load as well, their nodes from `ZNODES` or built
   by the game, Hexen-style line actions and ZDoom sector types translated, with coloured
   sector light, fog, texture scaling, offsets and rotation and per-surface light, and their
-  ACS scripts run, their floors and ceilings can slope and their 3D floors (solid slabs,
+  ACS scripts (with their libraries) run, their floors and ceilings can slope and their 3D floors (solid slabs,
   opaque or translucent) are drawn and walked on (polyobjects are not supported yet). A PWAD's GLDEFS lights
   (point, pulse, flicker, bound to sprite frames) become dynamic lights, and its
   brightmaps make the marked parts of textures and flats glow; UDMF light things light

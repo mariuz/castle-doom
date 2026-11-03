@@ -64,6 +64,13 @@ opaque, over the start room (140, id 15), which the player stands under,
 and a solid step at 0..24 filling the corridor east of it (141, id 9),
 which the player walks onto.
 
+udmf-acslib.wad, as udmf.wad with ACS libraries (tools/make_acs.py's
+library programs): the map's BEHAVIOR LOADs TESTLIB, imports its map
+variables libcount and libtext and its function LibAdd, and runs its
+named script LibNamed; a LOADACS lump loads AUTOLIB, whose open script
+runs on every map (E1M2 too, a Doom-format map of the IWAD). The
+libraries sit between A_START and A_END like ZDoom's.
+
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
 
@@ -372,6 +379,12 @@ def main():
                ('BEHAVIOR', make_acs.behavior('compat', make_acs.spawn_program('compat'))), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-3dfloor.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, floors3d=True)), ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-acslib.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True)),
+               ('BEHAVIOR', make_acs.behavior('compat', make_acs.libmap_program('compat'))), ('ENDMAP', b''),
+               ('A_START', b''), ('TESTLIB', make_acs.behavior('e', make_acs.library_program('e'))),
+               ('AUTOLIB', make_acs.behavior('E', make_acs.autolib_program('E'))), ('A_END', b''),
+               ('LOADACS', b'// libraries for every map\nAUTOLIB\n')])
     write_wad(os.path.join(outdir, 'udmf-doom.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(False)), ('ZNODES', b'XGLN' + zn.gl(False, False)),
                ('ENDMAP', b'')])

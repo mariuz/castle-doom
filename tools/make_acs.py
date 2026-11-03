@@ -395,6 +395,102 @@ def functions_program(layout):
     return a.finish(), [(1, 1, a.labels['s1'], 0), (-1, 0, a.labels['other'], 1)], [], S, ['Other']
 
 
+# ACS libraries (udmf-acslib.wad, written by make_udmf_wad.py): the map
+# LOADs TESTLIB and imports its variables libcount (map variable 0, 1 at
+# the start) and libtext (1, a string the library tags through MSTR) and
+# its function LibAdd; LOADACS loads AUTOLIB on every map.
+LIB_STRINGS = ['Library open', 'Library string', 'Named in library']
+MAP_LIB_STRINGS = ['Sum ', 'Count ', 'LibNamed']
+AUTO_STRINGS = ['Autoloaded']
+
+
+def names_chunk(cid, names):
+    """SNAM / FNAM / MEXP: count, offsets from the chunk's data, the names."""
+    head = 4 + 4 * len(names)
+    offs, blob = [], bytearray()
+    for n in names:
+        offs.append(head + len(blob))
+        blob += n.encode('latin-1') + b'\0'
+    return chunk(cid, struct.pack('<i', len(names)) + b''.join(struct.pack('<i', o) for o in offs) + bytes(blob))
+
+
+def library_program(layout):
+    """TESTLIB: an open script printing a tagged string, LibAdd(a, b)
+    returning a + b and the named script "LibNamed" printing "Named in
+    library"; exports libcount (1) and libtext (its string 1)."""
+    a = Asm(layout)
+    S = LIB_STRINGS
+
+    def tagged(text):
+        a.push(S.index(text))
+        a.op('TAGSTRING')
+        a.op('PRINTSTRING')
+    a.label('open')
+    a.op('BEGINPRINT')
+    tagged('Library open')
+    a.op('ENDPRINT')
+    a.op('TERMINATE')
+    a.label('named')
+    a.op('BEGINPRINT')
+    tagged('Named in library')
+    a.op('ENDPRINT')
+    a.op('TERMINATE')
+    a.label('add')
+    a.var('PUSHSCRIPTVAR', 0)
+    a.var('PUSHSCRIPTVAR', 1)
+    a.op('ADD')
+    a.op('RETURNVAL')
+    code = a.finish()
+    extra = {'vars': chunk(b'MINI', struct.pack('<iii', 0, 1, 1)) + chunk(b'MSTR', struct.pack('<i', 1)),
+             'chunks': names_chunk(b'MEXP', ['libcount', 'libtext']) + names_chunk(b'FNAM', ['LibAdd'])}
+    return (code, [(10, 1, a.labels['open'], 0), (-1, 0, a.labels['named'], 0)],
+            [(2, 0, 1, a.labels['add'])], S, ['LibNamed'], extra)
+
+
+def libmap_program(layout):
+    """The map: an open script printing "Sum 12" (LibAdd(5, 7)), adding
+    100 to libcount ("Count 101"), printing libtext ("Library string")
+    and running the library's named script."""
+    a = Asm(layout)
+    S = MAP_LIB_STRINGS
+
+    def show(*steps):
+        a.op('BEGINPRINT')
+        for st in steps:
+            st()
+        a.op('ENDPRINT')
+    a.label('open')
+    show(lambda: a.print_str('Sum ', S), lambda: a.push(5), lambda: a.push(7),
+         lambda: (a.op('CALL'), a.nbyte(0)), lambda: a.op('PRINTNUMBER'))
+    a.push(100)
+    a.var('ADDMAPVAR', 0)
+    show(lambda: a.print_str('Count ', S), lambda: a.var('PUSHMAPVAR', 0), lambda: a.op('PRINTNUMBER'))
+    show(lambda: a.var('PUSHMAPVAR', 1), lambda: a.op('PRINTSTRING'))
+    for v in (S.index('LibNamed'), 0, 0, 0, 0):
+        a.push(v)
+    a.callfunc('ACSNamedExecute', 5)
+    a.op('DROP')
+    a.op('TERMINATE')
+    code = a.finish()
+    mimp = b''.join(struct.pack('<i', i) + n.encode() + b'\0' for i, n in ((0, 'libcount'), (1, 'libtext')))
+    extra = {'vars': b'',
+             'chunks': chunk(b'LOAD', b'TESTLIB\0') + chunk(b'MIMP', mimp) + names_chunk(b'FNAM', ['LibAdd'])}
+    return code, [(1, 1, a.labels['open'], 0)], [(2, 0, 1, 0)], S, [], extra
+
+
+def autolib_program(layout):
+    """AUTOLIB (LOADACS): an open script printing "Autoloaded"."""
+    a = Asm(layout)
+    a.label('open')
+    a.op('BEGINPRINT')
+    a.push(0)
+    a.op('TAGSTRING')
+    a.op('PRINTSTRING')
+    a.op('ENDPRINT')
+    a.op('TERMINATE')
+    return a.finish(), [(20, 1, a.labels['open'], 0)], [], AUTO_STRINGS, [], {'vars': b'', 'chunks': b''}
+
+
 def chunk(cid, data):
     return cid + struct.pack('<i', len(data)) + data
 
@@ -419,6 +515,7 @@ def behavior(layout, program=None):
     program = program or tests_program(layout)
     code, scripts, funcs, strings = program[:4]
     names = program[4] if len(program) > 4 else []
+    extra = program[5] if len(program) > 5 else None
     if layout == 'old':
         out = bytearray(b'ACS\0' + b'\0\0\0\0') + code
         str_offs = []
@@ -445,18 +542,14 @@ def behavior(layout, program=None):
                                       for (argc, loc, ret, addr) in funcs))
     chunks += string_table(strings, layout == 'E')
     if names:
-        # SNAM: count, offsets from the chunk's data, the names.
-        head = 4 + 4 * len(names)
-        offs, blob = [], bytearray()
-        for n in names:
-            offs.append(head + len(blob))
-            blob += n.encode('latin-1') + b'\0'
-        chunks += chunk(b'SNAM', struct.pack('<i', len(names)) + b''.join(struct.pack('<i', o) for o in offs) +
-                        bytes(blob))
-    # Map variable 1 starts at 100; map variable 2 is a 4-element array.
-    chunks += chunk(b'MINI', struct.pack('<ii', 1, 100))
-    chunks += chunk(b'ARAY', struct.pack('<ii', 2, 4))
-    chunks += chunk(b'AINI', struct.pack('<iiiii', 2, 10, 20, 30, 40))
+        chunks += names_chunk(b'SNAM', names)
+    if extra is not None:
+        chunks += extra['vars'] + extra['chunks']
+    else:
+        # Map variable 1 starts at 100; map variable 2 is a 4-element array.
+        chunks += chunk(b'MINI', struct.pack('<ii', 1, 100))
+        chunks += chunk(b'ARAY', struct.pack('<ii', 2, 4))
+        chunks += chunk(b'AINI', struct.pack('<iiiii', 2, 10, 20, 30, 40))
     if layout == 'compat':
         out = bytearray(b'ACS\0' + b'\0\0\0\0') + code
         while len(out) % 4:
