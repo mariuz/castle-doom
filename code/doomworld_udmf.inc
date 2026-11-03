@@ -177,6 +177,56 @@ begin
     SpawnFog(X, Y, Result.DoomZ, Sec);
 end;
 
+{ ZDoom's spawn numbers of Doom's projectiles as effect kinds. }
+function ProjectileOfSpawnNum(const SpawnNum: Integer; out K: TEffectKind): Boolean;
+begin
+  Result := true;
+  case SpawnNum of
+    10: K := ekBal1;            { DoomImpBall }
+    126: K := ekBal2;           { CacodemonBall }
+    154: K := ekBal7;           { BaronBall }
+    127: K := ekRocket;         { Rocket }
+    53: K := ekRevenantRocket;  { RevenantTracer }
+    153: K := ekFatShot;        { FatShot }
+    129: K := ekArachPlasma;    { ArachnotronPlasma }
+    51: K := ekPlasmaBall;      { PlasmaBall }
+    128: K := ekBfgBall;        { BFGBall }
+    else Result := false;
+  end;
+end;
+
+function TDoomWorld.SpawnProjectile(const K: TEffectKind; const X, Y, Z, Angle, Speed, VSpeed: Single;
+  const Gravity: Boolean): TDoomActor;
+var
+  M: TDoomActor;
+begin
+  Result := nil;
+  if FMap.SectorAt(X, Y) < 0 then Exit;
+  M := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[K]);
+  M.State := asMissile;
+  M.Bright := true;
+  M.DoomX := X;
+  M.DoomY := Y;
+  M.DoomZ := Z;
+  M.Sector := FMap.SectorAt(X, Y);
+  M.VelX := Cos(DegToRad(Angle)) * Speed;
+  M.VelY := Sin(DegToRad(Angle)) * Speed;
+  M.VelZ := VSpeed;
+  M.MissileGravity := Gravity;
+  M.MissileDamageDice := EffectInfos[K].DamageDice;
+  M.MissileDamageFaces := EffectInfos[K].DamageFaces;
+  M.Angle := Angle;
+  M.Collides := false;
+  M.Pickable := false;
+  M.SetLight(255);
+  M.UpdateTransform;
+  FActors.Add(M);
+  FThingsGroup.Add(M);
+  if EffectInfos[K].AttackSound <> '' then
+    FSounds.PlayAt(EffectInfos[K].AttackSound, M);
+  Result := M;
+end;
+
 function TDoomWorld.ThingAction(const Special: Integer; const Args: array of Integer): Boolean;
 var
   A: array [0..4] of Integer;
@@ -184,6 +234,8 @@ var
   Act: TDoomActor;
   Spots: array of TVector2;
   Name: String;
+  Kind: TEffectKind;
+  Z: Single;
 
   function Arg(const K: Integer): Integer;
   begin
@@ -317,6 +369,31 @@ begin
               Inc(N);
             end;
       end;
+    UdmfThingProjectile, UdmfThingProjectileGravity:
+      begin
+        if not ProjectileOfSpawnNum(A[1], Kind) then
+        begin
+          AcsLogOnce(Format('%s of spawn number %d', [Name, A[1]]));
+          Exit;
+        end;
+        { From each live thing with that id (at its middle), else each of
+          the map's things (map spots, at their height above the floor). }
+        for Act in FActors do
+          if Matches(Act) then
+            if SpawnProjectile(Kind, Act.DoomX, Act.DoomY, Act.DoomZ + Act.Info^.Height / 2, A[2] * 360 / 256,
+               A[3] / 8, A[4] / 8, Special = UdmfThingProjectileGravity) <> nil then
+              Inc(N);
+        if N = 0 then
+          for I := 0 to High(FMap.Things) do
+            if (A[0] <> 0) and (FMap.Things[I].Tid = A[0]) and (FMap.SectorAt(FMap.Things[I].X, FMap.Things[I].Y) >= 0) then
+            begin
+              Z := FMap.FloorAt(FMap.SectorAt(FMap.Things[I].X, FMap.Things[I].Y), FMap.Things[I].X,
+                FMap.Things[I].Y) + FMap.Things[I].Z;
+              if SpawnProjectile(Kind, FMap.Things[I].X, FMap.Things[I].Y, Z, A[2] * 360 / 256, A[3] / 8, A[4] / 8,
+                 Special = UdmfThingProjectileGravity) <> nil then
+                Inc(N);
+            end;
+      end;
     UdmfDamageThing:
       begin
         DamagePlayer(Max(1, A[0]), nil);
@@ -333,6 +410,6 @@ begin
         end;
       end;
   end;
-  WritelnLog('Udmf', '%s (%d, %d, %d, %d): %d things', [Name, A[0], A[1], A[2], A[3], N]);
+  WritelnLog('Udmf', '%s (%d, %d, %d, %d, %d): %d things', [Name, A[0], A[1], A[2], A[3], A[4], N]);
   Result := N > 0;
 end;

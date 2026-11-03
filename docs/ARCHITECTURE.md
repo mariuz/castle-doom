@@ -341,9 +341,10 @@ afterwards; a teleport to a thing id tags the destination's sector for
 the call. `ACS_Execute` and its kin are the world's `UdmfAcs*` line
 types (`AcsLineAction`), and from scripts the VM runs them itself.
 Random numbers come from `TDoomWorld.Random`, so demos replay. Map
-variables and arrays live in the VM, world and global ones in
-`TAcsGlobals` (cleared by a new game); both are in saves (`acs`,
-`acsGlobals`), and a save restores the running scripts instead of
+variables and arrays live in the VM (with the user variables of
+things by thing id, `userVars`), world and global ones in
+`TAcsGlobals` (cleared by a new game, with the CVars scripts set);
+both are in saves (`acs`, `acsGlobals`), and a save restores the running scripts instead of
 starting the open ones. `TAcsModule.ConstCalls` walks the reachable
 code for line actions with constant arguments (and texture changes),
 so `ComputeDynamicSectors` gives their sectors their own chunks.

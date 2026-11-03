@@ -14,6 +14,11 @@
 - 3D floors in UDMF maps (`Sector_Set3dFloor`, first stage): solid slabs taken from a
   control sector, opaque or translucent, drawn with their top, bottom and sides in the
   sectors they are tagged to; the player stands on them and walks under them.
+- UDMF maps: `Thing_Projectile` and `Thing_ProjectileGravity` fire Doom's projectiles from
+  map spots and things. ACS: CVars (`GetCVar`, `SetCVar` and their string and user forms,
+  kept across levels and in saves), user variables and arrays of things
+  (`GetUserVariable`, `SetUserVariable`, `GetUserArray`, `SetUserArray`), and HUD clipping
+  calls accepted.
 
 ## v0.61.0 (2026-11-01)
 

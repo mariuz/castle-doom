@@ -403,15 +403,17 @@ TESTS = [
     ('udmf-things', 'E1M1',
      'Y,W:0.5,SAVE:1,LINE:829,W:0.5,G:-416:256,A:45,S,SAVE:2,LINE:1045,W:1,SAVE:3,LINE:1046,W:0.2,LINE:1052,'
      'W:0.3,SAVE:4,G:-224:200,W:1,SAVE:5,LINE:830,W:2,SAVE:6,LINE:900,W:0.3,SAVE:7,LINE:1047,W:0.3,LINE:1048,'
-     'W:0.6,SAVE:8,W:3,SAVE:9,Q',
+     'W:0.6,SAVE:8,W:3,SAVE:9,G:-416:200,A:90,LINE:1050,LINE:1051,SAVE:10,W:0.1,SAVE:11,Q',
      [r'Acs: SpawnSpot ShotgunGuy at things 20: 1', r'Acs: Spawn Medikit at \(-352, 192\): 1',
-      r'Message: Spawned 2', r'Udmf: Thing_Spawn \(20, 5, 64, 21\): 1 things',
-      r'Udmf: Thing_Damage \(21, 1000, 0, 0\): 1 things', r'Udmf: Thing_SpawnNoFog \(20, 4, 0, 22\): 1 things',
-      r'Udmf: Thing_Remove \(22, 0, 0, 0\): 1 things',
+      r'Message: Spawned 2', r'Udmf: Thing_Spawn \(20, 5, 64, 21, 0\): 1 things',
+      r'Udmf: Thing_Damage \(21, 1000, 0, 0, 0\): 1 things', r'Udmf: Thing_SpawnNoFog \(20, 4, 0, 22, 0\): 1 things',
+      r'Udmf: Thing_Remove \(22, 0, 0, 0, 0\): 1 things',
       r'Map: E1M1: scrollers: 0 walls, 1 floors, 0 ceilings, 1 carrying floors',
       r'Map: E1M1: 1 friction lines, 1 pushers', r'Message: Shells 20',
-      r'Udmf: line 830: Pillar_Build, tag 12, 16, 0', r'Udmf: Thing_Move \(31, 20, 0, 0\): 1 things',
-      r'Acs: line 1047: ACS_Execute -1', r'Message: Hello by name', r'Udmf: line 1048: Plat_UpByValue, tag 9'],
+      r'Udmf: line 830: Pillar_Build, tag 12, 16, 0', r'Udmf: Thing_Move \(31, 20, 0, 0, 0\): 1 things',
+      r'Acs: line 1047: ACS_Execute -1', r'Message: Hello by name', r'Udmf: line 1048: Plat_UpByValue, tag 9',
+      r'Udmf: Thing_Projectile \(40, 127, 64, 80, 0\): 1 things',
+      r'Udmf: Thing_ProjectileGravity \(40, 10, 64, 40, 48\): 1 things'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad'), '--fixed-step'],
      lambda config: check_udmf_things(config)),
     # 3D floors (udmf-3dfloor.wad): a translucent slab over the start
@@ -755,6 +757,20 @@ def check_udmf_things(config):
     assert kit and (round(kit[0]['x']), round(kit[0]['y'])) == (-320, 320), 'Thing_Move: %s' % kit
     assert (saves[7]['sectorFloor'][141], saves[8]['sectorFloor'][141]) == (32, 0), \
         'Plat_UpByValue: %s, %s' % (saves[7]['sectorFloor'][141], saves[8]['sectorFloor'][141])
+    # Thing_Projectile (a rocket, effect 7) and Thing_ProjectileGravity
+    # (an imp ball, effect 4) from map spot 40, 32 above the floor, north.
+    p10, p11 = save_json(config, 10), save_json(config, 11)
+
+    def shots(save, effect):
+        return [x for x in save['actors'] if x.get('effect') == effect and abs(x['x'] + 416) < 1]
+    rocket, ball = shots(p10, 7), shots(p10, 4)
+    assert rocket and abs(rocket[0]['velocity'][1] - 10) < 0.01 and abs(rocket[0]['z'] - 32) < 0.5, \
+        'no rocket from Thing_Projectile: %s' % rocket
+    assert ball and abs(ball[0]['velocity'][1] - 5) < 0.01 and 4 <= ball[0]['velocity'][2] <= 6, \
+        'no ball from Thing_ProjectileGravity: %s' % ball
+    later = shots(p11, 4)
+    assert later and later[0]['velocity'][2] <= ball[0]['velocity'][2] - 2 and later[0]['z'] > ball[0]['z'], \
+        'the ball does not fall: %s' % later
 
 
 def check_carry(config):

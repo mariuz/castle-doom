@@ -53,7 +53,10 @@ and Sector_SetWind(12, 32, 64, 0) on line 833; line 900 is a
 Thing_Move(31, 20) (the medikit to the map spot), line 1047 an
 ACS_Execute of the named script "Greet" (arg0str) and line 1048 a
 Plat_UpByValue(9, 16, 35, 4) (sector 141 up 32 and back after a
-second).
+second); a second map spot (id 40) 32 above the floor at (-416, 320)
+fires a rocket north from line 1050 (Thing_Projectile(40, 127, 64, 80))
+and a falling imp ball from line 1051 (Thing_ProjectileGravity(40, 10,
+64, 40, 48)).
 
 udmf-3dfloor.wad, as udmf.wad with two 3D floors (Sector_Set3dFloor)
 from control sectors added outside the map: a solid slab at 64..80, 160
@@ -126,9 +129,12 @@ FLOOR3D_CONTROLS = [(-3000, -3000, 64, 80, (15, 1, 0, 160)), (-2800, -3000, 0, 2
 THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
                1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), ''),
                830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), ''),
-               900: (125, (31, 20, 0), 'u'), 1047: (80, ('Greet',), 'u'), 1048: (65, (9, 16, 35, 4), 'u')}
+               900: (125, (31, 20, 0), 'u'), 1047: (80, ('Greet',), 'u'), 1048: (65, (9, 16, 35, 4), 'u'),
+               1050: (134, (40, 127, 64, 80, 0), 'u'), 1051: (136, (40, 10, 64, 40, 48), 'u')}
 THING_SECTOR_IDS = {141: 9, 99: 12}
 THING_SPOT = (-320, 320, 9001, 20)
+# A second map spot, 32 above the floor, for the projectiles.
+PROJECTILE_SPOT = (-416, 320, 9001, 40, 32)
 # Vertex heights: the triangular sector 165 (floor 16) gets its corner
 # (-384, 64) at 0.
 SLOPE_VERTEX_Z = {(-384, 64): 0}
@@ -281,6 +287,8 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
         things.append((TELEPORT_DEST[0], TELEPORT_DEST[1], 0, 14, 7, TELEPORT_DEST[2]))
     if things_on:
         things.append((THING_SPOT[0], THING_SPOT[1], 0, THING_SPOT[2], 7, THING_SPOT[3]))
+        things.append((PROJECTILE_SPOT[0], PROJECTILE_SPOT[1], 0, PROJECTILE_SPOT[2], 7, PROJECTILE_SPOT[3],
+                       PROJECTILE_SPOT[4]))
     extra = list(LOOK_LIGHTS) if look else []
     if slopes:
         extra += SLOPE_THINGS
@@ -295,6 +303,8 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
         body = ['x = %d.0;' % x, 'y = %d.0;' % y, 'angle = %d;' % angle, 'type = %d;' % typ]
         if len(t) > 5:
             body.append('id = %d;' % t[5])
+        if len(t) > 6:
+            body.append('height = %d.0;' % t[6])
         if fl & 1:
             body += ['skill1 = true;', 'skill2 = true;']
         if fl & 2:

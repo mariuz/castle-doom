@@ -217,7 +217,13 @@ type
     { Sparse arrays: (array * 2^32 + index, value) pairs, sorted. }
     ArrayKeys: array of Int64;
     ArrayValues: array of Integer;
+    { CVars scripts set (SetCVar, SetCVarString): names, values, texts. }
+    CVarNames: array of String;
+    CVarValues: array of Integer;
+    CVarTexts: array of String;
     procedure Clear;
+    { The index of CVar Name in CVarNames (added when Add), -1 none. }
+    function CVarIndex(const Name: String; const Add: Boolean): Integer;
     { Array A of the world (0..255) or global (256 + 0..63) ones. }
     function GetArray(const A, Index: Integer): Integer;
     procedure SetArray(const A, Index, Value: Integer);
@@ -236,6 +242,14 @@ type
     FDynStrings: array of String;
     FLogged: TStringList;
     FStarted: Integer;
+    { User variables (SetUserVariable, SetUserArray) of things by thing
+      id: keys "tid name index", values. }
+    FUserKeys: array of String;
+    FUserValues: array of Integer;
+    function UserVar(const Tid: Integer; const Name: String; const Index: Integer): Integer;
+    procedure SetUserVar(const Tid: Integer; const Name: String; const Index, Value: Integer);
+    { GetCVar: a value scripts set, else the game's own (skill), else 0. }
+    function CVar(const Name: String): Integer;
     function Inst(const I: Integer): TAcsInstance;
     procedure Run(const I: TAcsInstance);
     function StringOf(const Index: Integer): String;
@@ -1023,6 +1037,24 @@ begin
   for I := 0 to High(GlobalVars) do GlobalVars[I] := 0;
   SetLength(ArrayKeys, 0);
   SetLength(ArrayValues, 0);
+  SetLength(CVarNames, 0);
+  SetLength(CVarValues, 0);
+  SetLength(CVarTexts, 0);
+end;
+
+function TAcsGlobals.CVarIndex(const Name: String; const Add: Boolean): Integer;
+begin
+  for Result := 0 to High(CVarNames) do
+    if SameText(CVarNames[Result], Name) then Exit;
+  Result := -1;
+  if not Add then Exit;
+  Result := Length(CVarNames);
+  SetLength(CVarNames, Result + 1);
+  SetLength(CVarValues, Result + 1);
+  SetLength(CVarTexts, Result + 1);
+  CVarNames[Result] := LowerCase(Name);
+  CVarValues[Result] := 0;
+  CVarTexts[Result] := '';
 end;
 
 function FindKey(const Keys: array of Int64; const Key: Int64; out Pos: Integer): Boolean;
@@ -1116,6 +1148,17 @@ begin
     Arr.Add(ArrayValues[I]);
   end;
   Result.Add('arrays', Arr);
+  if Length(CVarNames) > 0 then
+  begin
+    Arr := TJSONArray.Create;
+    for I := 0 to High(CVarNames) do
+    begin
+      Arr.Add(CVarNames[I]);
+      Arr.Add(CVarValues[I]);
+      Arr.Add(CVarTexts[I]);
+    end;
+    Result.Add('cvars', Arr);
+  end;
 end;
 
 procedure TAcsGlobals.LoadState(const J: TJSONObject);
@@ -1132,6 +1175,14 @@ begin
     for I := 0 to TJSONArray(Arr).Count div 3 - 1 do
       SetArray(TJSONArray(Arr).Integers[I * 3], TJSONArray(Arr).Integers[I * 3 + 1],
         TJSONArray(Arr).Integers[I * 3 + 2]);
+  Arr := J.Find('cvars');
+  if Arr is TJSONArray then
+    for I := 0 to TJSONArray(Arr).Count div 3 - 1 do
+    begin
+      CVarIndex(TJSONArray(Arr).Strings[I * 3], true);
+      CVarValues[High(CVarValues)] := TJSONArray(Arr).Integers[I * 3 + 1];
+      CVarTexts[High(CVarTexts)] := TJSONArray(Arr).Strings[I * 3 + 2];
+    end;
 end;
 
 { TAcsVM -------------------------------------------------------------------- }
@@ -1248,6 +1299,12 @@ var
     Result := Wrap(Round(F * 65536));
   end;
 
+  { Thing id Tid, 0 the script's activator. }
+  function ActorTid(const Tid: Integer): Integer;
+  begin
+    if Tid = 0 then Result := I.ActivatorTid else Result := Tid;
+  end;
+
 begin
   Result := 0;
   case Index of
@@ -1335,9 +1392,94 @@ begin
           FHost.PlaySound(I, StringOf(Arg(1)), 127, Arg(0));
       end;
     AcsfSetMusicVolume: ;
+    { HUD messages are printed as plain messages: no clipping or wrapping. }
+    AcsfSetHUDClipRect, AcsfSetHUDWrapWidth: ;
+    AcsfGetUserVariable: Result := UserVar(ActorTid(Arg(0)), StringOf(Arg(1)), 0);
+    AcsfSetUserVariable: SetUserVar(ActorTid(Arg(0)), StringOf(Arg(1)), 0, Arg(2));
+    AcsfGetUserArray: Result := UserVar(ActorTid(Arg(0)), StringOf(Arg(1)), Arg(2));
+    AcsfSetUserArray: SetUserVar(ActorTid(Arg(0)), StringOf(Arg(1)), Arg(2), Arg(3));
+    AcsfSetCVar, AcsfSetUserCVar:
+      begin
+        if Index = AcsfSetCVar then S := StringOf(Arg(0)) else S := StringOf(Arg(1));
+        K := FGlobals.CVarIndex(S, true);
+        if Index = AcsfSetCVar then FGlobals.CVarValues[K] := Arg(1) else FGlobals.CVarValues[K] := Arg(2);
+        FGlobals.CVarTexts[K] := IntToStr(FGlobals.CVarValues[K]);
+        WritelnLog('Acs', 'CVar %s = %d', [FGlobals.CVarNames[K], FGlobals.CVarValues[K]]);
+        Result := 1;
+      end;
+    AcsfSetCVarString, AcsfSetUserCVarString:
+      begin
+        if Index = AcsfSetCVarString then
+        begin
+          S := StringOf(Arg(0));
+          T := StringOf(Arg(1));
+        end else
+        begin
+          S := StringOf(Arg(1));
+          T := StringOf(Arg(2));
+        end;
+        K := FGlobals.CVarIndex(S, true);
+        FGlobals.CVarTexts[K] := T;
+        FGlobals.CVarValues[K] := StrToIntDef(T, 0);
+        WritelnLog('Acs', 'CVar %s = "%s"', [FGlobals.CVarNames[K], T]);
+        Result := 1;
+      end;
+    AcsfGetUserCVar: Result := CVar(StringOf(Arg(1)));
+    AcsfGetCVarString, AcsfGetUserCVarString:
+      begin
+        if Index = AcsfGetCVarString then S := StringOf(Arg(0)) else S := StringOf(Arg(1));
+        K := FGlobals.CVarIndex(S, false);
+        if K >= 0 then
+          Result := NewString(FGlobals.CVarTexts[K])
+        else
+          Result := NewString(IntToStr(CVar(S)));
+      end;
     else
       LogOnce(SysUtils.Format('ACS function %d', [Index]));
   end;
+end;
+
+function TAcsVM.CVar(const Name: String): Integer;
+var
+  K: Integer;
+begin
+  K := FGlobals.CVarIndex(Name, false);
+  if K >= 0 then Exit(FGlobals.CVarValues[K]);
+  if SameText(Name, 'skill') or SameText(Name, 'gameskill') then Exit(FHost.GameSkill);
+  { Single player: no deathmatch, teams or cheats rules to report. }
+  if not (SameText(Name, 'deathmatch') or SameText(Name, 'teamplay') or SameText(Name, 'sv_cheats')) then
+    LogOnce(SysUtils.Format('CVar "%s"', [Name]));
+  Result := 0;
+end;
+
+function TAcsVM.UserVar(const Tid: Integer; const Name: String; const Index: Integer): Integer;
+var
+  Key: String;
+  I: Integer;
+begin
+  Key := SysUtils.Format('%d %s %d', [Tid, LowerCase(Name), Index]);
+  for I := 0 to High(FUserKeys) do
+    if FUserKeys[I] = Key then Exit(FUserValues[I]);
+  Result := 0;
+end;
+
+procedure TAcsVM.SetUserVar(const Tid: Integer; const Name: String; const Index, Value: Integer);
+var
+  Key: String;
+  I: Integer;
+begin
+  Key := SysUtils.Format('%d %s %d', [Tid, LowerCase(Name), Index]);
+  for I := 0 to High(FUserKeys) do
+    if FUserKeys[I] = Key then
+    begin
+      FUserValues[I] := Value;
+      Exit;
+    end;
+  I := Length(FUserKeys);
+  SetLength(FUserKeys, I + 1);
+  SetLength(FUserValues, I + 1);
+  FUserKeys[I] := Key;
+  FUserValues[I] := Value;
 end;
 
 function TAcsVM.Running(const Number: Integer): Boolean;
@@ -2177,7 +2319,8 @@ begin
       PcdSetactorangle, PcdSetactorpitch, PcdSetammocapacity,
       PcdSetmarineweapon, PcdSetmarinesprite, PcdGrabinput, PcdMovemousepointer, PcdChangesky:
         Skip(2);
-      PcdCheckweapon, PcdSetweapon, PcdGetcvar, PcdGetammocapacity, PcdPlayerclass,
+      PcdGetcvar: Push(CVar(StringOf(Pop)));
+      PcdCheckweapon, PcdSetweapon, PcdGetammocapacity, PcdPlayerclass,
       PcdUseinventory, PcdClassifyactor, PcdCheckplayercamera, PcdGetlevelinfo:
         Skip(1, true);
       PcdGetactorproperty, PcdCheckactorinventory, PcdUseactorinventory, PcdCheckactorceilingtexture,
@@ -2278,6 +2421,16 @@ begin
   for J := 0 to High(FDynStrings) do Arr.Add(FDynStrings[J]);
   Result.Add('strings', Arr);
   Result.Add('started', FStarted);
+  if Length(FUserKeys) > 0 then
+  begin
+    Arr := TJSONArray.Create;
+    for J := 0 to High(FUserKeys) do
+    begin
+      Arr.Add(FUserKeys[J]);
+      Arr.Add(FUserValues[J]);
+    end;
+    Result.Add('userVars', Arr);
+  end;
   Arr := TJSONArray.Create;
   for J := 0 to FInstances.Count - 1 do
   begin
@@ -2333,6 +2486,19 @@ begin
     for K := 0 to High(FDynStrings) do FDynStrings[K] := TJSONArray(D).Strings[K];
   end;
   FStarted := J.Get('started', 0);
+  SetLength(FUserKeys, 0);
+  SetLength(FUserValues, 0);
+  D := J.Find('userVars');
+  if D is TJSONArray then
+  begin
+    SetLength(FUserKeys, TJSONArray(D).Count div 2);
+    SetLength(FUserValues, Length(FUserKeys));
+    for K := 0 to High(FUserKeys) do
+    begin
+      FUserKeys[K] := TJSONArray(D).Strings[K * 2];
+      FUserValues[K] := TJSONArray(D).Integers[K * 2 + 1];
+    end;
+  end;
   FInstances.Clear;
   D := J.Find('scripts');
   if not (D is TJSONArray) then Exit;

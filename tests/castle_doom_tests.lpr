@@ -1138,8 +1138,21 @@ begin
     finally
       FreeAndNil(VM);
     end;
-    AssertEquals('ACS_FUNC: trace', 'print 12|print 2|print 5|print -10|print ell|print 3|print Other 7',
-      Host.Trace.DelimitedText);
+    AssertEquals('ACS_FUNC: trace', 'print 12|print 2|print 5|print -10|print ell|print 3|print 42|print 42|' +
+      'print 2|print 14|print Other 7', Host.Trace.DelimitedText);
+    { SetCVar keeps its value in the globals (saved, kept across levels). }
+    T := Globals.CVarIndex('Castle_Test', false);
+    AssertTrue('ACS_FUNC: CVar kept', T >= 0);
+    AssertEquals('ACS_FUNC: CVar value', 42, Globals.CVarValues[T]);
+    State := Globals.SaveState;
+    try
+      Globals.Clear;
+      AssertEquals('ACS_FUNC: CVars cleared', -1, Globals.CVarIndex('castle_test', false));
+      Globals.LoadState(State);
+    finally
+      FreeAndNil(State);
+    end;
+    AssertEquals('ACS_FUNC: CVar loaded', 42, Globals.CVarValues[Globals.CVarIndex('castle_test', false)]);
   finally
     FreeAndNil(Globals);
     FreeAndNil(Host);
@@ -1442,6 +1455,10 @@ begin
   AssertEquals('its trigger: SR', 3, H.Trigger);
   { Exits, teleports, lights, scripts. }
   AssertEquals('exit switch', 11, TranslateHexenLine(243, [0], UaPlayerUse).Special);
+  H := TranslateHexenLine(136, [40, 10, 64, 40, 48], UaPlayerUse);
+  AssertEquals('Thing_ProjectileGravity', UdmfThingProjectileGravity, H.Special);
+  AssertEquals('Thing_ProjectileGravity vspeed', 48, H.Args[4]);
+  AssertEquals('Thing_Projectile', UdmfThingProjectile, TranslateHexenLine(134, [40, 127], UaPlayerUse).Special);
   AssertEquals('secret exit walk', 124, TranslateHexenLine(244, [0], UaPlayerCross).Special);
   H := TranslateHexenLine(70, [7, 0], UaPlayerCross or UaRepeat);
   AssertEquals('teleport WR', 97, H.Special);

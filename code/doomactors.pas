@@ -118,6 +118,8 @@ type
     Removed: Boolean;
     { Missiles: fired by the player (hits monsters, never the player). }
     FromPlayer: Boolean;
+    { Missiles: falling (Thing_ProjectileGravity), 1 unit per tic per tic. }
+    MissileGravity: Boolean;
     { Missiles: the monster that fired it (nil for the player). }
     Shooter: TDoomActor;
     { Monsters: who they are after; nil means the player. }

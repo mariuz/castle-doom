@@ -362,6 +362,8 @@ begin
       AJ.Add('damageDice', A.MissileDamageDice);
       AJ.Add('damageFaces', A.MissileDamageFaces);
       AJ.Add('fromPlayer', A.FromPlayer);
+      if A.MissileGravity then
+        AJ.Add('missileGravity', true);
       AJ.Add('bright', A.Bright);
       AJ.Add('charging', A.Charging);
       AJ.Add('inFloat', A.InFloat);
@@ -672,6 +674,7 @@ begin
             A.MissileDamageDice := AJ.Get('damageDice', 0);
             A.MissileDamageFaces := AJ.Get('damageFaces', 0);
             A.FromPlayer := AJ.Get('fromPlayer', false);
+            A.MissileGravity := AJ.Get('missileGravity', false);
             A.Bright := AJ.Get('bright', false);
             A.Charging := AJ.Get('charging', false);
             A.InFloat := AJ.Get('inFloat', false);

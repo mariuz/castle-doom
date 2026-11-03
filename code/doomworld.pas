@@ -483,6 +483,10 @@ type
       facing Angle (degrees), with thing id Tid; teleport fog when Fog. }
     function SpawnByScript(const DoomNum: Integer; const X, Y, Angle: Single; const Tid: Integer;
       const Fog: Boolean): TDoomActor;
+    { Thing_Projectile: a projectile of kind K at (X, Y, Z) flying at
+      Angle (degrees), Speed horizontally and VSpeed up, nobody's shot. }
+    function SpawnProjectile(const K: TEffectKind; const X, Y, Z, Angle, Speed, VSpeed: Single;
+      const Gravity: Boolean): TDoomActor;
     { Where the things with thing id Tid stand (live ones, else the map's
       things such as map spots), the angle in Z. }
     function AcsSpots(const Tid: Integer): TAcsSpots;
@@ -4468,6 +4472,8 @@ var
   K, N: Integer;
 begin
   if A.State <> asMissile then Exit;
+  if A.MissileGravity then
+    A.VelZ := A.VelZ - 1;
   NX := A.DoomX + A.VelX;
   NY := A.DoomY + A.VelY;
   NZ := A.DoomZ + A.VelZ;

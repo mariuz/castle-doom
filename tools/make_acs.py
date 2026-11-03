@@ -332,14 +332,17 @@ def spawn_program(layout):
     return a.finish(), [(1, 1, a.labels['s1'], 0), (-1, 0, a.labels['greet'], 0)], [], S, ['Greet']
 
 
-FUNC_STRINGS = ['abc', 'abd', 'ABC', 'Hello', 'Other', 'Other ']
+FUNC_STRINGS = ['abc', 'abd', 'ABC', 'Hello', 'Other', 'Other ', 'castle_test', 'skill', 'user_x', 'user_a']
 
 
 def functions_program(layout):
     """acs.wad's ACS_FUNC: an open script printing CALLFUNC results (Sqrt
     144, FixedSqrt 4.0, VectorLength (3.0, 4.0), strcmp / stricmp, StrMid,
-    Round 2.5: "12", "2", "5", "-10", "ell", "3") and running the named
-    script "Other" with 7 (ACS_NamedExecute), which prints "Other 7"."""
+    Round 2.5: "12", "2", "5", "-10", "ell", "3"), SetCVar castle_test 42
+    read back by GETCVAR and GetCVarString ("42", "42"), GETCVAR skill
+    (the host's, "2"), a user variable 9 plus a user array's element 5
+    ("14"), and running the named script "Other" with 7
+    (ACS_NamedExecute), which prints "Other 7"."""
     a = Asm(layout)
     S = FUNC_STRINGS
 
@@ -362,6 +365,25 @@ def functions_program(layout):
          lambda: a.op('PRINTSTRING'))
     show(lambda: a.op('PUSHNUMBER', 0x28000), lambda: a.callfunc('Round', 1), lambda: a.push(16),
          lambda: a.op('RSHIFT'), lambda: a.op('PRINTNUMBER'))
+    for v in (S.index('castle_test'), 42):
+        a.push(v)
+    a.callfunc('SetCVar', 2)
+    a.op('DROP')
+    show(lambda: a.push(S.index('castle_test')), lambda: a.op('GETCVAR'), lambda: a.op('PRINTNUMBER'))
+    show(lambda: a.push(S.index('castle_test')), lambda: a.callfunc('GetCVarString', 1),
+         lambda: a.op('PRINTSTRING'))
+    show(lambda: a.push(S.index('skill')), lambda: a.op('GETCVAR'), lambda: a.op('PRINTNUMBER'))
+    for v in (0, S.index('user_x'), 9):
+        a.push(v)
+    a.callfunc('SetUserVariable', 3)
+    a.op('DROP')
+    for v in (0, S.index('user_a'), 2, 5):
+        a.push(v)
+    a.callfunc('SetUserArray', 4)
+    a.op('DROP')
+    show(lambda: a.push(0), lambda: a.push(S.index('user_x')), lambda: a.callfunc('GetUserVariable', 2),
+         lambda: a.push(0), lambda: a.push(S.index('user_a')), lambda: a.push(2),
+         lambda: a.callfunc('GetUserArray', 3), lambda: a.op('ADD'), lambda: a.op('PRINTNUMBER'))
     for v in (S.index('Other'), 0, 7, 0, 0):
         a.push(v)
     a.callfunc('ACSNamedExecute', 5)

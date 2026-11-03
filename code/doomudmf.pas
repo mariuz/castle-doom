@@ -118,6 +118,11 @@ const
   { Thing_Move: Args the thing id (0 the activator), the id of the spot
     to move to, 1 = no teleport fog. }
   UdmfThingMove = UdmfSpecialBase + 38;
+  { Thing_Projectile, Thing_ProjectileGravity: Args the id of the spots,
+    the projectile's ZDoom spawn number, byte angle, speed and vertical
+    speed in eighths of a unit per tic. }
+  UdmfThingProjectile = UdmfSpecialBase + 39;
+  UdmfThingProjectileGravity = UdmfSpecialBase + 40;
   { Pillars: Args tag, speed (eighths), then Build's height above the
     floor where floor and ceiling meet (0: halfway), Open's floor drop
     and ceiling rise (0: to the lowest floor / highest ceiling around). }
@@ -453,7 +458,7 @@ end;
 
 function UdmfThingSpecial(const Special: Integer): Boolean;
 begin
-  Result := (Special >= UdmfThingSpawn) and (Special <= UdmfThingMove);
+  Result := (Special >= UdmfThingSpawn) and (Special <= UdmfThingProjectileGravity);
 end;
 
 function UdmfAcsSpecial(const Special: Integer): Boolean;
@@ -492,6 +497,8 @@ begin
     UdmfDamageThing: Result := 'DamageThing';
     UdmfHealThing: Result := 'HealThing';
     UdmfThingMove: Result := 'Thing_Move';
+    UdmfThingProjectile: Result := 'Thing_Projectile';
+    UdmfThingProjectileGravity: Result := 'Thing_ProjectileGravity';
     UdmfPlaneCopy: Result := 'Plane_Copy';
     UdmfSet3dFloor: Result := 'Sector_Set3dFloor';
     UdmfAcsExecute: Result := 'ACS_Execute';
@@ -608,6 +615,8 @@ begin
     118: Result := 'Plane_Copy';
     119: Result := 'Thing_Damage';
     125: Result := 'Thing_Move';
+    134: Result := 'Thing_Projectile';
+    136: Result := 'Thing_ProjectileGravity';
     130: Result := 'Thing_Activate';
     132: Result := 'Thing_Remove';
     133: Result := 'Thing_Destroy';
@@ -1039,10 +1048,12 @@ begin
       end;
     121: Result.Tag := 0;
     { Things }
-    135, 137, 132, 133, 119, 130, 73, 248, 125:
+    135, 137, 132, 133, 119, 130, 73, 248, 125, 134, 136:
       begin
         case Special of
           125: Result.Special := UdmfThingMove;
+          134: Result.Special := UdmfThingProjectile;
+          136: Result.Special := UdmfThingProjectileGravity;
           135: Result.Special := UdmfThingSpawn;
           137: Result.Special := UdmfThingSpawnNoFog;
           132: Result.Special := UdmfThingRemove;

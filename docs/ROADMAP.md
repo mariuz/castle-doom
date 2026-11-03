@@ -27,6 +27,21 @@ L = several days). Items inside a section are in suggested order.
   `arg0str`, `TDoomMap.LineArg0Str`; `SCRIPTWAITNAMED`).
   `udmf-slopes.wad` and `udmf-things.wad` cover them.
 
+- UDMF, the rest (more): `Thing_Projectile` / `Thing_ProjectileGravity`
+  (`UdmfThingProjectile*`: Doom's projectiles by ZDoom spawn number from
+  each thing or map spot with the id, at the spot's height, with the
+  given byte angle and speeds in eighths; `TDoomWorld.SpawnProjectile`,
+  `TDoomActor.MissileGravity` saved as `missileGravity`) and the rarer
+  ACS functions: `GetCVar` (the `GETCVAR` p-code too), `SetCVar`,
+  `GetCVarString` / `SetCVarString` and the user CVar forms (values
+  scripts set live in `TAcsGlobals`, saved and kept across levels;
+  `skill` is the game's), user variables and arrays of things by id
+  (`Get` / `SetUserVariable`, `Get` / `SetUserArray`, saved with the
+  VM's state as `userVars`), `SetHudClipRect` / `SetHudWrapWidth`
+  accepted (messages are plain). `udmf-things.wad` fires a rocket and a
+  falling imp ball from map spot 40 (lines 1050, 1051), `acs.wad`'s
+  `ACS_FUNC` tests the functions (`TestAcs`).
+
 - UDMF, the rest (more): `Thing_Move` (`UdmfThingMove`: a thing by
   id, or the player, to the first thing or map spot with the other id,
   with teleport fog unless told not to) and `Plane_Copy` / ZDoom's
@@ -51,7 +66,7 @@ L = several days). Items inside a section are in suggested order.
   scripts alike (`Thing_Spawn` / `NoFog` at the things or map spots
   with a thing id, ZDoom spawn numbers of Doom's monsters; `Remove`,
   `Destroy`, `Damage`, `Activate`; `DamageThing`, `HealThing` on the
-  player; log `Udmf: Thing_Spawn (20, 5, 64, 21): 1 things`), map spots
+  player; log `Udmf: Thing_Spawn (20, 5, 64, 21, 0): 1 things`), map spots
   (9001, 9013) stay markers in `TDoomMap.Things`, `Scroll_Floor` /
   `Scroll_Ceiling` are static scrollers (`UdmfScrollFloor` / `Ceiling`
   in `BuildScrollers`, floors carrying too), and ACS spawns by class
@@ -1383,7 +1398,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's common ACSF functions done too; left are the rarer ACSF functions and libraries via `LOADACS`, the Hexen actions still logged as not supported (`Thing_Projectile`, polyobjects), thing specials (a thing's own action on death), the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
+| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables) and `Thing_Projectile` done too; left are ACS libraries via `LOADACS`, polyobjects, thing specials (a thing's own action on death), the map editor on UDMF maps (it refuses them: read `TEXTMAP` into `TDoomEditMap`, write it back), UDMF in the editor's export, and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
@@ -1427,9 +1442,9 @@ play.
 
 ## Suggested next three
 
-1. UDMF, the rest (S-M, see Content and formats): `Thing_Projectile`,
-   the rarer ACSF functions (user variables, HUD clipping, CVars);
-   polyobjects (L).
+1. UDMF, the rest (S-M, see Content and formats): ACS libraries
+   (`LOADACS` lumps, `LOAD` chunks, imported functions and variables),
+   thing specials (a thing's own action on death); polyobjects (L).
 2. 3D floors, stage 2 (M, `docs/RENDERING_ROADMAP.md` item 5):
    monsters, missiles, hitscans and sight against the slabs (a list of
    floors and ceilings per sector in `TDoomWorld`), things spawned on

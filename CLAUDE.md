@@ -970,7 +970,10 @@ autotest only checks the library loads.
   to the spot (`Thing_Move`), `LINE:1047` runs the named script
   "Greet" (`arg0str`; log `Acs: line 1047: ACS_Execute -1`, `Message:
   Hello by name`) and `LINE:1048` raises sector 141 by 32 and back
-  (`Plat_UpByValue`). Saves keep actors' ids (`tid`)
+  (`Plat_UpByValue`); from `G:-416:200,A:90`, `LINE:1050` fires a
+  rocket north from map spot 40 (32 above the floor, `Thing_Projectile`)
+  and `LINE:1051` a falling imp ball (`Thing_ProjectileGravity`; the
+  saves' actors with `effect` 7 / 4 and `missileGravity`). Saves keep actors' ids (`tid`)
   and pillars' ceiling targets; autotest `udmf-things` (golden).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
