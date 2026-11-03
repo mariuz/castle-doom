@@ -293,7 +293,9 @@ jobs:
           tests/castle_doom_tests --all --format=plain
 
       - name: Run autotests
-        timeout-minutes: 15
+        # About 14 minutes with 120 tests on a hosted runner; the demo test
+        # alone takes 3 to 4.
+        timeout-minutes: 22
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" python3 tools/run_autotests.py ./castle-doom autotest-output
 
