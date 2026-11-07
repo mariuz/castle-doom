@@ -445,6 +445,21 @@ TESTS = [
       r'Acs: SHEL \(thing id 0\): Light_ChangeToValue \(12, 220, 0, 0, 0\)'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad'), '--fixed-step'],
      lambda config: check_thing_specials(config)),
+    # Polyobjects (udmf-poly.wad): a slab placed in the start room by its
+    # start spot moves north 32 (line 829), turns a quarter (830), stops
+    # against the player in the way of its sliding door (831), finishes
+    # and comes back once the player steps aside; a shot hits it; a load
+    # restores it in the middle of a move.
+    ('polyobjects', 'E1M1',
+     'Y,SHOTS,G:-416:200,A:90,W:0.3,S,LINE:829,W:1,SAVE:1,S,LINE:830,W:1,SAVE:2,S,G:-372:416,A:90,W:0.1,'
+     'LINE:831,W:0.8,SAVE:3,G:-416:200,A:90,W:3,SAVE:4,S,X,W:0.3,LOAD:3,W:0.1,SAVE:5,Q',
+     [r'Map: E1M1: polyobject 1: 4 lines at \(-416, 384\) in sector 140',
+      r'Udmf: Polyobj_Move \(1, 16, 64, 32, 0\): polyobject 1',
+      r'Udmf: Polyobj_RotateLeft \(1, 32, 64, 0, 0\): polyobject 1',
+      r'Udmf: Polyobj_DoorSlide \(1, 16, 0, 48, 35\): polyobject 1',
+      r'Shot: angle 90\.0 slope 0\.000 range 2048: wall at \(-416, 380, '],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-poly.wad'), '--fixed-step'],
+     lambda config: check_polyobjects(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -780,6 +795,20 @@ def check_thing_specials(config):
     assert lights[1] == (64, lights[0][1]) and lights[2] == (64, 220) and lights[3] == lights[1], lights
     left = [[a['thingSpecial'] for a in s['actors'] if a.get('thingSpecial')] for s in saves]
     assert len(left[0]) == 2 and left[1] == [[112, 12, 220, 0, 0, 0]] and left[2] == [] and left[3] == left[1], left
+
+
+def check_polyobjects(config):
+    """tools/testdata/udmf-poly.wad: polyobject 1 after each move: north
+    to y 416, turned 90, its slide stopped by the player (x stays west of
+    -390), finished and back at -416 once the player left, and a load in
+    the middle of the slide keeping the place and the move."""
+    saves = [save_json(config, n) for n in range(1, 6)]
+    places = [s['polyobjs'][0] for s in saves]
+    assert places[0] == [-416, 416, 0], places
+    assert places[1] == [-416, 416, 90], places
+    assert -416 < places[2][0] < -390 and saves[2]['polyMoves'], 'not stopped by the player: %s' % places
+    assert places[3] == [-416, 416, 90] and not saves[3]['polyMoves'], 'door did not come back: %s' % places
+    assert places[4][0] >= places[2][0] and saves[4]['polyMoves'], 'load lost the move: %s %s' % (places, saves[4])
 
 
 def check_3d_floors(config):

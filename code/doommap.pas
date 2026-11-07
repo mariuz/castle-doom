@@ -91,6 +91,24 @@ type
     DX, DY, OX, OY: Single;
   end;
 
+  { A polyobject (Hexen's, UZDoom's): lines drawn somewhere out of the
+    way (Polyobj_StartLine's loop or the Polyobj_ExplicitLine ones) that
+    the map moves from their anchor thing (9300) to a start spot (9301
+    plain, 9302 crushing, 9303 hurting), both naming it by their angle;
+    the world slides and turns them. }
+  TPolyobj = record
+    Number: Integer;
+    Lines: array of Integer;
+    { Its vertices and where each is from the anchor. }
+    Verts: array of Integer;
+    RelX, RelY: array of Single;
+    { Where the anchor point is now and the turn (degrees, counter-clockwise). }
+    X, Y, Angle: Single;
+    { The start spot's sector: its walls take this sector's heights and light. }
+    Sector: Integer;
+    Crush, Hurt: Boolean;
+  end;
+
   { A 3D floor (UZDoom's Sector_Set3dFloor): a slab in sector Target
     from Control's floor to its ceiling, its top and bottom in Control's
     flats, its sides in Line's front middle texture. }
@@ -219,6 +237,14 @@ type
     FGridW, FGridH: Integer;
     FCellStart, FCellLines: array of Integer;
     FLineMark: array of Cardinal;
+    { UDMF: Polyobj_StartLine / ExplicitLine lines as (line, number,
+      order, explicit) for BuildPolyobjs; the polyobjects' lines, which
+      the line grid always returns (they move). }
+    FPolyStarts: array of record
+      Line, Number, Order: Integer;
+      Explicit: Boolean;
+    end;
+    FPolyLines: array of Integer;
     FMarkStamp: Cardinal;
     FUdmf: Boolean;
     FUdmfNamespace: String;
@@ -235,6 +261,8 @@ type
     procedure ResolveUdmfLinks;
     procedure BuildSlopes;
     procedure Build3dFloors;
+    procedure BuildPolyobjs;
+    procedure AddPolyLines(var Found: TLineList; var Count: Integer);
     procedure BuildLineGrid;
     procedure NextMark;
     procedure AddCellRow(const Row, Col0, Col1: Integer; var Found: TLineList; var Count: Integer);
@@ -332,6 +360,9 @@ type
     LineArg0Str: array of String;
     { 3D floors, and the ones each sector holds (indices into Floors3D). }
     Floors3D: array of TFloor3D;
+    Polyobjs: array of TPolyobj;
+    { The polyobject a line belongs to, -1 none (empty when there are none). }
+    PolyOfLine: array of Integer;
     SectorFloors3D: array of array of Integer;
     { How many floors and ceilings are sloped. }
     SlopedFloors, SlopedCeilings: Integer;
@@ -357,6 +388,10 @@ type
     { The segment from (X1, Y1, Z1) to (X2, Y2, Z2) passes through a solid
       3D floor; Frac is how far along (0..1) it enters one. }
     function SlabHit(const X1, Y1, Z1, X2, Y2, Z2: Single; out Frac: Single): Boolean;
+    { Put polyobject P's vertices where its X, Y and Angle say. }
+    procedure PlacePolyobj(const P: Integer);
+    { The polyobject with that number, -1 none. }
+    function FindPolyobj(const Number: Integer): Integer;
     { The lowest and highest height a slope reaches over its sector's
       vertices (the height itself when flat). }
     function FloorRange(const Sec: Integer; out Lowest, Highest: Single): Boolean;
@@ -532,6 +567,7 @@ begin
     ResolveUdmfLinks;
     BuildSlopes;
     Build3dFloors;
+    BuildPolyobjs;
   end;
   BuildLineGrid;
   BuildScrollers;
@@ -959,6 +995,18 @@ begin
           Act1('monsterpush', UaMonsterPush);
           Act1('missilecross', UaMissileCross);
           Act1('repeatspecial', UaRepeat);
+          { Polyobj_StartLine (1) and Polyobj_ExplicitLine (5): the lines
+            of a polyobject, gathered by BuildPolyobjs. }
+          if (UdmfInt(B^, 'special') = 1) or (UdmfInt(B^, 'special') = 5) then
+          begin
+            SetLength(FPolyStarts, Length(FPolyStarts) + 1);
+            FPolyStarts[High(FPolyStarts)].Line := NL;
+            FPolyStarts[High(FPolyStarts)].Number := Args[0];
+            FPolyStarts[High(FPolyStarts)].Order := Args[1];
+            FPolyStarts[High(FPolyStarts)].Explicit := UdmfInt(B^, 'special') = 5;
+            Inc(NL);
+            Continue;
+          end;
           H := TranslateHexenLine(UdmfInt(B^, 'special'), Args, Act);
           Linedefs[NL].Special := H.Special;
           Linedefs[NL].Tag := H.Tag;
@@ -1078,6 +1126,186 @@ begin
     Result := H + S.DX * (X - S.OX) + S.DY * (Y - S.OY)
   else
     Result := H;
+end;
+
+procedure TDoomMap.BuildPolyobjs;
+var
+  K, I, J, N, Cur, Next, Anchor, Spot, P, S: Integer;
+  Lines: array of Integer;
+  Taken: array of Boolean;
+  Order: array of Integer;
+  Kind: String;
+
+  function HasLine(const L: Integer): Boolean;
+  var
+    Q: Integer;
+  begin
+    for Q in Lines do
+      if Q = L then Exit(true);
+    Result := false;
+  end;
+
+  procedure AddVertex(const V: Integer);
+  var
+    Q: Integer;
+  begin
+    for Q in Polyobjs[P].Verts do
+      if Q = V then Exit;
+    Q := Length(Polyobjs[P].Verts);
+    SetLength(Polyobjs[P].Verts, Q + 1);
+    Polyobjs[P].Verts[Q] := V;
+  end;
+
+begin
+  Polyobjs := nil;
+  PolyOfLine := nil;
+  FPolyLines := nil;
+  if Length(FPolyStarts) = 0 then Exit;
+  SetLength(PolyOfLine, Length(Linedefs));
+  for I := 0 to High(PolyOfLine) do PolyOfLine[I] := -1;
+  SetLength(Taken, Length(FPolyStarts));
+  for K := 0 to High(FPolyStarts) do
+  begin
+    if Taken[K] then Continue;
+    Taken[K] := true;
+    Lines := nil;
+    if FPolyStarts[K].Explicit then
+    begin
+      { Every explicit line of that number, by their order argument. }
+      Order := nil;
+      for I := K to High(FPolyStarts) do
+        if FPolyStarts[I].Explicit and (FPolyStarts[I].Number = FPolyStarts[K].Number) then
+        begin
+          Taken[I] := true;
+          J := Length(Lines);
+          SetLength(Lines, J + 1);
+          SetLength(Order, J + 1);
+          while (J > 0) and (Order[J - 1] > FPolyStarts[I].Order) do
+          begin
+            Lines[J] := Lines[J - 1];
+            Order[J] := Order[J - 1];
+            Dec(J);
+          end;
+          Lines[J] := FPolyStarts[I].Line;
+          Order[J] := FPolyStarts[I].Order;
+        end;
+    end else
+    begin
+      { The loop of lines from the start line, each starting where the
+        last one ends. }
+      Cur := FPolyStarts[K].Line;
+      repeat
+        SetLength(Lines, Length(Lines) + 1);
+        Lines[High(Lines)] := Cur;
+        Next := -1;
+        for I := 0 to High(Linedefs) do
+          if (I <> Cur) and not HasLine(I) and
+             (Vertices[Linedefs[I].V1].X = Vertices[Linedefs[Cur].V2].X) and
+             (Vertices[Linedefs[I].V1].Y = Vertices[Linedefs[Cur].V2].Y) then
+          begin
+            Next := I;
+            Break;
+          end;
+        Cur := Next;
+      until (Cur < 0) or (Length(Lines) > 4096);
+    end;
+    { The anchor and the start spot name the polyobject by their angle. }
+    Anchor := -1;
+    Spot := -1;
+    for I := 0 to High(Things) do
+      if Things[I].Angle = FPolyStarts[K].Number then
+        case Things[I].TypeNum of
+          9300: Anchor := I;
+          9301, 9302, 9303: Spot := I;
+        end;
+    if Anchor < 0 then
+    begin
+      WritelnLog('Map', '%s: polyobject %d has no anchor, left where it is', [FName, FPolyStarts[K].Number]);
+      Continue;
+    end;
+    if Spot < 0 then
+    begin
+      WritelnLog('Map', '%s: polyobject %d has no start spot, left where it is', [FName, FPolyStarts[K].Number]);
+      Continue;
+    end;
+    P := Length(Polyobjs);
+    SetLength(Polyobjs, P + 1);
+    Polyobjs[P].Number := FPolyStarts[K].Number;
+    Polyobjs[P].Lines := Lines;
+    Polyobjs[P].Crush := Things[Spot].TypeNum = 9302;
+    Polyobjs[P].Hurt := Things[Spot].TypeNum = 9303;
+    Polyobjs[P].X := Things[Spot].X;
+    Polyobjs[P].Y := Things[Spot].Y;
+    Polyobjs[P].Angle := 0;
+    S := SectorAt(Things[Spot].X, Things[Spot].Y);
+    Polyobjs[P].Sector := S;
+    for I in Lines do
+    begin
+      AddVertex(Linedefs[I].V1);
+      AddVertex(Linedefs[I].V2);
+      PolyOfLine[I] := P;
+      N := Length(FPolyLines);
+      SetLength(FPolyLines, N + 1);
+      FPolyLines[N] := I;
+      { Its walls stand in the spot's sector. }
+      if S >= 0 then
+      begin
+        Linedefs[I].FrontSector := S;
+        if Linedefs[I].Side[0] >= 0 then Sidedefs[Linedefs[I].Side[0]].Sector := S;
+        if Linedefs[I].BackSector >= 0 then
+        begin
+          Linedefs[I].BackSector := S;
+          if Linedefs[I].Side[1] >= 0 then Sidedefs[Linedefs[I].Side[1]].Sector := S;
+        end;
+      end;
+    end;
+    SetLength(Polyobjs[P].RelX, Length(Polyobjs[P].Verts));
+    SetLength(Polyobjs[P].RelY, Length(Polyobjs[P].Verts));
+    for I := 0 to High(Polyobjs[P].Verts) do
+    begin
+      Polyobjs[P].RelX[I] := Vertices[Polyobjs[P].Verts[I]].X - Things[Anchor].X;
+      Polyobjs[P].RelY[I] := Vertices[Polyobjs[P].Verts[I]].Y - Things[Anchor].Y;
+    end;
+    PlacePolyobj(P);
+    if Polyobjs[P].Crush then Kind := ', crushing'
+    else if Polyobjs[P].Hurt then Kind := ', hurting'
+    else Kind := '';
+    WritelnLog('Map', '%s: polyobject %d: %d lines at (%.0f, %.0f) in sector %d%s', [FName, Polyobjs[P].Number,
+      Length(Lines), Polyobjs[P].X, Polyobjs[P].Y, S, Kind]);
+  end;
+  { Lines sorted, so the grid's answers stay in ascending order. }
+  for I := 1 to High(FPolyLines) do
+  begin
+    N := FPolyLines[I];
+    J := I - 1;
+    while (J >= 0) and (FPolyLines[J] > N) do
+    begin
+      FPolyLines[J + 1] := FPolyLines[J];
+      Dec(J);
+    end;
+    FPolyLines[J + 1] := N;
+  end;
+end;
+
+procedure TDoomMap.PlacePolyobj(const P: Integer);
+var
+  I: Integer;
+  C, S: Single;
+begin
+  C := Cos(DegToRad(Polyobjs[P].Angle));
+  S := Sin(DegToRad(Polyobjs[P].Angle));
+  for I := 0 to High(Polyobjs[P].Verts) do
+  begin
+    Vertices[Polyobjs[P].Verts[I]].X := Polyobjs[P].X + Polyobjs[P].RelX[I] * C - Polyobjs[P].RelY[I] * S;
+    Vertices[Polyobjs[P].Verts[I]].Y := Polyobjs[P].Y + Polyobjs[P].RelX[I] * S + Polyobjs[P].RelY[I] * C;
+  end;
+end;
+
+function TDoomMap.FindPolyobj(const Number: Integer): Integer;
+begin
+  for Result := 0 to High(Polyobjs) do
+    if Polyobjs[Result].Number = Number then Exit;
+  Result := -1;
 end;
 
 function TDoomMap.FloorAtZ(const Sec: Integer; const X, Y, Z: Single): Single;
@@ -2327,6 +2555,8 @@ begin
     end;
     for I := 0 to High(Linedefs) do
     begin
+      { Polyobjects move: AddPolyLines gives their lines to every query. }
+      if (Length(PolyOfLine) > 0) and (PolyOfLine[I] >= 0) then Continue;
       V1 := Vertices[Linedefs[I].V1];
       V2 := Vertices[Linedefs[I].V2];
       for Row := Trunc((Min(V1.Y, V2.Y) - FGridY) / LineGridCell) to
@@ -2349,6 +2579,21 @@ begin
           Inc(Counts[C]);
         end;
     end;
+  end;
+end;
+
+procedure TDoomMap.AddPolyLines(var Found: TLineList; var Count: Integer);
+var
+  Line: Integer;
+begin
+  for Line in FPolyLines do
+  begin
+    if FLineMark[Line] = FMarkStamp then Continue;
+    FLineMark[Line] := FMarkStamp;
+    if Count = Length(Found) then
+      SetLength(Found, Count * 2 + 64);
+    Found[Count] := Line;
+    Inc(Count);
   end;
 end;
 
@@ -2395,6 +2640,7 @@ begin
              Min(FGridH - 1, Floor(Min(FGridH, (Max(Y1, Y2) - FGridY) / LineGridCell))) do
     AddCellRow(Row, Floor(Max(-1, (Min(X1, X2) - FGridX) / LineGridCell)),
       Floor(Min(FGridW, (Max(X1, X2) - FGridX) / LineGridCell)), Found, Result);
+  AddPolyLines(Found, Result);
   if Result > 1 then SortLines(Found, 0, Result - 1);
 end;
 
@@ -2441,6 +2687,7 @@ begin
     AddCellRow(Row, Floor(Max(-1, (XA - Pad - FGridX) / LineGridCell)),
       Floor(Min(FGridW, (XB + Pad - FGridX) / LineGridCell)), Found, Result);
   end;
+  AddPolyLines(Found, Result);
   if Result > 1 then SortLines(Found, 0, Result - 1);
 end;
 

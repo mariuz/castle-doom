@@ -97,6 +97,18 @@ type
     mkToggle: Boom's instant plat toggles (211, 212), kept in stasis
     with the original floor in ReturnTarget. }
   TMoverKind = (mkDoor, mkLift, mkFloor, mkCeiling, mkCrusher, mkElevator, mkToggle, mkPillar);
+
+  { A polyobject moving (TDoomMap.Polyobjs): turning (Speed degrees a tic,
+    signed) or sliding (Speed units a tic along DX, DY); Left of this leg
+    (degrees / units, < 0 forever) of Total. Doors wait Delay tics
+    (Phase 1) and go back (Phase 2). }
+  TPolyMoveKind = (pkRotate, pkMove, pkSlide, pkSwing);
+  TPolyMove = record
+    Poly: Integer;
+    Kind: TPolyMoveKind;
+    Speed, DX, DY, Left, Total: Single;
+    Delay, Wait, Phase: Integer;
+  end;
   { mpStasis: a stopped perpetual lift or crusher (EV_StopPlat,
     EV_CeilingCrushStop) that a new start resumes (P_ActivateInStasis). }
   TMoverPhase = (mpMoving, mpWaiting, mpDone, mpStasis);
@@ -238,6 +250,7 @@ type
       the game), what was logged once, and which side of its line the
       player set off the last special from. }
     FAcs: TAcsVM;
+    FPolyMoves: array of TPolyMove;
     FAcsHost: TAcsHost;
     FAcsGlobals: TAcsGlobals;
     FAcsLogged: TStringList;
@@ -427,6 +440,19 @@ type
     { Hexen's thing actions (DoomUdmf's UdmfThing*: Thing_Spawn...) with
       their arguments; true when they did something. }
     function ThingAction(const Special: Integer; const Args: array of Integer): Boolean;
+    { A UdmfPoly* action on the polyobject Args[0]. }
+    function PolyAction(const Special: Integer; const Args: array of Integer): Boolean;
+    procedure TicPolys;
+    { Move polyobject P to (X, Y) turned Angle; false (and left where it
+      was, the things in the way hurt when it crushes) when a thing is in
+      the way. }
+    function TryPlacePoly(const P: Integer; const X, Y, Angle: Single): Boolean;
+    function PolyMoving(const P: Integer): Integer;
+    procedure RestorePolyobjs(const Places, Moves: TJSONArray);
+  public
+    { The polyobject with this number moves (ACS's PolyWait). }
+    function PolyBusy(const Number: Integer): Boolean;
+  private
     function ApplySpecial(const Line: Integer; const Activation: TActivation; const ByMonster: Boolean): Boolean;
     { Speed 0: the vanilla speed (Blaze: 4x); a faster one plays the
       blazing door sounds. }
@@ -1436,6 +1462,11 @@ begin
     if FMap.HeightSec[I] >= 0 then
       FDynamic[I] := true;
   AcsMarkDynamic;
+  { Polyobjects: their walls are in their start spot's sector's chunk,
+    rebuilt as they move. }
+  for I := 0 to High(FMap.Polyobjs) do
+    if FMap.Polyobjs[I].Sector >= 0 then
+      FDynamic[FMap.Polyobjs[I].Sector] := true;
   { 3D floors follow their control sectors: a moving one makes the
     sectors holding its slab dynamic. }
   for I := 0 to High(FMap.Floors3D) do
@@ -2221,6 +2252,7 @@ begin
   FGraphics.AnimationTic(FTic);
   Lap(0);
   TicMovers;
+  TicPolys;
   if FAcs <> nil then
     FAcs.Tic;
   Lap(1);

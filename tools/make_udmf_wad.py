@@ -73,6 +73,10 @@ named script LibNamed; a LOADACS lump loads AUTOLIB, whose open script
 runs on every map (E1M2 too, a Doom-format map of the IWAD). The
 libraries sit between A_START and A_END like ZDoom's.
 
+udmf-poly.wad, as udmf.wad with polyobject 1 (POLY_*): a 64 x 16 slab
+drawn out in the void, placed in the start room by its start spot, and
+three west-wall lines that move, turn and slide it.
+
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
 
@@ -130,6 +134,15 @@ SLOPE_THINGS = [(1670, 1080, 0, 9511, 0, (13,)),
                 # SetFloorSlope: the triangle 169 rising east at 30 degrees.
                 (-373, 445, 0, 9502, 0, (30,))]
 SLOPE_LINE_IDS = {1049: 50}
+# Polyobject 1 (udmf-poly.wad): a 64 x 16 slab drawn in a container
+# sector out in the void, anchored at its middle, placed in the start
+# room at (-416, 384); the start room's west wall moves it north 32
+# (line 829), turns it a quarter left (830) and slides it east 48 and
+# back after a second (831).
+POLY_CONTAINER = (-3000, -2000)
+POLY_SHAPE = [(-2968, -1944), (-2904, -1944), (-2904, -1928), (-2968, -1928)]
+POLY_THINGS = [(-2936, -1936, 1, 9300, 7), (-416, 384, 1, 9301, 7)]
+POLY_LINES = {829: (4, (1, 16, 64, 32), 'u'), 830: (2, (1, 32, 64), 'u'), 831: (8, (1, 16, 0, 48, 35), 'u')}
 SLOPE_FILL = (99, 141)
 FLOOR3D_IDS = {140: 15, 141: 9}
 # Control sectors (x, y of the corner, floor, ceiling, Sector_Set3dFloor
@@ -182,7 +195,7 @@ def flag_names(flags):
     return names
 
 
-def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=False):
+def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=False, polys=False):
     out = ['namespace = "%s";' % ('zdoom' if hexen else 'doom'), '']
     V = lump('VERTEXES')
     for k in range(len(V) // 4):
@@ -212,6 +225,8 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
                 act = SLOPE_LINES[k]
             if things and k in THING_LINES:
                 act = THING_LINES[k]
+            if polys and k in POLY_LINES:
+                act = POLY_LINES[k]
             if act:
                 special, args, how = act
                 body.append('special = %d;' % special)
@@ -298,6 +313,8 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
     things = [struct.unpack('<hhhhh', T[k * 10:k * 10 + 10]) for k in range(len(T) // 10)]
     if hexen:
         things.append((TELEPORT_DEST[0], TELEPORT_DEST[1], 0, 14, 7, TELEPORT_DEST[2]))
+    if polys:
+        things += POLY_THINGS
     if things_on:
         things.append((THING_SPOT[0], THING_SPOT[1], 0, THING_SPOT[2], 7, THING_SPOT[3]))
         things.append((PROJECTILE_SPOT[0], PROJECTILE_SPOT[1], 0, PROJECTILE_SPOT[2], 7, PROJECTILE_SPOT[3],
@@ -353,6 +370,33 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
             nl += 4
             ns += 4
             nsec += 1
+    if polys:
+        nv, ns, nsec = len(V) // 4, len(S) // 30, len(SE) // 26
+        if floors3d:
+            nv += 4 * len(FLOOR3D_CONTROLS)
+            ns += 4 * len(FLOOR3D_CONTROLS)
+            nsec += len(FLOOR3D_CONTROLS)
+        # The container: a 128-unit square facing in (clockwise), then the
+        # polyobject inside it facing out (counter-clockwise), its first
+        # line Polyobj_StartLine(1).
+        x, y = POLY_CONTAINER
+        loops = [([(x, y), (x, y + 128), (x + 128, y + 128), (x + 128, y)], 'STARTAN3', None),
+                 (POLY_SHAPE, 'DOOR3', (1, 1))]
+        for corners, tex, start in loops:
+            for (cx, cy) in corners:
+                out.append('vertex\n{\nx = %d.0;\ny = %d.0;\n}\n' % (cx, cy))
+            n = len(corners)
+            for k in range(n):
+                body = ['v1 = %d;' % (nv + k), 'v2 = %d;' % (nv + (k + 1) % n), 'sidefront = %d;' % (ns + k),
+                        'blocking = true;']
+                if start and k == 0:
+                    body += ['special = %d;' % start[0], 'arg0 = %d;' % start[1]]
+                out.append('linedef\n{\n%s\n}\n' % '\n'.join(body))
+                out.append('sidedef\n{\nsector = %d;\ntexturemiddle = "%s";\n}\n' % (nsec, tex))
+            nv += n
+            ns += n
+        out.append('sector\n{\nheightfloor = 0;\nheightceiling = 128;\ntexturefloor = "FLOOR7_2";\n'
+                   'textureceiling = "FLOOR7_2";\nlightlevel = 160;\n}\n')
     return '\n'.join(out).encode('ascii')
 
 
@@ -394,6 +438,8 @@ def main():
                ('A_START', b''), ('TESTLIB', make_acs.behavior('e', make_acs.library_program('e'))),
                ('AUTOLIB', make_acs.behavior('E', make_acs.autolib_program('E'))), ('A_END', b''),
                ('LOADACS', b'// libraries for every map\nAUTOLIB\n')])
+    write_wad(os.path.join(outdir, 'udmf-poly.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, polys=True)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-doom.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(False)), ('ZNODES', b'XGLN' + zn.gl(False, False)),
                ('ENDMAP', b'')])

@@ -63,6 +63,13 @@ begin
     if Result then FinishLine;
     Exit;
   end;
+  if UdmfPolySpecial(L.Special) then
+  begin
+    Manual := false;
+    Result := PolyAction(L.Special, L.Args);
+    if Result then FinishLine;
+    Exit;
+  end;
   if UdmfAcsSpecial(L.Special) then
   begin
     { Scripts: a used line counts as a switch even when its tag would
@@ -412,4 +419,251 @@ begin
   end;
   WritelnLog('Udmf', '%s (%d, %d, %d, %d, %d): %d things', [Name, A[0], A[1], A[2], A[3], A[4], N]);
   Result := N > 0;
+end;
+
+{ Polyobjects ---------------------------------------------------------------- }
+
+function TDoomWorld.PolyMoving(const P: Integer): Integer;
+begin
+  for Result := 0 to High(FPolyMoves) do
+    if FPolyMoves[Result].Poly = P then Exit;
+  Result := -1;
+end;
+
+function TDoomWorld.PolyBusy(const Number: Integer): Boolean;
+var
+  P: Integer;
+begin
+  P := FMap.FindPolyobj(Number);
+  Result := (P >= 0) and (PolyMoving(P) >= 0);
+end;
+
+{ The segment A-B passes through the square of half size R around (X, Y). }
+function SegmentInBox(const AX, AY, BX, BY, X, Y, R: Single): Boolean;
+var
+  T0, T1, D, P0, P1, Tmp: Single;
+  K: Integer;
+begin
+  T0 := 0;
+  T1 := 1;
+  for K := 0 to 1 do
+  begin
+    if K = 0 then
+    begin
+      D := BX - AX; P0 := X - R - AX; P1 := X + R - AX;
+    end else
+    begin
+      D := BY - AY; P0 := Y - R - AY; P1 := Y + R - AY;
+    end;
+    if Abs(D) < 1e-9 then
+    begin
+      if (P0 > 0) or (P1 < 0) then Exit(false);
+    end else
+    begin
+      P0 := P0 / D;
+      P1 := P1 / D;
+      if P0 > P1 then
+      begin
+        Tmp := P0; P0 := P1; P1 := Tmp;
+      end;
+      T0 := Max(T0, P0);
+      T1 := Min(T1, P1);
+      if T0 > T1 then Exit(false);
+    end;
+  end;
+  Result := true;
+end;
+
+function TDoomWorld.TryPlacePoly(const P: Integer; const X, Y, Angle: Single): Boolean;
+var
+  OldX, OldY, OldAngle: Single;
+  A: TDoomActor;
+  Blocked: Boolean;
+
+  function Touches(const TX, TY, R: Single): Boolean;
+  var
+    Line: Integer;
+  begin
+    for Line in FMap.Polyobjs[P].Lines do
+      if SegmentInBox(FMap.Vertices[FMap.Linedefs[Line].V1].X, FMap.Vertices[FMap.Linedefs[Line].V1].Y,
+         FMap.Vertices[FMap.Linedefs[Line].V2].X, FMap.Vertices[FMap.Linedefs[Line].V2].Y, TX, TY, R) then
+        Exit(true);
+    Result := false;
+  end;
+
+begin
+  OldX := FMap.Polyobjs[P].X;
+  OldY := FMap.Polyobjs[P].Y;
+  OldAngle := FMap.Polyobjs[P].Angle;
+  FMap.Polyobjs[P].X := X;
+  FMap.Polyobjs[P].Y := Y;
+  FMap.Polyobjs[P].Angle := Angle;
+  FMap.PlacePolyobj(P);
+  Blocked := false;
+  if (not Player.Dead) and Touches(Player.X, Player.Y, PlayerRadius) then
+  begin
+    Blocked := true;
+    if FMap.Polyobjs[P].Crush or FMap.Polyobjs[P].Hurt then
+      DamagePlayer(3, nil);
+  end;
+  for A in FActors do
+    if A.Collides and (not A.Removed) and (A.State <> asDead) and
+       (A.Info^.Kind in [tkMonster, tkDecoration]) and Touches(A.DoomX, A.DoomY, A.Info^.Radius) then
+    begin
+      Blocked := true;
+      if (FMap.Polyobjs[P].Crush or FMap.Polyobjs[P].Hurt) and (A.Info^.Kind = tkMonster) and (A.Health > 0) then
+        DamageActor(A, 3, A.DoomX, A.DoomY, A.DoomZ, nil, false);
+    end;
+  if Blocked then
+  begin
+    FMap.Polyobjs[P].X := OldX;
+    FMap.Polyobjs[P].Y := OldY;
+    FMap.Polyobjs[P].Angle := OldAngle;
+    FMap.PlacePolyobj(P);
+    Exit(false);
+  end;
+  FGeometry.SectorChanged(FMap.Polyobjs[P].Sector);
+  Result := true;
+end;
+
+function TDoomWorld.PolyAction(const Special: Integer; const Args: array of Integer): Boolean;
+var
+  P, M: Integer;
+  Move: TPolyMove;
+  Angle: Single;
+
+  function Arg(const K: Integer): Integer;
+  begin
+    if K <= High(Args) then Result := Args[K] else Result := 0;
+  end;
+
+begin
+  Result := false;
+  P := FMap.FindPolyobj(Arg(0));
+  if P < 0 then
+  begin
+    AcsLogOnce(Format('%s on polyobject %d (no such polyobject)', [UdmfSpecialName(Special), Arg(0)]));
+    Exit;
+  end;
+  M := PolyMoving(P);
+  { A moving polyobject takes only the OR_ actions. }
+  if (M >= 0) and not ((Special >= UdmfPolyOrRotateLeft) and (Special <= UdmfPolyOrMoveTimes8)) then Exit;
+  Move := Default(TPolyMove);
+  Move.Poly := P;
+  Angle := Arg(2) * 360 / 256;
+  case Special of
+    UdmfPolyRotateLeft, UdmfPolyRotateRight, UdmfPolyOrRotateLeft, UdmfPolyOrRotateRight:
+      begin
+        { Hexen: speed in eighths of its byte angles a tic; 0 a whole
+          turn, 255 for ever. }
+        Move.Kind := pkRotate;
+        Move.Speed := Arg(1) * (360 / 256) / 8;
+        if (Special = UdmfPolyRotateRight) or (Special = UdmfPolyOrRotateRight) then Move.Speed := -Move.Speed;
+        if Arg(2) = 255 then Move.Left := -1
+        else if Arg(2) = 0 then Move.Left := 360
+        else Move.Left := Angle;
+      end;
+    UdmfPolyMove, UdmfPolyMoveTimes8, UdmfPolyOrMove, UdmfPolyOrMoveTimes8:
+      begin
+        Move.Kind := pkMove;
+        Move.Speed := Arg(1) / 8;
+        Move.Left := Arg(3);
+        if (Special = UdmfPolyMoveTimes8) or (Special = UdmfPolyOrMoveTimes8) then Move.Left := Move.Left * 8;
+      end;
+    UdmfPolyDoorSlide:
+      begin
+        Move.Kind := pkSlide;
+        Move.Speed := Arg(1) / 8;
+        Move.Left := Arg(3);
+        Move.Delay := Arg(4);
+      end;
+    else
+      begin
+        { Polyobj_DoorSwing: speed, angle, delay. }
+        Move.Kind := pkSwing;
+        Move.Speed := Arg(1) * (360 / 256) / 8;
+        Move.Left := Angle;
+        Move.Delay := Arg(3);
+      end;
+  end;
+  if Move.Kind in [pkMove, pkSlide] then
+  begin
+    Move.DX := Cos(DegToRad(Angle));
+    Move.DY := Sin(DegToRad(Angle));
+  end;
+  Move.Total := Move.Left;
+  if (Move.Speed = 0) or (Move.Left = 0) then Exit;
+  if M >= 0 then
+    FPolyMoves[M] := Move
+  else
+  begin
+    SetLength(FPolyMoves, Length(FPolyMoves) + 1);
+    FPolyMoves[High(FPolyMoves)] := Move;
+  end;
+  FSounds.Play('DSDOROPN');
+  WritelnLog('Udmf', '%s (%d, %d, %d, %d, %d): polyobject %d', [UdmfSpecialName(Special), Arg(0), Arg(1), Arg(2),
+    Arg(3), Arg(4), FMap.Polyobjs[P].Number]);
+  Result := true;
+end;
+
+procedure TDoomWorld.TicPolys;
+var
+  I, K: Integer;
+  Step, X, Y, Angle: Single;
+  Done: Boolean;
+begin
+  I := 0;
+  while I <= High(FPolyMoves) do
+  begin
+    Done := false;
+    if FPolyMoves[I].Phase = 1 then
+    begin
+      Dec(FPolyMoves[I].Wait);
+      if FPolyMoves[I].Wait <= 0 then
+      begin
+        { Back the way it came. }
+        FPolyMoves[I].Phase := 2;
+        FPolyMoves[I].Left := FPolyMoves[I].Total;
+        FPolyMoves[I].Speed := -FPolyMoves[I].Speed;
+        FSounds.Play('DSDORCLS');
+      end;
+    end else
+    begin
+      Step := Abs(FPolyMoves[I].Speed);
+      if (FPolyMoves[I].Left >= 0) and (Step > FPolyMoves[I].Left) then Step := FPolyMoves[I].Left;
+      X := FMap.Polyobjs[FPolyMoves[I].Poly].X;
+      Y := FMap.Polyobjs[FPolyMoves[I].Poly].Y;
+      Angle := FMap.Polyobjs[FPolyMoves[I].Poly].Angle;
+      if FPolyMoves[I].Kind in [pkRotate, pkSwing] then
+        Angle := Angle + Sign(FPolyMoves[I].Speed) * Step
+      else
+      begin
+        X := X + FPolyMoves[I].DX * Sign(FPolyMoves[I].Speed) * Step;
+        Y := Y + FPolyMoves[I].DY * Sign(FPolyMoves[I].Speed) * Step;
+      end;
+      { Keep the angle in 0..360 so saves stay small. }
+      if Angle >= 360 then Angle := Angle - 360;
+      if Angle < 0 then Angle := Angle + 360;
+      if TryPlacePoly(FPolyMoves[I].Poly, X, Y, Angle) and (FPolyMoves[I].Left >= 0) then
+      begin
+        FPolyMoves[I].Left := FPolyMoves[I].Left - Step;
+        if FPolyMoves[I].Left <= 1e-4 then
+        begin
+          if (FPolyMoves[I].Kind in [pkSlide, pkSwing]) and (FPolyMoves[I].Phase = 0) then
+          begin
+            FPolyMoves[I].Phase := 1;
+            FPolyMoves[I].Wait := FPolyMoves[I].Delay;
+          end else
+            Done := true;
+        end;
+      end;
+    end;
+    if Done then
+    begin
+      for K := I to High(FPolyMoves) - 1 do
+        FPolyMoves[K] := FPolyMoves[K + 1];
+      SetLength(FPolyMoves, Length(FPolyMoves) - 1);
+    end else
+      Inc(I);
+  end;
 end;

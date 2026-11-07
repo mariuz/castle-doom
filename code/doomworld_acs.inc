@@ -16,6 +16,7 @@ type
     function LineSpecial(const Inst: TAcsInstance; const Special: Integer; const Args: TAcsArgs): Integer; override;
     procedure Print(const Inst: TAcsInstance; const Text: String; const Kind: TAcsPrintKind); override;
     function TagBusy(const Tag: Integer): Boolean; override;
+    function PolyBusy(const Number: Integer): Boolean; override;
     function ThingCount(const SpawnNum, Tid: Integer): Integer; override;
     function ThingCountName(const Name: String; const Tid: Integer): Integer; override;
     procedure ChangeFlat(const Tag: Integer; const Name: String; const Ceiling: Boolean); override;
@@ -121,6 +122,11 @@ begin
   WritelnLog('Acs', 'script %d prints "%s"', [Inst.Number, S]);
   if (Kind <> apLog) and (S <> '') then
     FWorld.ShowMessage(S);
+end;
+
+function TWorldAcsHost.PolyBusy(const Number: Integer): Boolean;
+begin
+  Result := FWorld.PolyBusy(Number);
 end;
 
 function TWorldAcsHost.TagBusy(const Tag: Integer): Boolean;

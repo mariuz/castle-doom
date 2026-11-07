@@ -225,6 +225,24 @@ begin
   Arr := TJSONArray.Create;
   for I := 0 to High(FMap.Sectors) do Arr.Add(FMap.Sectors[I].LightLevel);
   Result.Add('sectorLight', Arr);
+  { Polyobjects: [x, y, angle] each; their movers as [polyobject, kind,
+    speed, dx, dy, left, total, delay, wait, phase]. }
+  if Length(FMap.Polyobjs) > 0 then
+  begin
+    Arr := TJSONArray.Create;
+    for I := 0 to High(FMap.Polyobjs) do
+      Arr.Add(JsonFloatArray([FMap.Polyobjs[I].X, FMap.Polyobjs[I].Y, FMap.Polyobjs[I].Angle]));
+    Result.Add('polyobjs', Arr);
+    Arr := TJSONArray.Create;
+    for I := 0 to High(FPolyMoves) do
+    begin
+      Sub := JsonFloatArray([FPolyMoves[I].Poly, Ord(FPolyMoves[I].Kind), FPolyMoves[I].Speed, FPolyMoves[I].DX,
+        FPolyMoves[I].DY, FPolyMoves[I].Left, FPolyMoves[I].Total, FPolyMoves[I].Delay, FPolyMoves[I].Wait,
+        FPolyMoves[I].Phase]);
+      Arr.Add(Sub);
+    end;
+    Result.Add('polyMoves', Arr);
+  end;
   { Boom's runtime scrollers: speed, last control height, the offset of
     what they move. }
   if Length(FMap.DynScrollers) > 0 then
@@ -470,6 +488,7 @@ begin
     FMap.Sectors[I].FloorTex := ArrayItemStr(ObjArray(State, 'sectorFloorTex'), I, FMap.Sectors[I].FloorTex);
     FMap.Sectors[I].CeilingTex := ArrayItemStr(ObjArray(State, 'sectorCeilingTex'), I, FMap.Sectors[I].CeilingTex);
   end;
+  RestorePolyobjs(ObjArray(State, 'polyobjs'), ObjArray(State, 'polyMoves'));
   RestoreScrollers(ObjArray(State, 'scrollers'));
   Arr := ObjArray(State, 'lineSpecial');
   if (Arr = nil) or (Arr.Count = Length(FMap.Linedefs)) then
@@ -493,6 +512,46 @@ begin
 end;
 
 { Everything else, after the geometry exists. }
+procedure TDoomWorld.RestorePolyobjs(const Places, Moves: TJSONArray);
+var
+  I: Integer;
+  Row: TJSONArray;
+  M: TPolyMove;
+begin
+  FPolyMoves := nil;
+  if Places <> nil then
+    for I := 0 to Min(High(FMap.Polyobjs), Places.Count - 1) do
+    begin
+      if not (Places.Items[I] is TJSONArray) then Continue;
+      Row := TJSONArray(Places.Items[I]);
+      FMap.Polyobjs[I].X := ArrayItemFloat(Row, 0, FMap.Polyobjs[I].X);
+      FMap.Polyobjs[I].Y := ArrayItemFloat(Row, 1, FMap.Polyobjs[I].Y);
+      FMap.Polyobjs[I].Angle := ArrayItemFloat(Row, 2, FMap.Polyobjs[I].Angle);
+      FMap.PlacePolyobj(I);
+      if FGeometry <> nil then FGeometry.SectorChanged(FMap.Polyobjs[I].Sector);
+    end;
+  if Moves = nil then Exit;
+  for I := 0 to Moves.Count - 1 do
+  begin
+    if not (Moves.Items[I] is TJSONArray) then Continue;
+    Row := TJSONArray(Moves.Items[I]);
+    M := Default(TPolyMove);
+    M.Poly := Round(ArrayItemFloat(Row, 0, -1));
+    if (M.Poly < 0) or (M.Poly > High(FMap.Polyobjs)) then Continue;
+    M.Kind := TPolyMoveKind(EnsureRange(Round(ArrayItemFloat(Row, 1, 0)), 0, Ord(High(TPolyMoveKind))));
+    M.Speed := ArrayItemFloat(Row, 2, 0);
+    M.DX := ArrayItemFloat(Row, 3, 0);
+    M.DY := ArrayItemFloat(Row, 4, 0);
+    M.Left := ArrayItemFloat(Row, 5, 0);
+    M.Total := ArrayItemFloat(Row, 6, 0);
+    M.Delay := Round(ArrayItemFloat(Row, 7, 0));
+    M.Wait := Round(ArrayItemFloat(Row, 8, 0));
+    M.Phase := Round(ArrayItemFloat(Row, 9, 0));
+    SetLength(FPolyMoves, Length(FPolyMoves) + 1);
+    FPolyMoves[High(FPolyMoves)] := M;
+  end;
+end;
+
 procedure TDoomWorld.RestoreDynamicState(const State: TJSONObject);
 var
   PJ, AJ, MJ: TJSONObject;

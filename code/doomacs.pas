@@ -141,7 +141,8 @@ type
     function ConstCalls: TAcsConstCalls;
   end;
 
-  TAcsState = (asRunning, asSuspended, asDelayed, asTagWait, asScriptWaitPre, asScriptWait, asDone);
+  { asPolyWait comes last: saves keep the states by number. }
+  TAcsState = (asRunning, asSuspended, asDelayed, asTagWait, asScriptWaitPre, asScriptWait, asDone, asPolyWait);
   TAcsActivator = (aaWorld, aaPlayer, aaMonster);
   TAcsPrintKind = (apPrint, apBold, apHud, apLog);
 
@@ -187,6 +188,8 @@ type
     procedure Print(const Inst: TAcsInstance; const Text: String; const Kind: TAcsPrintKind); virtual;
     { A sector with this tag moves. }
     function TagBusy(const Tag: Integer): Boolean; virtual;
+    { The polyobject with this number moves. }
+    function PolyBusy(const Number: Integer): Boolean; virtual;
     { Live things of a type (ZDoom's spawn number, 0 any) with a thing id
       (0 any). }
     function ThingCount(const SpawnNum, Tid: Integer): Integer; virtual;
@@ -1038,6 +1041,11 @@ begin
 end;
 
 function TAcsHost.TagBusy(const Tag: Integer): Boolean;
+begin
+  Result := false;
+end;
+
+function TAcsHost.PolyBusy(const Number: Integer): Boolean;
 begin
   Result := false;
 end;
@@ -2007,6 +2015,8 @@ begin
         end;
       asTagWait:
         if not FHost.TagBusy(X.StateData) then X.State := asRunning;
+      asPolyWait:
+        if not FHost.PolyBusy(X.StateData) then X.State := asRunning;
       asScriptWaitPre:
         if Running(X.StateData) then X.State := asScriptWait;
       asScriptWait:
@@ -2559,9 +2569,12 @@ begin
           I.State := asTagWait;
           I.StateData := A;
         end;
-      { No polyobjects: their waits end at once. }
-      PcdPolywait: Drop(1);
-      PcdPolywaitdirect: M.ReadWord(I.PC);
+      PcdPolywait, PcdPolywaitdirect:
+        begin
+          if Op = PcdPolywait then A := Pop else A := M.ReadWord(I.PC);
+          I.State := asPolyWait;
+          I.StateData := A;
+        end;
       PcdScriptwait, PcdScriptwaitdirect, PcdScriptwaitnamed:
         begin
           if Op = PcdScriptwait then A := Pop

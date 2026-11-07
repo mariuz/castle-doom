@@ -96,6 +96,19 @@ const
     solid, 2 swimmable, 3 not solid), flags, opacity 0..255, high byte
     of the tag); the line's front sector is the slab's control sector. }
   UdmfSet3dFloor = UdmfSpecialBase + 58;
+  { Polyobjects (Hexen's actions 2..8 and the OR_ ones 90..93, which
+    take over a polyobject that is moving): Args the polyobject number,
+    speed, angle (byte angles), distance or delay as Hexen's. }
+  UdmfPolyRotateLeft = UdmfSpecialBase + 60;
+  UdmfPolyRotateRight = UdmfSpecialBase + 61;
+  UdmfPolyMove = UdmfSpecialBase + 62;
+  UdmfPolyMoveTimes8 = UdmfSpecialBase + 63;
+  UdmfPolyDoorSlide = UdmfSpecialBase + 64;
+  UdmfPolyDoorSwing = UdmfSpecialBase + 65;
+  UdmfPolyOrRotateLeft = UdmfSpecialBase + 66;
+  UdmfPolyOrRotateRight = UdmfSpecialBase + 67;
+  UdmfPolyOrMove = UdmfSpecialBase + 68;
+  UdmfPolyOrMoveTimes8 = UdmfSpecialBase + 69;
   { ACS scripts (DoomAcs). Args as Hexen's: script, map (0 = this one),
     the script's arguments; ACS_ExecuteWithResult: script and four
     arguments; the locked ones: the lock in Args[4]. }
@@ -188,6 +201,8 @@ function UdmfSpecialName(const Special: Integer): String;
 function UdmfAcsSpecial(const Special: Integer): Boolean;
 { One of the thing actions (UdmfThingSpawn..UdmfHealThing). }
 function UdmfThingSpecial(const Special: Integer): Boolean;
+{ One of the polyobject actions (UdmfPolyRotateLeft..UdmfPolyOrMoveTimes8). }
+function UdmfPolySpecial(const Special: Integer): Boolean;
 
 implementation
 
@@ -460,6 +475,11 @@ end;
 
 { Specials ------------------------------------------------------------------ }
 
+function UdmfPolySpecial(const Special: Integer): Boolean;
+begin
+  Result := (Special >= UdmfPolyRotateLeft) and (Special <= UdmfPolyOrMoveTimes8);
+end;
+
 function UdmfThingSpecial(const Special: Integer): Boolean;
 begin
   Result := (Special >= UdmfThingSpawn) and (Special <= UdmfThingProjectileGravity);
@@ -505,6 +525,16 @@ begin
     UdmfThingProjectileGravity: Result := 'Thing_ProjectileGravity';
     UdmfPlaneCopy: Result := 'Plane_Copy';
     UdmfSet3dFloor: Result := 'Sector_Set3dFloor';
+    UdmfPolyRotateLeft: Result := 'Polyobj_RotateLeft';
+    UdmfPolyRotateRight: Result := 'Polyobj_RotateRight';
+    UdmfPolyMove: Result := 'Polyobj_Move';
+    UdmfPolyMoveTimes8: Result := 'Polyobj_MoveTimes8';
+    UdmfPolyDoorSlide: Result := 'Polyobj_DoorSlide';
+    UdmfPolyDoorSwing: Result := 'Polyobj_DoorSwing';
+    UdmfPolyOrRotateLeft: Result := 'Polyobj_OR_RotateLeft';
+    UdmfPolyOrRotateRight: Result := 'Polyobj_OR_RotateRight';
+    UdmfPolyOrMove: Result := 'Polyobj_OR_Move';
+    UdmfPolyOrMoveTimes8: Result := 'Polyobj_OR_MoveTimes8';
     UdmfAcsExecute: Result := 'ACS_Execute';
     UdmfAcsExecuteAlways: Result := 'ACS_ExecuteAlways';
     UdmfAcsExecuteWithResult: Result := 'ACS_ExecuteWithResult';
@@ -563,7 +593,18 @@ end;
 function HexenActionName(const Special: Integer): String;
 begin
   case Special of
-    1..8: Result := 'Polyobj_*';
+    1: Result := 'Polyobj_StartLine';
+    2: Result := 'Polyobj_RotateLeft';
+    3: Result := 'Polyobj_RotateRight';
+    4: Result := 'Polyobj_Move';
+    5: Result := 'Polyobj_ExplicitLine';
+    6: Result := 'Polyobj_MoveTimes8';
+    7: Result := 'Polyobj_DoorSwing';
+    8: Result := 'Polyobj_DoorSlide';
+    90: Result := 'Polyobj_OR_RotateLeft';
+    91: Result := 'Polyobj_OR_RotateRight';
+    92: Result := 'Polyobj_OR_Move';
+    93: Result := 'Polyobj_OR_MoveTimes8';
     9: Result := 'Line_Horizon';
     10: Result := 'Door_Close';
     11: Result := 'Door_Open';
@@ -1098,6 +1139,23 @@ begin
     223, 224:
       begin
         if Special = 223 then Result.Special := UdmfScrollFloor else Result.Special := UdmfScrollCeiling;
+        Result.Tag := 0;
+        for I := 0 to 4 do Result.Args[I] := A[I];
+      end;
+    2, 3, 4, 6, 7, 8, 90, 91, 92, 93:
+      begin
+        case Special of
+          2: Result.Special := UdmfPolyRotateLeft;
+          3: Result.Special := UdmfPolyRotateRight;
+          4: Result.Special := UdmfPolyMove;
+          6: Result.Special := UdmfPolyMoveTimes8;
+          7: Result.Special := UdmfPolyDoorSwing;
+          8: Result.Special := UdmfPolyDoorSlide;
+          90: Result.Special := UdmfPolyOrRotateLeft;
+          91: Result.Special := UdmfPolyOrRotateRight;
+          92: Result.Special := UdmfPolyOrMove;
+          else Result.Special := UdmfPolyOrMoveTimes8;
+        end;
         Result.Tag := 0;
         for I := 0 to 4 do Result.Args[I] := A[I];
       end;
