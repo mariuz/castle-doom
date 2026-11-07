@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 60 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 61 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -971,6 +971,14 @@ autotest only checks the library loads.
   `FloorAtZ` / `CeilingAtZ` / `SlabHit`: the test's `SHOTS,...,LOOK:45,X`
   under the slab logs `wall at (-391, 256, 60)` and `P:3001:130` in the
   corridor stands on the step (z 24 in save 3).
+  Polyobjects: `udmf-poly.wad` (same script) draws a 64 x 16 slab out
+  in the void and places it at (-416, 384) in the start room (log `Map:
+  E1M1: polyobject 1: 4 lines at (-416, 384) in sector 140`); from
+  `G:-416:200,A:90`, `LINE:829` moves it north 32, `LINE:830` turns it
+  a quarter and `LINE:831` slides it east 48 and back after a second
+  (`Udmf: Polyobj_DoorSlide (1, 16, 0, 48, 35): polyobject 1`); saves
+  hold `polyobjs` ([x, y, angle]) and `polyMoves` (autotest
+  `polyobjects` with goldens, unit test `TestPolyobjs`).
   Thing actions: `udmf-things.wad` (same script) has a map spot (id 20)
   at (-320, 320); `LINE:829` spawns an imp there (`Thing_Spawn`, id
   21), `LINE:1045` kills it (`Thing_Damage`), `LINE:1046` /

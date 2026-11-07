@@ -27,6 +27,28 @@ L = several days). Items inside a section are in suggested order.
   `arg0str`, `TDoomMap.LineArg0Str`; `SCRIPTWAITNAMED`).
   `udmf-slopes.wad` and `udmf-things.wad` cover them.
 
+- Polyobjects (UDMF, stage 1): `TDoomMap.BuildPolyobjs` gathers each
+  polyobject's lines (`Polyobj_StartLine`'s loop of joined lines or the
+  numbered `Polyobj_ExplicitLine` ones, taken out of the translated
+  specials), finds its anchor (9300) and start spot (9301 plain, 9302
+  crushing, 9303 hurting) by their angle, and keeps its vertices
+  relative to the anchor (`Polyobjs`, `PolyOfLine`). `PlacePolyobj` puts
+  them at X, Y turned by Angle; the lines' sides belong to the spot's
+  sector, which `ComputeDynamicSectors` makes dynamic, so its chunk
+  redraws them as they move. The line grid leaves them out and
+  `LinesInBox` / `LinesNearSegment` always add them (still in ascending
+  order), so moves, sight, shots and missiles meet them where they are.
+  Hexen's 2, 3, 4, 6, 7, 8 and 90-93 become `UdmfPoly*` actions run by
+  `TDoomWorld.PolyAction` / `TicPolys` (`TPolyMove`: turning, moving,
+  sliding and swinging doors with their wait and way back, the OR_
+  ones taking over a moving polyobject); `TryPlacePoly` refuses a step
+  that would touch the player or a solid thing (3 damage a tic when it
+  crushes or hurts). ACS's `PolyWait` waits (`asPolyWait`, the host's
+  `PolyBusy`); saves keep `polyobjs` and `polyMoves`. Test map
+  `udmf-poly.wad` (a slab placed in E1M1's start room, three west-wall
+  lines), unit test `TestPolyobjs`, autotest `polyobjects` (goldens).
+  Left: see the next three.
+
 - The map editor on UDMF maps: `TDoomEditMap.LoadFromWad` reads a
   TEXTMAP (`LoadUdmf`, DoomUdmf's parser, which now remembers quoted
   values) into the same records: Doom's flag bits from UDMF's line and
@@ -1445,7 +1467,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile`, ACS libraries (`LOAD`, `LOADACS`) and thing specials done too; left are polyobjects, editing the UDMF-only fields in the map editor (it reads and writes UDMF maps now, keeping them), and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
+| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile`, ACS libraries (`LOAD`, `LOADACS`) and thing specials done too; polyobjects (stage 1) done too; left are polyobjects' rest, editing the UDMF-only fields in the map editor (it reads and writes UDMF maps now, keeping them), and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
@@ -1489,9 +1511,10 @@ play.
 
 ## Suggested next three
 
-1. UDMF, the rest: polyobjects (L, `Polyobj_StartLine` /
-   `ExplicitLine`, the anchor and start spot things, rotating and
-   sliding doors drawn as moving geometry).
+1. Polyobjects, stage 2 (S-M): mirrored polyobjects (StartLine's
+   arg1), `Polyobj_MoveToSpot`, things pushed instead of blocking,
+   walls that take the heights of the sector they are in now (not their
+   start spot's), sound sequences.
 2. 3D floors, stage 3 (M, `docs/RENDERING_ROADMAP.md` item 5): light
    under slabs (the control sector's light below the slab), swimmable
    slabs (water: the view tinted inside, the player swims), sloped and

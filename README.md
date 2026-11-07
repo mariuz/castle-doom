@@ -168,7 +168,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   by the game, Hexen-style line actions and ZDoom sector types translated, with coloured
   sector light, fog, texture scaling, offsets and rotation and per-surface light, and their
   ACS scripts (with their libraries) run, their floors and ceilings can slope and their 3D floors (solid slabs,
-  opaque or translucent) are drawn and walked on (polyobjects are not supported yet). A PWAD's GLDEFS lights
+  opaque or translucent) are drawn and walked on, and their polyobjects (moving
+  doors and walls) slide and turn. A PWAD's GLDEFS lights
   (point, pulse, flicker, bound to sprite frames) become dynamic lights, and its
   brightmaps make the marked parts of textures and flats glow; UDMF light things light
   their rooms. Options -> Video -> LIGHT MODE switches Doom's banded light for a smooth one. Boom's generalized linedef
@@ -192,7 +193,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) and, for UZDoom-style rendering (slopes, 3D floors,
 coloured light, models, post-processing), [docs/RENDERING_ROADMAP.md](docs/RENDERING_ROADMAP.md).
-Headlines: no polyobjects in UDMF maps, no light under or swimming in 3D floors,
+Headlines: no light under or swimming in 3D floors, no mirrored polyobjects,
 DeHackEd patches cannot rename sprites or sounds (BEX `[SPRITES]` / `[SOUNDS]`),
 the browser's music is the approximate FM model (no OPL3 emulator there).
 

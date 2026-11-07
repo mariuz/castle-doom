@@ -298,6 +298,22 @@ geometry (CGE's walk navigation), so ramps need no more code there.
 Movers' targets (`LowestFloorSurrounding`...) still read the sectors'
 heights, which on a slope are the origins'.
 
+### Polyobjects (`TDoomMap.BuildPolyobjs`, `TDoomWorld.TicPolys`)
+
+A polyobject is a set of one-sided lines drawn somewhere out of the
+way, an anchor thing (9300) at its pivot and a start spot (9301-9303)
+where it belongs, both naming it by their angle. At load
+`BuildPolyobjs` keeps each vertex relative to the anchor and
+`PlacePolyobj` writes the vertices at the polyobject's X, Y and Angle,
+so every user of `Vertices` and `Linedefs` (the geometry's chunk of the
+start spot's sector, made dynamic; the 2D queries, to which the line
+grid adds the polyobjects' lines on every query) sees it where it is
+now. The BSP and the subsectors stay as built (with the lines at their
+drawn place), which is fine: nothing walks or draws there. The world's
+`TPolyMove` list turns or slides a polyobject a step a tic through
+`TryPlacePoly`, which puts the step back when the player or a solid
+thing is in the way.
+
 ### 3D floors (`TDoomMap.Build3dFloors`, `Floors3D`)
 
 A `Sector_Set3dFloor` line (DoomUdmf's static `UdmfSet3dFloor`, args

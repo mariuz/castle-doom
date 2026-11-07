@@ -1356,7 +1356,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'editor-udmf_edit_1.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'editor-udmf_edit_1.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'polyobjects_1.png', 'polyobjects_2.png', 'polyobjects_3.png', 'polyobjects_4.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
 ]

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Polyobjects in UDMF maps: lines that move as one (Hexen's sliding and swinging doors),
+  placed at their start spots, turned and slid by `Polyobj_RotateLeft` / `RotateRight`,
+  `Move`, `MoveTimes8`, `DoorSlide`, `DoorSwing` and the `OR_` actions, blocked by (or
+  crushing) what stands in the way; scripts wait for them (`PolyWait`), saves keep them.
 - UDMF maps: `Thing_Move`, `Plane_Copy` and ZDoom's plane-copying things (9510, 9511), the
   slope things 9500-9503, platforms that go up and come back (`Plat_UpWaitDownStay`,
   `Plat_UpNearestWaitDownStay`, `Plat_DownByValue`, `Plat_UpByValue`), and named ACS

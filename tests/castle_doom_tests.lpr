@@ -72,6 +72,7 @@ type
     procedure TestSlopes;
     procedure Test3dFloors;
     procedure TestThingSpecials;
+    procedure TestPolyobjs;
     procedure TestDynScrollers;
     procedure TestDeepWater;
     procedure TestSectorSkies;
@@ -1351,6 +1352,86 @@ begin
       for I := 0 to High(M.Things) do
         if M.Things[I].Special <> 0 then Inc(N);
       AssertEquals('things with specials', 2, N);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+{ Polyobject 1 of tools/testdata/udmf-poly.wad: its four lines moved from
+  the container out in the void to the start spot (-416, 384) in sector
+  140, turned by PlacePolyobj, always among the line grid's answers. }
+procedure TTestMap.TestPolyobjs;
+var
+  Dir: String;
+  W: TDoomWad;
+  M: TDoomMap;
+  L, N, K: Integer;
+  Found: TLineList;
+  MinX, MaxX, MinY, MaxY: Single;
+  Has: Boolean;
+
+  procedure Bounds;
+  var
+    J: Integer;
+  begin
+    MinX := 1e9; MaxX := -1e9; MinY := 1e9; MaxY := -1e9;
+    for J in M.Polyobjs[0].Verts do
+    begin
+      MinX := Min(MinX, M.Vertices[J].X); MaxX := Max(MaxX, M.Vertices[J].X);
+      MinY := Min(MinY, M.Vertices[J].Y); MaxY := Max(MaxY, M.Vertices[J].Y);
+    end;
+  end;
+
+begin
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf-poly.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf-poly.wad') then
+  begin
+    WriteLn('TestPolyobjs: no udmf-poly.wad (python3 tools/make_udmf_wad.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-poly.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('polyobjects', 1, Length(M.Polyobjs));
+      AssertEquals('number', 0, M.FindPolyobj(1));
+      AssertEquals('none', -1, M.FindPolyobj(2));
+      AssertEquals('lines', 4, Length(M.Polyobjs[0].Lines));
+      AssertEquals('vertices', 4, Length(M.Polyobjs[0].Verts));
+      AssertEquals('sector', 140, M.Polyobjs[0].Sector);
+      for L in M.Polyobjs[0].Lines do
+      begin
+        AssertEquals('wall in the spot sector', 140, M.Linedefs[L].FrontSector);
+        AssertEquals('poly line', 0, M.PolyOfLine[L]);
+      end;
+      Bounds;
+      AssertEquals('west', -448, MinX, 0.01);
+      AssertEquals('east', -384, MaxX, 0.01);
+      AssertEquals('south', 376, MinY, 0.01);
+      AssertEquals('north', 392, MaxY, 0.01);
+      { A quarter turn stands it north to south. }
+      M.Polyobjs[0].Angle := 90;
+      M.PlacePolyobj(0);
+      Bounds;
+      AssertEquals('turned west', -424, MinX, 0.01);
+      AssertEquals('turned north', 416, MaxY, 0.01);
+      { Moved far away, the grid still finds its lines there. }
+      M.Polyobjs[0].X := 1000;
+      M.Polyobjs[0].Y := -900;
+      M.PlacePolyobj(0);
+      Found := nil;
+      N := M.LinesInBox(990, -910, 1010, -890, Found);
+      Has := false;
+      for K := 0 to N - 1 do
+        if Found[K] = M.Polyobjs[0].Lines[0] then Has := true;
+      AssertTrue('grid finds it', Has);
+      for K := 1 to N - 1 do
+        AssertTrue('ascending', Found[K - 1] < Found[K]);
     finally
       FreeAndNil(M);
     end;
