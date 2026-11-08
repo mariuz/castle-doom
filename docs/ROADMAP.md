@@ -47,7 +47,18 @@ L = several days). Items inside a section are in suggested order.
   `PolyBusy`); saves keep `polyobjs` and `polyMoves`. Test map
   `udmf-poly.wad` (a slab placed in E1M1's start room, three west-wall
   lines), unit test `TestPolyobjs`, autotest `polyobjects` (goldens).
-  Left: see the next three.
+  Stage 2: mirrors (StartLine's arg1, ExplicitLine's arg2: the mirror
+  turns the other way and moves the opposite way, `FPolyMirrorDepth`
+  stops loops), `Polyobj_MoveToSpot` / `OR_MoveToSpot` (86, 59: straight
+  to a thing or map spot by id), things in the way thrust out along the
+  touching wall's outward side (`PlayerPushVX` / an actor's velocity)
+  as they stop the step, walls in the heights and light of the sector
+  the anchor point is in now (`CurSector`, set by `PlacePolyobj`) and
+  start / stop sounds from the polyobject's place (`PolySound`: doors
+  `DSDOROPN` / `DSDORCLS`, the rest `DSPSTART` / `DSPSTOP`). The
+  movers reset with the map. `udmf-poly.wad` gained polyobject 2
+  mirroring 1 and a map spot (autotest `polyobjects`, unit test
+  `TestPolyobjs`).
 
 - The map editor on UDMF maps: `TDoomEditMap.LoadFromWad` reads a
   TEXTMAP (`LoadUdmf`, DoomUdmf's parser, which now remembers quoted
@@ -1511,10 +1522,9 @@ play.
 
 ## Suggested next three
 
-1. Polyobjects, stage 2 (S-M): mirrored polyobjects (StartLine's
-   arg1), `Polyobj_MoveToSpot`, things pushed instead of blocking,
-   walls that take the heights of the sector they are in now (not their
-   start spot's), sound sequences.
+1. Polyobjects, the rest (S): SNDSEQ sound sequences (Hexen's own
+   sounds per polyobject), polyobjects in Hexen-format (binary) maps,
+   a moving polyobject redrawn when the sector it is in changes height.
 2. 3D floors, stage 3 (M, `docs/RENDERING_ROADMAP.md` item 5): light
    under slabs (the control sector's light below the slab), swimmable
    slabs (water: the view tinted inside, the player swims), sloped and

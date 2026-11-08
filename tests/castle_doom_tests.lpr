@@ -1398,9 +1398,12 @@ begin
     W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-poly.wad')));
     M := TDoomMap.Create(W, 'E1M1');
     try
-      AssertEquals('polyobjects', 1, Length(M.Polyobjs));
+      AssertEquals('polyobjects', 2, Length(M.Polyobjs));
       AssertEquals('number', 0, M.FindPolyobj(1));
-      AssertEquals('none', -1, M.FindPolyobj(2));
+      AssertEquals('second', 1, M.FindPolyobj(2));
+      AssertEquals('none', -1, M.FindPolyobj(3));
+      AssertEquals('mirror', 2, M.Polyobjs[0].Mirror);
+      AssertEquals('no mirror', 0, M.Polyobjs[1].Mirror);
       AssertEquals('lines', 4, Length(M.Polyobjs[0].Lines));
       AssertEquals('vertices', 4, Length(M.Polyobjs[0].Verts));
       AssertEquals('sector', 140, M.Polyobjs[0].Sector);
@@ -1420,6 +1423,14 @@ begin
       Bounds;
       AssertEquals('turned west', -424, MinX, 0.01);
       AssertEquals('turned north', 416, MaxY, 0.01);
+      { In the corridor east of the start room its walls take sector 141's
+        heights; its chunk stays the start spot's. }
+      M.Polyobjs[0].X := -224;
+      M.Polyobjs[0].Y := 300;
+      M.PlacePolyobj(0);
+      AssertEquals('now in 141', 141, M.Polyobjs[0].CurSector);
+      AssertEquals('walls in 141', 141, M.Linedefs[M.Polyobjs[0].Lines[0]].FrontSector);
+      AssertEquals('chunk sector', 140, M.Polyobjs[0].Sector);
       { Moved far away, the grid still finds its lines there. }
       M.Polyobjs[0].X := 1000;
       M.Polyobjs[0].Y := -900;

@@ -109,6 +109,10 @@ const
   UdmfPolyOrRotateRight = UdmfSpecialBase + 67;
   UdmfPolyOrMove = UdmfSpecialBase + 68;
   UdmfPolyOrMoveTimes8 = UdmfSpecialBase + 69;
+  { Polyobj_MoveToSpot / OR_MoveToSpot: Args the polyobject, speed, the
+    thing id of the spot. }
+  UdmfPolyMoveToSpot = UdmfSpecialBase + 70;
+  UdmfPolyOrMoveToSpot = UdmfSpecialBase + 71;
   { ACS scripts (DoomAcs). Args as Hexen's: script, map (0 = this one),
     the script's arguments; ACS_ExecuteWithResult: script and four
     arguments; the locked ones: the lock in Args[4]. }
@@ -201,7 +205,7 @@ function UdmfSpecialName(const Special: Integer): String;
 function UdmfAcsSpecial(const Special: Integer): Boolean;
 { One of the thing actions (UdmfThingSpawn..UdmfHealThing). }
 function UdmfThingSpecial(const Special: Integer): Boolean;
-{ One of the polyobject actions (UdmfPolyRotateLeft..UdmfPolyOrMoveTimes8). }
+{ One of the polyobject actions (UdmfPolyRotateLeft..UdmfPolyOrMoveToSpot). }
 function UdmfPolySpecial(const Special: Integer): Boolean;
 
 implementation
@@ -477,7 +481,7 @@ end;
 
 function UdmfPolySpecial(const Special: Integer): Boolean;
 begin
-  Result := (Special >= UdmfPolyRotateLeft) and (Special <= UdmfPolyOrMoveTimes8);
+  Result := (Special >= UdmfPolyRotateLeft) and (Special <= UdmfPolyOrMoveToSpot);
 end;
 
 function UdmfThingSpecial(const Special: Integer): Boolean;
@@ -535,6 +539,8 @@ begin
     UdmfPolyOrRotateRight: Result := 'Polyobj_OR_RotateRight';
     UdmfPolyOrMove: Result := 'Polyobj_OR_Move';
     UdmfPolyOrMoveTimes8: Result := 'Polyobj_OR_MoveTimes8';
+    UdmfPolyMoveToSpot: Result := 'Polyobj_MoveToSpot';
+    UdmfPolyOrMoveToSpot: Result := 'Polyobj_OR_MoveToSpot';
     UdmfAcsExecute: Result := 'ACS_Execute';
     UdmfAcsExecuteAlways: Result := 'ACS_ExecuteAlways';
     UdmfAcsExecuteWithResult: Result := 'ACS_ExecuteWithResult';
@@ -605,6 +611,8 @@ begin
     91: Result := 'Polyobj_OR_RotateRight';
     92: Result := 'Polyobj_OR_Move';
     93: Result := 'Polyobj_OR_MoveTimes8';
+    86: Result := 'Polyobj_MoveToSpot';
+    59: Result := 'Polyobj_OR_MoveToSpot';
     9: Result := 'Line_Horizon';
     10: Result := 'Door_Close';
     11: Result := 'Door_Open';
@@ -1142,9 +1150,11 @@ begin
         Result.Tag := 0;
         for I := 0 to 4 do Result.Args[I] := A[I];
       end;
-    2, 3, 4, 6, 7, 8, 90, 91, 92, 93:
+    2, 3, 4, 6, 7, 8, 90, 91, 92, 93, 86, 59:
       begin
         case Special of
+          86: Result.Special := UdmfPolyMoveToSpot;
+          59: Result.Special := UdmfPolyOrMoveToSpot;
           2: Result.Special := UdmfPolyRotateLeft;
           3: Result.Special := UdmfPolyRotateRight;
           4: Result.Special := UdmfPolyMove;

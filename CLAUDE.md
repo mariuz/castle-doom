@@ -976,7 +976,10 @@ autotest only checks the library loads.
   E1M1: polyobject 1: 4 lines at (-416, 384) in sector 140`); from
   `G:-416:200,A:90`, `LINE:829` moves it north 32, `LINE:830` turns it
   a quarter and `LINE:831` slides it east 48 and back after a second
-  (`Udmf: Polyobj_DoorSlide (1, 16, 0, 48, 35): polyobject 1`); saves
+  (`Udmf: Polyobj_DoorSlide (1, 16, 0, 48, 35): polyobject 1`),
+  pushing a player in its way; polyobject 2 (at (-416, 120)) mirrors
+  each move (`Polyobj_Move (2, 16, 192, 32, 0)`) and `LINE:1046` sends 1
+  to map spot 41 at (-480, 300) (`Polyobj_MoveToSpot`); saves
   hold `polyobjs` ([x, y, angle]) and `polyMoves` (autotest
   `polyobjects` with goldens, unit test `TestPolyobjs`).
   Thing actions: `udmf-things.wad` (same script) has a map spot (id 20)

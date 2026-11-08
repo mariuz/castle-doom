@@ -452,8 +452,12 @@ TESTS = [
     # restores it in the middle of a move.
     ('polyobjects', 'E1M1',
      'Y,SHOTS,G:-416:200,A:90,W:0.3,S,LINE:829,W:1,SAVE:1,S,LINE:830,W:1,SAVE:2,S,G:-372:416,A:90,W:0.1,'
-     'LINE:831,W:0.8,SAVE:3,G:-416:200,A:90,W:3,SAVE:4,S,X,W:0.3,LOAD:3,W:0.1,SAVE:5,Q',
+     'LINE:831,W:0.8,SAVE:3,G:-416:200,A:90,W:3,SAVE:4,S,X,W:0.3,LOAD:3,W:0.1,SAVE:5,G:-416:200,A:90,W:3,'
+     'LINE:1046,W:3,SAVE:6,S,Q',
      [r'Map: E1M1: polyobject 1: 4 lines at \(-416, 384\) in sector 140',
+      r'Map: E1M1: polyobject 2: 4 lines at \(-416, 120\) in sector 140',
+      r'Udmf: Polyobj_MoveToSpot \(1, 32, 41, 0, 0\): polyobject 1',
+      r'Udmf: Polyobj_Move \(2, 16, 192, 32, 0\): polyobject 2',
       r'Udmf: Polyobj_Move \(1, 16, 64, 32, 0\): polyobject 1',
       r'Udmf: Polyobj_RotateLeft \(1, 32, 64, 0, 0\): polyobject 1',
       r'Udmf: Polyobj_DoorSlide \(1, 16, 0, 48, 35\): polyobject 1',
@@ -799,16 +803,22 @@ def check_thing_specials(config):
 
 def check_polyobjects(config):
     """tools/testdata/udmf-poly.wad: polyobject 1 after each move: north
-    to y 416, turned 90, its slide stopped by the player (x stays west of
-    -390), finished and back at -416 once the player left, and a load in
-    the middle of the slide keeping the place and the move."""
-    saves = [save_json(config, n) for n in range(1, 6)]
+    to y 416, turned 90, its slide pushing the player standing in its way
+    east, finished and back at -416, a load in the middle of the slide
+    keeping the place and the move, then sent to the map spot at (-480,
+    300); polyobject 2 mirrors its moves (south, turned the other way,
+    sliding west)."""
+    saves = [save_json(config, n) for n in range(1, 7)]
     places = [s['polyobjs'][0] for s in saves]
-    assert places[0] == [-416, 416, 0], places
-    assert places[1] == [-416, 416, 90], places
-    assert -416 < places[2][0] < -390 and saves[2]['polyMoves'], 'not stopped by the player: %s' % places
-    assert places[3] == [-416, 416, 90] and not saves[3]['polyMoves'], 'door did not come back: %s' % places
-    assert places[4][0] >= places[2][0] and saves[4]['polyMoves'], 'load lost the move: %s %s' % (places, saves[4])
+    mirror = [s['polyobjs'][1] for s in saves]
+    assert places[0] == [-416, 416, 0] and mirror[0] == [-416, 88, 0], (places, mirror)
+    assert places[1] == [-416, 416, 90] and mirror[1] == [-416, 88, 270], (places, mirror)
+    assert saves[2]['player']['x'] > -368, 'player not pushed: %s' % saves[2]['player']
+    assert -416 < places[2][0] and mirror[2][0] < -416, (places, mirror)
+    assert places[3] == [-416, 416, 90] and mirror[3] == [-416, 88, 270] and not saves[3]['polyMoves'], \
+        'doors did not come back: %s %s' % (places, mirror)
+    assert places[4][0] == places[2][0] and saves[4]['polyMoves'], 'load lost the move: %s %s' % (places, saves[4])
+    assert [round(v) for v in places[5][:2]] == [-480, 300], 'not at the spot: %s' % places
 
 
 def check_3d_floors(config):
@@ -1356,7 +1366,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'editor-udmf_edit_1.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'polyobjects_1.png', 'polyobjects_2.png', 'polyobjects_3.png', 'polyobjects_4.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'editor-udmf_edit_1.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'polyobjects_1.png', 'polyobjects_2.png', 'polyobjects_3.png', 'polyobjects_4.png', 'polyobjects_5.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
 ]

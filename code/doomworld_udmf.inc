@@ -474,20 +474,35 @@ begin
   Result := true;
 end;
 
-function TDoomWorld.TryPlacePoly(const P: Integer; const X, Y, Angle: Single): Boolean;
+function TDoomWorld.TryPlacePoly(const P: Integer; const X, Y, Angle, Thrust: Single): Boolean;
 var
-  OldX, OldY, OldAngle: Single;
+  OldX, OldY, OldAngle, NX, NY: Single;
   A: TDoomActor;
   Blocked: Boolean;
 
-  function Touches(const TX, TY, R: Single): Boolean;
+  { The first wall touching the box around (TX, TY), -1 none; its outward
+    side (the front faces out) is where Hexen thrusts what it meets. }
+  function Touches(const TX, TY, R: Single; out NX, NY: Single): Boolean;
   var
     Line: Integer;
+    DX, DY, Len: Single;
   begin
+    NX := 0;
+    NY := 0;
     for Line in FMap.Polyobjs[P].Lines do
       if SegmentInBox(FMap.Vertices[FMap.Linedefs[Line].V1].X, FMap.Vertices[FMap.Linedefs[Line].V1].Y,
          FMap.Vertices[FMap.Linedefs[Line].V2].X, FMap.Vertices[FMap.Linedefs[Line].V2].Y, TX, TY, R) then
+      begin
+        DX := FMap.Vertices[FMap.Linedefs[Line].V2].X - FMap.Vertices[FMap.Linedefs[Line].V1].X;
+        DY := FMap.Vertices[FMap.Linedefs[Line].V2].Y - FMap.Vertices[FMap.Linedefs[Line].V1].Y;
+        Len := Sqrt(DX * DX + DY * DY);
+        if Len > 0 then
+        begin
+          NX := DY / Len;
+          NY := -DX / Len;
+        end;
         Exit(true);
+      end;
     Result := false;
   end;
 
@@ -500,17 +515,26 @@ begin
   FMap.Polyobjs[P].Angle := Angle;
   FMap.PlacePolyobj(P);
   Blocked := false;
-  if (not Player.Dead) and Touches(Player.X, Player.Y, PlayerRadius) then
+  { What is in the way is thrust out (Hexen's ThrustMobj) and stops the
+    step; a crushing or hurting polyobject also hurts it. }
+  if (not Player.Dead) and Touches(Player.X, Player.Y, PlayerRadius, NX, NY) then
   begin
     Blocked := true;
+    PlayerPushVX := PlayerPushVX + NX * Thrust;
+    PlayerPushVY := PlayerPushVY + NY * Thrust;
     if FMap.Polyobjs[P].Crush or FMap.Polyobjs[P].Hurt then
       DamagePlayer(3, nil);
   end;
   for A in FActors do
     if A.Collides and (not A.Removed) and (A.State <> asDead) and
-       (A.Info^.Kind in [tkMonster, tkDecoration]) and Touches(A.DoomX, A.DoomY, A.Info^.Radius) then
+       (A.Info^.Kind in [tkMonster, tkDecoration]) and Touches(A.DoomX, A.DoomY, A.Info^.Radius, NX, NY) then
     begin
       Blocked := true;
+      if A.Info^.Kind = tkMonster then
+      begin
+        A.VelX := A.VelX + NX * Thrust;
+        A.VelY := A.VelY + NY * Thrust;
+      end;
       if (FMap.Polyobjs[P].Crush or FMap.Polyobjs[P].Hurt) and (A.Info^.Kind = tkMonster) and (A.Health > 0) then
         DamageActor(A, 3, A.DoomX, A.DoomY, A.DoomZ, nil, false);
     end;
@@ -528,9 +552,12 @@ end;
 
 function TDoomWorld.PolyAction(const Special: Integer; const Args: array of Integer): Boolean;
 var
-  P, M: Integer;
+  P, M, K: Integer;
   Move: TPolyMove;
-  Angle: Single;
+  Angle, DX, DY: Single;
+  Spots: TAcsSpots;
+  MirrorArgs: array [0..4] of Integer;
+  MirrorSpecial: Integer;
 
   function Arg(const K: Integer): Integer;
   begin
@@ -547,7 +574,8 @@ begin
   end;
   M := PolyMoving(P);
   { A moving polyobject takes only the OR_ actions. }
-  if (M >= 0) and not ((Special >= UdmfPolyOrRotateLeft) and (Special <= UdmfPolyOrMoveTimes8)) then Exit;
+  if (M >= 0) and not (((Special >= UdmfPolyOrRotateLeft) and (Special <= UdmfPolyOrMoveTimes8)) or
+     (Special = UdmfPolyOrMoveToSpot)) then Exit;
   Move := Default(TPolyMove);
   Move.Poly := P;
   Angle := Arg(2) * 360 / 256;
@@ -569,6 +597,22 @@ begin
         Move.Speed := Arg(1) / 8;
         Move.Left := Arg(3);
         if (Special = UdmfPolyMoveTimes8) or (Special = UdmfPolyOrMoveTimes8) then Move.Left := Move.Left * 8;
+      end;
+    UdmfPolyMoveToSpot, UdmfPolyOrMoveToSpot:
+      begin
+        { Straight to the thing (or map spot) with that id. }
+        Spots := AcsSpots(Arg(2));
+        if Length(Spots) = 0 then
+        begin
+          AcsLogOnce(Format('%s to thing id %d (none)', [UdmfSpecialName(Special), Arg(2)]));
+          Exit;
+        end;
+        Move.Kind := pkMove;
+        Move.Speed := Arg(1) / 8;
+        DX := Spots[0].X - FMap.Polyobjs[P].X;
+        DY := Spots[0].Y - FMap.Polyobjs[P].Y;
+        Move.Left := Sqrt(DX * DX + DY * DY);
+        Angle := RadToDeg(ArcTan2(DY, DX));
       end;
     UdmfPolyDoorSlide:
       begin
@@ -600,10 +644,57 @@ begin
     SetLength(FPolyMoves, Length(FPolyMoves) + 1);
     FPolyMoves[High(FPolyMoves)] := Move;
   end;
-  FSounds.Play('DSDOROPN');
+  PolySound(P, Move.Kind, true);
   WritelnLog('Udmf', '%s (%d, %d, %d, %d, %d): polyobject %d', [UdmfSpecialName(Special), Arg(0), Arg(1), Arg(2),
     Arg(3), Arg(4), FMap.Polyobjs[P].Number]);
   Result := true;
+  { The mirror does the same the other way: turned the other way round,
+    moved the opposite way (Hexen's mirrored polyobjects). }
+  K := FMap.FindPolyobj(FMap.Polyobjs[P].Mirror);
+  if (K >= 0) and (K <> P) and (FPolyMirrorDepth < 8) and (Special <> UdmfPolyMoveToSpot) and
+     (Special <> UdmfPolyOrMoveToSpot) then
+  begin
+    for M := 0 to 4 do MirrorArgs[M] := Arg(M);
+    MirrorArgs[0] := FMap.Polyobjs[K].Number;
+    MirrorSpecial := Special;
+    if Special = UdmfPolyRotateLeft then MirrorSpecial := UdmfPolyRotateRight
+    else if Special = UdmfPolyRotateRight then MirrorSpecial := UdmfPolyRotateLeft
+    else if Special = UdmfPolyOrRotateLeft then MirrorSpecial := UdmfPolyOrRotateRight
+    else if Special = UdmfPolyOrRotateRight then MirrorSpecial := UdmfPolyOrRotateLeft
+    else if Special <> UdmfPolyDoorSwing then
+      MirrorArgs[2] := (Arg(2) + 128) and 255;
+    Inc(FPolyMirrorDepth);
+    if PolyAction(MirrorSpecial, MirrorArgs) and (Special = UdmfPolyDoorSwing) then
+    begin
+      { A swinging door's mirror turns the other way. }
+      M := PolyMoving(K);
+      if M >= 0 then FPolyMoves[M].Speed := -FPolyMoves[M].Speed;
+    end;
+    Dec(FPolyMirrorDepth);
+  end;
+end;
+
+{ The polyobject's sounds where it is: doors open and close, the rest
+  start and stop like Doom's lifts. }
+procedure TDoomWorld.PolySound(const P: Integer; const Kind: TPolyMoveKind; const Starting: Boolean);
+var
+  Name: String;
+begin
+  if Kind in [pkSlide, pkSwing] then
+  begin
+    if Starting then Name := 'DSDOROPN' else Name := 'DSDORCLS';
+  end else
+  begin
+    if Starting then Name := 'DSPSTART' else Name := 'DSPSTOP';
+  end;
+  if FPolyEmitter = nil then
+  begin
+    FPolyEmitter := TCastleTransform.Create(nil);
+    FPolyEmitter.Name := 'PolyobjectSound';
+  end;
+  if FPolyEmitter.Parent = nil then Items.Add(FPolyEmitter);
+  FPolyEmitter.Translation := DoomToCge(FMap.Polyobjs[P].X, FMap.Polyobjs[P].Y, Player.Z + 32);
+  FSounds.PlayAt(Name, FPolyEmitter);
 end;
 
 procedure TDoomWorld.TicPolys;
@@ -625,7 +716,7 @@ begin
         FPolyMoves[I].Phase := 2;
         FPolyMoves[I].Left := FPolyMoves[I].Total;
         FPolyMoves[I].Speed := -FPolyMoves[I].Speed;
-        FSounds.Play('DSDORCLS');
+        PolySound(FPolyMoves[I].Poly, FPolyMoves[I].Kind, false);
       end;
     end else
     begin
@@ -644,7 +735,7 @@ begin
       { Keep the angle in 0..360 so saves stay small. }
       if Angle >= 360 then Angle := Angle - 360;
       if Angle < 0 then Angle := Angle + 360;
-      if TryPlacePoly(FPolyMoves[I].Poly, X, Y, Angle) and (FPolyMoves[I].Left >= 0) then
+      if TryPlacePoly(FPolyMoves[I].Poly, X, Y, Angle, Max(2, Step)) and (FPolyMoves[I].Left >= 0) then
       begin
         FPolyMoves[I].Left := FPolyMoves[I].Left - Step;
         if FPolyMoves[I].Left <= 1e-4 then
@@ -654,7 +745,11 @@ begin
             FPolyMoves[I].Phase := 1;
             FPolyMoves[I].Wait := FPolyMoves[I].Delay;
           end else
+          begin
             Done := true;
+            if FPolyMoves[I].Kind in [pkRotate, pkMove] then
+              PolySound(FPolyMoves[I].Poly, FPolyMoves[I].Kind, false);
+          end;
         end;
       end;
     end;

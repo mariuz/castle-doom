@@ -312,7 +312,9 @@ now. The BSP and the subsectors stay as built (with the lines at their
 drawn place), which is fine: nothing walks or draws there. The world's
 `TPolyMove` list turns or slides a polyobject a step a tic through
 `TryPlacePoly`, which puts the step back when the player or a solid
-thing is in the way.
+thing is in the way and thrusts that out along the touching wall's
+outward side. `PolyAction` starts the same action, mirrored, on the
+polyobject's mirror.
 
 ### 3D floors (`TDoomMap.Build3dFloors`, `Floors3D`)
 

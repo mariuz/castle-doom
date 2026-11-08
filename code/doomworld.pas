@@ -251,6 +251,9 @@ type
       player set off the last special from. }
     FAcs: TAcsVM;
     FPolyMoves: array of TPolyMove;
+    { Where polyobject sounds come from; how deep mirrored actions go. }
+    FPolyEmitter: TCastleTransform;
+    FPolyMirrorDepth: Integer;
     FAcsHost: TAcsHost;
     FAcsGlobals: TAcsGlobals;
     FAcsLogged: TStringList;
@@ -446,8 +449,9 @@ type
     { Move polyobject P to (X, Y) turned Angle; false (and left where it
       was, the things in the way hurt when it crushes) when a thing is in
       the way. }
-    function TryPlacePoly(const P: Integer; const X, Y, Angle: Single): Boolean;
+    function TryPlacePoly(const P: Integer; const X, Y, Angle, Thrust: Single): Boolean;
     function PolyMoving(const P: Integer): Integer;
+    procedure PolySound(const P: Integer; const Kind: TPolyMoveKind; const Starting: Boolean);
     procedure RestorePolyobjs(const Places, Moves: TJSONArray);
   public
     { The polyobject with this number moves (ACS's PolyWait). }
@@ -1194,6 +1198,7 @@ begin
   FreeAndNil(FAcsLogged);
   FreeAndNil(FPlayerEmitter);
   FreeAndNil(FMovers);
+  FreeAndNil(FPolyEmitter);
   FreeAndNil(FActors);
   FreeAndNil(FSpriteBatch);
   FreeAndNil(FSpritesGroup);
@@ -1244,6 +1249,9 @@ begin
   ClearGhost;
   FreeAndNil(FAcs);
   FMovers.Clear;
+  FPolyMoves := nil;
+  if (FPolyEmitter <> nil) and (FPolyEmitter.Parent <> nil) then
+    FPolyEmitter.Parent.Remove(FPolyEmitter);
   for A in FActors do
     if A.Parent <> nil then
       A.Parent.Remove(A);

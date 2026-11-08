@@ -6,6 +6,9 @@
   placed at their start spots, turned and slid by `Polyobj_RotateLeft` / `RotateRight`,
   `Move`, `MoveTimes8`, `DoorSlide`, `DoorSwing` and the `OR_` actions, blocked by (or
   crushing) what stands in the way; scripts wait for them (`PolyWait`), saves keep them.
+  Mirrored polyobjects copy each move the other way, `Polyobj_MoveToSpot` sends one to a
+  spot, things in the way are pushed aside, walls take the heights of the sector they are
+  in now, and their sounds come from where they are.
 - UDMF maps: `Thing_Move`, `Plane_Copy` and ZDoom's plane-copying things (9510, 9511), the
   slope things 9500-9503, platforms that go up and come back (`Plat_UpWaitDownStay`,
   `Plat_UpNearestWaitDownStay`, `Plat_DownByValue`, `Plat_UpByValue`), and named ACS

@@ -104,8 +104,12 @@ type
     RelX, RelY: array of Single;
     { Where the anchor point is now and the turn (degrees, counter-clockwise). }
     X, Y, Angle: Single;
-    { The start spot's sector: its walls take this sector's heights and light. }
-    Sector: Integer;
+    { The start spot's sector, whose chunk draws the walls; the walls take
+      the heights and light of the sector the anchor point is in now
+      (CurSector, kept by PlacePolyobj). }
+    Sector, CurSector: Integer;
+    { The polyobject that does every move of this one mirrored, 0 none. }
+    Mirror: Integer;
     Crush, Hurt: Boolean;
   end;
 
@@ -241,7 +245,7 @@ type
       order, explicit) for BuildPolyobjs; the polyobjects' lines, which
       the line grid always returns (they move). }
     FPolyStarts: array of record
-      Line, Number, Order: Integer;
+      Line, Number, Order, Mirror: Integer;
       Explicit: Boolean;
     end;
     FPolyLines: array of Integer;
@@ -1004,6 +1008,11 @@ begin
             FPolyStarts[High(FPolyStarts)].Number := Args[0];
             FPolyStarts[High(FPolyStarts)].Order := Args[1];
             FPolyStarts[High(FPolyStarts)].Explicit := UdmfInt(B^, 'special') = 5;
+            { StartLine (po, mirror, sound), ExplicitLine (po, order, mirror, sound). }
+            if UdmfInt(B^, 'special') = 5 then
+              FPolyStarts[High(FPolyStarts)].Mirror := Args[2]
+            else
+              FPolyStarts[High(FPolyStarts)].Mirror := Args[1];
             Inc(NL);
             Continue;
           end;
@@ -1231,6 +1240,11 @@ begin
     P := Length(Polyobjs);
     SetLength(Polyobjs, P + 1);
     Polyobjs[P].Number := FPolyStarts[K].Number;
+    Polyobjs[P].Mirror := 0;
+    for I := 0 to High(FPolyStarts) do
+      if (FPolyStarts[I].Number = FPolyStarts[K].Number) and (FPolyStarts[I].Mirror <> 0) then
+        Polyobjs[P].Mirror := FPolyStarts[I].Mirror;
+    Polyobjs[P].CurSector := -1;
     Polyobjs[P].Lines := Lines;
     Polyobjs[P].Crush := Things[Spot].TypeNum = 9302;
     Polyobjs[P].Hurt := Things[Spot].TypeNum = 9303;
@@ -1289,9 +1303,25 @@ end;
 
 procedure TDoomMap.PlacePolyobj(const P: Integer);
 var
-  I: Integer;
+  I, Sec, L: Integer;
   C, S: Single;
 begin
+  { The walls stand in the sector the polyobject is in now. }
+  Sec := SectorAt(Polyobjs[P].X, Polyobjs[P].Y);
+  if (Sec >= 0) and (Sec <> Polyobjs[P].CurSector) then
+  begin
+    Polyobjs[P].CurSector := Sec;
+    for L in Polyobjs[P].Lines do
+    begin
+      Linedefs[L].FrontSector := Sec;
+      if Linedefs[L].Side[0] >= 0 then Sidedefs[Linedefs[L].Side[0]].Sector := Sec;
+      if Linedefs[L].Side[1] >= 0 then
+      begin
+        Linedefs[L].BackSector := Sec;
+        Sidedefs[Linedefs[L].Side[1]].Sector := Sec;
+      end;
+    end;
+  end;
   C := Cos(DegToRad(Polyobjs[P].Angle));
   S := Sin(DegToRad(Polyobjs[P].Angle));
   for I := 0 to High(Polyobjs[P].Verts) do
