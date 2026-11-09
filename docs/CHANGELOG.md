@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.62.0 (2026-11-09)
 
 - 3D floors: water slabs the player swims in (the view tinted under the surface, floating at
   it), the control sector's light under a slab, and sloped slabs.
