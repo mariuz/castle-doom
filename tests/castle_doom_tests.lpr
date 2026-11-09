@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf, DoomGldefs, DoomAcs;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf, DoomGldefs, DoomAcs, DoomSoundSeq;
 
 function DataPath(const Name: String): String;
 begin
@@ -74,6 +74,7 @@ type
     procedure Test3dWater;
     procedure TestThingSpecials;
     procedure TestPolyobjs;
+    procedure TestSoundSeq;
     procedure TestDynScrollers;
     procedure TestDeepWater;
     procedure TestSectorSkies;
@@ -1361,6 +1362,38 @@ begin
   end;
 end;
 
+{ DoomSoundSeq: SNDINFO names and SNDSEQ sequences (comments, a
+  repeating start, a stop sound, a later sequence replacing one). }
+procedure TTestMap.TestSoundSeq;
+var
+  Q: TSoundSequences;
+  K: Integer;
+begin
+  Q := TSoundSequences.Create;
+  try
+    Q.ParseSndInfo('// sounds' + LineEnding + 'poly/start dsstnmov' + LineEnding + '$random x { a b }' +
+      LineEnding + 'Poly/Stop  DSPSTOP ; stop' + LineEnding);
+    AssertEquals('logical names', 2, Q.LogicalCount);
+    AssertEquals('lump', 'DSSTNMOV', Q.LumpOf('POLY/START'));
+    AssertEquals('a lump name', 'DSDOROPN', Q.LumpOf('dsdoropn'));
+    Q.ParseSndSeq(':PolyStone' + LineEnding + '  door 1' + LineEnding + '  playrepeat poly/start' + LineEnding +
+      '  stopsound poly/stop' + LineEnding + 'end' + LineEnding + ':Lift' + LineEnding + ' platform 1' + LineEnding +
+      ' play plats/pt1_strt' + LineEnding + 'end' + LineEnding);
+    AssertEquals('sequences', 2, Length(Q.Sequences));
+    K := Q.Find(skDoor, 1);
+    AssertEquals('door 1', 0, K);
+    AssertEquals('start', 'poly/start', Q.Sequences[K].StartSound);
+    AssertTrue('repeats', Q.Sequences[K].Repeating);
+    AssertEquals('stop', 'poly/stop', Q.Sequences[K].StopSound);
+    AssertEquals('platform', 1, Q.Find(skPlatform, 1));
+    AssertEquals('none', -1, Q.Find(skDoor, 2));
+    Q.ParseSndSeq(':Other' + LineEnding + 'door 1' + LineEnding + 'play dsdoropn' + LineEnding + 'end');
+    AssertEquals('replaced', 2, Q.Find(skDoor, 1));
+  finally
+    FreeAndNil(Q);
+  end;
+end;
+
 { Polyobject 1 of tools/testdata/udmf-poly.wad: its four lines moved from
   the container out in the void to the start spot (-416, 384) in sector
   140, turned by PlacePolyobj, always among the line grid's answers. }
@@ -1405,6 +1438,7 @@ begin
       AssertEquals('none', -1, M.FindPolyobj(3));
       AssertEquals('mirror', 2, M.Polyobjs[0].Mirror);
       AssertEquals('no mirror', 0, M.Polyobjs[1].Mirror);
+      AssertEquals('sound sequence', 1, M.Polyobjs[0].Sound);
       AssertEquals('lines', 4, Length(M.Polyobjs[0].Lines));
       AssertEquals('vertices', 4, Length(M.Polyobjs[0].Verts));
       AssertEquals('sector', 140, M.Polyobjs[0].Sector);

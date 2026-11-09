@@ -457,6 +457,8 @@ TESTS = [
      [r'Map: E1M1: polyobject 1: 4 lines at \(-416, 384\) in sector 140',
       r'Map: E1M1: polyobject 2: 4 lines at \(-416, 120\) in sector 140',
       r'Udmf: Polyobj_MoveToSpot \(1, 32, 41, 0, 0\): polyobject 1',
+      r'Sound: SNDSEQ: 1 sequences, SNDINFO: 2 sounds',
+      r'Sound: polyobject 1: PolyStone starts \(DSSTNMOV\)', r'Sound: polyobject 1: PolyStone stops \(DSPSTOP\)',
       r'Udmf: Polyobj_Move \(2, 16, 192, 32, 0\): polyobject 2',
       r'Udmf: Polyobj_Move \(1, 16, 64, 32, 0\): polyobject 1',
       r'Udmf: Polyobj_RotateLeft \(1, 32, 64, 0, 0\): polyobject 1',

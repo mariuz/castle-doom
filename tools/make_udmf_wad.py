@@ -147,6 +147,10 @@ SLOPE_LINE_IDS = {1049: 50}
 # Polyobject 2, the same slab, mirrors every move of 1 (StartLine arg1)
 # from (-416, 120); line 1046 sends 1 to the map spot 41 at (-480, 300)
 # (Polyobj_MoveToSpot).
+# Polyobject 1's sounds (StartLine arg2 = 1): SNDSEQ's door sequence 1,
+# its logical names given lumps by SNDINFO.
+POLY_SNDINFO = b'// polyobject sounds\npoly/start dsstnmov\npoly/stop dspstop\n'
+POLY_SNDSEQ = b':PolyStone\n  door 1\n  playrepeat poly/start\n  stopsound poly/stop\nend\n'
 POLY_CONTAINER = (-3000, -2000)
 POLY_SHAPE = [(-2968, -1944), (-2904, -1944), (-2904, -1928), (-2968, -1928)]
 POLY_SHAPE2 = [(-2968, -1904), (-2904, -1904), (-2904, -1888), (-2968, -1888)]
@@ -406,7 +410,7 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
         # line Polyobj_StartLine(1).
         x, y = POLY_CONTAINER
         loops = [([(x, y), (x, y + 128), (x + 128, y + 128), (x + 128, y)], 'STARTAN3', None),
-                 (POLY_SHAPE, 'DOOR3', (1, 1, 2)), (POLY_SHAPE2, 'DOOR3', (1, 2))]
+                 (POLY_SHAPE, 'DOOR3', (1, 1, 2, 1)), (POLY_SHAPE2, 'DOOR3', (1, 2))]
         for corners, tex, start in loops:
             for (cx, cy) in corners:
                 out.append('vertex\n{\nx = %d.0;\ny = %d.0;\n}\n' % (cx, cy))
@@ -466,7 +470,8 @@ def main():
                ('AUTOLIB', make_acs.behavior('E', make_acs.autolib_program('E'))), ('A_END', b''),
                ('LOADACS', b'// libraries for every map\nAUTOLIB\n')])
     write_wad(os.path.join(outdir, 'udmf-poly.wad'),
-              [('E1M1', b''), ('TEXTMAP', textmap(True, polys=True)), ('ENDMAP', b'')])
+              [('E1M1', b''), ('TEXTMAP', textmap(True, polys=True)), ('ENDMAP', b''),
+               ('SNDINFO', POLY_SNDINFO), ('SNDSEQ', POLY_SNDSEQ)])
     write_wad(os.path.join(outdir, 'udmf-doom.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(False)), ('ZNODES', b'XGLN' + zn.gl(False, False)),
                ('ENDMAP', b'')])

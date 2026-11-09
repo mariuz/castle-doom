@@ -110,6 +110,8 @@ type
     Sector, CurSector: Integer;
     { The polyobject that does every move of this one mirrored, 0 none. }
     Mirror: Integer;
+    { Its sound sequence: SNDSEQ's door sequence with this number. }
+    Sound: Integer;
     Crush, Hurt: Boolean;
   end;
 
@@ -249,7 +251,7 @@ type
       order, explicit) for BuildPolyobjs; the polyobjects' lines, which
       the line grid always returns (they move). }
     FPolyStarts: array of record
-      Line, Number, Order, Mirror: Integer;
+      Line, Number, Order, Mirror, Sound: Integer;
       Explicit: Boolean;
     end;
     FPolyLines: array of Integer;
@@ -1024,9 +1026,14 @@ begin
             FPolyStarts[High(FPolyStarts)].Explicit := UdmfInt(B^, 'special') = 5;
             { StartLine (po, mirror, sound), ExplicitLine (po, order, mirror, sound). }
             if UdmfInt(B^, 'special') = 5 then
-              FPolyStarts[High(FPolyStarts)].Mirror := Args[2]
-            else
+            begin
+              FPolyStarts[High(FPolyStarts)].Mirror := Args[2];
+              FPolyStarts[High(FPolyStarts)].Sound := Args[3];
+            end else
+            begin
               FPolyStarts[High(FPolyStarts)].Mirror := Args[1];
+              FPolyStarts[High(FPolyStarts)].Sound := Args[2];
+            end;
             Inc(NL);
             Continue;
           end;
@@ -1255,9 +1262,13 @@ begin
     SetLength(Polyobjs, P + 1);
     Polyobjs[P].Number := FPolyStarts[K].Number;
     Polyobjs[P].Mirror := 0;
+    Polyobjs[P].Sound := 0;
     for I := 0 to High(FPolyStarts) do
-      if (FPolyStarts[I].Number = FPolyStarts[K].Number) and (FPolyStarts[I].Mirror <> 0) then
-        Polyobjs[P].Mirror := FPolyStarts[I].Mirror;
+      if FPolyStarts[I].Number = FPolyStarts[K].Number then
+      begin
+        if FPolyStarts[I].Mirror <> 0 then Polyobjs[P].Mirror := FPolyStarts[I].Mirror;
+        if FPolyStarts[I].Sound <> 0 then Polyobjs[P].Sound := FPolyStarts[I].Sound;
+      end;
     Polyobjs[P].CurSector := -1;
     Polyobjs[P].Lines := Lines;
     Polyobjs[P].Crush := Things[Spot].TypeNum = 9302;

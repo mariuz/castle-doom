@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 62 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 63 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -985,7 +985,10 @@ autotest only checks the library loads.
   (`Udmf: Polyobj_DoorSlide (1, 16, 0, 48, 35): polyobject 1`),
   pushing a player in its way; polyobject 2 (at (-416, 120)) mirrors
   each move (`Polyobj_Move (2, 16, 192, 32, 0)`) and `LINE:1046` sends 1
-  to map spot 41 at (-480, 300) (`Polyobj_MoveToSpot`); saves
+  to map spot 41 at (-480, 300) (`Polyobj_MoveToSpot`); its SNDSEQ
+  door sequence 1 plays through SNDINFO's names (log `Sound:
+  polyobject 1: PolyStone starts (DSSTNMOV)`, unit test
+  `TestSoundSeq`); saves
   hold `polyobjs` ([x, y, angle]) and `polyMoves` (autotest
   `polyobjects` with goldens, unit test `TestPolyobjs`).
   Thing actions: `udmf-things.wad` (same script) has a map spot (id 20)

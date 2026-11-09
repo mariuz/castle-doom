@@ -679,6 +679,7 @@ end;
 procedure TDoomWorld.PolySound(const P: Integer; const Kind: TPolyMoveKind; const Starting: Boolean);
 var
   Name: String;
+  Seq: Integer;
 begin
   if Kind in [pkSlide, pkSwing] then
   begin
@@ -686,6 +687,19 @@ begin
   end else
   begin
     if Starting then Name := 'DSPSTART' else Name := 'DSPSTOP';
+  end;
+  { Hexen's polyobjects play their door sound sequence (StartLine's
+    arg2) from SNDSEQ, its sounds named through SNDINFO. }
+  Seq := -1;
+  if FSoundSeqs <> nil then Seq := FSoundSeqs.Find(skDoor, FMap.Polyobjs[P].Sound);
+  if Seq >= 0 then
+  begin
+    if Starting then Name := FSoundSeqs.Sequences[Seq].StartSound
+    else Name := FSoundSeqs.Sequences[Seq].StopSound;
+    if Name = '' then Exit;
+    Name := FSoundSeqs.LumpOf(Name);
+    WritelnLog('Sound', 'polyobject %d: %s %s (%s)', [FMap.Polyobjs[P].Number, FSoundSeqs.Sequences[Seq].Name,
+      BoolToStr(Starting, 'starts', 'stops'), Name]);
   end;
   if FPolyEmitter = nil then
   begin

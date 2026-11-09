@@ -27,6 +27,16 @@ L = several days). Items inside a section are in suggested order.
   `arg0str`, `TDoomMap.LineArg0Str`; `SCRIPTWAITNAMED`).
   `udmf-slopes.wad` and `udmf-things.wad` cover them.
 
+- Polyobjects, the rest: their sound sequences (StartLine's arg2,
+  ExplicitLine's arg3: SNDSEQ's door sequence of that number, its
+  logical sounds named by SNDINFO; `DoomSoundSeq`, read when a map has
+  polyobjects: log `Sound: SNDSEQ: 1 sequences, SNDINFO: 2 sounds` and
+  `polyobject 1: PolyStone starts (DSSTNMOV)`; a repeating sound plays
+  once) and their walls redrawn when the sector they stand in changes
+  (`TDoomGeometry.SectorChanged`). `udmf-poly.wad` has a SNDINFO and a
+  SNDSEQ; unit test `TestSoundSeq`. Left: Hexen-format maps (see the
+  next three).
+
 - 3D floors (UDMF, stage 3): slabs follow sloped control sectors
   (`TDoomMap.SlabTop` / `SlabBottom` read the control's plane wherever
   a height is needed: the drawn faces and sides, `FloorAtZ`,
@@ -1536,9 +1546,11 @@ play.
 
 ## Suggested next three
 
-1. Polyobjects, the rest (S): SNDSEQ sound sequences (Hexen's own
-   sounds per polyobject), polyobjects in Hexen-format (binary) maps,
-   a moving polyobject redrawn when the sector it is in changes height.
+1. Hexen-format maps (M-L): the binary map format with BEHAVIOR (16-byte
+   linedefs with an action and five arguments, 20-byte things with
+   ids, heights, actions), read into the same records the UDMF loader
+   fills, so their scripts, polyobjects and thing actions work as they
+   do in UDMF maps; the map editor reading them too.
 2. 3D floors, the rest (S-M): monsters and missiles in water (they
    ignore it), the water's own colour from the control sector
    (`fadecolor`), vertex-height control sectors, sounds blocked by

@@ -13,7 +13,7 @@ interface
 uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
   DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting, DoomStates,
-  DoomGeneralized, DoomDemo, DoomUdmf, DoomAcs;
+  DoomGeneralized, DoomDemo, DoomUdmf, DoomAcs, DoomSoundSeq;
 
 const
   TicRate = 35;
@@ -258,6 +258,8 @@ type
     { Where polyobject sounds come from; how deep mirrored actions go. }
     FPolyEmitter: TCastleTransform;
     FPolyMirrorDepth: Integer;
+    { The WADs' SNDINFO and SNDSEQ (polyobjects' sounds). }
+    FSoundSeqs: TSoundSequences;
     FAcsHost: TAcsHost;
     FAcsGlobals: TAcsGlobals;
     FAcsLogged: TStringList;
@@ -1207,6 +1209,7 @@ begin
   FreeAndNil(FPlayerEmitter);
   FreeAndNil(FMovers);
   FreeAndNil(FPolyEmitter);
+  FreeAndNil(FSoundSeqs);
   FreeAndNil(FActors);
   FreeAndNil(FSpriteBatch);
   FreeAndNil(FSpritesGroup);
@@ -1650,6 +1653,14 @@ begin
   BuildWeaponSeqs;
   SyncProjectileInfos;
   FMap := TDoomMap.Create(FWad, MapName);
+  if Length(FMap.Polyobjs) > 0 then
+  begin
+    if FSoundSeqs = nil then FSoundSeqs := TSoundSequences.Create;
+    FSoundSeqs.LoadFromWad(FWad);
+    if Length(FSoundSeqs.Sequences) > 0 then
+      WritelnLog('Sound', 'SNDSEQ: %d sequences, SNDINFO: %d sounds', [Length(FSoundSeqs.Sequences),
+        FSoundSeqs.LogicalCount]);
+  end;
   { A new game clears ACS's world and global variables. }
   if (State = nil) and not KeepInventory then
     FAcsGlobals.Clear;

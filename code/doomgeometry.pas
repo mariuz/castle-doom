@@ -1603,11 +1603,20 @@ end;
 procedure TDoomGeometry.SectorChanged(const Sec: Integer);
 var
   C: TMapChunk;
+  P: Integer;
 begin
   if (Sec < 0) or (Sec > High(FSectorDependents)) then Exit;
   for C in FSectorDependents[Sec] do
     if FDirty.IndexOf(C) < 0 then
       FDirty.Add(C);
+  { A polyobject standing in this sector takes its heights: its walls
+    are in its start spot's chunk. }
+  for P := 0 to High(FMap.Polyobjs) do
+    if (FMap.Polyobjs[P].CurSector = Sec) and (FMap.Polyobjs[P].Sector <> Sec) and
+       (FMap.Polyobjs[P].Sector >= 0) then
+      for C in FSectorDependents[FMap.Polyobjs[P].Sector] do
+        if FDirty.IndexOf(C) < 0 then
+          FDirty.Add(C);
 end;
 
 function TDoomGeometry.SectorOwnSky(const Sec: Integer; out Texture: String; out Flipped: Boolean): Boolean;

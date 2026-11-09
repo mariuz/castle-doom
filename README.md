@@ -194,7 +194,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) and, for UZDoom-style rendering (slopes, 3D floors,
 coloured light, models, post-processing), [docs/RENDERING_ROADMAP.md](docs/RENDERING_ROADMAP.md).
-Headlines: monsters ignore 3D floors' water, no polyobject sound sequences,
+Headlines: no Hexen-format maps (UDMF ones work), monsters ignore 3D floors' water,
 DeHackEd patches cannot rename sprites or sounds (BEX `[SPRITES]` / `[SOUNDS]`),
 the browser's music is the approximate FM model (no OPL3 emulator there).
 

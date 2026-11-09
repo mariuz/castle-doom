@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Polyobjects play their sound sequences (SNDSEQ, with SNDINFO's sound names), and their
+  walls follow the floor and ceiling of the sector they stand in as it moves.
+
 ## v0.62.0 (2026-11-09)
 
 - 3D floors: water slabs the player swims in (the view tinted under the surface, floating at
