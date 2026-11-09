@@ -25,6 +25,8 @@ type
     FPaletteFlash: TCastleRectangleControl;
     { Boom's deep water colormaps as a tint of the 3D view and the weapon. }
     FColormapTint: TCastleRectangleControl;
+    { The navigation swims (FWorld.Swimming). }
+    FSwimNav: Boolean;
     FPaletteTints: array [0..13] of TVector4;
     FInfoLabel, FHelpLabel: TCastleLabel;
     FWorldStatus: TDoomWorldStatus;
@@ -496,6 +498,7 @@ end;
 procedure TViewPlay.SetupNavigation;
 begin
   FNavigation.Gravity := true;
+  FSwimNav := false;
   FNavigation.PreferredHeight := PlayerViewHeight;
   FNavigation.Radius := 14;
   FNavigation.ClimbHeight := 24;
@@ -1543,6 +1546,7 @@ begin
   begin
     FViewport.Camera.SetView(FPhotoPos, FPhotoDir, FPhotoUp);
     FNavigation.Gravity := true;
+    FSwimNav := false;
     FNavigation.CheckCollisions := true;
     FNavigation.PreferGravityUpForMoving := true;
     FNavigation.HeadBobbing := 0.03;
@@ -2829,7 +2833,7 @@ var
   Lift, MaxEye: Single;
   Sec: Integer;
   CamPos, CamDir, TurnPos, TurnDir, TurnUp: TVector3;
-  Feet: TVector3;
+  Feet, SwimEye: TVector3;
   P: TPlayerState;
   PerfT: TTimerResult;
   Elapsed: Double;
@@ -3115,6 +3119,22 @@ begin
 
   P := FWorld.Player;
   FPaletteFlash.Color := FPaletteTints[FWorld.PaletteIndex];
+  { Swimming in a 3D floor's water: no gravity, moving where the view
+    looks (up and down too). }
+  if (not FPhoto) and (FWorld.Swimming <> FSwimNav) then
+  begin
+    FSwimNav := FWorld.Swimming;
+    FNavigation.Gravity := not FSwimNav;
+    FNavigation.PreferGravityUpForMoving := not FSwimNav;
+    if not FSwimNav then FNavigation.CancelFalling;
+  end;
+  { Afloat: the feet stay 8 units under the surface (the head out). }
+  if FSwimNav and not FPhoto then
+  begin
+    SwimEye := CgeToDoom(FViewport.Camera.Translation);
+    if SwimEye.Z - PlayerViewHeight > FWorld.SwimSurface - 8 then
+      FViewport.Camera.Translation := DoomToCge(SwimEye.X, SwimEye.Y, FWorld.SwimSurface - 8 + PlayerViewHeight);
+  end;
   FColormapTint.Color := FWorld.ColormapTint;
   FColormapTint.Exists := (FWorld.ColormapTint.W > 0) and not FAutomap.Exists;
   { Doom's colormaps: the gun flash lights the room, invulnerability and

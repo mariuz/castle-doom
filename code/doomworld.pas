@@ -179,6 +179,10 @@ type
     { Boom's deep water: the colormap of the viewer's region and its tint. }
     FColormapName: String;
     FColormapTint: TVector4;
+    { A swimmable 3D floor the eye is in (-1 none); the player swims. }
+    FWaterSlab: Integer;
+    FSwimming: Boolean;
+    FSwimSurface: Single;
     FWad: TDoomWad;
     FGraphics: TDoomGraphics;
     FSounds: TDoomSounds;
@@ -679,6 +683,10 @@ type
     { The colormap of the viewer's deep water region as a screen tint
       (RGB, opacity; zero when none). }
     property ColormapTint: TVector4 read FColormapTint;
+    { The player is in a swimmable 3D floor (the view lets it swim). }
+    property Swimming: Boolean read FSwimming;
+    { While swimming: the water's top above the player. }
+    property SwimSurface: Single read FSwimSurface;
     { R_SetupFrame's fixedcolormap: InverseColormap during invulnerability,
       colormap 1 with the light amplification visor (both blink in their
       last 4 seconds), NoFixedColormap otherwise. }
@@ -1250,6 +1258,8 @@ begin
   FreeAndNil(FAcs);
   FMovers.Clear;
   FPolyMoves := nil;
+  FWaterSlab := -1;
+  FSwimming := false;
   if (FPolyEmitter <> nil) and (FPolyEmitter.Parent <> nil) then
     FPolyEmitter.Parent.Remove(FPolyEmitter);
   for A in FActors do
@@ -1516,7 +1526,8 @@ begin
     A.Look := FSectorLook[Sec]
   else
     A.Look := 0;
-  A.SetLight(FMap.Sectors[Sec].LightLevel);
+  { Under a 3D floor that casts its light down: the control's light. }
+  A.SetLight(FMap.LightAt(Sec, A.DoomX, A.DoomY, A.DoomZ + A.Info^.Height / 2));
 end;
 
 procedure TDoomWorld.SpawnThings;
@@ -3356,7 +3367,8 @@ end;
 
 procedure TDoomWorld.UpdateWaterView(const EyeZ: Single);
 var
-  H, Region: Integer;
+  H, Region, Slab, K: Integer;
+  Swim: Boolean;
   View: TWaterView;
   Name: String;
   Tint: TVector3;
@@ -3380,6 +3392,48 @@ begin
     end;
     Name := FMap.WaterColormaps[Player.Sector][Region];
   end;
+  { A swimmable 3D floor: the view tinted while the eye is in it, the
+    player swimming while the body is. }
+  Slab := -1;
+  if (H < 0) and (Player.Sector >= 0) then
+    Slab := FMap.WaterSlabAt(Player.Sector, Player.X, Player.Y, EyeZ);
+  { Swimming while the feet are in it; the view keeps them a little
+    under the surface (SwimSurface), so the player floats there. }
+  K := -1;
+  { Once swimming, a frame's step above the clamped float height still
+    counts as in the water. }
+  if Player.Sector >= 0 then
+  begin
+    K := FMap.WaterSlabAt(Player.Sector, Player.X, Player.Y, Player.Z + 4);
+    if (K < 0) and FSwimming then
+      K := FMap.WaterSlabAt(Player.Sector, Player.X, Player.Y, Player.Z - 8);
+  end;
+  Swim := K >= 0;
+  if Swim then FSwimSurface := FMap.SlabTop(K, Player.X, Player.Y);
+  if Swim <> FSwimming then
+  begin
+    FSwimming := Swim;
+    if Swim then
+      WritelnLog('Water', 'Swimming (sector %d, z %.1f, eye %.1f)', [Player.Sector, Player.Z, EyeZ])
+    else
+      WritelnLog('Water', 'Out of the water (sector %d, z %.1f, eye %.1f)', [Player.Sector, Player.Z, EyeZ]);
+  end;
+  if (Slab >= 0) <> (FWaterSlab >= 0) then
+  begin
+    if Slab >= 0 then
+    begin
+      WritelnLog('Water', 'View in a swimmable 3D floor (sector %d, control %d)', [Player.Sector,
+        FMap.Floors3D[Slab].Control]);
+      FColormapName := '3D water';
+      FColormapTint := Vector4(0.1, 0.25, 0.55, 0.45);
+    end else
+    begin
+      FColormapName := '';
+      FColormapTint := Vector4(0, 0, 0, 0);
+    end;
+  end;
+  FWaterSlab := Slab;
+  if Slab >= 0 then Exit;
   if View <> FGeometry.WaterView then
     WritelnLog('Water', 'View %s (sector %d, control %d)', [WaterViewNames[View], Player.Sector, H]);
   FGeometry.WaterView := View;

@@ -334,7 +334,14 @@ the slabs through the walk navigation's collision. The simulation asks
 actor's feet + 24, `SlabSideZ`: a slab whose middle is below is a
 floor, above a ceiling; `LineOpening` takes that height for moves)
 and `SlabHit` (a segment sampled every 8 units against the slabs of
-the sectors it passes) for missiles, hitscans, autoaim and sight.
+the sectors it passes) for missiles, hitscans, autoaim and sight. A
+slab's heights come from `SlabTop` / `SlabBottom` (the control's
+planes, so sloped slabs work everywhere). Light: `LightAt` gives the
+control's light up to the top of the lowest slab that casts it, which
+the floor flat, the wall pieces under it (`EmitWall` splits the quad)
+and things there use. Swimmable slabs are not solid; the world's
+`UpdateWaterView` tints the view while the eye is in one and sets
+`Swimming`, which the play view turns into gravity-free movement.
 
 ### ACS scripts (`DoomAcs`, `doomworld_acs.inc`)
 

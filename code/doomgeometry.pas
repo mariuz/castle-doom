@@ -136,6 +136,9 @@ type
     FBuilt: Boolean;
     FRootSolid, FRootPassable, FRootCollision: TX3DRootNode;
     FEmitMode: TEmitMode;
+    { The sector whose side EmitWall draws (-1 none): below a 3D floor
+      that casts its light down, the wall takes the control's light. }
+    FWallSec: Integer;
     { What collision mode discards (passable middle textures). }
     FDiscard: TGeomBatch;
     function IsWaterLine(const Line: Integer): Boolean;
@@ -503,6 +506,7 @@ begin
   inherited Create;
   FOwner := AOwner;
   Name := AName;
+  FWallSec := -1;
   FBatches := TGeomBatchDict.Create([doOwnsValues]);
   SceneSolid := TCastleScene.Create(nil);
   SceneSolid.PreciseCollisions := true;
@@ -638,7 +642,10 @@ procedure TMapChunk.EmitWall(const B: TGeomBatch; const AX, AY, BX, BY: Single;
   const TexTopZ: Single; const Img: TDoomImage; const Light: TVector2;
   const ScaleX, ScaleY: Single);
 var
-  TopA, TopB: Single;
+  TopA, TopB, HA, HB, Best: Single;
+  Map: TDoomMap;
+  K, Slab: Integer;
+  Below: TVector2;
 
   { Doom texture rows count from the top; X3D v grows upward. A UDMF
     scale is texels a map unit (2: the texture half as big). }
@@ -650,6 +657,46 @@ var
 begin
   TopA := Max(ZTopA, ZBottomA);
   TopB := Max(ZTopB, ZBottomB);
+  { The lowest 3D floor of the side's sector that casts its light down:
+    the part of the wall under its top is drawn in that light. }
+  Map := FOwner.Map;
+  Slab := -1;
+  if (FWallSec >= 0) and (FWallSec <= High(Map.SectorFloors3D)) then
+  begin
+    Best := 1e30;
+    for K in Map.SectorFloors3D[FWallSec] do
+      if Map.Floors3D[K].LightBelow and (Map.SlabTop(K, (AX + BX) / 2, (AY + BY) / 2) < Best) then
+      begin
+        Best := Map.SlabTop(K, (AX + BX) / 2, (AY + BY) / 2);
+        Slab := K;
+      end;
+  end;
+  if Slab >= 0 then
+  begin
+    HA := Map.SlabTop(Slab, AX, AY);
+    HB := Map.SlabTop(Slab, BX, BY);
+    if (ZBottomA < HA) or (ZBottomB < HB) then
+    begin
+      Below := Light;
+      Below.X := Map.Sectors[Map.Floors3D[Slab].Control].LightLevel;
+      B.AddQuad(
+        DoomToCge(AX, AY, ZBottomA), DoomToCge(BX, BY, ZBottomB),
+        DoomToCge(BX, BY, Max(ZBottomB, Min(TopB, HB))), DoomToCge(AX, AY, Max(ZBottomA, Min(TopA, HA))),
+        Vector2(U0 * ScaleX / Img.Width, V(ZBottomA)), Vector2(U1 * ScaleX / Img.Width, V(ZBottomB)),
+        Vector2(U1 * ScaleX / Img.Width, V(Max(ZBottomB, Min(TopB, HB)))),
+        Vector2(U0 * ScaleX / Img.Width, V(Max(ZBottomA, Min(TopA, HA)))),
+        BrightLight(Below, Img), TileOf(B, Img));
+    end;
+    if (TopA <= HA) and (TopB <= HB) then Exit;
+    { The rest above it, in the wall's own light. }
+    B.AddQuad(
+      DoomToCge(AX, AY, Max(ZBottomA, HA)), DoomToCge(BX, BY, Max(ZBottomB, HB)),
+      DoomToCge(BX, BY, TopB), DoomToCge(AX, AY, TopA),
+      Vector2(U0 * ScaleX / Img.Width, V(Max(ZBottomA, HA))), Vector2(U1 * ScaleX / Img.Width, V(Max(ZBottomB, HB))),
+      Vector2(U1 * ScaleX / Img.Width, V(TopB)), Vector2(U0 * ScaleX / Img.Width, V(TopA)),
+      BrightLight(Light, Img), TileOf(B, Img));
+    Exit;
+  end;
   B.AddQuad(
     DoomToCge(AX, AY, ZBottomA), DoomToCge(BX, BY, ZBottomB),
     DoomToCge(BX, BY, TopB), DoomToCge(AX, AY, TopA),
@@ -698,6 +745,7 @@ begin
   if L.Side[Side] < 0 then Exit;
   Sd := Map.Sidedefs[L.Side[Side]];
   Sec := Sd.Sector;
+  FWallSec := Sec;
   if Side = 0 then
   begin
     VA := Map.Vertices[L.V1];
@@ -833,9 +881,10 @@ var
   Shared: Boolean;
   Img: TDoomImage;
   B: TGeomBatch;
-  Bottom, Top, LowA, LowB, HighA, HighB: Single;
+  BottomA, BottomB, TopA, TopB, LowA, LowB, HighA, HighB: Single;
 begin
   Map := FOwner.Map;
+  FWallSec := -1;
   if (Other < 0) or (Length(Map.SectorFloors3D[Other]) = 0) then Exit;
   LowA := Max(Map.FloorAt(Sec, VA.X, VA.Y), Map.FloorAt(Other, VA.X, VA.Y));
   LowB := Max(Map.FloorAt(Sec, VB.X, VB.Y), Map.FloorAt(Other, VB.X, VB.Y));
@@ -852,12 +901,14 @@ begin
     if CtlSide < 0 then Continue;
     Img := FOwner.Graphics.Texture(Map.Sidedefs[CtlSide].MiddleTex);
     if Img = nil then Continue;
-    Bottom := Map.Sectors[Ctl].FloorHeight;
-    Top := Map.Sectors[Ctl].CeilingHeight;
+    BottomA := Map.SlabBottom(F, VA.X, VA.Y);
+    BottomB := Map.SlabBottom(F, VB.X, VB.Y);
+    TopA := Map.SlabTop(F, VA.X, VA.Y);
+    TopB := Map.SlabTop(F, VB.X, VB.Y);
     B := Batch(Img, not Map.Floors3D[F].Solid, TVector2.Zero, -1, Map.Floors3D[F].Alpha, stSide, -1);
     SetLook(B, Sec);
-    EmitWall(B, VA.X, VA.Y, VB.X, VB.Y, Max(Bottom, LowA), Max(Bottom, LowB), Min(Top, HighA), Min(Top, HighB),
-      U0, U1, Top, Img, Light);
+    EmitWall(B, VA.X, VA.Y, VB.X, VB.Y, Max(BottomA, LowA), Max(BottomB, LowB), Min(TopA, HighA),
+      Min(TopB, HighB), U0, U1, Max(TopA, TopB), Img, Light);
   end;
 end;
 
@@ -915,7 +966,9 @@ begin
   if Map.FloorLightSector[Sec] >= 0 then
     Light := Vector2(Map.Sectors[Map.FloorLightSector[Sec]].LightLevel, DoomLightPlane)
   else
-    Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightPlane);
+    { Under a 3D floor that casts its light down: the control's. }
+    Light := Vector2(Map.LightAt(Sec, S.Poly[0].X, S.Poly[0].Y, Map.FloorAt(Sec, S.Poly[0].X, S.Poly[0].Y)),
+      DoomLightPlane);
   Light.X := PlaneLightLevel(Map.Sectors[Sec].FloorLook, Round(Light.X));
   if Img <> nil then
   begin
@@ -970,18 +1023,20 @@ begin
   end;
 
   { 3D floors: each slab's top (its control sector's ceiling, facing up)
-    and bottom (the control's floor, facing down), in the sector's light. }
-  Light := Vector2(Map.Sectors[Sec].LightLevel, DoomLightPlane);
+    and bottom (the control's floor, facing down), planes too; the top in
+    the light above it, the bottom in the light below it (the control
+    sector's when the slab casts its light down). }
   for F in Map.SectorFloors3D[Sec] do
   begin
     Ctl := Map.Floors3D[F].Control;
     Img := FOwner.Graphics.Flat(Map.Sectors[Ctl].CeilingTex);
+    Light := Vector2(Map.LightAt(Sec, S.Poly[0].X, S.Poly[0].Y, Map.SlabTop(F, S.Poly[0].X, S.Poly[0].Y) + 0.1),
+      DoomLightPlane);
     if Img <> nil then
     begin
-      Z := Map.Sectors[Ctl].CeilingHeight;
       for I := 0 to N - 1 do
       begin
-        Pts[I] := DoomToCge(S.Poly[I].X, S.Poly[I].Y, Z);
+        Pts[I] := DoomToCge(S.Poly[I].X, S.Poly[I].Y, Map.SlabTop(F, S.Poly[I].X, S.Poly[I].Y));
         Tex[I] := FlatTexCoord(S.Poly[I], Map.Sectors[Ctl].CeilingLook);
       end;
       B := Batch(Img, not Map.Floors3D[F].Solid, TVector2.Zero, -1, Map.Floors3D[F].Alpha, stFloor, -1);
@@ -989,12 +1044,14 @@ begin
       B.AddPolygon(Pts, Tex, BrightLight(Light, Img), TileOf(B, Img));
     end;
     Img := FOwner.Graphics.Flat(Map.Sectors[Ctl].FloorTex);
+    Light := Vector2(Map.LightAt(Sec, S.Poly[0].X, S.Poly[0].Y, Map.SlabBottom(F, S.Poly[0].X, S.Poly[0].Y) - 0.1),
+      DoomLightPlane);
     if Img <> nil then
     begin
-      Z := Map.Sectors[Ctl].FloorHeight;
       for I := 0 to N - 1 do
       begin
-        Pts[I] := DoomToCge(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y, Z);
+        Pts[I] := DoomToCge(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y,
+          Map.SlabBottom(F, S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y));
         Tex[I] := FlatTexCoord(S.Poly[N - 1 - I], Map.Sectors[Ctl].FloorLook);
       end;
       B := Batch(Img, not Map.Floors3D[F].Solid, TVector2.Zero, -1, Map.Floors3D[F].Alpha, stCeiling, -1);

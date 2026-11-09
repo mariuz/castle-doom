@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 3D floors: water slabs the player swims in (the view tinted under the surface, floating at
+  it), the control sector's light under a slab, and sloped slabs.
 - Polyobjects in UDMF maps: lines that move as one (Hexen's sliding and swinging doors),
   placed at their start spots, turned and slid by `Polyobj_RotateLeft` / `RotateRight`,
   `Move`, `MoveTimes8`, `DoorSlide`, `DoorSwing` and the `OR_` actions, blocked by (or

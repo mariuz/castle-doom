@@ -118,7 +118,11 @@ type
     flats, its sides in Line's front middle texture. }
   TFloor3D = record
     Target, Control, Line: Integer;
-    Solid: Boolean;
+    { Solid (types 0, 1), Swimmable (type 2: water the player swims in);
+      LightBelow: the control sector's light below the slab (ZDoom's
+      default; flag 1 turns it off). Top and bottom follow the control
+      sector's ceiling and floor, sloped too (SlabTop / SlabBottom). }
+    Solid, Swimmable, LightBelow: Boolean;
     Alpha: Single;
   end;
 
@@ -392,6 +396,16 @@ type
     { The segment from (X1, Y1, Z1) to (X2, Y2, Z2) passes through a solid
       3D floor; Frac is how far along (0..1) it enters one. }
     function SlabHit(const X1, Y1, Z1, X2, Y2, Z2: Single; out Frac: Single): Boolean;
+    { 3D floor F's top and bottom at (X, Y): its control sector's ceiling
+      and floor (planes too). }
+    function SlabTop(const F: Integer; const X, Y: Single): Single;
+    function SlabBottom(const F: Integer; const X, Y: Single): Single;
+    { The light at height Z in sector Sec: the control sector's of the
+      lowest light-casting 3D floor whose top is above Z, else the
+      sector's own. }
+    function LightAt(const Sec: Integer; const X, Y, Z: Single): Integer;
+    { The swimmable 3D floor of Sec that holds height Z, -1 none. }
+    function WaterSlabAt(const Sec: Integer; const X, Y, Z: Single): Integer;
     { Put polyobject P's vertices where its X, Y and Angle say. }
     procedure PlacePolyobj(const P: Integer);
     { The polyobject with that number, -1 none. }
@@ -1348,8 +1362,8 @@ begin
   for K in SectorFloors3D[Sec] do
     if Floors3D[K].Solid then
     begin
-      Bottom := Sectors[Floors3D[K].Control].FloorHeight;
-      Top := Sectors[Floors3D[K].Control].CeilingHeight;
+      Bottom := SlabBottom(K, X, Y);
+      Top := SlabTop(K, X, Y);
       if (Z >= (Bottom + Top) / 2) and (Top > Result) then Result := Top;
     end;
 end;
@@ -1364,8 +1378,8 @@ begin
   for K in SectorFloors3D[Sec] do
     if Floors3D[K].Solid then
     begin
-      Bottom := Sectors[Floors3D[K].Control].FloorHeight;
-      Top := Sectors[Floors3D[K].Control].CeilingHeight;
+      Bottom := SlabBottom(K, X, Y);
+      Top := SlabTop(K, X, Y);
       if (Z < (Bottom + Top) / 2) and (Bottom < Result) then Result := Bottom;
     end;
 end;
@@ -1393,8 +1407,8 @@ begin
       for K in SectorFloors3D[S] do
         if Floors3D[K].Solid then
         begin
-          Bottom := Sectors[Floors3D[K].Control].FloorHeight;
-          Top := Sectors[Floors3D[K].Control].CeilingHeight;
+          Bottom := SlabBottom(K, X, Y);
+          Top := SlabTop(K, X, Y);
           if (Min(PrevZ, Z) < Top) and (Max(PrevZ, Z) > Bottom) then
           begin
             { Where in this step the segment reaches the slab's height. }
@@ -1407,6 +1421,50 @@ begin
         end;
     PrevZ := Z;
   end;
+end;
+
+function TDoomMap.SlabTop(const F: Integer; const X, Y: Single): Single;
+begin
+  Result := CeilingAt(Floors3D[F].Control, X, Y);
+end;
+
+function TDoomMap.SlabBottom(const F: Integer; const X, Y: Single): Single;
+begin
+  Result := FloorAt(Floors3D[F].Control, X, Y);
+end;
+
+function TDoomMap.LightAt(const Sec: Integer; const X, Y, Z: Single): Integer;
+var
+  K: Integer;
+  Best, Bottom: Single;
+begin
+  if (Sec < 0) or (Sec > High(Sectors)) then Exit(0);
+  Result := Sectors[Sec].LightLevel;
+  if Sec > High(SectorFloors3D) then Exit;
+  Best := 1e30;
+  for K in SectorFloors3D[Sec] do
+    if Floors3D[K].LightBelow then
+    begin
+      { Like GZDoom's light lists: the control's light reaches up to the
+        slab's top (inside water too). }
+      Bottom := SlabTop(K, X, Y);
+      if (Bottom >= Z - 0.01) and (Bottom < Best) then
+      begin
+        Best := Bottom;
+        Result := Sectors[Floors3D[K].Control].LightLevel;
+      end;
+    end;
+end;
+
+function TDoomMap.WaterSlabAt(const Sec: Integer; const X, Y, Z: Single): Integer;
+var
+  K: Integer;
+begin
+  if (Sec >= 0) and (Sec <= High(SectorFloors3D)) then
+    for K in SectorFloors3D[Sec] do
+      if Floors3D[K].Swimmable and (Z > SlabBottom(K, X, Y)) and (Z < SlabTop(K, X, Y)) then
+        Exit(K);
+  Result := -1;
 end;
 
 function TDoomMap.FloorAt(const Sec: Integer; const X, Y: Single): Single;
@@ -1751,6 +1809,8 @@ begin
     F.Control := Control;
     F.Line := L;
     F.Solid := Kind in [0, 1];
+    F.Swimmable := Kind = 2;
+    F.LightBelow := (Linedefs[L].Args[2] and 1) = 0;
     if Linedefs[L].Args[3] > 0 then F.Alpha := Min(255, Linedefs[L].Args[3]) / 255 else F.Alpha := 1;
     S := -1;
     repeat

@@ -27,6 +27,20 @@ L = several days). Items inside a section are in suggested order.
   `arg0str`, `TDoomMap.LineArg0Str`; `SCRIPTWAITNAMED`).
   `udmf-slopes.wad` and `udmf-things.wad` cover them.
 
+- 3D floors (UDMF, stage 3): slabs follow sloped control sectors
+  (`TDoomMap.SlabTop` / `SlabBottom` read the control's plane wherever
+  a height is needed: the drawn faces and sides, `FloorAtZ`,
+  `SlabHit`); a slab casts its control sector's light down to its top
+  unless its flags have bit 1 (`LightBelow`, `LightAt`): the target's
+  floor, the parts of walls under it (`EmitWall` splits a wall at the
+  slab's top, `FWallSec`) and things there (`LightActor`); swimmable
+  slabs (type 2, `Swimmable`, `WaterSlabAt`) tint the view while the
+  eye is in them and make the player swim while the feet are
+  (`TDoomWorld.Swimming`: the view turns gravity off and moves where it
+  looks, floating with the feet 8 under the surface, `SwimSurface`).
+  Test map `udmf-3dfloor2.wad`, unit test `Test3dWater`, autotest
+  `3d-water` (goldens).
+
 - Polyobjects (UDMF, stage 1): `TDoomMap.BuildPolyobjs` gathers each
   polyobject's lines (`Polyobj_StartLine`'s loop of joined lines or the
   numbered `Polyobj_ExplicitLine` ones, taken out of the translated
@@ -1525,10 +1539,10 @@ play.
 1. Polyobjects, the rest (S): SNDSEQ sound sequences (Hexen's own
    sounds per polyobject), polyobjects in Hexen-format (binary) maps,
    a moving polyobject redrawn when the sector it is in changes height.
-2. 3D floors, stage 3 (M, `docs/RENDERING_ROADMAP.md` item 5): light
-   under slabs (the control sector's light below the slab), swimmable
-   slabs (water: the view tinted inside, the player swims), sloped and
-   vertex-height slabs, sounds blocked by them.
+2. 3D floors, the rest (S-M): monsters and missiles in water (they
+   ignore it), the water's own colour from the control sector
+   (`fadecolor`), vertex-height control sectors, sounds blocked by
+   slabs, non-solid slabs' "render inside" flag.
 3. Map editor, UDMF fields (S-M): edit what is kept as text today
    (arg1..arg4, line and thing ids, activation flags, thing specials,
    the look fields) in the properties panel, and keep fractional

@@ -464,6 +464,18 @@ TESTS = [
       r'Shot: angle 90\.0 slope 0\.000 range 2048: wall at \(-416, 380, '],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-poly.wad'), '--fixed-step'],
      lambda config: check_polyobjects(config)),
+    # 3D floors, stage 3 (udmf-3dfloor2.wad): water in the start room
+    # (tinted view, swimming up to float at the surface, down again), a
+    # sloped slab lighting the corridor under it at 255 and an imp there.
+    ('3d-water', 'E1M1',
+     'Y,G:-416:256,A:0,W:0.3,S,LOOK:60,F:0.6,W:0.5,SAVE:1,S,LOOK:-60,F:0.4,W:0.3,SAVE:2,G:-224:150,A:90,LOOK:0,'
+     'W:0.5,S,P:3001:120,W:0.5,SAVE:3,Q',
+     [r'Map: E1M1: slopes: 0 floors, 1 ceilings', r'Map: E1M1: 2 3D floors',
+      r'Water: Swimming \(sector 140, z 0\.0, eye 41\.0\)',
+      r'Water: View in a swimmable 3D floor \(sector 140, control 182\)',
+      r'Water: Out of the water \(sector 141'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-3dfloor2.wad'), '--fixed-step'],
+     lambda config: check_3d_water(config)),
     ('udmf-doom', 'E1M1', 'W:0.3,S,Q',
      [r'Map: E1M1: UDMF, namespace "doom": .* XGLN nodes',
       r'Map: E1M1: XGLN nodes, 682 subsector polygons, total area 6712683'],
@@ -819,6 +831,17 @@ def check_polyobjects(config):
         'doors did not come back: %s %s' % (places, mirror)
     assert places[4][0] == places[2][0] and saves[4]['polyMoves'], 'load lost the move: %s %s' % (places, saves[4])
     assert [round(v) for v in places[5][:2]] == [-480, 300], 'not at the spot: %s' % places
+
+
+def check_3d_water(config):
+    """tools/testdata/udmf-3dfloor2.wad: afloat with the feet 8 under the
+    water's top (64) after swimming up, back at the floor after swimming
+    down, an imp standing under the corridor's slab."""
+    a, b, c = (save_json(config, n) for n in (1, 2, 3))
+    assert abs(a['player']['z'] - 56) < 1, 'not afloat: %s' % a['player']
+    assert abs(b['player']['z']) < 2, 'not back down: %s' % b['player']
+    imps = [t for t in c['actors'] if t.get('type') == 3001 and abs(t['x'] + 224) < 40]
+    assert imps and abs(imps[0]['z']) < 0.5, 'imp not under the slab: %s' % imps
 
 
 def check_3d_floors(config):
@@ -1366,7 +1389,7 @@ GOLDEN = [
     'editor-pick_edit_1.png', 'editor-pick_edit_2.png', 'editor-pick_edit_3.png', 'editor-pick_edit_4.png',
     'editor-align_edit_1.png', 'editor-align_edit_2.png', 'editor-align_edit_3.png',
     'ghost-race_1.png', 'ghost-race_2.png',
-    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'editor-udmf_edit_1.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'polyobjects_1.png', 'polyobjects_2.png', 'polyobjects_3.png', 'polyobjects_4.png', 'polyobjects_5.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
+    'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'editor-udmf_edit_1.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'polyobjects_1.png', 'polyobjects_2.png', 'polyobjects_3.png', 'polyobjects_4.png', 'polyobjects_5.png', '3d-water_1.png', '3d-water_2.png', '3d-water_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
 ]

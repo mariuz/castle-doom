@@ -71,6 +71,7 @@ type
     procedure TestAcsLibraries;
     procedure TestSlopes;
     procedure Test3dFloors;
+    procedure Test3dWater;
     procedure TestThingSpecials;
     procedure TestPolyobjs;
     procedure TestDynScrollers;
@@ -1453,6 +1454,52 @@ end;
 
 { Sector_Set3dFloor in tools/testdata/udmf-3dfloor.wad: a translucent
   slab (64..80) in the start room (140) and a solid step (0..24) in 141. }
+procedure TTestMap.Test3dWater;
+var
+  Dir: String;
+  W: TDoomWad;
+  M: TDoomMap;
+  Water, Slab, I: Integer;
+begin
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf-3dfloor2.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf-3dfloor2.wad') then
+  begin
+    WriteLn('Test3dWater: no udmf-3dfloor2.wad (python3 tools/make_udmf_wad.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-3dfloor2.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      Water := -1;
+      Slab := -1;
+      for I := 0 to High(M.Floors3D) do
+        if M.Floors3D[I].Target = 140 then Water := I else Slab := I;
+      AssertTrue('water', (Water >= 0) and M.Floors3D[Water].Swimmable and not M.Floors3D[Water].Solid);
+      AssertEquals('in the water', Water, M.WaterSlabAt(140, -416, 256, 30));
+      AssertEquals('above it', -1, M.WaterSlabAt(140, -416, 256, 70));
+      { Water does not hold the player up. }
+      AssertEquals('water floor', 0, M.FloorAtZ(140, -416, 256, 70), 0.01);
+      { The corridor's slab: its top slopes from 72 to 96, its light (255)
+        below it, the sector's own above. }
+      AssertTrue('slab', (Slab >= 0) and M.Floors3D[Slab].Solid and M.Floors3D[Slab].LightBelow);
+      AssertEquals('top south', 72, M.SlabTop(Slab, -224, 128), 0.01);
+      AssertEquals('top north', 96, M.SlabTop(Slab, -224, 384), 0.01);
+      AssertEquals('bottom', 64, M.SlabBottom(Slab, -224, 300), 0.01);
+      AssertEquals('above the sloped top', 96, M.FloorAtZ(141, -224, 384, 100), 0.01);
+      AssertEquals('light under', 255, M.LightAt(141, -224, 200, 10));
+      AssertEquals('light over', M.Sectors[141].LightLevel, M.LightAt(141, -224, 200, 100));
+      AssertEquals('light in the water', 96, M.LightAt(140, -416, 256, 10));
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
 procedure TTestMap.Test3dFloors;
 var
   Dir: String;
@@ -1504,6 +1551,8 @@ begin
       AssertEquals('up: where', (64 - 40) / 80, F, 0.02);
       AssertFalse('below: clear', M.SlabHit(-460, 256, 10, -380, 256, 50, F));
       AssertTrue('through: hit', M.SlabHit(-460, 256, 70, -380, 256, 70, F));
+      AssertFalse('not water', M.Floors3D[0].Swimmable);
+      AssertEquals('no water', -1, M.WaterSlabAt(140, -416, 256, 10));
       AssertEquals('140 has one', 1, Length(M.SectorFloors3D[140]));
       AssertEquals('141 has one', 1, Length(M.SectorFloors3D[141]));
       AssertEquals('99 has none', 0, Length(M.SectorFloors3D[99]));

@@ -78,6 +78,10 @@ drawn out in the void, placed in the start room by its start spot, and
 three west-wall lines that move, turn and slide it; polyobject 2
 mirrors it, line 1046 sends 1 to a map spot.
 
+udmf-3dfloor2.wad, the same with stage 3's slabs (FLOOR3D_CONTROLS2):
+water to swim in over the start room, a sloped slab that lights the
+corridor under it.
+
 udmf-doom.wad, namespace "doom": the same map with Doom's own specials
 and ZDoom GL nodes (XGLN) in ZNODES.
 
@@ -155,6 +159,15 @@ FLOOR3D_IDS = {140: 15, 141: 9}
 # Control sectors (x, y of the corner, floor, ceiling, Sector_Set3dFloor
 # args): a 64-unit square each, far from the map.
 FLOOR3D_CONTROLS = [(-3000, -3000, 64, 80, (15, 1, 0, 160)), (-2800, -3000, 0, 24, (9, 1, 0, 255))]
+# udmf-3dfloor2.wad (3D floors, stage 3): swimmable water from 0 to 64 in
+# the start room (140, type 2, alpha 128), and over the corridor east of
+# it (141) a solid slab from 64 whose top slopes from 72 at y 128 to 96 at
+# y 384 (the control's ceiling plane), in light 255: the corridor under it
+# is lit 255.
+FLOOR3D_CONTROLS2 = [(-3000, -3000, 0, 64, (15, 2, 0, 128), {'lightlevel': '96'}),
+                     (-2800, -3000, 64, 72, (9, 1, 0, 255), {'lightlevel': '255', 'ceilingplane_a': '0.0',
+                                                            'ceilingplane_b': '-0.09375', 'ceilingplane_c': '1.0',
+                                                            'ceilingplane_d': '-60.0'})]
 THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
                1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), ''),
                830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), ''),
@@ -358,8 +371,11 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
         body += ['coop = true;', 'dm = true;']
         out.append('thing\n{\n%s\n}\n' % '\n'.join(body))
     if floors3d:
+        controls = FLOOR3D_CONTROLS if floors3d is True else floors3d
         nv, nl, ns, nsec = len(V) // 4, len(L) // 14, len(S) // 30, len(SE) // 26
-        for (x, y, fh, ch, args) in FLOOR3D_CONTROLS:
+        for control in controls:
+            (x, y, fh, ch, args) = control[:5]
+            fields = control[5] if len(control) > 5 else {}
             corners = [(x, y), (x, y + 64), (x + 64, y + 64), (x + 64, y)]
             for (cx, cy) in corners:
                 out.append('vertex\n{\nx = %d.0;\ny = %d.0;\n}\n' % (cx, cy))
@@ -371,8 +387,10 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
                     body += ['arg%d = %d;' % (i, a) for i, a in enumerate(args) if a]
                 out.append('linedef\n{\n%s\n}\n' % '\n'.join(body))
                 out.append('sidedef\n{\nsector = %d;\ntexturemiddle = "STARTAN3";\n}\n' % nsec)
-            out.append('sector\n{\nheightfloor = %d;\nheightceiling = %d;\ntexturefloor = "FLOOR7_2";\n'
-                       'textureceiling = "FLOOR7_2";\nlightlevel = 160;\n}\n' % (fh, ch))
+            body = ['heightfloor = %d;' % fh, 'heightceiling = %d;' % ch, 'texturefloor = "FLOOR7_2";',
+                    'textureceiling = "FLOOR7_2";', 'lightlevel = %s;' % fields.get('lightlevel', '160')]
+            body += ['%s = %s;' % kv for kv in fields.items() if kv[0] != 'lightlevel']
+            out.append('sector\n{\n%s\n}\n' % '\n'.join(body))
             nv += 4
             nl += 4
             ns += 4
@@ -380,9 +398,9 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
     if polys:
         nv, ns, nsec = len(V) // 4, len(S) // 30, len(SE) // 26
         if floors3d:
-            nv += 4 * len(FLOOR3D_CONTROLS)
-            ns += 4 * len(FLOOR3D_CONTROLS)
-            nsec += len(FLOOR3D_CONTROLS)
+            nv += 4 * len(FLOOR3D_CONTROLS if floors3d is True else floors3d)
+            ns += 4 * len(FLOOR3D_CONTROLS if floors3d is True else floors3d)
+            nsec += len(FLOOR3D_CONTROLS if floors3d is True else floors3d)
         # The container: a 128-unit square facing in (clockwise), then the
         # polyobject inside it facing out (counter-clockwise), its first
         # line Polyobj_StartLine(1).
@@ -439,6 +457,8 @@ def main():
                ('BEHAVIOR', make_acs.behavior('compat', make_acs.spawn_program('compat'))), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-3dfloor.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, floors3d=True)), ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-3dfloor2.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, floors3d=FLOOR3D_CONTROLS2)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-acslib.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True)),
                ('BEHAVIOR', make_acs.behavior('compat', make_acs.libmap_program('compat'))), ('ENDMAP', b''),
