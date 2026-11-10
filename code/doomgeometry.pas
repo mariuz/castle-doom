@@ -885,11 +885,35 @@ var
 begin
   Map := FOwner.Map;
   FWallSec := -1;
-  if (Other < 0) or (Length(Map.SectorFloors3D[Other]) = 0) then Exit;
+  if Other < 0 then Exit;
   LowA := Max(Map.FloorAt(Sec, VA.X, VA.Y), Map.FloorAt(Other, VA.X, VA.Y));
   LowB := Max(Map.FloorAt(Sec, VB.X, VB.Y), Map.FloorAt(Other, VB.X, VB.Y));
   HighA := Min(Map.CeilingAt(Sec, VA.X, VA.Y), Map.CeilingAt(Other, VA.X, VA.Y));
   HighB := Min(Map.CeilingAt(Sec, VB.X, VB.Y), Map.CeilingAt(Other, VB.X, VB.Y));
+  { Render inside: this sector's own slabs the neighbour lacks, their
+    sides seen from inside them. }
+  for F in Map.SectorFloors3D[Sec] do
+  begin
+    if not Map.Floors3D[F].RenderInside then Continue;
+    Ctl := Map.Floors3D[F].Control;
+    Shared := false;
+    for G in Map.SectorFloors3D[Other] do
+      if Map.Floors3D[G].Control = Ctl then Shared := true;
+    if Shared then Continue;
+    CtlSide := Map.Linedefs[Map.Floors3D[F].Line].Side[0];
+    if CtlSide < 0 then Continue;
+    Img := FOwner.Graphics.Texture(Map.Sidedefs[CtlSide].MiddleTex);
+    if Img = nil then Continue;
+    BottomA := Map.SlabBottom(F, VA.X, VA.Y);
+    BottomB := Map.SlabBottom(F, VB.X, VB.Y);
+    TopA := Map.SlabTop(F, VA.X, VA.Y);
+    TopB := Map.SlabTop(F, VB.X, VB.Y);
+    B := Batch(Img, true, TVector2.Zero, -1, Map.Floors3D[F].Alpha, stSide, -1);
+    SetLook(B, Sec);
+    EmitWall(B, VA.X, VA.Y, VB.X, VB.Y, Max(BottomA, LowA), Max(BottomB, LowB), Min(TopA, HighA),
+      Min(TopB, HighB), U0, U1, Max(TopA, TopB), Img, Light);
+  end;
+  if Length(Map.SectorFloors3D[Other]) = 0 then Exit;
   for F in Map.SectorFloors3D[Other] do
   begin
     Ctl := Map.Floors3D[F].Control;
@@ -928,6 +952,25 @@ begin
     Q := Vector2(P.X * C + P.Y * Sn, -P.X * Sn + P.Y * C);
   end;
   Result := Vector2((Q.X + Look.PanX) * ScaleOr1(Look.ScaleX) / 64, (Q.Y + Look.PanY) * ScaleOr1(Look.ScaleY) / 64);
+end;
+
+{ Polygon Pts (N points) once more, facing the other way (a 3D floor's
+  face seen from inside it). }
+procedure AddReversed(const B: TGeomBatch; const Pts: array of TVector3; const Tex: array of TVector2;
+  const N: Integer; const Light: TVector2; const Tile: TVector4);
+var
+  RP: array of TVector3;
+  RT: array of TVector2;
+  I: Integer;
+begin
+  SetLength(RP, N);
+  SetLength(RT, N);
+  for I := 0 to N - 1 do
+  begin
+    RP[I] := Pts[N - 1 - I];
+    RT[I] := Tex[N - 1 - I];
+  end;
+  B.AddPolygon(RP, RT, Light, Tile);
 end;
 
 procedure TMapChunk.EmitFlats(const Sub: Integer);
@@ -1042,6 +1085,9 @@ begin
       B := Batch(Img, not Map.Floors3D[F].Solid, TVector2.Zero, -1, Map.Floors3D[F].Alpha, stFloor, -1);
       SetLook(B, Sec);
       B.AddPolygon(Pts, Tex, BrightLight(Light, Img), TileOf(B, Img));
+      { Render inside: the top seen from under it too (the water's surface). }
+      if Map.Floors3D[F].RenderInside then
+        AddReversed(B, Pts, Tex, N, BrightLight(Light, Img), TileOf(B, Img));
     end;
     Img := FOwner.Graphics.Flat(Map.Sectors[Ctl].FloorTex);
     Light := Vector2(Map.LightAt(Sec, S.Poly[0].X, S.Poly[0].Y, Map.SlabBottom(F, S.Poly[0].X, S.Poly[0].Y) - 0.1),
@@ -1057,6 +1103,8 @@ begin
       B := Batch(Img, not Map.Floors3D[F].Solid, TVector2.Zero, -1, Map.Floors3D[F].Alpha, stCeiling, -1);
       SetLook(B, Sec);
       B.AddPolygon(Pts, Tex, BrightLight(Light, Img), TileOf(B, Img));
+      if Map.Floors3D[F].RenderInside then
+        AddReversed(B, Pts, Tex, N, BrightLight(Light, Img), TileOf(B, Img));
     end;
   end;
 end;

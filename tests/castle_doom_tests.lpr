@@ -1628,6 +1628,25 @@ begin
       AssertEquals('light under', 255, M.LightAt(141, -224, 200, 10));
       AssertEquals('light over', M.Sectors[141].LightLevel, M.LightAt(141, -224, 200, 100));
       AssertEquals('light in the water', 96, M.LightAt(140, -416, 256, 10));
+      AssertFalse('not drawn inside', M.Floors3D[Water].RenderInside);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+  { udmf-3dfloor3.wad: type 2 + 4, drawn from inside; green fog in the
+    control sector (the view's tint). }
+  if not FileExists(Dir + 'udmf-3dfloor3.wad') then Exit;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-3dfloor3.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('one slab', 1, Length(M.Floors3D));
+      AssertTrue('swimmable, inside', M.Floors3D[0].Swimmable and M.Floors3D[0].RenderInside);
+      AssertTrue('green', M.Sectors[M.Floors3D[0].Control].HasFade);
+      AssertEquals('green g', $A0 / 255, M.Sectors[M.Floors3D[0].Control].FadeColor.Y, 0.001);
     finally
       FreeAndNil(M);
     end;

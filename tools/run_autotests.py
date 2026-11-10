@@ -497,6 +497,18 @@ TESTS = [
     # 3D floors, stage 3 (udmf-3dfloor2.wad): water in the start room
     # (tinted view, swimming up to float at the surface, down again), a
     # sloped slab lighting the corridor under it at 255 and an imp there.
+    # 3D floors, the rest (udmf-3dfloor3.wad): the start room's water
+    # tinted green by its control sector's fadecolor and drawn from
+    # inside (type 2 + 4: the surface over the view when looking up), a
+    # falling imp ball fired in it slowed by the water (an eighth of the
+    # gravity), and the slab's side seen from the corridor.
+    ('3d-water-inside', 'E1M1',
+     'Y,G:-416:200,A:90,W:0.3,S,LOOK:50,W:0.2,S,LOOK:0,LINE:1051,W:0.03,SAVE:1,G:-224:256,A:180,W:0.3,S,Q',
+     [r'Map: E1M1: 1 3D floors',
+      r'Water: View in a swimmable 3D floor \(sector 140, control 182\), tint 0\.18824 0\.62745 0\.25098 0\.45',
+      r'Udmf: Thing_ProjectileGravity \(40, 10, 64, 40, 48\): 1 things'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-3dfloor3.wad'), '--fixed-step'],
+     lambda config: check_water_inside(config)),
     ('3d-water', 'E1M1',
      'Y,G:-416:256,A:0,W:0.3,S,LOOK:89,F:0.6,W:0.5,LOOK:30,W:0.1,SAVE:1,S,LOOK:-60,F:0.4,W:0.3,SAVE:2,G:-224:150,A:90,LOOK:0,'
      'W:0.5,S,P:3001:120,W:0.5,SAVE:3,Q',
@@ -894,6 +906,16 @@ def check_polyobjects(config):
         'doors did not come back: %s %s' % (places, mirror)
     assert places[4][0] == places[2][0] and saves[4]['polyMoves'], 'load lost the move: %s %s' % (places, saves[4])
     assert [round(v) for v in places[5][:2]] == [-480, 300], 'not at the spot: %s' % places
+
+
+def check_water_inside(config):
+    """udmf-3dfloor3.wad: the imp ball rising in the water loses an
+    eighth of a unit a tic (in the air it would lose 1)."""
+    balls = [a for a in save_json(config, 1)['actors'] if a.get('effect') == 4 and abs(a['x'] + 416) < 1]
+    assert balls, 'no imp ball'
+    vz = balls[0]['velocity'][2]
+    assert 5.4 < vz < 6, 'not slowed by the water: velocity %s' % vz
+    assert 32 < balls[0]['z'] < 64, 'ball out of the water: z %s' % balls[0]['z']
 
 
 def check_3d_water(config):
@@ -1476,6 +1498,7 @@ GOLDEN = [
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
     'hexen-format_1.png', 'hexen-poly_1.png', 'editor-hexen_edit_1.png',
+    '3d-water-inside_1.png', '3d-water-inside_2.png', '3d-water-inside_3.png',
 ]
 
 

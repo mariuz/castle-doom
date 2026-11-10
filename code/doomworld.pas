@@ -291,6 +291,9 @@ type
     procedure TicMonster(const A: TDoomActor);
     { Height of a flying monster: P_ZMovement's floating towards the target,
       and its corpse falling (lost souls stay where they die). }
+    { A thing's middle in a swimmable 3D floor. }
+    function InWater(const A: TDoomActor): Boolean;
+    procedure WaterFall(const A: TDoomActor; const SinkSpeed: Single);
     procedure TicFloat(const A: TDoomActor);
     { P_XYMovement for knocked-back monsters, corpses and barrels. }
     procedure TicPush(const A: TDoomActor);
@@ -724,6 +727,10 @@ const
   MaxMove = 30;
   StopSpeed = 1 / 16;
   Friction = $E800 / $10000;
+  { Things in swimmable 3D floors sink at most this fast (corpses a
+    third of it); a faster fall loses this part of its speed a tic. }
+  WaterSinkSpeed = 0.5;
+  WaterSinkFactor = 0.125;
 
 const
   { Boom's sector types: bit 7 is the secret, bits 5-6 the damage, bit 8
@@ -3278,6 +3285,24 @@ begin
     MonsterCrossLines(A, OldX, OldY);
 end;
 
+function TDoomWorld.InWater(const A: TDoomActor): Boolean;
+begin
+  Result := (A.Sector >= 0) and (A.Sector <= High(FMap.SectorFloors3D)) and
+    (Length(FMap.SectorFloors3D[A.Sector]) > 0) and
+    (FMap.WaterSlabAt(A.Sector, A.DoomX, A.DoomY, A.DoomZ + A.Info^.Height / 2) >= 0);
+end;
+
+{ Falling in water (after GZDoom's P_ZMovement): an eighth of the
+  gravity down to the sinking speed; a faster fall (a thing dropping in)
+  loses an eighth of its speed a tic until it sinks at that speed. }
+procedure TDoomWorld.WaterFall(const A: TDoomActor; const SinkSpeed: Single);
+begin
+  if A.VelZ < -SinkSpeed then
+    A.VelZ := Min(-SinkSpeed, A.VelZ * (1 - WaterSinkFactor))
+  else
+    A.VelZ := Max(-SinkSpeed, A.VelZ - 1 / 8);
+end;
+
 procedure TDoomWorld.TicFloat(const A: TDoomActor);
 const
   FloatSpeed = 4;
@@ -3295,6 +3320,9 @@ begin
       falls (P_ZMovement: -2 on the first tic, then 1 more per tic). }
     if A.Info^.Num <> 3006 then
     begin
+      if InWater(A) then
+        WaterFall(A, WaterSinkSpeed / 3)
+      else
       if A.VelZ = 0 then A.VelZ := -2 * Gravity else A.VelZ := A.VelZ - Gravity;
       A.DoomZ := A.DoomZ + A.VelZ;
       if A.DoomZ <= Floor then
@@ -3378,7 +3406,7 @@ end;
 
 procedure TDoomWorld.UpdateWaterView(const EyeZ: Single);
 var
-  H, Region, Slab, K: Integer;
+  H, Region, Slab, K, C: Integer;
   Swim: Boolean;
   View: TWaterView;
   Name: String;
@@ -3433,10 +3461,18 @@ begin
   begin
     if Slab >= 0 then
     begin
-      WritelnLog('Water', 'View in a swimmable 3D floor (sector %d, control %d)', [Player.Sector,
-        FMap.Floors3D[Slab].Control]);
+      { The water's colour: the control sector's fog colour, else its
+        light colour, else a sea blue. }
+      C := FMap.Floors3D[Slab].Control;
+      if FMap.Sectors[C].HasFade then
+        FColormapTint := Vector4(FMap.Sectors[C].FadeColor, 0.45)
+      else if FMap.Sectors[C].HasColor then
+        FColormapTint := Vector4(FMap.Sectors[C].LightColor, 0.45)
+      else
+        FColormapTint := Vector4(0.1, 0.25, 0.55, 0.45);
+      WritelnLog('Water', 'View in a swimmable 3D floor (sector %d, control %d), tint %s', [Player.Sector,
+        C, FColormapTint.ToString]);
       FColormapName := '3D water';
-      FColormapTint := Vector4(0.1, 0.25, 0.55, 0.45);
     end else
     begin
       FColormapName := '';
@@ -4623,7 +4659,12 @@ var
 begin
   if A.State <> asMissile then Exit;
   if A.MissileGravity then
-    A.VelZ := A.VelZ - 1;
+  begin
+    if InWater(A) then
+      WaterFall(A, WaterSinkSpeed)
+    else
+      A.VelZ := A.VelZ - 1;
+  end;
   NX := A.DoomX + A.VelX;
   NY := A.DoomY + A.VelY;
   NZ := A.DoomZ + A.VelZ;

@@ -123,8 +123,9 @@ type
     { Solid (types 0, 1), Swimmable (type 2: water the player swims in);
       LightBelow: the control sector's light below the slab (ZDoom's
       default; flag 1 turns it off). Top and bottom follow the control
-      sector's ceiling and floor, sloped too (SlabTop / SlabBottom). }
-    Solid, Swimmable, LightBelow: Boolean;
+      sector's ceiling and floor, sloped too (SlabTop / SlabBottom).
+      RenderInside (type bit 4): its faces are drawn from inside too. }
+    Solid, Swimmable, LightBelow, RenderInside: Boolean;
     Alpha: Single;
   end;
 
@@ -1951,6 +1952,7 @@ begin
     F.Line := L;
     F.Solid := Kind in [0, 1];
     F.Swimmable := Kind = 2;
+    F.RenderInside := (Linedefs[L].Args[1] and 4) <> 0;
     F.LightBelow := (Linedefs[L].Args[2] and 1) = 0;
     if Linedefs[L].Args[3] > 0 then F.Alpha := Min(255, Linedefs[L].Args[3]) / 255 else F.Alpha := 1;
     S := -1;
