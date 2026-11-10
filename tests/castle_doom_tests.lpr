@@ -73,6 +73,7 @@ type
     procedure Test3dFloors;
     procedure Test3dWater;
     procedure TestThingSpecials;
+    procedure TestHexenFormat;
     procedure TestPolyobjs;
     procedure TestSoundSeq;
     procedure TestDynScrollers;
@@ -1359,6 +1360,107 @@ begin
     end;
   finally
     FreeAndNil(W);
+  end;
+end;
+
+{ Hexen's binary map format (tools/testdata/hexen.wad, made from
+  udmf-things.wad's TEXTMAP): the same lines, things and activations as
+  the UDMF map but for the bytes' limits; Line_SetIdentification's id;
+  the editor's UDMF text of it; E1M2 without nodes gets them built. }
+procedure TTestMap.TestHexenFormat;
+var
+  Dir: String;
+  W, WU: TDoomWad;
+  M, U: TDoomMap;
+  E: TDoomEditMap;
+  I, J: Integer;
+  Error: String;
+begin
+  Error := '';
+  AssertEquals('use, monsters, repeat', UaPlayerUse or UaMonsterUse or UaRepeat, HexenActivation($2000 or $200 or (1 shl 10)));
+  AssertEquals('impact', UaImpact, HexenActivation(3 shl 10));
+  AssertEquals('missile cross', UaMissileCross, HexenActivation(5 shl 10));
+  AssertEquals('set id', 300, HexenLineId(121, [44, 0, 0, 0, 1]));
+  AssertEquals('no id', -1, HexenLineId(80, [1, 0, 0, 0, 0]));
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'hexen.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'hexen.wad') then
+  begin
+    WriteLn('TestHexenFormat: no hexen.wad (python3 tools/make_hexen_wad.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  WU := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'hexen.wad')));
+    WU.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-things.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    U := TDoomMap.Create(WU, 'E1M1');
+    try
+      AssertTrue('Hexen format', M.HexenFormat and M.Udmf);
+      AssertFalse('UDMF is not', U.HexenFormat);
+      AssertEquals('nodes', 'VANILLA', M.NodesFormat);
+      AssertTrue('behavior', Length(M.Behavior) > 0);
+      AssertEquals('lines', Length(U.Linedefs), Length(M.Linedefs));
+      for I := 0 to High(M.Linedefs) do
+      begin
+        { 1045's damage and 1047's named script do not fit in bytes. }
+        if (I = 1045) or (I = 1047) or (I = 1049) then Continue;
+        AssertEquals('special of ' + IntToStr(I), U.Linedefs[I].Special, M.Linedefs[I].Special);
+        AssertEquals('tag of ' + IntToStr(I), U.Linedefs[I].Tag, M.Linedefs[I].Tag);
+        { The binary format has no "no activation": static actions
+          (friction, wind) are SPAC 0, player cross. }
+        if not ((U.Linedefs[I].Activation = 0) and (M.Linedefs[I].Activation = UaPlayerCross)) then
+          AssertEquals('activation of ' + IntToStr(I), U.Linedefs[I].Activation, M.Linedefs[I].Activation);
+        AssertEquals('flags of ' + IntToStr(I), U.Linedefs[I].Flags, M.Linedefs[I].Flags);
+        for J := 0 to 4 do
+          AssertEquals('arg of ' + IntToStr(I), U.Linedefs[I].Args[J], M.Linedefs[I].Args[J]);
+      end;
+      AssertEquals('1045 damage', 232, M.Linedefs[1045].Args[1]);
+      AssertEquals('1049 id', 50, M.Linedefs[1049].Id);
+      AssertEquals('1049 special', 0, M.Linedefs[1049].Special);
+      AssertEquals('things', Length(U.Things), Length(M.Things));
+      for I := 0 to High(M.Things) do
+      begin
+        AssertEquals('type of ' + IntToStr(I), U.Things[I].TypeNum, M.Things[I].TypeNum);
+        AssertEquals('tid of ' + IntToStr(I), U.Things[I].Tid, M.Things[I].Tid);
+        AssertEquals('z of ' + IntToStr(I), U.Things[I].Z, M.Things[I].Z, 0.001);
+        AssertEquals('flags of ' + IntToStr(I), U.Things[I].Flags, M.Things[I].Flags);
+        AssertEquals('special of ' + IntToStr(I), U.Things[I].Special, M.Things[I].Special);
+      end;
+      for I := 0 to High(M.Sectors) do
+      begin
+        AssertEquals('sector special ' + IntToStr(I), U.Sectors[I].Special, M.Sectors[I].Special);
+        AssertEquals('sector tag ' + IntToStr(I), U.Sectors[I].Tag, M.Sectors[I].Tag);
+      end;
+    finally
+      FreeAndNil(M);
+      FreeAndNil(U);
+    end;
+    M := TDoomMap.Create(W, 'E1M2');
+    try
+      AssertEquals('built nodes', 'BUILT', M.NodesFormat);
+      AssertEquals('polyobjects', 2, Length(M.Polyobjs));
+    finally
+      FreeAndNil(M);
+    end;
+    E := TDoomEditMap.Create;
+    try
+      AssertTrue('editor: ' + Error, E.LoadFromWad(W, 'E1M1', Error));
+      AssertTrue('editor UDMF', E.Udmf and E.FromHexen);
+      AssertEquals('namespace', 'zdoom', E.Namespace);
+      AssertEquals('editor lines', 1175, Length(E.Lines));
+      AssertEquals('editor 829 special', 135, E.Lines[829].Special);
+      AssertEquals('editor 829 arg0', 20, E.Lines[829].Tag);
+      AssertTrue('editor 829 use', Pos('playeruse = true;', E.Lines[829].Udmf) > 0);
+      AssertTrue('editor 1049 id', Pos('id = 50;', E.Lines[1049].Udmf) > 0);
+      AssertTrue('editor behavior', Length(E.Behavior) > 0);
+    finally
+      FreeAndNil(E);
+    end;
+  finally
+    FreeAndNil(W);
+    FreeAndNil(WU);
   end;
 end;
 

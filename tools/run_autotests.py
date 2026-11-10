@@ -416,6 +416,34 @@ TESTS = [
       r'Udmf: Thing_ProjectileGravity \(40, 10, 64, 40, 48\): 1 things'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad'), '--fixed-step'],
      lambda config: check_udmf_things(config)),
+    # Hexen-format maps (hexen.wad, tools/make_hexen_wad.py): E1M1 in
+    # the binary format with 16-byte lines and 20-byte things: its
+    # BEHAVIOR runs, line actions spawn and kill an imp by thing id, the
+    # imp 81's thing action lights sector 141 when it dies, and line 1049
+    # is named 50 by Line_SetIdentification (no special left).
+    ('hexen-format', 'E1M1',
+     'Y,W:0.5,SAVE:1,LINE:829,W:0.5,G:-416:256,A:45,S,SAVE:2,LINE:1045,W:1,SAVE:3,LINE:830,W:2,SAVE:4,D,W:0.5,'
+     'SAVE:5,Q',
+     [r'Map: E1M1: Hexen format: 1196 vertices, 1175 linedefs, 1829 sidedefs, 182 sectors, 295 things, '
+      r'BEHAVIOR of 326 bytes', r'Map: E1M1: 56 Hexen-style line specials translated',
+      r'Map: E1M1: VANILLA nodes, 682 subsector polygons, total area 6712683',
+      r'Acs: SpawnSpot ShotgunGuy at things 20: 1', r'Message: Spawned 2',
+      r'Udmf: Thing_Spawn \(20, 5, 64, 21, 0\): 1 things', r'Udmf: Thing_Damage \(21, 232, 0, 0, 0\): 1 things',
+      r'Udmf: line 830: Pillar_Build, tag 12, 16, 0',
+      r'Acs: TROO \(thing id 0\): Light_ChangeToValue \(9, 64, 0, 0, 0\)'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'hexen.wad'), '--fixed-step'],
+     lambda config: check_hexen_format(config)),
+    # hexen.wad's E1M2: polyobjects in a Hexen-format map without nodes
+    # (built at load), moved by their lines, with SNDSEQ sounds.
+    ('hexen-poly', 'E1M2',
+     'Y,G:-416:200,A:90,W:0.3,LINE:829,W:1,SAVE:1,LINE:830,W:1,SAVE:2,S,Q',
+     [r'Map: E1M2: no BSP nodes, building them', r'Map: E1M2: BUILT nodes',
+      r'Map: E1M2: polyobject 1: 4 lines at \(-416, 384\) in sector 140',
+      r'Map: E1M2: polyobject 2: 4 lines at \(-416, 120\) in sector 140',
+      r'Sound: polyobject 1: PolyStone starts \(DSSTNMOV\)',
+      r'Udmf: Polyobj_RotateLeft \(1, 32, 64, 0, 0\): polyobject 1'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'hexen.wad'), '--fixed-step'],
+     lambda config: check_hexen_poly(config)),
     # 3D floors (udmf-3dfloor.wad): a translucent slab over the start
     # room the player walks under and a solid step in the corridor east
     # of it (sector 141) the player climbs onto; a shot up into the slab
@@ -641,6 +669,16 @@ TESTS = [
       r'Map: E1M1: UDMF, namespace "zdoom"', r'Message: Spawned 2'],
      ['--edit', '-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad')],
      lambda config: check_editor_udmf(config)),
+    # The editor reads a Hexen-format map as UDMF ("zdoom"), exports it
+    # as a TEXTMAP with its BEHAVIOR and play-tests it (the open script
+    # runs again).
+    ('editor-hexen', 'E1M1',
+     'VIEW:-416:256:0.5,MODE:s,CLICK:-416:240,KEY:E,TYPE:24,KEY:Enter,KEY:E,S,EXPORT,PLAY,W:1.5,SAVE:1,Q',
+     [r'Editor: Imported E1M1: \d+ vertices, 1175 lines, \d+ sides, 182 sectors, \d+ things, '
+      r'UDMF namespace "zdoom" \(from the Hexen format\) with scripts', r'Editor: Sector 140: Floor height 24',
+      r'Editor: Exported E1M1', r'Map: E1M1: UDMF, namespace "zdoom"', r'Message: Spawned 2'],
+     ['--edit', '-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'hexen.wad')],
+     lambda config: check_editor_hexen(config)),
     ('editor-props', 'E1M1',
      'VIEW:-416:256:0.5,DRAW:-480:192:-352:192:-352:288:-480:288,MODE:s,CLICK:-416:240,KEY:E,TYPE:24,KEY:Enter,'
      'KEY:Down,KEY:Down,TYPE:255,KEY:Enter,S,KEY:E,KEY:Ctrl+C,MOUSE:-416:-300,KEY:Ctrl+V,MOUSE:-900:256,KEY:Ctrl+V,S,'
@@ -813,6 +851,29 @@ def check_thing_specials(config):
     assert lights[1] == (64, lights[0][1]) and lights[2] == (64, 220) and lights[3] == lights[1], lights
     left = [[a['thingSpecial'] for a in s['actors'] if a.get('thingSpecial')] for s in saves]
     assert len(left[0]) == 2 and left[1] == [[112, 12, 220, 0, 0, 0]] and left[2] == [] and left[3] == left[1], left
+
+
+def check_hexen_format(config):
+    """tools/testdata/hexen.wad's E1M1: the things by thing id and the
+    actions of lines and things in the saves."""
+    saves = [save_json(config, n) for n in range(1, 6)]
+
+    def tid(save, t):
+        return [a for a in save['actors'] if a.get('tid') == t]
+    assert [a['type'] for a in tid(saves[0], 30)] == [9], 'no shotgun guy from SpawnSpot'
+    imp = tid(saves[1], 21)
+    assert imp and imp[0]['type'] == 3001 and abs(imp[0]['x'] + 320) < 1, 'no imp from Thing_Spawn: %s' % imp
+    assert tid(saves[2], 21)[0]['health'] <= 0, 'Thing_Damage did not kill the imp'
+    assert (saves[3]['sectorFloor'][99], saves[3]['sectorCeiling'][99]) == (46, 46), 'Pillar_Build'
+    assert saves[3]['sectorLight'][141] != 64 and saves[4]['sectorLight'][141] == 64, \
+        'thing action: light %s' % saves[4]['sectorLight'][141]
+
+
+def check_hexen_poly(config):
+    """hexen.wad's E1M2: polyobject 1 moved north, then turned; 2 mirrors."""
+    places = [save_json(config, n)['polyobjs'] for n in (1, 2)]
+    assert places[0] == [[-416, 416, 0], [-416, 88, 0]], places
+    assert places[1] == [[-416, 416, 90], [-416, 88, 270]], places
 
 
 def check_polyobjects(config):
@@ -1237,6 +1298,26 @@ def check_editor_udmf(config):
     assert abs(p['z'] - 24) < 2, 'play-test not on the raised floor: %s' % p
 
 
+def check_editor_hexen(config):
+    """The editor's export of hexen.wad's E1M1: UDMF with the BEHAVIOR,
+    the raised start room, line 1049's id from Line_SetIdentification,
+    the thing ids and thing actions kept; the play-test on the floor."""
+    lumps = read_wad(os.path.join(os.path.dirname(config), 'editor-hexen_e1m1.wad'))
+    assert [n for n, _ in lumps] == ['E1M1', 'TEXTMAP', 'BEHAVIOR', 'ENDMAP'], [n for n, _ in lumps]
+    text = lumps[1][1].decode('latin-1')
+    assert text.startswith('namespace = "zdoom";'), text[:40]
+    blocks = re.findall(r'(\w+) // (\d+)\n\{\n(.*?)\}', text, re.S)
+    sec = [b for k, n, b in blocks if k == 'sector' and n == '140'][0]
+    assert 'heightfloor = 24;' in sec, sec
+    line = [b for k, n, b in blocks if k == 'linedef' and n == '1049'][0]
+    assert 'id = 50;' in line and 'special' not in line, line
+    line = [b for k, n, b in blocks if k == 'linedef' and n == '829'][0]
+    assert 'special = 135;' in line and 'arg1 = 5;' in line and 'playeruse = true;' in line, line
+    assert 'id = 20;' in text and text.count('special = 112;') == 2, 'thing ids or specials lost'
+    p = save_json(config, 1)['player']
+    assert abs(p['z'] - 24) < 2, 'play-test not on the raised floor: %s' % p
+
+
 def check_editor_props(config):
     """Typed values, pasted sectors and a flipped line in the exported PWAD:
     sector 182 (floor 24, light 255) and its two copies, line 1176 turned
@@ -1394,6 +1475,7 @@ GOLDEN = [
     'udmf_1.png', 'udmf_2.png', 'udmf-acs_1.png', 'udmf-acs_2.png', 'udmf-things_1.png', 'editor-copy_edit_1.png', 'editor-copy_edit_2.png', 'editor-udmf_edit_1.png', 'slopes_1.png', 'slopes_2.png', 'slopes_3.png', '3d-floors_1.png', '3d-floors_2.png', '3d-floors_3.png', 'polyobjects_1.png', 'polyobjects_2.png', 'polyobjects_3.png', 'polyobjects_4.png', 'polyobjects_5.png', '3d-water_1.png', '3d-water_2.png', '3d-water_3.png', 'udmf-doom_1.png', 'udmf-look_1.png', 'udmf-look_2.png', 'udmf-look_3.png', 'udmf-look_4.png',
     'gldefs_1.png', 'gldefs_2.png', 'gldefs_3.png',
     'udmf-lights_1.png', 'udmf-lights_2.png',
+    'hexen-format_1.png', 'hexen-poly_1.png', 'editor-hexen_edit_1.png',
 ]
 
 

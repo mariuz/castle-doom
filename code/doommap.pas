@@ -257,6 +257,7 @@ type
     FPolyLines: array of Integer;
     FMarkStamp: Cardinal;
     FUdmf: Boolean;
+    FHexenFormat: Boolean;
     FUdmfNamespace: String;
     FUdmfSummary: String;
     { UDMF lines' opacity ("alpha", TranslucentLine), 1 = solid. }
@@ -277,6 +278,9 @@ type
     procedure NextMark;
     procedure AddCellRow(const Row, Col0, Col1: Integer; var Found: TLineList; var Count: Integer);
     procedure LoadLumps(const MarkerIndex: Integer);
+    function ApplyHexenLine(const NL, Special: Integer; const Args: array of Integer;
+      const Act: Integer; var Translated: Integer; const Unsupported: TStrings): Boolean;
+    procedure LogHexenSpecials(const Translated: Integer; const Unsupported: TStringList);
     procedure LoadVanillaNodes(const NodesLump, SegsLump, SubsLump: Integer);
     procedure LoadExtendedNodes(const Data: PByte; const Size: Integer; const Format: String);
     function LoadGlNodes: Boolean;
@@ -458,8 +462,12 @@ type
     { VANILLA, XNOD, ZNOD, XGLN, ZGLN, XGL2, ZGL2, XGL3, ZGL3, or GL_V1,
       GL_V2, GL_V3, GL_V5 (glBSP lumps). }
     property NodesFormat: String read FNodesFormat;
-    { A UDMF map (TEXTMAP), its namespace (lower case). }
+    { A UDMF map or a Hexen-format one: Hexen-style specials, thing ids,
+      scripts, polyobjects. }
     property Udmf: Boolean read FUdmf;
+    { The binary Hexen format (16-byte linedefs, 20-byte things, BEHAVIOR). }
+    property HexenFormat: Boolean read FHexenFormat;
+    { A UDMF map's namespace (lower case), '' for a binary map. }
     property UdmfNamespace: String read FUdmfNamespace;
   end;
 
@@ -617,10 +625,27 @@ procedure TDoomMap.LoadLumps(const MarkerIndex: Integer);
   end;
 
 var
-  L, I, N, NodesL, SegsL, SubsL: Integer;
+  L, I, J, N, NodesL, SegsL, SubsL, Raw, Act, Translated: Integer;
   P: PByte;
   Magic: String;
+  Args: array [0..4] of Integer;
+  Unsupported: TStringList;
 begin
+  { Hexen's format: a BEHAVIOR lump among the map's (before the next
+    marker, whose THINGS or TEXTMAP follows it). }
+  FHexenFormat := false;
+  for I := MarkerIndex + 1 to Min(MarkerIndex + 12, FWad.LumpCount - 1) do
+  begin
+    if (I + 1 < FWad.LumpCount) and (I > MarkerIndex + 1) and
+       ((FWad.LumpName(I + 1) = 'THINGS') or (FWad.LumpName(I + 1) = 'TEXTMAP')) then Break;
+    if FWad.LumpName(I) = 'BEHAVIOR' then
+    begin
+      FHexenFormat := true;
+      Behavior := FWad.LumpBytes(I);
+      Break;
+    end;
+  end;
+
   { VERTEXES }
   L := MapLump('VERTEXES');
   P := FWad.LumpPointer(L);
@@ -653,6 +678,8 @@ begin
     Sectors[I].OrigLight := PInt16(P + I * 26 + 20)^;
     Sectors[I].LightLevel := Sectors[I].OrigLight;
     Sectors[I].Special := PInt16(P + I * 26 + 22)^;
+    if FHexenFormat then
+      Sectors[I].Special := TranslateZDoomSectorSpecial(PUInt16(P + I * 26 + 22)^);
     Sectors[I].Tag := PInt16(P + I * 26 + 24)^;
   end;
 
@@ -683,44 +710,120 @@ begin
       Sidedefs[I].Sector := 0;
   end;
 
-  { LINEDEFS }
+  { LINEDEFS (Hexen's: 16 bytes, an action and five arguments in place
+    of the special and tag) }
   L := MapLump('LINEDEFS');
   P := FWad.LumpPointer(L);
-  N := FWad.LumpSize(L) div 14;
-  SetLength(Linedefs, N);
-  for I := 0 to N - 1 do
-  begin
-    Linedefs[I].V1 := PUInt16(P + I * 14)^;
-    Linedefs[I].V2 := PUInt16(P + I * 14 + 2)^;
-    Linedefs[I].Flags := PUInt16(P + I * 14 + 4)^;
-    Linedefs[I].Special := PInt16(P + I * 14 + 6)^;
-    Linedefs[I].Tag := PInt16(P + I * 14 + 8)^;
-    Linedefs[I].Side[0] := PUInt16(P + I * 14 + 10)^;
-    Linedefs[I].Side[1] := PUInt16(P + I * 14 + 12)^;
-    if Linedefs[I].Side[0] = $FFFF then Linedefs[I].Side[0] := -1;
-    if Linedefs[I].Side[1] = $FFFF then Linedefs[I].Side[1] := -1;
-    if (Linedefs[I].Side[0] < 0) or (Linedefs[I].Side[0] >= Length(Sidedefs)) then Linedefs[I].Side[0] := -1;
-    if (Linedefs[I].Side[1] < 0) or (Linedefs[I].Side[1] >= Length(Sidedefs)) then Linedefs[I].Side[1] := -1;
-    if (Linedefs[I].V1 >= Length(Vertices)) then Linedefs[I].V1 := 0;
-    if (Linedefs[I].V2 >= Length(Vertices)) then Linedefs[I].V2 := 0;
-    Linedefs[I].FrontSector := SideSector(I, 0);
-    Linedefs[I].BackSector := SideSector(I, 1);
-    Linedefs[I].Length := Sqrt(Sqr(Vertices[Linedefs[I].V2].X - Vertices[Linedefs[I].V1].X) +
-      Sqr(Vertices[Linedefs[I].V2].Y - Vertices[Linedefs[I].V1].Y));
-  end;
+  Translated := 0;
+  Unsupported := TStringList.Create;
+  try
+    if FHexenFormat then
+    begin
+      N := FWad.LumpSize(L) div 16;
+      SetLength(FUdmfAlpha, N);
+    end else
+      N := FWad.LumpSize(L) div 14;
+    SetLength(Linedefs, N);
+    for I := 0 to N - 1 do
+    begin
+      Linedefs[I] := Default(TDoomLinedef);
+      Linedefs[I].Id := -1;
+      if FHexenFormat then
+      begin
+        Linedefs[I].V1 := PUInt16(P + I * 16)^;
+        Linedefs[I].V2 := PUInt16(P + I * 16 + 2)^;
+        Raw := PUInt16(P + I * 16 + 4)^;
+        { Doom's nine flags; the rest is the activation. ZDoom's UseThrough
+          (SPAC 6) lets the use pass on (Boom's 512). }
+        Linedefs[I].Flags := Raw and $1FF;
+        if ((Raw shr 10) and 7) = 6 then
+          Linedefs[I].Flags := Linedefs[I].Flags or 512;
+        for J := 0 to 4 do
+          Args[J] := P[I * 16 + 7 + J];
+        Linedefs[I].Side[0] := PUInt16(P + I * 16 + 12)^;
+        Linedefs[I].Side[1] := PUInt16(P + I * 16 + 14)^;
+        Linedefs[I].Id := HexenLineId(P[I * 16 + 6], Args);
+        FUdmfAlpha[I] := 1;
+        Act := HexenActivation(Raw);
+        { No action and no activation bits: nothing activates it (SPAC 0
+          is also "player cross"). }
+        if (P[I * 16 + 6] = 0) and ((Raw and $3E00) = 0) then Act := 0;
+        { Line_SetIdentification only names the line. }
+        if P[I * 16 + 6] <> 121 then
+          ApplyHexenLine(I, P[I * 16 + 6], Args, Act, Translated, Unsupported);
+      end else
+      begin
+        Linedefs[I].V1 := PUInt16(P + I * 14)^;
+        Linedefs[I].V2 := PUInt16(P + I * 14 + 2)^;
+        Linedefs[I].Flags := PUInt16(P + I * 14 + 4)^;
+        Linedefs[I].Special := PInt16(P + I * 14 + 6)^;
+        Linedefs[I].Tag := PInt16(P + I * 14 + 8)^;
+        Linedefs[I].Side[0] := PUInt16(P + I * 14 + 10)^;
+        Linedefs[I].Side[1] := PUInt16(P + I * 14 + 12)^;
+      end;
+      if Linedefs[I].Side[0] = $FFFF then Linedefs[I].Side[0] := -1;
+      if Linedefs[I].Side[1] = $FFFF then Linedefs[I].Side[1] := -1;
+      if (Linedefs[I].Side[0] < 0) or (Linedefs[I].Side[0] >= Length(Sidedefs)) then Linedefs[I].Side[0] := -1;
+      if (Linedefs[I].Side[1] < 0) or (Linedefs[I].Side[1] >= Length(Sidedefs)) then Linedefs[I].Side[1] := -1;
+      if (Linedefs[I].V1 >= Length(Vertices)) then Linedefs[I].V1 := 0;
+      if (Linedefs[I].V2 >= Length(Vertices)) then Linedefs[I].V2 := 0;
+      Linedefs[I].FrontSector := SideSector(I, 0);
+      Linedefs[I].BackSector := SideSector(I, 1);
+      Linedefs[I].Length := Sqrt(Sqr(Vertices[Linedefs[I].V2].X - Vertices[Linedefs[I].V1].X) +
+        Sqr(Vertices[Linedefs[I].V2].Y - Vertices[Linedefs[I].V1].Y));
+    end;
 
-  { THINGS }
-  L := MapLump('THINGS');
-  P := FWad.LumpPointer(L);
-  N := FWad.LumpSize(L) div 10;
-  SetLength(Things, N);
-  for I := 0 to N - 1 do
-  begin
-    Things[I].X := PInt16(P + I * 10)^;
-    Things[I].Y := PInt16(P + I * 10 + 2)^;
-    Things[I].Angle := PInt16(P + I * 10 + 4)^;
-    Things[I].TypeNum := PInt16(P + I * 10 + 6)^;
-    Things[I].Flags := PInt16(P + I * 10 + 8)^;
+    { THINGS (Hexen's: 20 bytes, with an id, a height, an action) }
+    L := MapLump('THINGS');
+    P := FWad.LumpPointer(L);
+    if FHexenFormat then
+    begin
+      N := FWad.LumpSize(L) div 20;
+      SetLength(Things, N);
+      for I := 0 to N - 1 do
+      begin
+        Things[I] := Default(TDoomThing);
+        Things[I].Tid := PInt16(P + I * 20)^;
+        Things[I].X := PInt16(P + I * 20 + 2)^;
+        Things[I].Y := PInt16(P + I * 20 + 4)^;
+        Things[I].Z := PInt16(P + I * 20 + 6)^;
+        Things[I].Angle := PInt16(P + I * 20 + 8)^;
+        Things[I].TypeNum := PInt16(P + I * 20 + 10)^;
+        { ZDoom's teleport destinations with a height. }
+        if (Things[I].TypeNum = 9043) or (Things[I].TypeNum = 9044) then
+          Things[I].TypeNum := 14;
+        Raw := PUInt16(P + I * 20 + 12)^;
+        { Skills and ambush as Doom's; 256 single player, 512 coop, 1024
+          deathmatch (none of them: every mode). }
+        Things[I].Flags := Raw and 15;
+        if ((Raw and $700) <> 0) and ((Raw and 256) = 0) then
+          Things[I].Flags := Things[I].Flags or MTF_NOTSINGLE;
+        Things[I].Special := P[I * 20 + 14];
+        for J := 0 to 4 do
+          Things[I].Args[J] := P[I * 20 + 15 + J];
+      end;
+    end else
+    begin
+      N := FWad.LumpSize(L) div 10;
+      SetLength(Things, N);
+      for I := 0 to N - 1 do
+      begin
+        Things[I].X := PInt16(P + I * 10)^;
+        Things[I].Y := PInt16(P + I * 10 + 2)^;
+        Things[I].Angle := PInt16(P + I * 10 + 4)^;
+        Things[I].TypeNum := PInt16(P + I * 10 + 6)^;
+        Things[I].Flags := PInt16(P + I * 10 + 8)^;
+      end;
+    end;
+    if FHexenFormat then
+    begin
+      WritelnLog('Map', '%s: Hexen format: %d vertices, %d linedefs, %d sidedefs, %d sectors, %d things, BEHAVIOR of %d bytes', [
+        FName, Length(Vertices), Length(Linedefs), Length(Sidedefs), Length(Sectors), Length(Things),
+        Length(Behavior)]);
+      LogHexenSpecials(Translated, Unsupported);
+    end;
+  finally
+    FreeAndNil(Unsupported);
   end;
 
   { BSP: vanilla NODES/SEGS/SSECTORS, or ZDoom extended nodes in NODES
@@ -755,10 +858,98 @@ begin
       begin
         { glBSP run with -xn leaves the normal nodes empty: GL_<map>. }
         if not LoadGlNodes then
-          raise Exception.CreateFmt('Map %s has no BSP nodes; build it with a node builder (ZDBSP, ZokumBSP, glBSP...)', [FName]);
+        begin
+          WritelnLog('Map', '%s: no BSP nodes, building them', [FName]);
+          BuildNodes;
+        end;
       end else
         LoadVanillaNodes(NodesL, SegsL, SubsL);
     end;
+  end;
+  { Its lines, things and scripts work as a UDMF map's (after the nodes:
+    a UDMF map's extended nodes are checked against its TEXTMAP). }
+  if FHexenFormat then
+    FUdmf := true;
+end;
+
+procedure TDoomMap.LogHexenSpecials(const Translated: Integer; const Unsupported: TStringList);
+var
+  I, J: Integer;
+begin
+  Unsupported.Sort;
+  FUdmfSummary := '';
+  I := 0;
+  while I < Unsupported.Count do
+  begin
+    J := I;
+    while (J + 1 < Unsupported.Count) and (Unsupported[J + 1] = Unsupported[I]) do Inc(J);
+    if FUdmfSummary <> '' then FUdmfSummary := FUdmfSummary + ', ';
+    FUdmfSummary := FUdmfSummary + Unsupported[I];
+    if J > I then FUdmfSummary := FUdmfSummary + Format(' x%d', [J - I + 1]);
+    I := J + 1;
+  end;
+  if Unsupported.Count = 0 then
+    WritelnLog('Map', '%s: %d Hexen-style line specials translated', [FName, Translated])
+  else
+    WritelnLog('Map', '%s: %d Hexen-style line specials translated, %d not supported: %s', [
+      FName, Translated, Unsupported.Count, FUdmfSummary]);
+end;
+
+{ Line NL's Hexen-style Special with Args, activated as Act (Ua*): a
+  polyobject's line (false: kept for BuildPolyobjs, no special) or
+  translated to Doom's / Boom's / the UdmfSpecial* types. }
+function TDoomMap.ApplyHexenLine(const NL, Special: Integer; const Args: array of Integer;
+  const Act: Integer; var Translated: Integer; const Unsupported: TStrings): Boolean;
+var
+  H: THexenLine;
+  J: Integer;
+begin
+  Result := true;
+  { Polyobj_StartLine (1) and Polyobj_ExplicitLine (5): the lines of a
+    polyobject, gathered by BuildPolyobjs. }
+  if (Special = 1) or (Special = 5) then
+  begin
+    SetLength(FPolyStarts, Length(FPolyStarts) + 1);
+    FPolyStarts[High(FPolyStarts)].Line := NL;
+    FPolyStarts[High(FPolyStarts)].Number := Args[0];
+    FPolyStarts[High(FPolyStarts)].Order := Args[1];
+    FPolyStarts[High(FPolyStarts)].Explicit := Special = 5;
+    { StartLine (po, mirror, sound), ExplicitLine (po, order, mirror, sound). }
+    if Special = 5 then
+    begin
+      FPolyStarts[High(FPolyStarts)].Mirror := Args[2];
+      FPolyStarts[High(FPolyStarts)].Sound := Args[3];
+    end else
+    begin
+      FPolyStarts[High(FPolyStarts)].Mirror := Args[1];
+      FPolyStarts[High(FPolyStarts)].Sound := Args[2];
+    end;
+    Exit(false);
+  end;
+  H := TranslateHexenLine(Special, Args, Act);
+  Linedefs[NL].Special := H.Special;
+  Linedefs[NL].Tag := H.Tag;
+  for J := 0 to 4 do
+    Linedefs[NL].Args[J] := H.Args[J];
+  Linedefs[NL].Trigger := H.Trigger;
+  Linedefs[NL].Activation := Act;
+  if H.Special <> 0 then Inc(Translated);
+  if H.Unsupported <> '' then
+    Unsupported.Add(H.Unsupported);
+  if H.TeleportTid <> 0 then
+  begin
+    SetLength(FTidTeleports, Length(FTidTeleports) + 1);
+    FTidTeleports[High(FTidTeleports)][0] := NL;
+    FTidTeleports[High(FTidTeleports)][1] := H.TeleportTid;
+  end;
+  if H.TranslucentId <> 0 then
+  begin
+    if H.TranslucentId < 0 then
+      FUdmfAlpha[NL] := H.Alpha
+    else
+      { Lines read so far; ResolveUdmfLinks does all of them. }
+      Linedefs[NL].Args[4] := Round(H.Alpha * 255);
+    Linedefs[NL].Args[3] := H.TranslucentId;
   end;
 end;
 
@@ -774,7 +965,6 @@ var
   I, J, L, NV, NL, NS, NSec, NT, ZNodes, Translated, Act: Integer;
   B: PUdmfBlock;
   Hexen: Boolean;
-  H: THexenLine;
   Args: array [0..4] of Integer;
   Unsupported: TStringList;
   P: PByte;
@@ -1015,57 +1205,15 @@ begin
           Act1('monsterpush', UaMonsterPush);
           Act1('missilecross', UaMissileCross);
           Act1('repeatspecial', UaRepeat);
-          { Polyobj_StartLine (1) and Polyobj_ExplicitLine (5): the lines
-            of a polyobject, gathered by BuildPolyobjs. }
-          if (UdmfInt(B^, 'special') = 1) or (UdmfInt(B^, 'special') = 5) then
+          if not ApplyHexenLine(NL, UdmfInt(B^, 'special'), Args, Act, Translated, Unsupported) then
           begin
-            SetLength(FPolyStarts, Length(FPolyStarts) + 1);
-            FPolyStarts[High(FPolyStarts)].Line := NL;
-            FPolyStarts[High(FPolyStarts)].Number := Args[0];
-            FPolyStarts[High(FPolyStarts)].Order := Args[1];
-            FPolyStarts[High(FPolyStarts)].Explicit := UdmfInt(B^, 'special') = 5;
-            { StartLine (po, mirror, sound), ExplicitLine (po, order, mirror, sound). }
-            if UdmfInt(B^, 'special') = 5 then
-            begin
-              FPolyStarts[High(FPolyStarts)].Mirror := Args[2];
-              FPolyStarts[High(FPolyStarts)].Sound := Args[3];
-            end else
-            begin
-              FPolyStarts[High(FPolyStarts)].Mirror := Args[1];
-              FPolyStarts[High(FPolyStarts)].Sound := Args[2];
-            end;
             Inc(NL);
             Continue;
           end;
-          H := TranslateHexenLine(UdmfInt(B^, 'special'), Args, Act);
-          Linedefs[NL].Special := H.Special;
-          Linedefs[NL].Tag := H.Tag;
-          for J := 0 to 4 do
-            Linedefs[NL].Args[J] := H.Args[J];
-          Linedefs[NL].Trigger := H.Trigger;
-          Linedefs[NL].Activation := Act;
           if UdmfHas(B^, 'arg0str') then
           begin
             if Length(LineArg0Str) < Length(Linedefs) then SetLength(LineArg0Str, Length(Linedefs));
             LineArg0Str[NL] := UdmfStr(B^, 'arg0str');
-          end;
-          if H.Special <> 0 then Inc(Translated);
-          if H.Unsupported <> '' then
-            Unsupported.Add(H.Unsupported);
-          if H.TeleportTid <> 0 then
-          begin
-            SetLength(FTidTeleports, Length(FTidTeleports) + 1);
-            FTidTeleports[High(FTidTeleports)][0] := NL;
-            FTidTeleports[High(FTidTeleports)][1] := H.TeleportTid;
-          end;
-          if H.TranslucentId <> 0 then
-          begin
-            if H.TranslucentId < 0 then
-              FUdmfAlpha[NL] := H.Alpha
-            else
-              { Lines read so far; ResolveUdmfLinks does all of them. }
-              Linedefs[NL].Args[4] := Round(H.Alpha * 255);
-            Linedefs[NL].Args[3] := H.TranslucentId;
           end;
         end else
         begin
@@ -1121,30 +1269,12 @@ begin
   end else
     BuildNodes;
 
-  Unsupported.Sort;
-  FUdmfSummary := '';
-  I := 0;
-  while I < Unsupported.Count do
-  begin
-    J := I;
-    while (J + 1 < Unsupported.Count) and (Unsupported[J + 1] = Unsupported[I]) do Inc(J);
-    if FUdmfSummary <> '' then FUdmfSummary := FUdmfSummary + ', ';
-    FUdmfSummary := FUdmfSummary + Unsupported[I];
-    if J > I then FUdmfSummary := FUdmfSummary + Format(' x%d', [J - I + 1]);
-    I := J + 1;
-  end;
   WritelnLog('Map', '%s: UDMF, namespace "%s": %d vertices, %d linedefs, %d sidedefs, %d sectors, %d things, %s nodes', [
     FName, FUdmfNamespace, Length(Vertices), Length(Linedefs), Length(Sidedefs), Length(Sectors),
     Length(Things), FNodesFormat]);
   LogUdmfLook;
   if Hexen then
-  begin
-    if Unsupported.Count = 0 then
-      WritelnLog('Map', '%s: %d Hexen-style line specials translated', [FName, Translated])
-    else
-      WritelnLog('Map', '%s: %d Hexen-style line specials translated, %d not supported: %s', [
-        FName, Translated, Unsupported.Count, FUdmfSummary]);
-  end;
+    LogHexenSpecials(Translated, Unsupported);
   FreeAndNil(Unsupported);
 end;
 

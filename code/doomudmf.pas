@@ -208,6 +208,15 @@ function UdmfThingSpecial(const Special: Integer): Boolean;
 { One of the polyobject actions (UdmfPolyRotateLeft..UdmfPolyOrMoveToSpot). }
 function UdmfPolySpecial(const Special: Integer): Boolean;
 
+{ Hexen-format maps (binary, 16-byte linedefs): a line's flags as the
+  Ua* activation (bits 10..12 the SPAC: 0 player cross, 1 use, 2 monster
+  cross, 3 impact, 4 player push, 5 missile cross, 6 use through; 0x200
+  repeat; ZDoom's 0x2000 lets monsters do what the player does). }
+function HexenActivation(const Flags: Integer): Integer;
+{ The line id a Hexen-format line's special sets (Line_SetIdentification,
+  TranslucentLine, Teleport_Line, Polyobj_StartLine...), -1 none. }
+function HexenLineId(const Special: Integer; const Args: array of Integer): Integer;
+
 implementation
 
 uses Math, DoomGeneralized;
@@ -1215,6 +1224,52 @@ begin
   end;
   if Result.Special >= UdmfSpecialBase then
     Result.Trigger := Trig + IfThen(Monster, 8, 0);
+end;
+
+function HexenActivation(const Flags: Integer): Integer;
+var
+  Monsters: Boolean;
+begin
+  Monsters := (Flags and $2000) <> 0;
+  case (Flags shr 10) and 7 of
+    0: begin
+         Result := UaPlayerCross;
+         if Monsters then Result := Result or UaMonsterCross;
+       end;
+    1, 6:
+       begin
+         Result := UaPlayerUse;
+         if Monsters then Result := Result or UaMonsterUse;
+       end;
+    2: Result := UaMonsterCross;
+    3: Result := UaImpact;
+    4: begin
+         Result := UaPlayerPush;
+         if Monsters then Result := Result or UaMonsterPush;
+       end;
+    5: Result := UaMissileCross;
+    else Result := 0;
+  end;
+  if (Flags and $200) <> 0 then Result := Result or UaRepeat;
+end;
+
+function HexenLineId(const Special: Integer; const Args: array of Integer): Integer;
+
+  function A(const I: Integer): Integer;
+  begin
+    if I <= High(Args) then Result := Args[I] else Result := 0;
+  end;
+
+begin
+  case Special of
+    121: Result := A(0) + 256 * A(4);   { Line_SetIdentification }
+    208, 215, 222: Result := A(0);      { TranslucentLine, Teleport_Line, Scroll_Texture_Model }
+    1: Result := A(3);                  { Polyobj_StartLine }
+    5: Result := A(4);                  { Polyobj_ExplicitLine }
+    181: Result := A(2);                { Plane_Align }
+    else Result := 0;
+  end;
+  if Result = 0 then Result := -1;
 end;
 
 function TranslateZDoomSectorSpecial(const Special: Integer): Integer;

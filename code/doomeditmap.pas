@@ -118,6 +118,9 @@ type
     Behavior: TBytes;
     { UDMF: vertices whose fractions were rounded away on reading. }
     RoundedVertices: Integer;
+    { Read from a Hexen-format map (binary lumps with a BEHAVIOR), kept
+      as UDMF. }
+    FromHexen: Boolean;
     { The map lump name (E1M1, MAP01...). }
     Name: String;
     Vertices: TEditVertexArray;
@@ -251,6 +254,12 @@ const
 
 { The play-test URL of the editor's map MapName (TDoomWad.AddFile reads
   its PWAD from RegisterEditedWad). }
+{ A Hexen-format map's lumps (16-byte LINEDEFS, 20-byte THINGS) as a
+  UDMF TEXTMAP in the "zdoom" namespace, whose specials, sector types and
+  thing fields are the same: what the editor reads such a map as (it
+  saves it as UDMF). }
+function HexenMapToUdmf(const ThingsLump, LinesLump, SidesLump, VertsLump, SectorsLump: TBytes): String;
+
 function EditedWadUrl(const MapName: String): String;
 function IsEditedWadUrl(const Url: String; out MapName: String): Boolean;
 { Keep a copy of Data as the PWAD of edit:/MapName. }
@@ -416,6 +425,7 @@ begin
   Namespace := '';
   Behavior := nil;
   RoundedVertices := 0;
+  FromHexen := false;
 end;
 
 function TDoomEditMap.LoadFromWad(const Wad: TDoomWad; const MapName: String; out Error: String): Boolean;
@@ -467,10 +477,15 @@ begin
       if Lump('BEHAVIOR') >= 0 then
         Behavior := Wad.LumpBytes(Lump('BEHAVIOR'));
     end else
-    if Lump('BEHAVIOR') >= 0 then
+    if (Lump('BEHAVIOR') >= 0) and (Lump('VERTEXES') >= 0) and (Lump('LINEDEFS') >= 0) and
+       (Lump('SIDEDEFS') >= 0) and (Lump('SECTORS') >= 0) and (Lump('THINGS') >= 0) then
     begin
-      Error := Format('%s is a Hexen-format map, which the editor cannot read', [UpperCase(MapName)]);
-      Exit;
+      Clear(MapName);
+      if not LoadUdmf(HexenMapToUdmf(Wad.LumpBytes(Lump('THINGS')), Wad.LumpBytes(Lump('LINEDEFS')),
+        Wad.LumpBytes(Lump('SIDEDEFS')), Wad.LumpBytes(Lump('VERTEXES')), Wad.LumpBytes(Lump('SECTORS'))),
+        Error) then Exit;
+      Behavior := Wad.LumpBytes(Lump('BEHAVIOR'));
+      FromHexen := true;
     end else
     if (Lump('VERTEXES') < 0) or (Lump('LINEDEFS') < 0) or (Lump('SIDEDEFS') < 0) or
        (Lump('SECTORS') < 0) or (Lump('THINGS') < 0) then
@@ -608,6 +623,152 @@ begin
   else
     Result := FloatToStr(V, DefaultFormatSettings);
   Result := StringReplace(Result, DefaultFormatSettings.DecimalSeparator, '.', []);
+end;
+
+{ Hexen format ----------------------------------------------------------------- }
+
+function HexenMapToUdmf(const ThingsLump, LinesLump, SidesLump, VertsLump, SectorsLump: TBytes): String;
+var
+  Sb: TStringBuilder;
+  I, J, Raw, Special, Id, Spac: Integer;
+  Args: array [0..4] of Integer;
+  P: PByte;
+
+  procedure Put(const Key, Value: String);
+  begin
+    Sb.Append(Key).Append(' = ').Append(Value).Append(';').Append(#10);
+  end;
+
+  procedure PutTrue(const Key: String);
+  begin
+    Put(Key, 'true');
+  end;
+
+  procedure PutTex(const Key: String; const At: PByte);
+  var
+    T: String;
+  begin
+    T := DoomName(At);
+    if (T <> '') and (T <> '-') then Put(Key, UdmfQuote(T));
+  end;
+
+const
+  LineKeys: array [0..8] of String = ('blocking', 'blockmonsters', 'twosided', 'dontpegtop',
+    'dontpegbottom', 'secret', 'blocksound', 'dontdraw', 'mapped');
+  SpacKeys: array [0..6] of String = ('playercross', 'playeruse', 'monstercross', 'impact',
+    'playerpush', 'missilecross', 'playeruse');
+  MonsterKeys: array [0..6] of String = ('monstercross', 'monsteruse', '', '', 'monsterpush', '', 'monsteruse');
+begin
+  Sb := TStringBuilder.Create;
+  try
+    Sb.Append('namespace = "zdoom";').Append(#10).Append(#10);
+    for I := 0 to Length(VertsLump) div 4 - 1 do
+    begin
+      P := @VertsLump[I * 4];
+      Sb.Append('vertex').Append(#10).Append('{').Append(#10);
+      Put('x', UdmfNumber(PInt16(P)^));
+      Put('y', UdmfNumber(PInt16(P + 2)^));
+      Sb.Append('}').Append(#10);
+    end;
+    for I := 0 to Length(LinesLump) div 16 - 1 do
+    begin
+      P := @LinesLump[I * 16];
+      Sb.Append('linedef').Append(#10).Append('{').Append(#10);
+      Put('v1', IntToStr(PUInt16(P)^));
+      Put('v2', IntToStr(PUInt16(P + 2)^));
+      if PUInt16(P + 12)^ <> $FFFF then Put('sidefront', IntToStr(PUInt16(P + 12)^));
+      if PUInt16(P + 14)^ <> $FFFF then Put('sideback', IntToStr(PUInt16(P + 14)^));
+      Raw := PUInt16(P + 4)^;
+      for J := 0 to High(LineKeys) do
+        if (Raw and (1 shl J)) <> 0 then PutTrue(LineKeys[J]);
+      Special := P[6];
+      for J := 0 to 4 do
+        Args[J] := P[7 + J];
+      Id := HexenLineId(Special, Args);
+      if Id > 0 then Put('id', IntToStr(Id));
+      { Line_SetIdentification only names the line (arg1: more flags). }
+      if Special = 121 then
+        Special := 0
+      else
+      if Special <> 0 then
+      begin
+        Put('special', IntToStr(Special));
+        for J := 0 to 4 do
+          if Args[J] <> 0 then Put('arg' + IntToStr(J), IntToStr(Args[J]));
+        Spac := (Raw shr 10) and 7;
+        if Spac <= High(SpacKeys) then
+        begin
+          PutTrue(SpacKeys[Spac]);
+          if ((Raw and $2000) <> 0) and (MonsterKeys[Spac] <> '') then PutTrue(MonsterKeys[Spac]);
+          if Spac = 6 then PutTrue('passuse');
+        end;
+        if (Raw and $200) <> 0 then PutTrue('repeatspecial');
+      end;
+      if (Raw and $4000) <> 0 then PutTrue('blockplayers');
+      if (Raw and $8000) <> 0 then PutTrue('blockeverything');
+      Sb.Append('}').Append(#10);
+    end;
+    for I := 0 to Length(SidesLump) div 30 - 1 do
+    begin
+      P := @SidesLump[I * 30];
+      Sb.Append('sidedef').Append(#10).Append('{').Append(#10);
+      if PInt16(P)^ <> 0 then Put('offsetx', IntToStr(PInt16(P)^));
+      if PInt16(P + 2)^ <> 0 then Put('offsety', IntToStr(PInt16(P + 2)^));
+      PutTex('texturetop', P + 4);
+      PutTex('texturebottom', P + 12);
+      PutTex('texturemiddle', P + 20);
+      Put('sector', IntToStr(PUInt16(P + 28)^));
+      Sb.Append('}').Append(#10);
+    end;
+    for I := 0 to Length(SectorsLump) div 26 - 1 do
+    begin
+      P := @SectorsLump[I * 26];
+      Sb.Append('sector').Append(#10).Append('{').Append(#10);
+      Put('heightfloor', IntToStr(PInt16(P)^));
+      Put('heightceiling', IntToStr(PInt16(P + 2)^));
+      Put('texturefloor', UdmfQuote(DoomName(P + 4)));
+      Put('textureceiling', UdmfQuote(DoomName(P + 12)));
+      Put('lightlevel', IntToStr(PInt16(P + 20)^));
+      if PUInt16(P + 22)^ <> 0 then Put('special', IntToStr(PUInt16(P + 22)^));
+      if PInt16(P + 24)^ <> 0 then Put('id', IntToStr(PInt16(P + 24)^));
+      Sb.Append('}').Append(#10);
+    end;
+    for I := 0 to Length(ThingsLump) div 20 - 1 do
+    begin
+      P := @ThingsLump[I * 20];
+      Sb.Append('thing').Append(#10).Append('{').Append(#10);
+      if PInt16(P)^ <> 0 then Put('id', IntToStr(PInt16(P)^));
+      Put('x', UdmfNumber(PInt16(P + 2)^));
+      Put('y', UdmfNumber(PInt16(P + 4)^));
+      if PInt16(P + 6)^ <> 0 then Put('height', UdmfNumber(PInt16(P + 6)^));
+      Put('angle', IntToStr(PInt16(P + 8)^));
+      Put('type', IntToStr(PInt16(P + 10)^));
+      Raw := PUInt16(P + 12)^;
+      if (Raw and 1) <> 0 then begin PutTrue('skill1'); PutTrue('skill2'); end;
+      if (Raw and 2) <> 0 then PutTrue('skill3');
+      if (Raw and 4) <> 0 then begin PutTrue('skill4'); PutTrue('skill5'); end;
+      if (Raw and 8) <> 0 then PutTrue('ambush');
+      if (Raw and 16) <> 0 then PutTrue('dormant');
+      if (Raw and 32) <> 0 then PutTrue('class1');
+      if (Raw and 64) <> 0 then PutTrue('class2');
+      if (Raw and 128) <> 0 then PutTrue('class3');
+      { None of the modes: all of them. }
+      if ((Raw and 256) <> 0) or ((Raw and $700) = 0) then PutTrue('single');
+      if ((Raw and 512) <> 0) or ((Raw and $700) = 0) then PutTrue('coop');
+      if ((Raw and 1024) <> 0) or ((Raw and $700) = 0) then PutTrue('dm');
+      if (Raw and 2048) <> 0 then PutTrue('translucent');
+      if (Raw and 4096) <> 0 then PutTrue('invisible');
+      if (Raw and 8192) <> 0 then PutTrue('friend');
+      if (Raw and 16384) <> 0 then PutTrue('standing');
+      if P[14] <> 0 then Put('special', IntToStr(P[14]));
+      for J := 0 to 4 do
+        if P[15 + J] <> 0 then Put('arg' + IntToStr(J), IntToStr(P[15 + J]));
+      Sb.Append('}').Append(#10);
+    end;
+    Result := Sb.ToString;
+  finally
+    FreeAndNil(Sb);
+  end;
 end;
 
 function TDoomEditMap.LoadUdmf(const Text: String; out Error: String): Boolean;
@@ -1092,6 +1253,7 @@ begin
   if Udmf then
   begin
     Result := Result + Format(', UDMF namespace "%s"', [Namespace]);
+    if FromHexen then Result := Result + ' (from the Hexen format)';
     if Length(Behavior) > 0 then Result := Result + ' with scripts';
     if RoundedVertices > 0 then Result := Result + Format(', %d vertices rounded', [RoundedVertices]);
   end;
