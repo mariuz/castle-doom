@@ -974,7 +974,7 @@ autotest only checks the library loads.
   3D floors, stage 3: `udmf-3dfloor2.wad` (same script) fills the start
   room with swimmable water (0..64, light 96: log `Water: Swimming
   (sector 140, z 0.0, eye 41.0)`, `View in a swimmable 3D floor`;
-  `LOOK:60,F:0.6` floats the player at z 56) and puts a sloped slab
+  `LOOK:89,F:0.6` floats the player at z 56, straight up so the spot does not depend on timing) and puts a sloped slab
   (top 72..96, light 255) over the corridor east of it (autotest
   `3d-water` with goldens, unit test `Test3dWater`).
   Polyobjects: `udmf-poly.wad` (same script) draws a 64 x 16 slab out

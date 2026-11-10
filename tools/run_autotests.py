@@ -498,7 +498,7 @@ TESTS = [
     # (tinted view, swimming up to float at the surface, down again), a
     # sloped slab lighting the corridor under it at 255 and an imp there.
     ('3d-water', 'E1M1',
-     'Y,G:-416:256,A:0,W:0.3,S,LOOK:60,F:0.6,W:0.5,SAVE:1,S,LOOK:-60,F:0.4,W:0.3,SAVE:2,G:-224:150,A:90,LOOK:0,'
+     'Y,G:-416:256,A:0,W:0.3,S,LOOK:89,F:0.6,W:0.5,LOOK:30,W:0.1,SAVE:1,S,LOOK:-60,F:0.4,W:0.3,SAVE:2,G:-224:150,A:90,LOOK:0,'
      'W:0.5,S,P:3001:120,W:0.5,SAVE:3,Q',
      [r'Map: E1M1: slopes: 0 floors, 1 ceilings', r'Map: E1M1: 2 3D floors',
       r'Water: Swimming \(sector 140, z 0\.0, eye 41\.0\)',
