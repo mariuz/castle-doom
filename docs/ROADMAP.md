@@ -64,6 +64,16 @@ L = several days). Items inside a section are in suggested order.
   Test map `udmf-3dfloor2.wad`, unit test `Test3dWater`, autotest
   `3d-water` (goldens).
 
+- 3D floors, the rest (part): the water's view tint takes the control
+  sector's `fadecolor` (or `lightcolor`); things in water sink slowly
+  (`TDoomWorld.InWater` / `WaterFall`, after GZDoom: an eighth of the
+  gravity, sinking speed 0.5, corpses a third); slabs with type bit 4
+  are drawn from inside too (`TFloor3D.RenderInside`). Test map
+  `udmf-3dfloor3.wad` (green water drawn from inside, a falling imp
+  ball fired in it), autotest `3d-water-inside` (goldens), unit test
+  `Test3dWater`. Left: vertex-height control sectors, sounds blocked
+  by slabs, splashes.
+
 - Polyobjects (UDMF, stage 1): `TDoomMap.BuildPolyobjs` gathers each
   polyobject's lines (`Polyobj_StartLine`'s loop of joined lines or the
   numbered `Polyobj_ExplicitLine` ones, taken out of the translated
@@ -1559,19 +1569,17 @@ play.
 
 ## Suggested next three
 
-1. 3D floors, the rest (S-M): monsters and missiles in water (they
-   ignore it), the water's own colour from the control sector
-   (`fadecolor`), vertex-height control sectors, sounds blocked by
-   slabs, non-solid slabs' "render inside" flag.
-2. Map editor, UDMF fields (S-M): edit what is kept as text today
+1. Map editor, UDMF fields (S-M): edit what is kept as text today
    (arg1..arg4, line and thing ids, activation flags, thing specials,
    the look fields) in the properties panel, and keep fractional
    vertices through moves.
-3. Line blocking flags (S): ZDoom's `blockplayers`, `blockeverything`,
+2. Line blocking flags (S): ZDoom's `blockplayers`, `blockeverything`,
    `blockprojectiles`, `blockhitscan`, `blocksight` and `blockuse`
    (UDMF booleans, Hexen-format bits 0x4000 / 0x8000), read into
    `TDoomLinedef` and honoured by moves, missiles, hitscans, sight and
    use.
+3. 3D floors, the last part (S-M): vertex-height control sectors,
+   sounds blocked by slabs, splashes where things enter water.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

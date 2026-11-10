@@ -364,8 +364,17 @@ planes, so sloped slabs work everywhere). Light: `LightAt` gives the
 control's light up to the top of the lowest slab that casts it, which
 the floor flat, the wall pieces under it (`EmitWall` splits the quad)
 and things there use. Swimmable slabs are not solid; the world's
-`UpdateWaterView` tints the view while the eye is in one and sets
-`Swimming`, which the play view turns into gravity-free movement.
+`UpdateWaterView` tints the view while the eye is in one (in the
+control sector's `fadecolor`, else its `lightcolor`, else sea blue)
+and sets `Swimming`, which the play view turns into gravity-free
+movement. Things whose middle is in the water (`InWater`) fall by
+`WaterFall`: an eighth of the gravity down to a sinking speed of 0.5
+(corpses a third of it), a faster fall losing an eighth a tic; that
+covers gravity missiles and falling corpses of floating monsters. A
+slab of type bit 4 (`RenderInside`) is drawn from inside too: its top
+and bottom once more facing the other way (`AddReversed`) and its
+sides on the lines where the neighbour lacks it, facing in
+(`Emit3dFloorSides`).
 
 ### ACS scripts (`DoomAcs`, `doomworld_acs.inc`)
 

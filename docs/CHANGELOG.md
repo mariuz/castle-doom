@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 3D floors: water takes its control sector's colour (UDMF `fadecolor` or `lightcolor`),
+  things sink slowly in it, and slabs marked "render inside" are drawn from inside too.
 - Hexen-format maps (the binary format of ZDoom maps from before UDMF: lines with an action
   and five arguments, things with ids, heights and actions, a `BEHAVIOR` lump) load and play
   like UDMF maps: their scripts, polyobjects, thing actions and line ids work. The map
