@@ -34,8 +34,21 @@ L = several days). Items inside a section are in suggested order.
   `polyobject 1: PolyStone starts (DSSTNMOV)`; a repeating sound plays
   once) and their walls redrawn when the sector they stand in changes
   (`TDoomGeometry.SectorChanged`). `udmf-poly.wad` has a SNDINFO and a
-  SNDSEQ; unit test `TestSoundSeq`. Left: Hexen-format maps (see the
-  next three).
+  SNDSEQ; unit test `TestSoundSeq`.
+
+- Hexen-format maps: the binary format with a `BEHAVIOR` lump
+  (16-byte linedefs, 20-byte things) read by `TDoomMap.LoadLumps`
+  into the UDMF loader's records (`ApplyHexenLine`, `HexenActivation`,
+  `HexenLineId`), so scripts, polyobjects, thing ids and actions work;
+  binary maps without nodes get them built; the map editor reads them
+  as `zdoom` UDMF (`HexenMapToUdmf`) and saves them as UDMF.
+  `tools/make_hexen_wad.py` writes `hexen.wad` (E1M1 from
+  udmf-things.wad's TEXTMAP with E1M1's nodes, E1M2 the polyobjects
+  without nodes); autotests `hexen-format`, `hexen-poly`,
+  `editor-hexen` with goldens, unit test `TestHexenFormat`. Left:
+  ZDoom's extra Hexen-format line flags (`blockplayers`,
+  `blockeverything` are kept by the editor, not used by the game) and
+  `Line_SetIdentification`'s more flags.
 
 - 3D floors (UDMF, stage 3): slabs follow sloped control sectors
   (`TDoomMap.SlabTop` / `SlabBottom` read the control's plane wherever
@@ -1506,7 +1519,7 @@ L = several days). Items inside a section are in suggested order.
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
-| **Hexen/Heretic** map formats: out of scope unless someone wants them. | - | - | - |
+| **Heretic / Hexen games**: Hexen's map format is read (ZDoom-style maps for Doom, see above); the games themselves (their things, actions, classes, hubs) are out of scope unless someone wants them. | - | - | - |
 
 ## 5. Engine and tooling
 
@@ -1546,19 +1559,19 @@ play.
 
 ## Suggested next three
 
-1. Hexen-format maps (M-L): the binary map format with BEHAVIOR (16-byte
-   linedefs with an action and five arguments, 20-byte things with
-   ids, heights, actions), read into the same records the UDMF loader
-   fills, so their scripts, polyobjects and thing actions work as they
-   do in UDMF maps; the map editor reading them too.
-2. 3D floors, the rest (S-M): monsters and missiles in water (they
+1. 3D floors, the rest (S-M): monsters and missiles in water (they
    ignore it), the water's own colour from the control sector
    (`fadecolor`), vertex-height control sectors, sounds blocked by
    slabs, non-solid slabs' "render inside" flag.
-3. Map editor, UDMF fields (S-M): edit what is kept as text today
+2. Map editor, UDMF fields (S-M): edit what is kept as text today
    (arg1..arg4, line and thing ids, activation flags, thing specials,
    the look fields) in the properties panel, and keep fractional
    vertices through moves.
+3. Line blocking flags (S): ZDoom's `blockplayers`, `blockeverything`,
+   `blockprojectiles`, `blockhitscan`, `blocksight` and `blockuse`
+   (UDMF booleans, Hexen-format bits 0x4000 / 0x8000), read into
+   `TDoomLinedef` and honoured by moves, missiles, hitscans, sight and
+   use.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

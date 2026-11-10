@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Hexen-format maps (the binary format of ZDoom maps from before UDMF: lines with an action
+  and five arguments, things with ids, heights and actions, a `BEHAVIOR` lump) load and play
+  like UDMF maps: their scripts, polyobjects, thing actions and line ids work. The map
+  editor opens them too and saves them as UDMF. Binary maps without nodes get them built.
 - Polyobjects play their sound sequences (SNDSEQ, with SNDINFO's sound names), and their
   walls follow the floor and ceiling of the sector they stand in as it moves.
 

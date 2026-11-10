@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 63 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 64 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -1013,6 +1013,19 @@ autotest only checks the library loads.
   TROO (thing id 0): Light_ChangeToValue (9, 64, 0, 0, 0)`; autotest
   `thing-specials`, unit test `TestThingSpecials`). Saves keep actors' ids (`tid`)
   and pillars' ceiling targets; autotest `udmf-things` (golden).
+  Hexen-format maps (binary, a `BEHAVIOR` among the map's lumps):
+  `tools/make_hexen_wad.py` writes `tools/testdata/hexen.wad` from
+  udmf-things.wad's and udmf-poly.wad's TEXTMAPs (arguments are bytes:
+  1045's damage is 232; line 1049 gets `Line_SetIdentification(50)`):
+  E1M1 with E1M1's nodes logs `Map: E1M1: Hexen format: 1196
+  vertices, ... BEHAVIOR of 326 bytes` and runs the same recipes as
+  udmf-things.wad (autotest `hexen-format`), E1M2 has no nodes (`no
+  BSP nodes, building them`, any binary map now) and the polyobjects
+  (`G:-416:200,A:90,LINE:829...`; autotest `hexen-poly`); `--edit`
+  reads it as `zdoom` UDMF (`Editor: Imported E1M1: ..., UDMF
+  namespace "zdoom" (from the Hexen format) with scripts`) and exports
+  a TEXTMAP (autotest `editor-hexen`); unit test `TestHexenFormat`
+  compares it with udmf-things.wad line by line.
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

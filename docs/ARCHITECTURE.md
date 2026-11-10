@@ -272,6 +272,30 @@ pushers) to Doom's with Boom's bits. Actions without a translation
 (polyobjects, slopes, 3D floors, portals...) are counted and
 logged.
 
+### Hexen-format maps (`TDoomMap.LoadLumps`)
+
+A binary map with a `BEHAVIOR` lump among its lumps is in Hexen's
+format (ZDoom maps before UDMF): `LINEDEFS` are 16 bytes (vertices,
+flags, an action byte, five argument bytes, sides), `THINGS` 20 (id,
+x, y, height, angle, type, flags, action, five arguments); sectors,
+sides and vertices are Doom's. `LoadLumps` reads them into the records
+`LoadUdmf` fills for the `zdoom` namespace and passes each line through
+`ApplyHexenLine` (shared with `LoadUdmf`: polyobject start lines, then
+`TranslateHexenLine`). The flags' bits 10..12 (the SPAC) and 0x200 /
+0x2000 become the `Ua*` activation (`HexenActivation`; a line without
+an action and without those bits gets none), the low nine bits stay
+Doom's; a line's id comes from the action that sets one
+(`HexenLineId`: `Line_SetIdentification`, which then leaves no action,
+`TranslucentLine`, `Teleport_Line`, the polyobject lines'
+`Plane_Align`...); thing flags 256 / 512 / 1024 (single, coop,
+deathmatch; none of them: all) become `MTF_NOTSINGLE`; sector types are
+ZDoom's (`TranslateZDoomSectorSpecial`). After the nodes are read,
+`Udmf` is set, so the UDMF passes (links, slopes, 3D floors,
+polyobjects) and the world's Hexen-style handling apply unchanged
+(`HexenFormat` tells the formats apart). A binary map whose `NODES`
+and `SSECTORS` are empty (and no GL nodes) gets `BuildNodes`, as a
+UDMF map without `ZNODES` does.
+
 ### Slopes (`TDoomMap.BuildSlopes`, `FloorAt` / `CeilingAt`)
 
 A sector's floor or ceiling may be a plane (`TSectorSlope`): a
@@ -474,7 +498,9 @@ map number, independent of `System.Random`.
 `TDoomEditMap` holds a map as the WAD's own records in plain arrays
 (`Vertices`, `Lines`, `Sides`, `Sectors`, `Things`, whole units), read
 by `LoadFromWad` straight from the map's lumps (the node builder's split
-vertices dropped; Hexen-format maps refused) or from a UDMF map's
+vertices dropped), from a Hexen-format map (`HexenMapToUdmf` writes
+its binary lumps as a `zdoom` TEXTMAP, read like one and saved as
+UDMF; `FromHexen`) or from a UDMF map's
 TEXTMAP (`LoadUdmf`: the fields the records have, Doom's flag bits from
 UDMF's booleans, a Hexen namespace's arg0 as the line's Tag; every
 other assignment kept as text in the record's `Udmf`, so `WriteLumps`

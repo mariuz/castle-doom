@@ -163,7 +163,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 - External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-deh` / `-warp`), PWAD lumps
   overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
   `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`) and glBSP GL nodes (V1, V2, V3, V5, also from
-  a `.gwa` file), so maps built with ZDBSP or glBSP load too. UDMF maps (`TEXTMAP`, the
+  a `.gwa` file), so maps built with ZDBSP or glBSP load too (and maps without nodes get
+  them built). Hexen-format maps (binary, with a `BEHAVIOR` lump) and UDMF maps (`TEXTMAP`, the
   format of maps made for UZDoom / GZDoom) load as well, their nodes from `ZNODES` or built
   by the game, Hexen-style line actions and ZDoom sector types translated, with coloured
   sector light, fog, texture scaling, offsets and rotation and per-surface light, and their
@@ -194,7 +195,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) and, for UZDoom-style rendering (slopes, 3D floors,
 coloured light, models, post-processing), [docs/RENDERING_ROADMAP.md](docs/RENDERING_ROADMAP.md).
-Headlines: no Hexen-format maps (UDMF ones work), monsters ignore 3D floors' water,
+Headlines: monsters ignore 3D floors' water,
 DeHackEd patches cannot rename sprites or sounds (BEX `[SPRITES]` / `[SOUNDS]`),
 the browser's music is the approximate FM model (no OPL3 emulator there).
 
