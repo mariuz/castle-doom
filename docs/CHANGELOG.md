@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Lines: ZDoom's blocking flags in UDMF and Hexen-format maps: lines that block only players,
+  everything, projectiles, hitscans, sight or use.
 - Map editor: the properties panel edits UDMF maps' own fields: line arguments, ids and
   activation flags, thing ids, heights, actions and arguments, sector light and fog colours
   (typed in hex), plane light and rotation. Fractional vertices keep their fractions when

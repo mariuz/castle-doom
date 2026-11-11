@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 64 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 65 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -1038,6 +1038,14 @@ autotest only checks the library loads.
   namespace "zdoom" (from the Hexen format) with scripts`) and exports
   a TEXTMAP (autotest `editor-hexen`); unit test `TestHexenFormat`
   compares it with udmf-things.wad line by line.
+  ZDoom's blocking flags (`ML_BLOCKPLAYERS` ... `ML_BLOCKUSE`, bits
+  above Doom's 16 so binary Doom maps never set them): `udmf-block.wad`
+  (same script) flags line 834 (x -256, start room / corridor 141)
+  blockplayers, blockhitscan, blocksight and blockprojectiles and the
+  west window 1045 blockeverything and blockuse; from `G:-300:256,A:0`
+  `F:1` stops at x about -272, `SHOTS,X` logs `wall at (-260, 256, ...)`
+  and a rocket explodes at the line (autotest `line-blocking`, unit
+  test `TestLineBlocking`).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

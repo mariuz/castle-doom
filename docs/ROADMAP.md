@@ -36,6 +36,15 @@ L = several days). Items inside a section are in suggested order.
   (`TDoomGeometry.SectorChanged`). `udmf-poly.wad` has a SNDINFO and a
   SNDSEQ; unit test `TestSoundSeq`.
 
+- Line blocking flags: ZDoom's blockplayers, blockeverything,
+  blockprojectiles, blockhitscan, blocksight and blockuse (UDMF; the
+  Hexen format's 0x4000 / 0x8000) honoured by the player's collision,
+  monster moves, missiles, hitscans and autoaim, sight and use
+  (`ML_BLOCKPLAYERS`...). Test map `udmf-block.wad`, autotest
+  `line-blocking`, unit test `TestLineBlocking`. Left: MBF21's
+  binary-map bits (block land monsters 0x1000, block players 0x2000)
+  behind a compatibility switch.
+
 - Map editor, UDMF fields: the properties panel (`E`) edits the
   fields UDMF maps keep as text: line arg1..arg4, ids and activation
   flags (Hexen-special namespaces), thing ids, heights, specials and
@@ -1579,16 +1588,15 @@ play.
 
 ## Suggested next three
 
-1. Line blocking flags (S): ZDoom's `blockplayers`, `blockeverything`,
-   `blockprojectiles`, `blockhitscan`, `blocksight` and `blockuse`
-   (UDMF booleans, Hexen-format bits 0x4000 / 0x8000), read into
-   `TDoomLinedef` and honoured by moves, missiles, hitscans, sight and
-   use.
-2. 3D floors, the last part (S-M): vertex-height control sectors,
+1. 3D floors, the last part (S-M): vertex-height control sectors,
    sounds blocked by slabs, splashes where things enter water.
-3. Map editor, UDMF fields, the rest (S): per-part texture scaling and
+2. Map editor, UDMF fields, the rest (S): per-part texture scaling and
    offsets on the sides, fractional values typed in the panel, string
    fields (`arg0str` for named scripts).
+3. MBF21 (M): the binary-map line flags (block land monsters, block
+   players), the new thing flags and code pointers of MBF21 DeHackEd
+   patches, behind a compatibility setting, so current community
+   maps made for DSDA-Doom play as meant.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

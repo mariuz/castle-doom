@@ -167,7 +167,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   a `.gwa` file), so maps built with ZDBSP or glBSP load too (and maps without nodes get
   them built). Hexen-format maps (binary, with a `BEHAVIOR` lump) and UDMF maps (`TEXTMAP`, the
   format of maps made for UZDoom / GZDoom) load as well, their nodes from `ZNODES` or built
-  by the game, Hexen-style line actions and ZDoom sector types translated, with coloured
+  by the game, Hexen-style line actions, ZDoom sector types and blocking flags (lines that stop only players, shots, sight...) translated, with coloured
   sector light, fog, texture scaling, offsets and rotation and per-surface light, and their
   ACS scripts (with their libraries) run, their floors and ceilings can slope and their 3D floors (solid slabs,
   opaque or translucent, sloped, lighting what is under them, or water to swim in, tinted

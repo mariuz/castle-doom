@@ -272,6 +272,20 @@ pushers) to Doom's with Boom's bits. Actions without a translation
 (polyobjects, slopes, 3D floors, portals...) are counted and
 logged.
 
+### Line blocking flags
+
+ZDoom's `blockplayers`, `blockeverything`, `blockprojectiles`,
+`blockhitscan`, `blocksight` and `blockuse` (UDMF booleans; the Hexen
+format's 0x4000 and 0x8000 are the first two) become `ML_BLOCKPLAYERS`
+... `ML_BLOCKUSE` in `TDoomLinedef.Flags`, bits above Doom's 16 so a
+binary Doom map's stray high bits never set them. The player's
+collision walls (`TDoomGeometry`'s invisible walls and blocking middle
+textures) take blocking, blockplayers and blockeverything; monsters'
+`TryMove2D` blocking, blockmonsters and blockeverything;
+`LineBlocksMissile` blockprojectiles; `TraceLineAttack` and
+`AimLineAttack` blockhitscan; `CheckSight` blocksight; the use trace
+blockuse (each also blockeverything).
+
 ### Hexen-format maps (`TDoomMap.LoadLumps`)
 
 A binary map with a `BEHAVIOR` lump among its lumps is in Hexen's
