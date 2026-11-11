@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 3D floors: slabs whose control sector is a triangle with vertex heights slope accordingly
+  (now tested).
 - Lines: ZDoom's blocking flags in UDMF and Hexen-format maps: lines that block only players,
   everything, projectiles, hitscans, sight or use.
 - Map editor: the properties panel edits UDMF maps' own fields: line arguments, ids and

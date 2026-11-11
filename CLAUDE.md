@@ -988,7 +988,10 @@ autotest only checks the library loads.
   0.62745 0.25098 0.45`) and drawn from inside (type 6), and has
   udmf-things.wad's lines: `LINE:1051` fires the falling imp ball from
   map spot 40 in the water, which loses only an eighth a tic (autotest
-  `3d-water-inside` with goldens).
+  `3d-water-inside` with goldens). `udmf-3dfloor4.wad` (same script)
+  takes a slab's top from a triangular control sector's vertex
+  heights (8 + (y - 128) / 8 over the corridor 141):
+  `G:-224:150,A:90,F:1` walks up it (autotest `3d-vertex-heights`).
   Polyobjects: `udmf-poly.wad` (same script) draws a 64 x 16 slab out
   in the void and places it at (-416, 384) in the start room (log `Map:
   E1M1: polyobject 1: 4 lines at (-416, 384) in sector 140`); from

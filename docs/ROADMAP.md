@@ -36,6 +36,14 @@ L = several days). Items inside a section are in suggested order.
   (`TDoomGeometry.SectorChanged`). `udmf-poly.wad` has a SNDINFO and a
   SNDSEQ; unit test `TestSoundSeq`.
 
+- 3D floors, vertex heights: a slab's top or bottom follows its
+  control sector's planes, so a triangular control sector with
+  `zceiling` / `zfloor` on its vertices (`BuildSlopes`) gives a sloped
+  slab the player walks up; test map `udmf-3dfloor4.wad`, autotest
+  `3d-vertex-heights` (golden), unit test `Test3dWater`. Left for 3D
+  floors: splashes (TERRAIN lumps, not read yet) and sound blocked by
+  slabs.
+
 - Line blocking flags: ZDoom's blockplayers, blockeverything,
   blockprojectiles, blockhitscan, blocksight and blockuse (UDMF; the
   Hexen format's 0x4000 / 0x8000) honoured by the player's collision,
@@ -1588,15 +1596,15 @@ play.
 
 ## Suggested next three
 
-1. 3D floors, the last part (S-M): vertex-height control sectors,
-   sounds blocked by slabs, splashes where things enter water.
-2. Map editor, UDMF fields, the rest (S): per-part texture scaling and
+1. Map editor, UDMF fields, the rest (S): per-part texture scaling and
    offsets on the sides, fractional values typed in the panel, string
    fields (`arg0str` for named scripts).
-3. MBF21 (M): the binary-map line flags (block land monsters, block
+2. MBF21 (M): the binary-map line flags (block land monsters, block
    players), the new thing flags and code pointers of MBF21 DeHackEd
    patches, behind a compatibility setting, so current community
    maps made for DSDA-Doom play as meant.
+3. TERRAIN lumps (S-M): ZDoom's per-flat terrain (splashes where things
+   land in water or 3D-floor water, damage and friction by flat).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.
