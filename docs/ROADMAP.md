@@ -57,11 +57,15 @@ L = several days). Items inside a section are in suggested order.
   fields UDMF maps keep as text: line arg1..arg4, ids and activation
   flags (Hexen-special namespaces), thing ids, heights, specials and
   arguments, sector light / fade colours (hex), plane light and
-  rotation (`TViewEdit.UdmfPropValue`, `UdmfFieldText` /
+  rotation (`TViewEdit.UdmfPropText`, `UdmfFieldText` /
   `SetUdmfFieldText`); fractional vertices keep their fraction when
   moved. Autotest `editor-udmf-fields` (goldens), unit test
-  `TestEditUdmf`. Left: texture scaling and offsets per part, floats
-  typed with fractions, strings (`arg0str`).
+  `TestEditUdmf`. Then the rest: line alpha, the front side's per-part
+  offsets (top, middle, bottom) and middle scaling (kept in the side's
+  UDMF text, `TUdmfProp.OnSide`), fractions typed with a dot and
+  string fields (`arg0str`, the script name) in the panel; values are
+  handled as text (`UdmfPropText`, `UdmfValueOf`). Left: the back
+  side's per-part fields and the top / bottom scaling.
 
 - Hexen-format maps: the binary format with a `BEHAVIOR` lump
   (16-byte linedefs, 20-byte things) read by `TDoomMap.LoadLumps`
@@ -1552,7 +1556,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile`, ACS libraries (`LOAD`, `LOADACS`) and thing specials done too; polyobjects (stage 1) done too; left are polyobjects' rest, the UDMF fields the map editor's panel does not edit yet (per-part scaling and offsets, strings), and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
+| **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile`, ACS libraries (`LOAD`, `LOADACS`) and thing specials done too; polyobjects (stage 1) done too; left are polyobjects' rest, the UDMF fields the map editor's panel does not edit yet (the back side's per-part ones), and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
 | **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
@@ -1592,19 +1596,19 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels, the menu, cheats, the browser, ghosts and the compact format are done (see above); left are choosing between several kept demos in the browser, a ghost picked from the menu (Options -> Race ghost...), the ghost's time on the intermission screen, and ghosts of random maps and PWADs (the race loads the IWAD's map today). | Replays; races. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | S |
-| **Map editor, the rest**: done (see above: the 2D editor, play-test, exports with things and sky, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors with holes, the 3D preview, opening PWADs, picking in 3D, the map list, texture alignment). UDMF maps load and save as UDMF and the panel edits their main fields (see above); left: per-part texture scaling and offsets, string fields. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M |
+| **Map editor, the rest**: done (see above: the 2D editor, play-test, exports with things and sky, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors with holes, the 3D preview, opening PWADs, picking in 3D, the map list, texture alignment). UDMF maps load and save as UDMF and the panel edits their fields (see above); left: the back side's per-part fields. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M |
 
 ## Suggested next three
 
-1. Map editor, UDMF fields, the rest (S): per-part texture scaling and
-   offsets on the sides, fractional values typed in the panel, string
-   fields (`arg0str` for named scripts).
-2. MBF21 (M): the binary-map line flags (block land monsters, block
+1. MBF21 (M): the binary-map line flags (block land monsters, block
    players), the new thing flags and code pointers of MBF21 DeHackEd
    patches, behind a compatibility setting, so current community
    maps made for DSDA-Doom play as meant.
-3. TERRAIN lumps (S-M): ZDoom's per-flat terrain (splashes where things
+2. TERRAIN lumps (S-M): ZDoom's per-flat terrain (splashes where things
    land in water or 3D-floor water, damage and friction by flat).
+3. Map editor, back sides and scaling (S): the back side's per-part
+   offsets, top and bottom texture scaling, and texture names typed
+   in the panel instead of picked.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

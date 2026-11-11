@@ -1994,7 +1994,12 @@ namespaces: arg1..arg4, the line id and the activation booleans;
 and its arguments; `SectorUdmfProps`: light and fade colours, typed
 and shown in hex, plane light and rotation), read and written with
 `UdmfFieldText` / `SetUdmfFieldText` (a value equal to the field's
-default removes the line). A vertex read with a fraction keeps it
+default removes the line); lines in any UDMF namespace also get
+`LineLookProps` (alpha and the front side's per-part offsets and
+middle scaling, `OnSide` fields living in the side's text). Values go
+through the panel as text (`UdmfPropText` shows, `UdmfValueOf` checks
+and formats: booleans 1 / 0, colours in hex, floats with a dot,
+strings quoted). A vertex read with a fraction keeps it
 through moves by whole units (`UdmfText`'s `Coord` writes the new
 whole position plus the fraction it was read with). `FlipLines` swaps a two-sided line's
 ends and sides together, so the geometry stays and only which sector is

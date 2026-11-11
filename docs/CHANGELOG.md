@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Map editor: the properties panel also edits a UDMF line's opacity, its front side's texture
+  offsets per part and middle scaling, values with fractions, and named scripts (`arg0str`).
 - 3D floors: slabs whose control sector is a triangle with vertex heights slope accordingly
   (now tested).
 - Lines: ZDoom's blocking flags in UDMF and Hexen-format maps: lines that block only players,
