@@ -74,6 +74,7 @@ type
     procedure Test3dWater;
     procedure TestThingSpecials;
     procedure TestHexenFormat;
+    procedure TestLineBlocking;
     procedure TestPolyobjs;
     procedure TestSoundSeq;
     procedure TestDynScrollers;
@@ -1461,6 +1462,39 @@ begin
   finally
     FreeAndNil(W);
     FreeAndNil(WU);
+  end;
+end;
+
+{ ZDoom's blocking flags: UDMF booleans in tools/testdata/udmf-block.wad
+  (above Doom's 16 bits) and the Hexen format's 0x4000 / 0x8000. }
+procedure TTestMap.TestLineBlocking;
+var
+  Dir: String;
+  W: TDoomWad;
+  M: TDoomMap;
+begin
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf-block.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf-block.wad') then
+  begin
+    WriteLn('TestLineBlocking: no udmf-block.wad (python3 tools/make_udmf_wad.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-block.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('834', ML_BLOCKPLAYERS or ML_BLOCKHITSCAN or ML_BLOCKSIGHT or ML_BLOCKPROJECTILES,
+        M.Linedefs[834].Flags and not $FFFF);
+      AssertEquals('834 keeps its own', ML_TWOSIDED, M.Linedefs[834].Flags and $FFFF);
+      AssertEquals('1045', ML_BLOCKEVERYTHING or ML_BLOCKUSE, M.Linedefs[1045].Flags and not $FFFF);
+      AssertEquals('others', 0, M.Linedefs[829].Flags and not $FFFF);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
   end;
 end;
 

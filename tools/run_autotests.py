@@ -444,6 +444,19 @@ TESTS = [
       r'Udmf: Polyobj_RotateLeft \(1, 32, 64, 0, 0\): polyobject 1'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'hexen.wad'), '--fixed-step'],
      lambda config: check_hexen_poly(config)),
+    # ZDoom's blocking flags (udmf-block.wad): line 834 at x -256 stops
+    # the player walking east, bullets both ways and a rocket (it
+    # explodes at the line, close to the player); an imp spawned behind
+    # it is not seen in 3D.
+    ('line-blocking', 'E1M1',
+     'Y,SHOTS,G:-300:256,A:0,W:0.3,F:1,W:0.3,SAVE:1,X,W:0.3,G:-224:256,A:180,W:0.2,X,W:0.3,'
+     'K,C:5,G:-300:256,A:0,W:1,X,W:1,SAVE:2,G:-224:256,A:180,W:0.1,P:3001:100,SIGHT,Q',
+     [r'Shot: angle 0\.0 slope 0\.000 range 2048: wall at \(-260, 256',
+      r'Shot: angle -180\.0 slope 0\.000 range 2048: wall at \(-252, 256',
+      r'Push: player by (1\d\d|[6-9]\d) damage',
+      r'Sight: TROO at \(-3\d\d, 2\d\d, z 0\) sector 140: 2D True, 3D False'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-block.wad'), '--fixed-step'],
+     lambda config: check_line_blocking(config)),
     # 3D floors (udmf-3dfloor.wad): a translucent slab over the start
     # room the player walks under and a solid step in the corridor east
     # of it (sector 141) the player climbs onto; a shot up into the slab
@@ -929,6 +942,12 @@ def check_water_inside(config):
     vz = balls[0]['velocity'][2]
     assert 5.4 < vz < 6, 'not slowed by the water: velocity %s' % vz
     assert 32 < balls[0]['z'] < 64, 'ball out of the water: z %s' % balls[0]['z']
+
+
+def check_line_blocking(config):
+    """udmf-block.wad: the player walking east stops before x -256."""
+    x = save_json(config, 1)['player']['x']
+    assert -290 < x < -256, 'not stopped by the blockplayers line: x %s' % x
 
 
 def check_3d_water(config):

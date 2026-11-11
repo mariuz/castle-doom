@@ -24,6 +24,15 @@ const
   ML_SOUNDBLOCK = 64;
   ML_DONTDRAW = 128;
   ML_MAPPED = 256;
+  { ZDoom's blocking flags (UDMF booleans, Hexen-format bits 0x4000 /
+    0x8000), kept above Doom's 16 bits so a binary Doom map's stray bits
+    never set them. }
+  ML_BLOCKPLAYERS = $10000;
+  ML_BLOCKEVERYTHING = $20000;
+  ML_BLOCKPROJECTILES = $40000;
+  ML_BLOCKHITSCAN = $80000;
+  ML_BLOCKSIGHT = $100000;
+  ML_BLOCKUSE = $200000;
 
   { Thing flags. }
   MTF_EASY = 1;
@@ -739,6 +748,8 @@ begin
         Linedefs[I].Flags := Raw and $1FF;
         if ((Raw shr 10) and 7) = 6 then
           Linedefs[I].Flags := Linedefs[I].Flags or 512;
+        if (Raw and $4000) <> 0 then Linedefs[I].Flags := Linedefs[I].Flags or ML_BLOCKPLAYERS;
+        if (Raw and $8000) <> 0 then Linedefs[I].Flags := Linedefs[I].Flags or ML_BLOCKEVERYTHING;
         for J := 0 to 4 do
           Args[J] := P[I * 16 + 7 + J];
         Linedefs[I].Side[0] := PUInt16(P + I * 16 + 12)^;
@@ -1187,6 +1198,12 @@ begin
         Flag('dontdraw', ML_DONTDRAW);
         Flag('mapped', ML_MAPPED);
         Flag('passuse', 512);
+        Flag('blockplayers', ML_BLOCKPLAYERS);
+        Flag('blockeverything', ML_BLOCKEVERYTHING);
+        Flag('blockprojectiles', ML_BLOCKPROJECTILES);
+        Flag('blockhitscan', ML_BLOCKHITSCAN);
+        Flag('blocksight', ML_BLOCKSIGHT);
+        Flag('blockuse', ML_BLOCKUSE);
         FUdmfAlpha[NL] := 1;
         if UdmfHas(B^, 'alpha') then
           FUdmfAlpha[NL] := Max(0.0, Min(1.0, UdmfFloat(B^, 'alpha', 1)))

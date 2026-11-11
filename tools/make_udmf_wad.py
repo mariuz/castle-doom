@@ -88,6 +88,9 @@ and ZDoom GL nodes (XGLN) in ZNODES.
 udmf-3dfloor3.wad: green water in the start room drawn from inside
 too, with udmf-things.wad's lines (see FLOOR3D_CONTROLS3).
 
+udmf-block.wad: ZDoom's blocking flags on line 834 (players, hitscans,
+sight, projectiles) and 1045 (everything, use); see BLOCK_LINES.
+
 udmf-look.wad, as udmf.wad plus UZDoom's look fields (rendering stage
 1): the start room (sector 140) lit warm orange (lightcolor 0xFFA070)
 with its floor turned 45 degrees and scaled 2x, the room east of it
@@ -180,6 +183,12 @@ FLOOR3D_CONTROLS2 = [(-3000, -3000, 0, 64, (15, 2, 0, 128), {'lightlevel': '96'}
 # (type 2 + 4, render inside); udmf-things.wad's lines fire a falling
 # imp ball (line 1051) from the map spot 40 inside it, which sinks slowly.
 FLOOR3D_CONTROLS3 = [(-3000, -3000, 0, 64, (15, 6, 0, 128), {'lightlevel': '160', 'fadecolor': '0x30A040'})]
+# udmf-block.wad: ZDoom's blocking flags on two of E1M1's two-sided lines:
+# the start room's east edge (834, x -256, to the corridor 141) blocks
+# players, hitscans, sight and projectiles (monsters and use pass), the
+# west window (1045) everything.
+BLOCK_LINES = {834: ['blockplayers', 'blockhitscan', 'blocksight', 'blockprojectiles'],
+               1045: ['blockeverything', 'blockuse']}
 THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
                1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), ''),
                830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), ''),
@@ -227,7 +236,7 @@ def flag_names(flags):
     return names
 
 
-def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=False, polys=False):
+def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=False, polys=False, block=False):
     out = ['namespace = "%s";' % ('zdoom' if hexen else 'doom'), '']
     V = lump('VERTEXES')
     for k in range(len(V) // 4):
@@ -245,6 +254,8 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
         if sb != 0xFFFF:
             body.append('sideback = %d;' % sb)
         body += ['%s = true;' % n for n in flag_names(fl)]
+        if block and k in BLOCK_LINES:
+            body += ['%s = true;' % n for n in BLOCK_LINES[k]]
         if hexen and slopes and k in SLOPE_LINE_IDS:
             body.append('id = %d;' % SLOPE_LINE_IDS[k])
         if hexen:
@@ -473,6 +484,8 @@ def main():
               [('E1M1', b''), ('TEXTMAP', textmap(True, floors3d=FLOOR3D_CONTROLS2)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-3dfloor3.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, things=True, floors3d=FLOOR3D_CONTROLS3)), ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-block.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, block=True)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-acslib.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True)),
                ('BEHAVIOR', make_acs.behavior('compat', make_acs.libmap_program('compat'))), ('ENDMAP', b''),

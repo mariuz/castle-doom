@@ -860,7 +860,7 @@ begin
       TexTopZ := OpenTop + Sd.YOffset + Sd.PartOffsetY[1];
     ZB := TexTopZ - MidHeight;
     ZT := TexTopZ;
-    Passable := (L.Flags and ML_BLOCKING) = 0;
+    Passable := (L.Flags and (ML_BLOCKING or ML_BLOCKPLAYERS or ML_BLOCKEVERYTHING)) = 0;
     B := Batch(Img, Passable, WallScroll(Rate, Img), SwitchLine, Map.LineAlpha[Line], stSide, DynSide);
     SetLook(B, Sec);
     EmitWall(B, VA.X, VA.Y, VB.X, VB.Y, Max(OpenBottomA, ZB), Max(OpenBottomB, ZB), Min(OpenTopA, ZT),
@@ -1469,7 +1469,8 @@ begin
       L := FMap.Linedefs[I];
       F := L.FrontSector;
       B := L.BackSector;
-      if (F < 0) or (B < 0) or ((L.Flags and ML_BLOCKING) = 0) then Continue;
+      if (F < 0) or (B < 0) or ((L.Flags and (ML_BLOCKING or ML_BLOCKPLAYERS or ML_BLOCKEVERYTHING)) = 0) then
+        Continue;
       VA := FMap.Vertices[L.V1];
       VB := FMap.Vertices[L.V2];
       ZB := Min(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight) - 16;

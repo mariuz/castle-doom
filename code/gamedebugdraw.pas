@@ -139,7 +139,8 @@ begin
     for I := 0 to High(Map.Linedefs) do
     begin
       L := Map.Linedefs[I];
-      if (L.BackSector >= 0) and ((L.Flags and ML_BLOCKING) = 0) then Continue;
+      if (L.BackSector >= 0) and ((L.Flags and (ML_BLOCKING or ML_BLOCKPLAYERS or ML_BLOCKEVERYTHING)) = 0) then
+        Continue;
       if (L.FrontSector < 0) or (L.FrontSector > High(Map.Sectors)) then Continue;
       V1 := Map.Vertices[L.V1];
       V2 := Map.Vertices[L.V2];

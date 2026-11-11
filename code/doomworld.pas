@@ -2823,6 +2823,7 @@ begin
     F := L.FrontSector;
     B := L.BackSector;
     if (F < 0) or (B < 0) then Exit(false);
+    if (L.Flags and (ML_BLOCKSIGHT or ML_BLOCKEVERYTHING)) <> 0 then Exit(false);
     LineOpening(I, X1 + (X2 - X1) * T, Y1 + (Y2 - Y1) * T, OpenBottom, OpenTop, LowFloor, FloorsDiffer,
       CeilingsDiffer);
     if OpenTop <= OpenBottom then Exit(false);
@@ -2966,7 +2967,7 @@ begin
       BlockedByLine := I;
       Exit;
     end;
-    if (L.Flags and (ML_BLOCKING or ML_BLOCKMONSTERS)) <> 0 then
+    if (L.Flags and (ML_BLOCKING or ML_BLOCKMONSTERS or ML_BLOCKEVERYTHING)) <> 0 then
     begin
       BlockedByLine := I;
       Exit;
@@ -4528,7 +4529,7 @@ begin
     Zh := Z + Slope * Along;
     F := L.FrontSector;
     B := L.BackSector;
-    if (F >= 0) and (B >= 0) then
+    if (F >= 0) and (B >= 0) and ((L.Flags and (ML_BLOCKHITSCAN or ML_BLOCKEVERYTHING)) = 0) then
     begin
       LineOpening(I, X + (EX - X) * T, Y + (EY - Y) * T, OpenBottom, OpenTop, LowFloor, FloorsDiffer,
         CeilingsDiffer);
@@ -4643,6 +4644,7 @@ begin
   F := L.FrontSector;
   B := L.BackSector;
   if (F < 0) or (B < 0) then Exit(true);
+  if (L.Flags and (ML_BLOCKPROJECTILES or ML_BLOCKEVERYTHING)) <> 0 then Exit(true);
   LineOpening(Line, X, Y, OpenBottom, OpenTop, LowFloor, FloorsDiffer, CeilingsDiffer);
   Result := (Z < OpenBottom) or (Z > OpenTop);
 end;
@@ -5402,6 +5404,7 @@ begin
       F := L.FrontSector;
       B := L.BackSector;
       if (F < 0) or (B < 0) then Exit; { one-sided: stop }
+      if (L.Flags and (ML_BLOCKHITSCAN or ML_BLOCKEVERYTHING)) <> 0 then Exit;
       LineOpening(Intercepts[I].Line, X + DX * Intercepts[I].Along, Y + DY * Intercepts[I].Along, OpenBottom,
         OpenTop, LowFloor, FloorsDiffer, CeilingsDiffer);
       if OpenBottom >= OpenTop then Exit; { closed door }
@@ -5993,7 +5996,7 @@ begin
     end;
     F := L.FrontSector;
     B := L.BackSector;
-    if (F < 0) or (B < 0) or
+    if (F < 0) or (B < 0) or ((L.Flags and (ML_BLOCKUSE or ML_BLOCKEVERYTHING)) <> 0) or
        (Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight) <=
         Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight)) then
     begin
