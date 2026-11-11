@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Map editor: the properties panel edits UDMF maps' own fields: line arguments, ids and
+  activation flags, thing ids, heights, actions and arguments, sector light and fog colours
+  (typed in hex), plane light and rotation. Fractional vertices keep their fractions when
+  moved.
 - 3D floors: water takes its control sector's colour (UDMF `fadecolor` or `lightcolor`),
   things sink slowly in it, and slabs marked "render inside" are drawn from inside too.
 - Hexen-format maps (the binary format of ZDoom maps from before UDMF: lines with an action

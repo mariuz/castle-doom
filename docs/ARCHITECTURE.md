@@ -1973,7 +1973,16 @@ sides and vertices no line uses afterwards. The properties panel
 `PropValue` / `SetPropValue`: sector heights keep the ceiling at or
 above the floor, light stays in 0..255, a vertex typed onto another
 joins it like a drag) and `ApplyProp` sets the typed number on the
-whole selection as one undo step. `FlipLines` swaps a two-sided line's
+whole selection as one undo step. In UDMF maps the panel adds fields
+kept in each record's `Udmf` text (`LineUdmfProps` in Hexen-special
+namespaces: arg1..arg4, the line id and the activation booleans;
+`ThingUdmfProps`: id, height and, with Hexen's specials, the special
+and its arguments; `SectorUdmfProps`: light and fade colours, typed
+and shown in hex, plane light and rotation), read and written with
+`UdmfFieldText` / `SetUdmfFieldText` (a value equal to the field's
+default removes the line). A vertex read with a fraction keeps it
+through moves by whole units (`UdmfText`'s `Coord` writes the new
+whole position plus the fraction it was read with). `FlipLines` swaps a two-sided line's
 ends and sides together, so the geometry stays and only which sector is
 in front changes. Copying sectors keeps each one's `SectorLoops` (its
 walls as edges with the sector on the right, chained into loops, the

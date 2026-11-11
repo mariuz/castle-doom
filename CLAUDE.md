@@ -727,7 +727,13 @@ the picker on that part only), `KEY:M` the map list (`Editor: Map list:
 (`--edit -file tools/testdata/udmf-things.wad`; log `Editor: Imported
 E1M1: ..., UDMF namespace "zdoom" with scripts`) and export as TEXTMAP +
 BEHAVIOR + ENDMAP with every field kept (autotest `editor-udmf`, unit
-test `TestEditUdmf`). A clear spot in E1M1's start room for a
+test `TestEditUdmf`). In UDMF maps the panel lists more fields after
+the base ones (lines in `zdoom`: 6 base, then Arg 1..4, Line id and
+the activation booleans; sectors: 5 base, then Light colour (typed
+in hex: `TYPE:FF8040`), Fade colour, plane light and rotation; things:
+4 base, then Thing id, Height, Special, Arg 0..4): `KEY:Down` x6,
+`TYPE:9,KEY:Enter` logs `Editor: Line 829: Arg 1 9` (autotest
+`editor-udmf-fields` with goldens checks the exported TEXTMAP). A clear spot in E1M1's start room for a
 room: `DRAW:-480:192:-352:192:-352:288:-480:288` (autotest `editor`
 raises it to 24 and play-tests standing on it; its exported WAD is
 checked with Python `struct`, `check_map_wad`). `--export-map MAP FILE`,

@@ -76,7 +76,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   specials and tags, pick wall textures and flats from their pictures (Space), make doors,
   cut a sector in two along a path, delete lines, sectors and vertices, toggle line and
   thing flags (number keys), type exact values in a properties panel (`E`: heights, light,
-  both sides' texture offsets, angles, positions), flip lines (`F`), add, turn, copy and paste
+  both sides' texture offsets, angles, positions; in UDMF maps also line arguments, ids and
+  activation, thing ids, heights and actions, sector colours, plane light and rotation), flip lines (`F`), add, turn, copy and paste
   things and sectors, undo / redo, look at the map in 3D beside the 2D view (`F5`; Space over
   it picks the texture of the wall or flat you point at, `O` aligns it with the arrows) and open PWAD files (`Ctrl+O`, in the
   browser too; `M` lists their maps). `F9` play-tests the map at once (`F7` in the game comes back), `F2` exports it
