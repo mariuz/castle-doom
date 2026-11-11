@@ -88,6 +88,9 @@ and ZDoom GL nodes (XGLN) in ZNODES.
 udmf-3dfloor3.wad: green water in the start room drawn from inside
 too, with udmf-things.wad's lines (see FLOOR3D_CONTROLS3).
 
+udmf-3dfloor4.wad: a slab whose top follows a triangular control
+sector's vertex heights (see FLOOR3D_CONTROLS4).
+
 udmf-block.wad: ZDoom's blocking flags on line 834 (players, hitscans,
 sight, projectiles) and 1045 (everything, use); see BLOCK_LINES.
 
@@ -189,6 +192,12 @@ FLOOR3D_CONTROLS3 = [(-3000, -3000, 0, 64, (15, 6, 0, 128), {'lightlevel': '160'
 # west window (1045) everything.
 BLOCK_LINES = {834: ['blockplayers', 'blockhitscan', 'blocksight', 'blockprojectiles'],
                1045: ['blockeverything', 'blockuse']}
+# udmf-3dfloor4.wad: a solid slab in the corridor east of the start room
+# (141) from 0 up to a top taken from a triangular control sector's
+# vertex heights (zceiling 8 at y 128, 40 at y 384: 8 + (y - 128) / 8),
+# a ramp the player walks up.
+FLOOR3D_CONTROLS4 = [(-3000, 128, 0, 8, (9, 1, 0, 255),
+                      {'_corners': [(-3000, 128, 8), (-3000, 384, 40), (-2900, 128, 8)]})]
 THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
                1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), ''),
                830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), ''),
@@ -399,11 +408,16 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
         for control in controls:
             (x, y, fh, ch, args) = control[:5]
             fields = control[5] if len(control) > 5 else {}
-            corners = [(x, y), (x, y + 64), (x + 64, y + 64), (x + 64, y)]
-            for (cx, cy) in corners:
-                out.append('vertex\n{\nx = %d.0;\ny = %d.0;\n}\n' % (cx, cy))
-            for k in range(4):
-                body = ['v1 = %d;' % (nv + k), 'v2 = %d;' % (nv + (k + 1) % 4), 'sidefront = %d;' % (ns + k),
+            # A square, or '_corners' [(x, y, zceiling)...] clockwise (a
+            # triangle: vertex heights).
+            corners = fields.get('_corners', [(x, y, None), (x, y + 64, None), (x + 64, y + 64, None),
+                                              (x + 64, y, None)])
+            for (cx, cy, cz) in corners:
+                z = '' if cz is None else 'zceiling = %d.0;\n' % cz
+                out.append('vertex\n{\nx = %d.0;\ny = %d.0;\n%s}\n' % (cx, cy, z))
+            n = len(corners)
+            for k in range(n):
+                body = ['v1 = %d;' % (nv + k), 'v2 = %d;' % (nv + (k + 1) % n), 'sidefront = %d;' % (ns + k),
                         'blocking = true;']
                 if k == 0:
                     body.append('special = 160;')
@@ -412,11 +426,11 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
                 out.append('sidedef\n{\nsector = %d;\ntexturemiddle = "STARTAN3";\n}\n' % nsec)
             body = ['heightfloor = %d;' % fh, 'heightceiling = %d;' % ch, 'texturefloor = "FLOOR7_2";',
                     'textureceiling = "FLOOR7_2";', 'lightlevel = %s;' % fields.get('lightlevel', '160')]
-            body += ['%s = %s;' % kv for kv in fields.items() if kv[0] != 'lightlevel']
+            body += ['%s = %s;' % kv for kv in fields.items() if kv[0] not in ('lightlevel', '_corners')]
             out.append('sector\n{\n%s\n}\n' % '\n'.join(body))
-            nv += 4
-            nl += 4
-            ns += 4
+            nv += n
+            nl += n
+            ns += n
             nsec += 1
     if polys:
         nv, ns, nsec = len(V) // 4, len(S) // 30, len(SE) // 26
@@ -484,6 +498,8 @@ def main():
               [('E1M1', b''), ('TEXTMAP', textmap(True, floors3d=FLOOR3D_CONTROLS2)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-3dfloor3.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, things=True, floors3d=FLOOR3D_CONTROLS3)), ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-3dfloor4.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, floors3d=FLOOR3D_CONTROLS4)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-block.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, block=True)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-acslib.wad'),

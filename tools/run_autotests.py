@@ -444,6 +444,14 @@ TESTS = [
       r'Udmf: Polyobj_RotateLeft \(1, 32, 64, 0, 0\): polyobject 1'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'hexen.wad'), '--fixed-step'],
      lambda config: check_hexen_poly(config)),
+    # 3D floors, vertex heights (udmf-3dfloor4.wad): a slab in the
+    # corridor east of the start room whose top is a triangular control
+    # sector's sloped ceiling (zceiling on its vertices), walked up.
+    ('3d-vertex-heights', 'E1M1',
+     'Y,G:-224:150,A:90,LOOK:-20,W:0.3,S,SAVE:1,LOOK:0,F:1,W:0.3,SAVE:2,Q',
+     [r'Map: E1M1: slopes: 0 floors, 1 ceilings', r'Map: E1M1: 1 3D floors'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-3dfloor4.wad'), '--fixed-step'],
+     lambda config: check_vertex_heights(config)),
     # ZDoom's blocking flags (udmf-block.wad): line 834 at x -256 stops
     # the player walking east, bullets both ways and a rocket (it
     # explodes at the line, close to the player); an imp spawned behind
@@ -942,6 +950,16 @@ def check_water_inside(config):
     vz = balls[0]['velocity'][2]
     assert 5.4 < vz < 6, 'not slowed by the water: velocity %s' % vz
     assert 32 < balls[0]['z'] < 64, 'ball out of the water: z %s' % balls[0]['z']
+
+
+def check_vertex_heights(config):
+    """udmf-3dfloor4.wad: the player stands on the slab's sloped top,
+    8 + (y - 128) / 8, at the ramp's foot and after walking up it."""
+    for n in (1, 2):
+        p = save_json(config, n)['player']
+        top = 8 + (p['y'] - 128) / 8
+        assert abs(p['z'] - top) < 2.5, 'save %d: z %s, slab top %s' % (n, p['z'], top)
+    assert save_json(config, 2)['player']['z'] > 25, 'did not walk up the ramp'
 
 
 def check_line_blocking(config):
@@ -1543,7 +1561,7 @@ GOLDEN = [
     'udmf-lights_1.png', 'udmf-lights_2.png',
     'hexen-format_1.png', 'hexen-poly_1.png', 'editor-hexen_edit_1.png',
     '3d-water-inside_1.png', '3d-water-inside_2.png', '3d-water-inside_3.png',
-    'editor-udmf-fields_edit_1.png', 'editor-udmf-fields_edit_2.png',
+    'editor-udmf-fields_edit_1.png', 'editor-udmf-fields_edit_2.png', '3d-vertex-heights_1.png',
 ]
 
 

@@ -1687,6 +1687,25 @@ begin
   finally
     FreeAndNil(W);
   end;
+  { udmf-3dfloor4.wad: the slab's top through its triangular control
+    sector's vertex heights (8 at y 128, 40 at y 384). }
+  if not FileExists(Dir + 'udmf-3dfloor4.wad') then Exit;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-3dfloor4.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('one slab', 1, Length(M.Floors3D));
+      AssertEquals('top south', 8, M.SlabTop(0, -224, 128), 0.01);
+      AssertEquals('top north', 40, M.SlabTop(0, -224, 384), 0.01);
+      AssertEquals('bottom', 0, M.SlabBottom(0, -224, 300), 0.01);
+      AssertEquals('stand on it', 24, M.FloorAtZ(141, -224, 256, 40), 0.01);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
 end;
 
 procedure TTestMap.Test3dFloors;
