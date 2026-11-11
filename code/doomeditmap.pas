@@ -108,8 +108,6 @@ type
     procedure AddVerticesOnEdge(const A, B: TEditPoint; var Q: TEditPoints);
     procedure MakeOneSided(const L: Integer);
     procedure FlipLine(const L: Integer);
-    function LoadUdmf(const Text: String; out Error: String): Boolean;
-    function UdmfText: String;
   public
     { The map came from a TEXTMAP (UDMF) and is written back as one, in
       this namespace; Behavior is its BEHAVIOR lump, kept. }
@@ -131,6 +129,9 @@ type
     { Used by new rooms when the map has nothing to copy. }
     DefaultWall, DefaultFloor, DefaultCeiling: String;
     constructor Create;
+    { Read a TEXTMAP into the arrays (after Clear); the map as a TEXTMAP. }
+    function LoadUdmf(const Text: String; out Error: String): Boolean;
+    function UdmfText: String;
     { UDMF with Hexen's line specials (zdoom, hexen...): a line's Tag is
       its arg0. }
     function HexenNamespace: Boolean;
@@ -254,10 +255,15 @@ const
 
 { The play-test URL of the editor's map MapName (TDoomWad.AddFile reads
   its PWAD from RegisterEditedWad). }
+{ A UDMF record's kept text ("key = value;" lines, DoomEditMap's Udmf
+  fields): Key's value as written ('' when missing), and setting it
+  (Value '' removes the line). }
 { A Hexen-format map's lumps (16-byte LINEDEFS, 20-byte THINGS) as a
   UDMF TEXTMAP in the "zdoom" namespace, whose specials, sector types and
   thing fields are the same: what the editor reads such a map as (it
   saves it as UDMF). }
+function UdmfFieldText(const Text, Key: String): String;
+procedure SetUdmfFieldText(var Text: String; const Key, Value: String);
 function HexenMapToUdmf(const ThingsLump, LinesLump, SidesLump, VertsLump, SectorsLump: TBytes): String;
 
 function EditedWadUrl(const MapName: String): String;
@@ -625,6 +631,61 @@ begin
   Result := StringReplace(Result, DefaultFormatSettings.DecimalSeparator, '.', []);
 end;
 
+{ Kept UDMF fields -------------------------------------------------------------- }
+
+function UdmfFieldText(const Text, Key: String): String;
+var
+  Lines: TStringArray;
+  L, K: String;
+  P: Integer;
+begin
+  Result := '';
+  Lines := Text.Split([#10]);
+  for L in Lines do
+  begin
+    P := Pos('=', L);
+    if P = 0 then Continue;
+    K := LowerCase(Trim(Copy(L, 1, P - 1)));
+    if K <> LowerCase(Key) then Continue;
+    Result := Trim(Copy(L, P + 1, MaxInt));
+    if (Result <> '') and (Result[Length(Result)] = ';') then SetLength(Result, Length(Result) - 1);
+    Result := Trim(Result);
+    Exit;
+  end;
+end;
+
+procedure SetUdmfFieldText(var Text: String; const Key, Value: String);
+var
+  Lines: TStringArray;
+  L, K, Res: String;
+  P: Integer;
+  Done: Boolean;
+begin
+  Res := '';
+  Done := false;
+  Lines := Text.Split([#10]);
+  for L in Lines do
+  begin
+    if Trim(L) = '' then Continue;
+    P := Pos('=', L);
+    if P > 0 then
+    begin
+      K := LowerCase(Trim(Copy(L, 1, P - 1)));
+      if K = LowerCase(Key) then
+      begin
+        if (Value <> '') and not Done then
+          Res := Res + LowerCase(Key) + ' = ' + Value + ';' + #10;
+        Done := true;
+        Continue;
+      end;
+    end;
+    Res := Res + L + #10;
+  end;
+  if (not Done) and (Value <> '') then
+    Res := Res + LowerCase(Key) + ' = ' + Value + ';' + #10;
+  Text := Res;
+end;
+
 { Hexen format ----------------------------------------------------------------- }
 
 function HexenMapToUdmf(const ThingsLump, LinesLump, SidesLump, VertsLump, SectorsLump: TBytes): String;
@@ -940,7 +1001,9 @@ var
     Sb.Append(Extra).Append('}').Append(#10).Append(#10);
   end;
 
-  { A coordinate as read while it still rounds to V, else V. }
+  { A coordinate as read while it still rounds to V; moved, V with the
+    fraction it was read with (a vertex dragged by whole units keeps
+    its fraction). }
   function Coord(const Text: String; const V: Integer): String;
   var
     F: Double;
@@ -948,9 +1011,13 @@ var
   begin
     Fs := DefaultFormatSettings;
     Fs.DecimalSeparator := '.';
-    if (Text <> '') and TryStrToFloat(Text, F, Fs) and (Round(F) = V) then
-      Result := Text
-    else
+    if (Text <> '') and TryStrToFloat(Text, F, Fs) then
+    begin
+      if Round(F) = V then
+        Result := Text
+      else
+        Result := UdmfNumber(V + (F - Round(F)));
+    end else
       Result := UdmfNumber(V);
   end;
 

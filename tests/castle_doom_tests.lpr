@@ -3796,6 +3796,31 @@ begin
       FreeAndNil(W);
     end;
   end;
+  { The kept fields' text: read, set, replace, remove. }
+  F := 'arg1 = 5;' + #10 + 'playeruse = true;' + #10;
+  AssertEquals('field', '5', UdmfFieldText(F, 'ARG1'));
+  AssertEquals('missing', '', UdmfFieldText(F, 'arg2'));
+  SetUdmfFieldText(F, 'arg1', '9');
+  SetUdmfFieldText(F, 'repeatspecial', 'true');
+  AssertEquals('replaced', '9', UdmfFieldText(F, 'arg1'));
+  AssertEquals('added', 'true', UdmfFieldText(F, 'repeatspecial'));
+  SetUdmfFieldText(F, 'playeruse', '');
+  AssertEquals('removed', '', UdmfFieldText(F, 'playeruse'));
+  AssertEquals('text', 'arg1 = 9;' + #10 + 'repeatspecial = true;' + #10, F);
+  { A fractional vertex moved by whole units keeps its fraction. }
+  E := TDoomEditMap.Create;
+  try
+    E.Clear('MAP01');
+    AssertTrue('small map', E.LoadUdmf('namespace = "zdoom"; vertex { x = 0.5; y = -2.25; }', Error));
+    AssertEquals('rounded', 0, E.Vertices[0].X);
+    AssertTrue('kept as read', Pos('x = 0.5;', E.UdmfText) > 0);
+    E.Vertices[0].X := E.Vertices[0].X + 16;
+    E.Vertices[0].Y := E.Vertices[0].Y - 32;
+    AssertTrue('x moved with its fraction: ' + E.UdmfText, Pos('x = 16.5;', E.UdmfText) > 0);
+    AssertTrue('y moved with its fraction', Pos('y = -34.25;', E.UdmfText) > 0);
+  finally
+    FreeAndNil(E);
+  end;
 end;
 
 { E1M1's geometry as glTF and X3D (DoomExport), read back by CGE: the

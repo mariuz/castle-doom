@@ -691,6 +691,19 @@ TESTS = [
       r'Editor: Exported E1M1', r'Map: E1M1: UDMF, namespace "zdoom"', r'Message: Spawned 2'],
      ['--edit', '-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'hexen.wad')],
      lambda config: check_editor_hexen(config)),
+    # UDMF fields in the properties panel (udmf-things.wad): line 829's
+    # arg1 and repeat flag, sector 140's light colour (typed in hex) and
+    # the player start's thing id, all written to the exported TEXTMAP;
+    # the play-test sees the sector coloured.
+    ('editor-udmf-fields', 'E1M1',
+     'VIEW:-416:256:0.5,MODE:l,CLICK:-512:192,KEY:E,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:9,KEY:Enter,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:1,KEY:Enter,S,KEY:Escape,'
+     'MODE:s,CLICK:-416:240,KEY:E,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:FF8040,KEY:Enter,S,KEY:Escape,'
+     'MODE:t,CLICK:-416:256,KEY:E,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:77,KEY:Enter,KEY:Escape,EXPORT,PLAY,W:1,Q',
+     [r'Editor: Line 829: Arg 1 9', r'Editor: Line 829: Repeat 1', r'Editor: Sector 140: Light colour FF8040',
+      r'Editor: Thing \d+: Thing id 77', r'Editor: Exported E1M1',
+      r'Map: E1M1: UDMF look: 1 coloured sectors'],
+     ['--edit', '-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad')],
+     lambda config: check_editor_udmf_fields(config)),
     ('editor-props', 'E1M1',
      'VIEW:-416:256:0.5,DRAW:-480:192:-352:192:-352:288:-480:288,MODE:s,CLICK:-416:240,KEY:E,TYPE:24,KEY:Enter,'
      'KEY:Down,KEY:Down,TYPE:255,KEY:Enter,S,KEY:E,KEY:Ctrl+C,MOUSE:-416:-300,KEY:Ctrl+V,MOUSE:-900:256,KEY:Ctrl+V,S,'
@@ -1340,6 +1353,18 @@ def check_editor_hexen(config):
     assert abs(p['z'] - 24) < 2, 'play-test not on the raised floor: %s' % p
 
 
+def check_editor_udmf_fields(config):
+    """The panel's UDMF fields in the exported TEXTMAP."""
+    lumps = read_wad(os.path.join(os.path.dirname(config), 'editor-udmf-fields_e1m1.wad'))
+    text = lumps[1][1].decode('latin-1')
+    blocks = re.findall(r'(\w+) // (\d+)\n\{\n(.*?)\}', text, re.S)
+    line = [b for k, n, b in blocks if k == 'linedef' and n == '829'][0]
+    assert 'arg1 = 9;' in line and 'repeatspecial = true;' in line, line
+    sec = [b for k, n, b in blocks if k == 'sector' and n == '140'][0]
+    assert 'lightcolor = %d;' % 0xFF8040 in sec, sec
+    assert any('id = 77;' in b and 'type = 1;' in b for k, n, b in blocks if k == 'thing'), 'no thing id 77'
+
+
 def check_editor_props(config):
     """Typed values, pasted sectors and a flipped line in the exported PWAD:
     sector 182 (floor 24, light 255) and its two copies, line 1176 turned
@@ -1499,6 +1524,7 @@ GOLDEN = [
     'udmf-lights_1.png', 'udmf-lights_2.png',
     'hexen-format_1.png', 'hexen-poly_1.png', 'editor-hexen_edit_1.png',
     '3d-water-inside_1.png', '3d-water-inside_2.png', '3d-water-inside_3.png',
+    'editor-udmf-fields_edit_1.png', 'editor-udmf-fields_edit_2.png',
 ]
 
 

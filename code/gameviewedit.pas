@@ -197,6 +197,15 @@ type
     procedure FlipSelectedLines;
     { The properties panel. }
     function PropCount: Integer;
+    function BasePropCount: Integer;
+    function UdmfPropCount: Integer;
+    function UdmfField(const Field: Integer): Integer;
+    function PropIsColor(const Field: Integer): Boolean;
+    function PropText(const Index, Field: Integer): String;
+    function RecordUdmf(const Index: Integer): String;
+    procedure SetRecordUdmf(const Index: Integer; const Text: String);
+    function UdmfPropValue(const Index, U: Integer): Integer;
+    procedure SetUdmfPropValue(const Index, U, Value: Integer);
     function PropName(const Field: Integer): String;
     function PropValue(const Index, Field: Integer): Integer;
     procedure SetPropValue(const Index, Field, Value: Integer);
@@ -1247,7 +1256,53 @@ const
   ThingProps: array [0..3] of String = ('Angle', 'Type', 'X', 'Y');
   VertexProps: array [0..1] of String = ('X', 'Y');
 
-function TViewEdit.PropCount: Integer;
+type
+  TUdmfPropKind = (upInt, upBool, upColor, upFloat);
+  { A UDMF field the panel edits in a record's kept text: written when
+    it differs from Default, else left out. }
+  TUdmfProp = record
+    Name, Key: String;
+    Kind: TUdmfPropKind;
+    Default: Integer;
+  end;
+
+const
+  { Lines in Hexen-special namespaces (arg0 is the Tag field). }
+  LineUdmfProps: array [0..12] of TUdmfProp = (
+    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0),
+    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0),
+    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0),
+    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0),
+    (Name: 'Line id'; Key: 'id'; Kind: upInt; Default: 0),
+    (Name: 'Player cross'; Key: 'playercross'; Kind: upBool; Default: 0),
+    (Name: 'Player use'; Key: 'playeruse'; Kind: upBool; Default: 0),
+    (Name: 'Monster cross'; Key: 'monstercross'; Kind: upBool; Default: 0),
+    (Name: 'Monster use'; Key: 'monsteruse'; Kind: upBool; Default: 0),
+    (Name: 'Impact'; Key: 'impact'; Kind: upBool; Default: 0),
+    (Name: 'Player push'; Key: 'playerpush'; Kind: upBool; Default: 0),
+    (Name: 'Missile cross'; Key: 'missilecross'; Kind: upBool; Default: 0),
+    (Name: 'Repeat'; Key: 'repeatspecial'; Kind: upBool; Default: 0));
+  { Things in any UDMF map; the special and its arguments only with
+    Hexen's specials. }
+  ThingUdmfProps: array [0..7] of TUdmfProp = (
+    (Name: 'Thing id'; Key: 'id'; Kind: upInt; Default: 0),
+    (Name: 'Height'; Key: 'height'; Kind: upFloat; Default: 0),
+    (Name: 'Special'; Key: 'special'; Kind: upInt; Default: 0),
+    (Name: 'Arg 0'; Key: 'arg0'; Kind: upInt; Default: 0),
+    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0),
+    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0),
+    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0),
+    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0));
+  { Sectors in any UDMF map: the look fields (colours in hex). }
+  SectorUdmfProps: array [0..5] of TUdmfProp = (
+    (Name: 'Light colour'; Key: 'lightcolor'; Kind: upColor; Default: $FFFFFF),
+    (Name: 'Fade colour'; Key: 'fadecolor'; Kind: upColor; Default: 0),
+    (Name: 'Floor light'; Key: 'lightfloor'; Kind: upInt; Default: 0),
+    (Name: 'Ceiling light'; Key: 'lightceiling'; Kind: upInt; Default: 0),
+    (Name: 'Floor rotation'; Key: 'rotationfloor'; Kind: upFloat; Default: 0),
+    (Name: 'Ceiling rotation'; Key: 'rotationceiling'; Kind: upFloat; Default: 0));
+
+function TViewEdit.BasePropCount: Integer;
 begin
   case FMode of
     emSectors: Result := Length(SectorProps);
@@ -1257,8 +1312,44 @@ begin
   end;
 end;
 
+{ How many UDMF fields the panel shows after the base ones. }
+function TViewEdit.UdmfPropCount: Integer;
+begin
+  Result := 0;
+  if not FEdit.Udmf then Exit;
+  case FMode of
+    emSectors: Result := Length(SectorUdmfProps);
+    emLines: if FEdit.HexenNamespace then Result := Length(LineUdmfProps);
+    emThings: if FEdit.HexenNamespace then Result := Length(ThingUdmfProps) else Result := 2;
+    else ;
+  end;
+end;
+
+function UdmfPropOf(const Mode: TEditMode; const I: Integer): TUdmfProp;
+begin
+  case Mode of
+    emSectors: Result := SectorUdmfProps[I];
+    emLines: Result := LineUdmfProps[I];
+    else Result := ThingUdmfProps[I];
+  end;
+end;
+
+function TViewEdit.PropCount: Integer;
+begin
+  Result := BasePropCount + UdmfPropCount;
+end;
+
+{ The UDMF field Field is (-1 a base field). }
+function TViewEdit.UdmfField(const Field: Integer): Integer;
+begin
+  Result := Field - BasePropCount;
+  if (Result < 0) or (Result >= UdmfPropCount) then Result := -1;
+end;
+
 function TViewEdit.PropName(const Field: Integer): String;
 begin
+  if UdmfField(Field) >= 0 then
+    Exit(UdmfPropOf(FMode, UdmfField(Field)).Name);
   case FMode of
     emSectors: Result := SectorProps[Field];
     emLines: Result := LineProps[Field];
@@ -1270,11 +1361,91 @@ begin
     Result := 'Arg 0';
 end;
 
+function TViewEdit.RecordUdmf(const Index: Integer): String;
+begin
+  case FMode of
+    emSectors: Result := FEdit.Sectors[Index].Udmf;
+    emLines: Result := FEdit.Lines[Index].Udmf;
+    emThings: Result := FEdit.Things[Index].Udmf;
+    else Result := '';
+  end;
+end;
+
+procedure TViewEdit.SetRecordUdmf(const Index: Integer; const Text: String);
+begin
+  case FMode of
+    emSectors: FEdit.Sectors[Index].Udmf := Text;
+    emLines: FEdit.Lines[Index].Udmf := Text;
+    emThings: FEdit.Things[Index].Udmf := Text;
+    else ;
+  end;
+end;
+
+function TViewEdit.UdmfPropValue(const Index, U: Integer): Integer;
+var
+  P: TUdmfProp;
+  T: String;
+  F: Double;
+  Fs: TFormatSettings;
+begin
+  P := UdmfPropOf(FMode, U);
+  T := UdmfFieldText(RecordUdmf(Index), P.Key);
+  if T = '' then Exit(P.Default);
+  case P.Kind of
+    upBool: if LowerCase(T) = 'true' then Result := 1 else Result := 0;
+    upColor:
+      if (Length(T) > 2) and (LowerCase(Copy(T, 1, 2)) = '0x') then
+        Result := StrToIntDef('$' + Copy(T, 3, MaxInt), P.Default)
+      else
+        Result := StrToIntDef(T, P.Default);
+    else
+      begin
+        Fs := DefaultFormatSettings;
+        Fs.DecimalSeparator := '.';
+        if TryStrToFloat(T, F, Fs) then Result := Round(F) else Result := P.Default;
+      end;
+  end;
+end;
+
+procedure TViewEdit.SetUdmfPropValue(const Index, U, Value: Integer);
+var
+  P: TUdmfProp;
+  T, V: String;
+begin
+  P := UdmfPropOf(FMode, U);
+  T := RecordUdmf(Index);
+  V := '';
+  case P.Kind of
+    upBool: if Value <> 0 then V := 'true';
+    upColor: if (Value and $FFFFFF) <> P.Default then V := IntToStr(Value and $FFFFFF);
+    upFloat: if Value <> P.Default then V := IntToStr(Value) + '.0';
+    else if Value <> P.Default then V := IntToStr(Value);
+  end;
+  SetUdmfFieldText(T, P.Key, V);
+  SetRecordUdmf(Index, T);
+end;
+
+function TViewEdit.PropIsColor(const Field: Integer): Boolean;
+begin
+  Result := (UdmfField(Field) >= 0) and (UdmfPropOf(FMode, UdmfField(Field)).Kind = upColor);
+end;
+
+{ A value as the panel shows it: colours in hex. }
+function TViewEdit.PropText(const Index, Field: Integer): String;
+begin
+  if (UdmfField(Field) >= 0) and (UdmfPropOf(FMode, UdmfField(Field)).Kind = upColor) then
+    Result := IntToHex(PropValue(Index, Field), 6)
+  else
+    Result := IntToStr(PropValue(Index, Field));
+end;
+
 function TViewEdit.PropValue(const Index, Field: Integer): Integer;
 var
   S: Integer;
 begin
   Result := 0;
+  if UdmfField(Field) >= 0 then
+    Exit(UdmfPropValue(Index, UdmfField(Field)));
   case FMode of
     emSectors:
       case Field of
@@ -1315,6 +1486,11 @@ procedure TViewEdit.SetPropValue(const Index, Field, Value: Integer);
 var
   S: Integer;
 begin
+  if UdmfField(Field) >= 0 then
+  begin
+    SetUdmfPropValue(Index, UdmfField(Field), Value);
+    Exit;
+  end;
   case FMode of
     emSectors:
       case Field of
@@ -1379,6 +1555,14 @@ var
   Value, I: Integer;
   Sel: TEditIndexArray;
 begin
+  if PropIsColor(FPropField) then
+  begin
+    if not TryStrToInt('$' + FPropText, Value) then
+    begin
+      Message('Type a colour in hex (RRGGBB)');
+      Exit;
+    end;
+  end else
   if not TryStrToInt(FPropText, Value) then
   begin
     Message('Type a number');
@@ -1397,8 +1581,8 @@ begin
         Break;
       end;
   if FSelected >= 0 then
-    LogAction(Format('%s %d: %s %d%s', [Copy(ModeNames[FMode], 1, Length(ModeNames[FMode]) - 1), FSelected,
-      PropName(FPropField), PropValue(FSelected, FPropField), MoreText]))
+    LogAction(Format('%s %d: %s %s%s', [Copy(ModeNames[FMode], 1, Length(ModeNames[FMode]) - 1), FSelected,
+      PropName(FPropField), PropText(FSelected, FPropField), MoreText]))
   else
     LogAction(Format('%s %d', [PropName(FPropField), Value]));
   FPropText := '';
@@ -1416,6 +1600,12 @@ begin
   else if Key in [key0..key9] then C := Chr(Ord('0') + Ord(Key) - Ord(key0))
   else if Key in [keyNumpad0..keyNumpad9] then C := Chr(Ord('0') + Ord(Key) - Ord(keyNumpad0))
   else if Key in [keyMinus, keyNumpadMinus] then C := '-';
+  { A colour takes hex digits (E too: Esc closes the panel there). }
+  if PropIsColor(FPropField) and (UpCase(C) in ['0'..'9', 'A'..'F']) then
+  begin
+    if Length(FPropText) < 6 then FPropText := FPropText + UpCase(C);
+    Exit;
+  end;
   if (C in ['0'..'9']) or ((C = '-') and (FPropText = '')) then
   begin
     if Length(FPropText) < 7 then FPropText := FPropText + C;
@@ -1452,7 +1642,7 @@ begin
   try
     Font.Size := Max(12, Container.PixelsHeight / 60);
     LineH := Font.Height * 1.35;
-    W := Font.TextWidth('> Front Y offset   -000000_') + 20;
+    W := Font.TextWidth('> Ceiling rotation   -000000_') + 20;
     X := Container.PixelsWidth - W - 10;
     Y := 10;
     DrawRectangle(FloatRectangle(X - 8, Y - 6, W + 8, LineH * (Count + 1) + 10), Vector4(0.1, 0.12, 0.2, 0.95));
@@ -1461,12 +1651,12 @@ begin
       if I = FPropField then
       begin
         Color := Vector4(1, 1, 0.5, 1);
-        if FPropText <> '' then Text := FPropText + '_' else Text := IntToStr(PropValue(FSelected, I)) + '_';
+        if FPropText <> '' then Text := FPropText + '_' else Text := PropText(FSelected, I) + '_';
         Text := '> ' + PropName(I) + '   ' + Text;
       end else
       begin
         Color := Vector4(0.9, 0.9, 0.9, 1);
-        Text := '  ' + PropName(I) + '   ' + IntToStr(PropValue(FSelected, I));
+        Text := '  ' + PropName(I) + '   ' + PropText(FSelected, I);
       end;
       Font.Print(X, Y + LineH * (Count - 1 - I), Color, Text);
     end;
