@@ -47,6 +47,16 @@ uses Classes, SysUtils,
 
 type
   TEditMode = (emVertices, emLines, emSectors, emThings);
+  TUdmfPropKind = (upInt, upBool, upColor, upFloat, upString);
+  { A UDMF field the panel edits in a record's kept text (OnSide: the
+    line's front side's), written when it differs from Default (else
+    left out). }
+  TUdmfProp = record
+    Name, Key: String;
+    Kind: TUdmfPropKind;
+    Default: Double;
+    OnSide: Boolean;
+  end;
   TEditIndexArray = array of Integer;
 
   { A line inside a copied sector (both its sides in it): its ends
@@ -201,11 +211,14 @@ type
     function UdmfPropCount: Integer;
     function UdmfField(const Field: Integer): Integer;
     function PropIsColor(const Field: Integer): Boolean;
+    function PropKind(const Field: Integer): TUdmfPropKind;
+    function UdmfPropAt(const U: Integer): TUdmfProp;
     function PropText(const Index, Field: Integer): String;
-    function RecordUdmf(const Index: Integer): String;
-    procedure SetRecordUdmf(const Index: Integer; const Text: String);
-    function UdmfPropValue(const Index, U: Integer): Integer;
-    procedure SetUdmfPropValue(const Index, U, Value: Integer);
+    function RecordUdmf(const Index: Integer; const OnSide: Boolean): String;
+    procedure SetRecordUdmf(const Index: Integer; const OnSide: Boolean; const Text: String);
+    function UdmfPropText(const Index, U: Integer): String;
+    function UdmfValueOf(const U: Integer; const Text: String; out Value: String): Boolean;
+    procedure SetUdmfPropValue(const Index, U: Integer; const Value: String);
     function PropName(const Field: Integer): String;
     function PropValue(const Index, Field: Integer): Integer;
     procedure SetPropValue(const Index, Field, Value: Integer);
@@ -1256,51 +1269,54 @@ const
   ThingProps: array [0..3] of String = ('Angle', 'Type', 'X', 'Y');
   VertexProps: array [0..1] of String = ('X', 'Y');
 
-type
-  TUdmfPropKind = (upInt, upBool, upColor, upFloat);
-  { A UDMF field the panel edits in a record's kept text: written when
-    it differs from Default, else left out. }
-  TUdmfProp = record
-    Name, Key: String;
-    Kind: TUdmfPropKind;
-    Default: Integer;
-  end;
-
 const
   { Lines in Hexen-special namespaces (arg0 is the Tag field). }
-  LineUdmfProps: array [0..12] of TUdmfProp = (
-    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0),
-    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0),
-    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0),
-    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0),
-    (Name: 'Line id'; Key: 'id'; Kind: upInt; Default: 0),
-    (Name: 'Player cross'; Key: 'playercross'; Kind: upBool; Default: 0),
-    (Name: 'Player use'; Key: 'playeruse'; Kind: upBool; Default: 0),
-    (Name: 'Monster cross'; Key: 'monstercross'; Kind: upBool; Default: 0),
-    (Name: 'Monster use'; Key: 'monsteruse'; Kind: upBool; Default: 0),
-    (Name: 'Impact'; Key: 'impact'; Kind: upBool; Default: 0),
-    (Name: 'Player push'; Key: 'playerpush'; Kind: upBool; Default: 0),
-    (Name: 'Missile cross'; Key: 'missilecross'; Kind: upBool; Default: 0),
-    (Name: 'Repeat'; Key: 'repeatspecial'; Kind: upBool; Default: 0));
+  LineHexenProps: array [0..13] of TUdmfProp = (
+    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Line id'; Key: 'id'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Player cross'; Key: 'playercross'; Kind: upBool; Default: 0; OnSide: false),
+    (Name: 'Player use'; Key: 'playeruse'; Kind: upBool; Default: 0; OnSide: false),
+    (Name: 'Monster cross'; Key: 'monstercross'; Kind: upBool; Default: 0; OnSide: false),
+    (Name: 'Monster use'; Key: 'monsteruse'; Kind: upBool; Default: 0; OnSide: false),
+    (Name: 'Impact'; Key: 'impact'; Kind: upBool; Default: 0; OnSide: false),
+    (Name: 'Player push'; Key: 'playerpush'; Kind: upBool; Default: 0; OnSide: false),
+    (Name: 'Missile cross'; Key: 'missilecross'; Kind: upBool; Default: 0; OnSide: false),
+    (Name: 'Repeat'; Key: 'repeatspecial'; Kind: upBool; Default: 0; OnSide: false),
+    (Name: 'Script name'; Key: 'arg0str'; Kind: upString; Default: 0; OnSide: false));
+  { Lines in any UDMF map: the opacity and the front side's per-part
+    texture offsets and scaling. }
+  LineLookProps: array [0..8] of TUdmfProp = (
+    (Name: 'Alpha'; Key: 'alpha'; Kind: upFloat; Default: 1; OnSide: false),
+    (Name: 'Mid X offset'; Key: 'offsetx_mid'; Kind: upFloat; Default: 0; OnSide: true),
+    (Name: 'Mid Y offset'; Key: 'offsety_mid'; Kind: upFloat; Default: 0; OnSide: true),
+    (Name: 'Mid X scale'; Key: 'scalex_mid'; Kind: upFloat; Default: 1; OnSide: true),
+    (Name: 'Mid Y scale'; Key: 'scaley_mid'; Kind: upFloat; Default: 1; OnSide: true),
+    (Name: 'Top X offset'; Key: 'offsetx_top'; Kind: upFloat; Default: 0; OnSide: true),
+    (Name: 'Top Y offset'; Key: 'offsety_top'; Kind: upFloat; Default: 0; OnSide: true),
+    (Name: 'Bottom X offset'; Key: 'offsetx_bottom'; Kind: upFloat; Default: 0; OnSide: true),
+    (Name: 'Bottom Y offset'; Key: 'offsety_bottom'; Kind: upFloat; Default: 0; OnSide: true));
   { Things in any UDMF map; the special and its arguments only with
     Hexen's specials. }
   ThingUdmfProps: array [0..7] of TUdmfProp = (
-    (Name: 'Thing id'; Key: 'id'; Kind: upInt; Default: 0),
-    (Name: 'Height'; Key: 'height'; Kind: upFloat; Default: 0),
-    (Name: 'Special'; Key: 'special'; Kind: upInt; Default: 0),
-    (Name: 'Arg 0'; Key: 'arg0'; Kind: upInt; Default: 0),
-    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0),
-    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0),
-    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0),
-    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0));
+    (Name: 'Thing id'; Key: 'id'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Height'; Key: 'height'; Kind: upFloat; Default: 0; OnSide: false),
+    (Name: 'Special'; Key: 'special'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Arg 0'; Key: 'arg0'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0; OnSide: false));
   { Sectors in any UDMF map: the look fields (colours in hex). }
   SectorUdmfProps: array [0..5] of TUdmfProp = (
-    (Name: 'Light colour'; Key: 'lightcolor'; Kind: upColor; Default: $FFFFFF),
-    (Name: 'Fade colour'; Key: 'fadecolor'; Kind: upColor; Default: 0),
-    (Name: 'Floor light'; Key: 'lightfloor'; Kind: upInt; Default: 0),
-    (Name: 'Ceiling light'; Key: 'lightceiling'; Kind: upInt; Default: 0),
-    (Name: 'Floor rotation'; Key: 'rotationfloor'; Kind: upFloat; Default: 0),
-    (Name: 'Ceiling rotation'; Key: 'rotationceiling'; Kind: upFloat; Default: 0));
+    (Name: 'Light colour'; Key: 'lightcolor'; Kind: upColor; Default: $FFFFFF; OnSide: false),
+    (Name: 'Fade colour'; Key: 'fadecolor'; Kind: upColor; Default: 0; OnSide: false),
+    (Name: 'Floor light'; Key: 'lightfloor'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Ceiling light'; Key: 'lightceiling'; Kind: upInt; Default: 0; OnSide: false),
+    (Name: 'Floor rotation'; Key: 'rotationfloor'; Kind: upFloat; Default: 0; OnSide: false),
+    (Name: 'Ceiling rotation'; Key: 'rotationceiling'; Kind: upFloat; Default: 0; OnSide: false));
 
 function TViewEdit.BasePropCount: Integer;
 begin
@@ -1319,18 +1335,28 @@ begin
   if not FEdit.Udmf then Exit;
   case FMode of
     emSectors: Result := Length(SectorUdmfProps);
-    emLines: if FEdit.HexenNamespace then Result := Length(LineUdmfProps);
+    emLines:
+      begin
+        Result := Length(LineLookProps);
+        if FEdit.HexenNamespace then Result := Result + Length(LineHexenProps);
+      end;
     emThings: if FEdit.HexenNamespace then Result := Length(ThingUdmfProps) else Result := 2;
     else ;
   end;
 end;
 
-function UdmfPropOf(const Mode: TEditMode; const I: Integer): TUdmfProp;
+function TViewEdit.UdmfPropAt(const U: Integer): TUdmfProp;
 begin
-  case Mode of
-    emSectors: Result := SectorUdmfProps[I];
-    emLines: Result := LineUdmfProps[I];
-    else Result := ThingUdmfProps[I];
+  case FMode of
+    emSectors: Result := SectorUdmfProps[U];
+    emLines:
+      if not FEdit.HexenNamespace then
+        Result := LineLookProps[U]
+      else if U < Length(LineHexenProps) then
+        Result := LineHexenProps[U]
+      else
+        Result := LineLookProps[U - Length(LineHexenProps)];
+    else Result := ThingUdmfProps[U];
   end;
 end;
 
@@ -1349,7 +1375,7 @@ end;
 function TViewEdit.PropName(const Field: Integer): String;
 begin
   if UdmfField(Field) >= 0 then
-    Exit(UdmfPropOf(FMode, UdmfField(Field)).Name);
+    Exit(UdmfPropAt(UdmfField(Field)).Name);
   case FMode of
     emSectors: Result := SectorProps[Field];
     emLines: Result := LineProps[Field];
@@ -1361,18 +1387,37 @@ begin
     Result := 'Arg 0';
 end;
 
-function TViewEdit.RecordUdmf(const Index: Integer): String;
+{ The kept text a field lives in: the record's, or its line's front
+  side's (-1: a line without a front side). }
+function TViewEdit.RecordUdmf(const Index: Integer; const OnSide: Boolean): String;
+var
+  S: Integer;
 begin
+  Result := '';
+  if OnSide then
+  begin
+    S := FEdit.Lines[Index].Side[0];
+    if S >= 0 then Result := FEdit.Sides[S].Udmf;
+    Exit;
+  end;
   case FMode of
     emSectors: Result := FEdit.Sectors[Index].Udmf;
     emLines: Result := FEdit.Lines[Index].Udmf;
     emThings: Result := FEdit.Things[Index].Udmf;
-    else Result := '';
+    else ;
   end;
 end;
 
-procedure TViewEdit.SetRecordUdmf(const Index: Integer; const Text: String);
+procedure TViewEdit.SetRecordUdmf(const Index: Integer; const OnSide: Boolean; const Text: String);
+var
+  S: Integer;
 begin
+  if OnSide then
+  begin
+    S := FEdit.Lines[Index].Side[0];
+    if S >= 0 then FEdit.Sides[S].Udmf := Text;
+    Exit;
+  end;
   case FMode of
     emSectors: FEdit.Sectors[Index].Udmf := Text;
     emLines: FEdit.Lines[Index].Udmf := Text;
@@ -1381,60 +1426,143 @@ begin
   end;
 end;
 
-function TViewEdit.UdmfPropValue(const Index, U: Integer): Integer;
+function DotFloat(const T: String; out F: Double): Boolean;
+var
+  Fs: TFormatSettings;
+begin
+  Fs := DefaultFormatSettings;
+  Fs.DecimalSeparator := '.';
+  Result := TryStrToFloat(T, F, Fs);
+end;
+
+{ A number as UDMF writes floats: "2.0", "0.5", "-12.25". }
+function UdmfFloatText(const F: Double): String;
+var
+  Fs: TFormatSettings;
+begin
+  Fs := DefaultFormatSettings;
+  Fs.DecimalSeparator := '.';
+  if Frac(F) = 0 then
+    Result := Format('%d.0', [Round(F)])
+  else
+    Result := FloatToStr(F, Fs);
+end;
+
+{ A UDMF field's value as the panel shows and takes it: booleans 1 / 0,
+  colours in hex, floats as written, strings without their quotes. }
+function TViewEdit.UdmfPropText(const Index, U: Integer): String;
 var
   P: TUdmfProp;
   T: String;
   F: Double;
-  Fs: TFormatSettings;
+  C: Integer;
 begin
-  P := UdmfPropOf(FMode, U);
-  T := UdmfFieldText(RecordUdmf(Index), P.Key);
-  if T = '' then Exit(P.Default);
+  P := UdmfPropAt(U);
+  T := UdmfFieldText(RecordUdmf(Index, P.OnSide), P.Key);
   case P.Kind of
-    upBool: if LowerCase(T) = 'true' then Result := 1 else Result := 0;
+    upBool: if LowerCase(T) = 'true' then Result := '1' else Result := '0';
     upColor:
-      if (Length(T) > 2) and (LowerCase(Copy(T, 1, 2)) = '0x') then
-        Result := StrToIntDef('$' + Copy(T, 3, MaxInt), P.Default)
-      else
-        Result := StrToIntDef(T, P.Default);
-    else
       begin
-        Fs := DefaultFormatSettings;
-        Fs.DecimalSeparator := '.';
-        if TryStrToFloat(T, F, Fs) then Result := Round(F) else Result := P.Default;
+        if T = '' then C := Round(P.Default)
+        else if (Length(T) > 2) and (LowerCase(Copy(T, 1, 2)) = '0x') then
+          C := StrToIntDef('$' + Copy(T, 3, MaxInt), Round(P.Default))
+        else
+          C := StrToIntDef(T, Round(P.Default));
+        Result := IntToHex(C and $FFFFFF, 6);
       end;
+    upString:
+      begin
+        Result := T;
+        if (Length(Result) >= 2) and (Result[1] = '"') and (Result[Length(Result)] = '"') then
+          Result := Copy(Result, 2, Length(Result) - 2);
+        Result := StringReplace(Result, '\"', '"', [rfReplaceAll]);
+        Result := StringReplace(Result, '\\', '\', [rfReplaceAll]);
+      end;
+    upFloat:
+      if (T <> '') and DotFloat(T, F) then
+        Result := UdmfFloatText(F)
+      else
+        Result := UdmfFloatText(P.Default);
+    else
+      if (T <> '') and DotFloat(T, F) then
+        Result := IntToStr(Round(F))
+      else
+        Result := IntToStr(Round(P.Default));
   end;
 end;
 
-procedure TViewEdit.SetUdmfPropValue(const Index, U, Value: Integer);
+{ Text typed for field U as the value written (Value), '' when it is the
+  default (the line is left out); false for text that does not fit. }
+function TViewEdit.UdmfValueOf(const U: Integer; const Text: String; out Value: String): Boolean;
 var
   P: TUdmfProp;
-  T, V: String;
+  I: Integer;
+  F: Double;
 begin
-  P := UdmfPropOf(FMode, U);
-  T := RecordUdmf(Index);
-  V := '';
+  P := UdmfPropAt(U);
+  Value := '';
+  Result := true;
   case P.Kind of
-    upBool: if Value <> 0 then V := 'true';
-    upColor: if (Value and $FFFFFF) <> P.Default then V := IntToStr(Value and $FFFFFF);
-    upFloat: if Value <> P.Default then V := IntToStr(Value) + '.0';
-    else if Value <> P.Default then V := IntToStr(Value);
+    upBool:
+      if TryStrToInt(Text, I) then
+      begin
+        if I <> 0 then Value := 'true';
+      end else
+        Result := false;
+    upColor:
+      if TryStrToInt('$' + Text, I) and (Length(Text) <= 6) then
+      begin
+        if I <> Round(P.Default) then Value := IntToStr(I);
+      end else
+        Result := false;
+    upFloat:
+      if DotFloat(Text, F) then
+      begin
+        if F <> P.Default then Value := UdmfFloatText(F);
+      end else
+        Result := false;
+    upString:
+      if Text <> '' then
+        Value := '"' + StringReplace(StringReplace(Text, '\', '\\', [rfReplaceAll]), '"', '\"', [rfReplaceAll]) + '"';
+    else
+      if TryStrToInt(Text, I) then
+      begin
+        if I <> Round(P.Default) then Value := IntToStr(I);
+      end else
+        Result := false;
   end;
-  SetUdmfFieldText(T, P.Key, V);
-  SetRecordUdmf(Index, T);
+end;
+
+procedure TViewEdit.SetUdmfPropValue(const Index, U: Integer; const Value: String);
+var
+  P: TUdmfProp;
+  T: String;
+begin
+  P := UdmfPropAt(U);
+  if P.OnSide and (FEdit.Lines[Index].Side[0] < 0) then Exit;
+  T := RecordUdmf(Index, P.OnSide);
+  SetUdmfFieldText(T, P.Key, Value);
+  SetRecordUdmf(Index, P.OnSide, T);
+end;
+
+function TViewEdit.PropKind(const Field: Integer): TUdmfPropKind;
+begin
+  if UdmfField(Field) >= 0 then
+    Result := UdmfPropAt(UdmfField(Field)).Kind
+  else
+    Result := upInt;
 end;
 
 function TViewEdit.PropIsColor(const Field: Integer): Boolean;
 begin
-  Result := (UdmfField(Field) >= 0) and (UdmfPropOf(FMode, UdmfField(Field)).Kind = upColor);
+  Result := PropKind(Field) = upColor;
 end;
 
 { A value as the panel shows it: colours in hex. }
 function TViewEdit.PropText(const Index, Field: Integer): String;
 begin
-  if (UdmfField(Field) >= 0) and (UdmfPropOf(FMode, UdmfField(Field)).Kind = upColor) then
-    Result := IntToHex(PropValue(Index, Field), 6)
+  if UdmfField(Field) >= 0 then
+    Result := UdmfPropText(Index, UdmfField(Field))
   else
     Result := IntToStr(PropValue(Index, Field));
 end;
@@ -1445,7 +1573,7 @@ var
 begin
   Result := 0;
   if UdmfField(Field) >= 0 then
-    Exit(UdmfPropValue(Index, UdmfField(Field)));
+    Exit(StrToIntDef(UdmfPropText(Index, UdmfField(Field)), 0));
   case FMode of
     emSectors:
       case Field of
@@ -1488,7 +1616,7 @@ var
 begin
   if UdmfField(Field) >= 0 then
   begin
-    SetUdmfPropValue(Index, UdmfField(Field), Value);
+    SetUdmfPropValue(Index, UdmfField(Field), IntToStr(Value));
     Exit;
   end;
   case FMode of
@@ -1554,15 +1682,29 @@ procedure TViewEdit.ApplyProp;
 var
   Value, I: Integer;
   Sel: TEditIndexArray;
+  Written: String;
 begin
-  if PropIsColor(FPropField) then
+  if UdmfField(FPropField) >= 0 then
   begin
-    if not TryStrToInt('$' + FPropText, Value) then
+    if not UdmfValueOf(UdmfField(FPropField), FPropText, Written) then
     begin
-      Message('Type a colour in hex (RRGGBB)');
+      case PropKind(FPropField) of
+        upColor: Message('Type a colour in hex (RRGGBB)');
+        upFloat: Message('Type a number (fractions with a dot)');
+        else Message('Type a number');
+      end;
       Exit;
     end;
-  end else
+    Sel := Selection;
+    FEdit.Snapshot;
+    for I := 0 to High(Sel) do
+      SetUdmfPropValue(Sel[I], UdmfField(FPropField), Written);
+    if FSelected >= 0 then
+      LogAction(Format('%s %d: %s %s%s', [Copy(ModeNames[FMode], 1, Length(ModeNames[FMode]) - 1), FSelected,
+        PropName(FPropField), PropText(FSelected, FPropField), MoreText]));
+    FPropText := '';
+    Exit;
+  end;
   if not TryStrToInt(FPropText, Value) then
   begin
     Message('Type a number');
@@ -1600,10 +1742,21 @@ begin
   else if Key in [key0..key9] then C := Chr(Ord('0') + Ord(Key) - Ord(key0))
   else if Key in [keyNumpad0..keyNumpad9] then C := Chr(Ord('0') + Ord(Key) - Ord(keyNumpad0))
   else if Key in [keyMinus, keyNumpadMinus] then C := '-';
-  { A colour takes hex digits (E too: Esc closes the panel there). }
+  { A colour takes hex digits, a string any character (E too: Esc
+    closes the panel there), a float a dot. }
   if PropIsColor(FPropField) and (UpCase(C) in ['0'..'9', 'A'..'F']) then
   begin
     if Length(FPropText) < 6 then FPropText := FPropText + UpCase(C);
+    Exit;
+  end;
+  if (PropKind(FPropField) = upString) and (C >= ' ') and (C <= '~') then
+  begin
+    if Length(FPropText) < 32 then FPropText := FPropText + C;
+    Exit;
+  end;
+  if (PropKind(FPropField) = upFloat) and (C = '.') and (Pos('.', FPropText) = 0) then
+  begin
+    FPropText := FPropText + C;
     Exit;
   end;
   if (C in ['0'..'9']) or ((C = '-') and (FPropText = '')) then
@@ -1642,7 +1795,7 @@ begin
   try
     Font.Size := Max(12, Container.PixelsHeight / 60);
     LineH := Font.Height * 1.35;
-    W := Font.TextWidth('> Ceiling rotation   -000000_') + 20;
+    W := Font.TextWidth('> Ceiling rotation   -0000000.00_') + 20;
     X := Container.PixelsWidth - W - 10;
     Y := 10;
     DrawRectangle(FloatRectangle(X - 8, Y - 6, W + 8, LineH * (Count + 1) + 10), Vector4(0.1, 0.12, 0.2, 0.95));

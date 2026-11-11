@@ -717,10 +717,14 @@ TESTS = [
     # the player start's thing id, all written to the exported TEXTMAP;
     # the play-test sees the sector coloured.
     ('editor-udmf-fields', 'E1M1',
-     'VIEW:-416:256:0.5,MODE:l,CLICK:-512:192,KEY:E,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:9,KEY:Enter,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:1,KEY:Enter,S,KEY:Escape,'
+     'VIEW:-416:256:0.5,MODE:l,CLICK:-512:192,KEY:E,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:9,KEY:Enter,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:1,KEY:Enter,'
+     'KEY:Down,TYPE:Greet,KEY:Enter,KEY:Down,TYPE:0.5,KEY:Enter,KEY:Down,KEY:Down,KEY:Down,TYPE:0.5,KEY:Enter,'
+     'S,KEY:Escape,'
      'MODE:s,CLICK:-416:240,KEY:E,KEY:Down,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:FF8040,KEY:Enter,S,KEY:Escape,'
      'MODE:t,CLICK:-416:256,KEY:E,KEY:Down,KEY:Down,KEY:Down,KEY:Down,TYPE:77,KEY:Enter,KEY:Escape,EXPORT,PLAY,W:1,Q',
-     [r'Editor: Line 829: Arg 1 9', r'Editor: Line 829: Repeat 1', r'Editor: Sector 140: Light colour FF8040',
+     [r'Editor: Line 829: Arg 1 9', r'Editor: Line 829: Repeat 1', r'Editor: Line 829: Script name Greet',
+      r'Editor: Line 829: Alpha 0\.5', r'Editor: Line 829: Mid X scale 0\.5',
+      r'Editor: Sector 140: Light colour FF8040',
       r'Editor: Thing \d+: Thing id 77', r'Editor: Exported E1M1',
       r'Map: E1M1: UDMF look: 1 coloured sectors'],
      ['--edit', '-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad')],
@@ -1397,6 +1401,10 @@ def check_editor_udmf_fields(config):
     blocks = re.findall(r'(\w+) // (\d+)\n\{\n(.*?)\}', text, re.S)
     line = [b for k, n, b in blocks if k == 'linedef' and n == '829'][0]
     assert 'arg1 = 9;' in line and 'repeatspecial = true;' in line, line
+    assert 'arg0str = "Greet";' in line and 'alpha = 0.5;' in line, line
+    front = int(re.search(r'sidefront = (\d+);', line).group(1))
+    side = [b for k, n, b in blocks if k == 'sidedef' and n == str(front)][0]
+    assert 'scalex_mid = 0.5;' in side, side
     sec = [b for k, n, b in blocks if k == 'sector' and n == '140'][0]
     assert 'lightcolor = %d;' % 0xFF8040 in sec, sec
     assert any('id = 77;' in b and 'type = 1;' in b for k, n, b in blocks if k == 'thing'), 'no thing id 77'
