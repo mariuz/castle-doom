@@ -33,3 +33,19 @@ Args2 = 1
 FRAME 185 = A_MonsterProjectile
 FRAME 454 = A_MonsterBulletAttack
 FRAME 487 = A_MonsterMeleeAttack
+
+# MBF21's per-frame code pointers: the zombieman alerts monsters as it
+# starts dying (frame 189) and leaves an imp 64 ahead (frame 190, thing
+# 12); the imp's death (frame 458) hurts 64 within 128.
+Frame 190
+Args1 = 12
+Args3 = 4194304
+
+Frame 458
+Args1 = 64
+Args2 = 128
+
+[CODEPTR]
+FRAME 189 = A_NoiseAlert
+FRAME 190 = A_SpawnObject
+FRAME 458 = A_RadiusDamage

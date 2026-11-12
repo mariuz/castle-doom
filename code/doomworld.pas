@@ -360,6 +360,7 @@ type
       out HitActor: TDoomActor; out HitPlayer, HitWall: Boolean; out HX, HY, HZ: Single);
     procedure SpawnPuff(const X, Y, Z: Single);
     procedure SpawnMissileOf(const A: TDoomActor; const K: TEffectKind; const AngleOfs, Pitch, HOfs, VOfs: Single);
+    procedure Mbf21FrameAction(const A: TDoomActor);
     procedure Mbf21Attack(const A: TDoomActor; const Action: TStateAction; const S: Integer);
     procedure SpawnMissile(const A: TDoomActor);
     procedure SpawnPlayerMissile(const Kind: TEffectKind);
@@ -2742,6 +2743,11 @@ begin
         else
           TicMissile(A);
     end;
+    if A.FrameEntered then
+    begin
+      A.FrameEntered := false;
+      if not A.Removed then Mbf21FrameAction(A);
+    end;
     if A.Info^.Num = 89 then
       TicBrainShooter(A);
     if A.Info = @EffectInfos[ekVileFire] then
@@ -4580,6 +4586,95 @@ begin
             DamagePlayer(Damage, A)
           else
             DamageActor(A.Target, Damage, TX, TY, TZ + 32, A, false, true, A.DoomX, A.DoomY, A.DoomZ);
+        end;
+      end;
+    else ;
+  end;
+end;
+
+{ MBF21's per-frame code pointers, run as an actor enters the frame:
+  A_SpawnObject (thing number, angle, forward / left / up offset,
+  velocity forward / left / up; fixed point but the thing), A_RadiusDamage
+  (damage, radius) and A_NoiseAlert (the target hears it). }
+procedure TDoomWorld.Mbf21FrameAction(const A: TDoomActor);
+const
+  Fixed = 65536;
+var
+  S, Thing, Damage, Radius: Integer;
+  Ang, Fwd, Side, Up, X, Y, Z, VF, VS, VU: Single;
+  O: TDoomActor;
+  M: TDoomActor;
+  K: TEffectKind;
+begin
+  if not (A.CurrentAction in [saSpawnObject, saRadiusDamage, saNoiseAlert]) then Exit;
+  S := A.CurrentActionState;
+  case A.CurrentAction of
+    saRadiusDamage:
+      begin
+        Damage := StateArg(S, 0, 0);
+        Radius := StateArg(S, 1, 0);
+        WritelnLog('Mbf21', '%s: A_RadiusDamage, %d within %d', [A.Info^.Sprite, Damage, Radius]);
+        if (Damage > 0) and (Radius > 0) then
+          RadiusDamage(A.DoomX, A.DoomY, A.DoomZ, Radius, Damage, A);
+      end;
+    saNoiseAlert:
+      begin
+        WritelnLog('Mbf21', '%s: A_NoiseAlert', [A.Info^.Sprite]);
+        NoiseAlert;
+      end;
+    saSpawnObject:
+      begin
+        Thing := StateArg(S, 0, 0);
+        Ang := A.Angle + StateArg(S, 1, 0) / Fixed;
+        Fwd := StateArg(S, 2, 0) / Fixed;
+        Side := StateArg(S, 3, 0) / Fixed;
+        Up := StateArg(S, 4, 0) / Fixed;
+        X := A.DoomX + Cos(DegToRad(Ang)) * Fwd + Cos(DegToRad(Ang + 90)) * Side;
+        Y := A.DoomY + Sin(DegToRad(Ang)) * Fwd + Sin(DegToRad(Ang + 90)) * Side;
+        Z := A.DoomZ + Up;
+        if (Thing < 1) or (Thing > Length(Mobjs)) then
+        begin
+          WritelnLog('Mbf21', '%s: A_SpawnObject, no thing %d', [A.Info^.Sprite, Thing]);
+          Exit;
+        end;
+        if Mobjs[Thing - 1].DoomedNum > 0 then
+        begin
+          { A thing of the map's kinds (monster, item...). }
+          O := SpawnMonster(Mobjs[Thing - 1].DoomedNum, X, Y, Z);
+          if O <> nil then
+          begin
+            O.Angle := Ang;
+            WritelnLog('Mbf21', '%s: A_SpawnObject, thing %d (%s) at %.0f %.0f', [A.Info^.Sprite, Thing,
+              O.Info^.Sprite, X, Y]);
+          end;
+        end else
+        begin
+          { A projectile, flying with the given velocity. }
+          K := MissileOfThing(Thing);
+          VF := StateArg(S, 5, 0) / Fixed;
+          VS := StateArg(S, 6, 0) / Fixed;
+          VU := StateArg(S, 7, 0) / Fixed;
+          M := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[K]);
+          M.State := asMissile;
+          M.Bright := true;
+          M.Shooter := A;
+          M.DoomX := X;
+          M.DoomY := Y;
+          M.DoomZ := Z;
+          M.Sector := FMap.SectorAt(X, Y);
+          M.VelX := Cos(DegToRad(Ang)) * VF + Cos(DegToRad(Ang + 90)) * VS;
+          M.VelY := Sin(DegToRad(Ang)) * VF + Sin(DegToRad(Ang + 90)) * VS;
+          M.VelZ := VU;
+          M.MissileDamageDice := EffectInfos[K].DamageDice;
+          M.MissileDamageFaces := EffectInfos[K].DamageFaces;
+          M.Angle := Ang;
+          M.Collides := false;
+          M.Pickable := false;
+          M.SetLight(255);
+          M.UpdateTransform;
+          FActors.Add(M);
+          FThingsGroup.Add(M);
+          WritelnLog('Mbf21', '%s: A_SpawnObject, thing %d (a missile)', [A.Info^.Sprite, Thing]);
         end;
       end;
     else ;

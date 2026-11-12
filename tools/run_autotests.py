@@ -463,7 +463,7 @@ TESTS = [
     # death run E1M8's boss action too.
     ('mbf21-boss', 'E1M8',
      'Y,W:0.5,P:3004:100,W:0.2,D,W:2,Q',
-     [r'DeHackEd: MBF21 on \(an MBF21 DeHackEd patch\)', r'DeHackEd: mbf21\.deh: 14 values applied, 0 not supported',
+     [r'DeHackEd: MBF21 on \(an MBF21 DeHackEd patch\)', r'DeHackEd: mbf21\.deh: 21 values applied, 0 not supported',
       r'BossDeath: E1M8: all POSS dead, action floorlower on tag 666'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21.deh')], None),
     # MBF21's code pointers with frame arguments (mbf21.deh): the
@@ -473,6 +473,14 @@ TESTS = [
      'Y,W:0.3,A:0,P:3004:300,P:3001:200,P:3002:70,W:5,Q',
      [r'Mbf21: POSS: A_MonsterProjectile, thing 34', r'Mbf21: TROO: A_MonsterBulletAttack, 3 bullets of 3 x 1\.\.5',
       r'Mbf21: SARG: A_MonsterMeleeAttack, 10 x 1\.\.1 within 64'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21.deh'), '--fixed-step'], None),
+    # MBF21's per-frame pointers (mbf21.deh): the zombieman shot dead
+    # alerts monsters (A_NoiseAlert) and leaves an imp (A_SpawnObject),
+    # whose death hurts around it (A_RadiusDamage).
+    ('mbf21-frames', 'E1M1',
+     'Y,K,C:3,W:1,A:0,P:3004:150,W:0.1,X,W:1.5,A:0,X,W:1,X,W:1.5,Q',
+     [r'Mbf21: POSS: A_NoiseAlert', r'Mbf21: POSS: A_SpawnObject, thing 12 \(TROO\) at -331 256',
+      r'Mbf21: TROO: A_RadiusDamage, 64 within 128'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21.deh'), '--fixed-step'], None),
     # ZDoom's blocking flags (udmf-block.wad): line 834 at x -256 stops
     # the player walking east, bullets both ways and a rocket (it

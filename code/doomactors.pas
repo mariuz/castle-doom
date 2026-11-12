@@ -118,6 +118,9 @@ type
     MissileDamageDice, MissileDamageFaces: Integer;
     { Sequence finished (non-looping) this tic. }
     SequenceDone: Boolean;
+    { A frame of a state sequence was entered since the world last ran
+      its action (MBF21's per-frame code pointers, DoomWorld clears it). }
+    FrameEntered: Boolean;
     { Set when the actor should be removed from the world. }
     Removed: Boolean;
     { Missiles: fired by the player (hits monsters, never the player). }
@@ -166,6 +169,9 @@ type
     procedure PlayStates(const Seq: TFrameSeq; const Loop: Boolean);
     { The current frame's code pointer (saNone for PlaySequence frames). }
     function CurrentAction: TStateAction;
+    { The state the current frame's action comes from (MBF21's frame
+      arguments), -1 none. }
+    function CurrentActionState: Integer;
     { Advance the animation by one Doom tic. }
     procedure AnimateTic;
     { Pick the sprite rotation for a viewer at (ViewerX, ViewerY) in Doom coords. }
@@ -810,6 +816,7 @@ begin
   FSeq := Seq;
   FSequence := Seq.Frames;
   FSeqIndex := 0;
+  FrameEntered := true;
   FSeqTics := Max(1, Seq.Tics[0]);
   FSeqLoop := Loop or Seq.Loop;
   FTicsLeft := FSeqTics;
@@ -865,6 +872,14 @@ begin
     FFrameBright := false;
   if (WasBright <> FFrameBright) and (FGroup <> nil) then
     SetLight(FLastLight);
+end;
+
+function TDoomActor.CurrentActionState: Integer;
+begin
+  if (FSeqIndex >= 0) and (FSeqIndex < Length(FSeq.ActionStates)) then
+    Result := FSeq.ActionStates[FSeqIndex]
+  else
+    Result := -1;
 end;
 
 function TDoomActor.CurrentAction: TStateAction;
@@ -954,6 +969,7 @@ begin
     if FSeqIndex < Length(FSeq.Tics) then
       FSeqTics := Max(1, FSeq.Tics[FSeqIndex]);
     FTicsLeft := FSeqTics;
+    FrameEntered := true;
     FFrame := FSequence[FSeqIndex + 1];
     ApplyFrameData;
     ApplySprite;

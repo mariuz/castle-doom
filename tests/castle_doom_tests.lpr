@@ -3090,6 +3090,14 @@ begin
     AssertTrue('imp bullets', FindThingInfo(3001)^.Attack = akHitscan);
     AssertEquals('imp Args3', 3, StateArg(454, 2, 1));
     AssertTrue('demon melee', FindThingInfo(3002)^.AttackAction = saMonsterMeleeAttack);
+    { Per-frame pointers, carried into the walked death sequences. }
+    AssertTrue('frame 190 pointer', States[190].Action = saSpawnObject);
+    AssertEquals('frame 190 Args1', 12, StateArg(190, 0, 0));
+    AssertEquals('frame 190 Args3 (fixed 64.0)', 64 * 65536, StateArg(190, 2, 0));
+    AssertTrue('imp death radius damage', States[458].Action = saRadiusDamage);
+    AssertTrue('zombieman death sequence has the spawn',
+      FindThingInfo(3004)^.Seqs[skDeath].Actions[1] = saSpawnObject);
+    AssertEquals('its state', 190, FindThingInfo(3004)^.Seqs[skDeath].ActionStates[1]);
     ClearDehackedFiles;
     ApplyDehacked(W);
     AssertFalse('MBF21 off again', Mbf21Compat);
