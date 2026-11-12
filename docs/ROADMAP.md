@@ -48,6 +48,12 @@ L = several days). Items inside a section are in suggested order.
   follow state numbers instead of walked sequences, and the RIP,
   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
 
+- MBF21, stage 2b: per-frame code pointers run as an actor enters a
+  frame (`TDoomActor.FrameEntered`, `TDoomWorld.Mbf21FrameAction`):
+  `A_SpawnObject`, `A_RadiusDamage`, `A_NoiseAlert`; `mbf21.deh`'s
+  zombieman death spawns an imp whose death hurts around it (autotest
+  `mbf21-frames`, unit test `TestMbf21`).
+
 - MBF21, stage 2a: DeHackEd frame arguments (`Args1..8`,
   `DoomStates.StateArgs` / `StateArg`), every MBF21 code pointer name
   (`tools/make_states.py`'s `MBF21_ACTIONS`), and the three monster
@@ -1620,13 +1626,12 @@ play.
 
 ## Suggested next three
 
-1. MBF21, stage 2b (M-L): actions run per state (each actor knows its
-   state number and runs the action of every state it enters), then the
-   remaining monster pointers (A_SpawnObject, A_RadiusDamage,
-   A_NoiseAlert, A_HealChase, the tracer ones, A_Add/RemoveFlags) and
-   the jumps (A_JumpIfHealthBelow, A_JumpIfTargetInSight,
-   A_JumpIfTargetCloser...), which need monsters that follow state
-   numbers instead of walked sequences; then the weapon pointers.
+1. MBF21, the jumps (M-L): monsters that follow state numbers (each
+   actor's state and tics, `A_Chase` and the attacks as actions of the
+   states they are in) so `A_JumpIfHealthBelow`, `A_JumpIfTargetInSight`,
+   `A_JumpIfTargetCloser`, `A_JumpIfFlagsSet`, `A_HealChase`, the tracer
+   pointers and `A_Add/RemoveFlags` work; then the weapon pointers on the
+   weapon's state machine.
 2. TERRAIN lumps (S-M): ZDoom's per-flat terrain (splashes where things
    land in water or 3D-floor water, damage and friction by flat).
 3. Map editor, back sides and scaling (S): the back side's per-part

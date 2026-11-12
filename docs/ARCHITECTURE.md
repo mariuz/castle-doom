@@ -309,10 +309,14 @@ keeps the state an entry's action comes from, so `TThingInfo.AttackState`
 knows where the attack's arguments are. The world runs the three
 monster attacks (`Mbf21Attack`: `A_MonsterProjectile` through
 `SpawnMissileOf` with the thing number mapped to this port's missile
-kinds, `A_MonsterBulletAttack`, `A_MonsterMeleeAttack`). The other
-pointers (spawns, radius damage, the jumps, the weapon ones) need
-actions run per state, and the jumps monsters that follow state
-numbers instead of walked sequences.
+kinds, `A_MonsterBulletAttack`, `A_MonsterMeleeAttack`). Per-frame
+pointers run when an actor enters a frame of a state sequence
+(`TDoomActor.FrameEntered`, set by `PlayStates` and `AnimateTic`;
+`TDoomWorld.Mbf21FrameAction` with `CurrentActionState`'s arguments):
+`A_SpawnObject` (a map thing through `SpawnMonster`, or a missile kind
+with the given velocity), `A_RadiusDamage`, `A_NoiseAlert`. The jumps
+need monsters that follow state numbers instead of walked sequences,
+and the weapon pointers the weapon's state machine.
 
 ### Hexen-format maps (`TDoomMap.LoadLumps`)
 

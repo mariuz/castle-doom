@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- MBF21: the per-frame code pointers `A_SpawnObject`, `A_RadiusDamage` and `A_NoiseAlert`.
 - MBF21: DeHackEd frame arguments (`Args1`..`Args8`) and the monster attack code pointers
   `A_MonsterProjectile`, `A_MonsterBulletAttack` and `A_MonsterMeleeAttack`; every MBF21 code
   pointer name is now accepted in patches.

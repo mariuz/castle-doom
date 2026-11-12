@@ -1064,7 +1064,12 @@ autotest only checks the library loads.
   34), the imp three bullets (`A_MonsterBulletAttack`) and the demon bite
   for 10 (`A_MonsterMeleeAttack`): `Y,W:0.3,A:0,P:3004:300,P:3001:200,
   P:3002:70,W:5` logs `Mbf21: POSS: A_MonsterProjectile, thing 34` and
-  the like (autotest `mbf21-attacks`). MBF21's code pointer names are
+  the like (autotest `mbf21-attacks`); its per-frame pointers make the
+  zombieman's death alert monsters (`A_NoiseAlert`) and leave an imp
+  (`A_SpawnObject`), and the imp's death hurt around it
+  (`A_RadiusDamage`): shoot it (`Y,K,C:3,W:1,A:0,P:3004:150,W:0.1,X,...`;
+  `D` gibs, so the death frames never play) for `Mbf21: POSS:
+  A_SpawnObject, thing 12 (TROO) at -331 256` (autotest `mbf21-frames`). MBF21's code pointer names are
   appended by `tools/make_states.py` (`MBF21_ACTIONS`), its frame
   arguments are `DoomStates.StateArgs` / `StateArg`.
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
