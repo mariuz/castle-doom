@@ -104,6 +104,7 @@ type
     procedure TestFreedoomLump;
     procedure TestPatchFile;
     procedure TestTranslucentBits;
+    procedure TestMbf21;
   end;
 
   TTestGamepad = class(TTestCase)
@@ -3045,6 +3046,66 @@ begin
     end;
   finally
     FreeAndNil(W);
+  end;
+end;
+
+{ MBF21 (tools/testdata/mbf21.deh, mbf21.wad): the patch's thing fields
+  and bits, MBF21 switched on by the patch or a COMPLVL lump, and the
+  binary-map bit 0x2000 read as blockplayers only then. }
+procedure TTestDehacked.TestMbf21;
+var
+  W: TDoomWad;
+  M: TDoomMap;
+  Patch, Dir: String;
+  Imp: PThingInfo;
+begin
+  Patch := 'tools/testdata/mbf21.deh';
+  if not FileExists(Patch) then
+    Patch := '../tools/testdata/mbf21.deh';
+  Dir := ExtractFilePath(Patch);
+  ClearDehackedFiles;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    ApplyDehacked(W);
+    AssertFalse('MBF21 off', Mbf21Compat);
+    AssertEquals('melee range', 64, FindThingInfo(3001)^.MeleeRange);
+    AddDehackedFile(Patch);
+    ApplyDehacked(W);
+    AssertTrue('MBF21 on by the patch', Mbf21Compat);
+    Imp := FindThingInfo(3001);
+    AssertEquals('infighting group', 1, Imp^.InfightGroup);
+    AssertEquals('projectile group', -1, Imp^.ProjectileGroup);
+    AssertEquals('splash group', 2, Imp^.SplashGroup);
+    AssertEquals('melee range (fixed 128.0)', 128, Imp^.MeleeRange);
+    AssertEquals('fast speed', 20, Imp^.FastSpeed);
+    AssertEquals('imp bits', Mbf21NoRadiusDamage or Mbf21RangeHalf, Imp^.Mbf21Bits);
+    AssertEquals('zombieman bits', Mbf21E1M8Boss, FindThingInfo(3004)^.Mbf21Bits);
+    ClearDehackedFiles;
+    ApplyDehacked(W);
+    AssertFalse('MBF21 off again', Mbf21Compat);
+    AssertEquals('reset', 0, FindThingInfo(3001)^.InfightGroup);
+    if FileExists(Dir + 'mbf21.wad') then
+    begin
+      M := TDoomMap.Create(W, 'E1M1');
+      try
+        AssertEquals('vanilla: no blockplayers', 0, M.Linedefs[834].Flags and ML_BLOCKPLAYERS);
+      finally
+        FreeAndNil(M);
+      end;
+      W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'mbf21.wad')));
+      ApplyDehacked(W);
+      AssertTrue('MBF21 on by COMPLVL', Mbf21Compat);
+      M := TDoomMap.Create(W, 'E1M1');
+      try
+        AssertEquals('blockplayers', ML_BLOCKPLAYERS, M.Linedefs[834].Flags and ML_BLOCKPLAYERS);
+        AssertEquals('others', 0, M.Linedefs[829].Flags and ML_BLOCKPLAYERS);
+      finally
+        FreeAndNil(M);
+      end;
+    end;
+  finally
+    FreeAndNil(W);
+    Mbf21Compat := false;
   end;
 end;
 

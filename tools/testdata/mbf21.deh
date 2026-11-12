@@ -1,0 +1,17 @@
+Patch File for DeHackEd v3.0
+# MBF21 test patch (tools/testdata/mbf21.deh): read by the unit test
+# TestMbf21 and the mbf21-boss autotest.
+Doom version = 2021
+Patch format = 6
+
+Thing 2 (Zombieman)
+# E1M8's boss action also waits for (and runs after) the last zombieman.
+MBF21 Bits = E1M8BOSS
+
+Thing 12 (Imp)
+Infighting group = 1
+Projectile group = -1
+Splash group = 2
+Melee range = 8388608
+Fast speed = 20
+MBF21 Bits = NORADIUSDMG+RANGEHALF

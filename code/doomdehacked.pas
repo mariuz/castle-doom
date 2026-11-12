@@ -54,8 +54,14 @@ var
     2, backpacks 1, like P_GiveAmmo). }
   DehMaxAmmo, DehClipAmmo: array [0..3] of Integer;
 
+var
+  { -complevel 21 (or mbf21): MBF21 on whatever the WADs say. }
+  Mbf21Forced: Boolean;
+
 { Remember a -deh / -bex patch file (read now; applied by ApplyDehacked). }
 procedure AddDehackedFile(const FileName: String);
+{ Forget the -deh / -bex files (tests). }
+procedure ClearDehackedFiles;
 { Reset things, misc, ammo and par times to vanilla and apply every patch:
   the WAD's DEHACKED lumps, then the -deh files. }
 procedure ApplyDehacked(const AWad: TDoomWad);
@@ -81,7 +87,29 @@ type
 
 implementation
 
-uses SysUtils, Math, Generics.Collections, CastleLog, DoomThings, DoomStates, DoomMapInfo;
+uses SysUtils, Math, Generics.Collections, CastleLog, DoomThings, DoomStates, DoomMapInfo, DoomMap;
+
+var
+  { A patch read since the last reset is MBF21's (Doom version 2021, or
+    MBF21 fields). }
+  Mbf21Patch: Boolean;
+
+{ "MBF21 Bits = LOGRAV+BOSS" (names joined by + | , or blanks) or a number. }
+function Mbf21BitsValue(const S: String): Integer;
+var
+  Words: TStringArray;
+  W: String;
+  I: Integer;
+begin
+  Result := StrToIntDef(Trim(S), -1);
+  if Result >= 0 then Exit;
+  Result := 0;
+  Words := S.Split(['+', '|', ',', ' ', #9], TStringSplitOptions.ExcludeEmpty);
+  for W in Words do
+    for I := 0 to High(Mbf21BitNames) do
+      if SameText(W, Mbf21BitNames[I]) then
+        Result := Result or (1 shl I);
+end;
 
 var
   DehFileNames, DehFileTexts: TStringList;
@@ -141,6 +169,12 @@ begin
   DehPars.Clear;
   ResetStates;
   ResetThingInfos;
+end;
+
+procedure ClearDehackedFiles;
+begin
+  DehFileNames.Clear;
+  DehFileTexts.Clear;
 end;
 
 procedure AddDehackedFile(const FileName: String);
@@ -228,6 +262,17 @@ var
     else if SameText(Key, 'Height') then Info^.Height := Value div 65536
     else if SameText(Key, 'Mass') then Info^.Mass := Value
     else if SameText(Key, 'Pain chance') then Info^.PainChance := Value
+    { MBF21's thing fields. }
+    else if SameText(Key, 'Infighting group') then begin Info^.InfightGroup := Value; Mbf21Patch := true; end
+    else if SameText(Key, 'Projectile group') then begin Info^.ProjectileGroup := Value; Mbf21Patch := true; end
+    else if SameText(Key, 'Splash group') then begin Info^.SplashGroup := Value; Mbf21Patch := true; end
+    else if SameText(Key, 'Melee range') then begin Info^.MeleeRange := Value div 65536; Mbf21Patch := true; end
+    else if SameText(Key, 'Fast speed') then
+    begin
+      if Value >= 65536 then Info^.FastSpeed := Value div 65536 else Info^.FastSpeed := Value;
+      Mbf21Patch := true;
+    end
+    else if SameText(Key, 'MBF21 Bits') then begin Info^.Mbf21Bits := Mbf21BitsValue(ValueStr); Mbf21Patch := true; end
     else
     begin
       Inc(Ignored);
@@ -459,8 +504,10 @@ begin
           Inc(Ignored);
       end else
       if (Section = 'doom') or (Section = 'patch') then
-        { "Doom version = 19", "Patch format = 6" }
-      else
+      begin
+        { "Doom version = 19", "Patch format = 6"; 2021 is MBF21's. }
+        if SameText(Key, 'Doom version') and (Value = 2021) then Mbf21Patch := true;
+      end else
         Inc(Ignored);
     end;
   finally
@@ -483,14 +530,30 @@ end;
 procedure ApplyDehacked(const AWad: TDoomWad);
 var
   I: Integer;
+  Why: String;
 begin
   ResetDehacked;
+  Mbf21Patch := false;
   if AWad <> nil then
     for I := 0 to AWad.LumpCount - 1 do
       if AWad.LumpName(I) = 'DEHACKED' then
         ApplyPatch(LumpText(AWad, I), 'DEHACKED lump');
   for I := 0 to DehFileTexts.Count - 1 do
     ApplyPatch(DehFileTexts[I], DehFileNames[I]);
+  { MBF21: -complevel 21, a COMPLVL lump saying mbf21, or an MBF21 patch. }
+  Why := '';
+  if Mbf21Forced then Why := '-complevel 21'
+  else if (AWad <> nil) and (AWad.FindLump('COMPLVL') >= 0) and
+     (Pos('mbf21', LowerCase(LumpText(AWad, AWad.FindLump('COMPLVL')))) > 0) then Why := 'COMPLVL lump'
+  else if Mbf21Patch then Why := 'an MBF21 DeHackEd patch';
+  if (Why <> '') <> Mbf21Compat then
+  begin
+    if Why <> '' then
+      WritelnLog('DeHackEd', 'MBF21 on (%s)', [Why])
+    else
+      WritelnLog('DeHackEd', 'MBF21 off');
+  end;
+  Mbf21Compat := Why <> '';
   { The things' sequences, sounds and attacks from the patched states. }
   ApplyStateTable;
 end;

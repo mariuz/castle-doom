@@ -386,6 +386,8 @@ type
     procedure VileAttack(const A: TDoomActor);
     procedure FollowVileFire(const F: TDoomActor);
     function SameSpecies(const A, B: TDoomActor): Boolean;
+    function ProjectileImmune(const Target, Shooter: TDoomActor): Boolean;
+    function InfightImmune(const Target, Attacker: TDoomActor): Boolean;
     function TargetAlive(const A: TDoomActor): Boolean;
     procedure TargetPosition(const A: TDoomActor; out TX, TY, TZ, TRadius: Single);
     function FloorRaiseToTexture(const Sec: Integer): Single;
@@ -2967,7 +2969,8 @@ begin
       BlockedByLine := I;
       Exit;
     end;
-    if (L.Flags and (ML_BLOCKING or ML_BLOCKMONSTERS or ML_BLOCKEVERYTHING)) <> 0 then
+    if ((L.Flags and (ML_BLOCKING or ML_BLOCKMONSTERS or ML_BLOCKEVERYTHING)) <> 0) or
+       (((L.Flags and ML_BLOCKLANDMONSTERS) <> 0) and not A.Info^.Floats) then
     begin
       BlockedByLine := I;
       Exit;
@@ -3129,6 +3132,26 @@ begin
     (((A.Info^.Num = 3003) or (A.Info^.Num = 69)) and ((B.Info^.Num = 3003) or (B.Info^.Num = 69)));
 end;
 
+{ MBF21's P_ProjectileImmune: a missile passes through monsters of its
+  shooter's species (vanilla) or projectile group, unless the target's
+  group is -1 (hit by everything). }
+function TDoomWorld.ProjectileImmune(const Target, Shooter: TDoomActor): Boolean;
+begin
+  if (Target = nil) or (Shooter = nil) then Exit(false);
+  if Target.Info^.ProjectileGroup = -1 then Exit(false);
+  Result := SameSpecies(Target, Shooter) or
+    ((Target.Info^.ProjectileGroup > 0) and (Target.Info^.ProjectileGroup = Shooter.Info^.ProjectileGroup));
+end;
+
+{ MBF21: monsters of one infighting group never turn on each other, and
+  nothing turns on an attacker with DMGIGNORED. }
+function TDoomWorld.InfightImmune(const Target, Attacker: TDoomActor): Boolean;
+begin
+  if (Target = nil) or (Attacker = nil) then Exit(false);
+  Result := ((Attacker.Info^.Mbf21Bits and Mbf21DamageIgnored) <> 0) or
+    ((Target.Info^.InfightGroup > 0) and (Target.Info^.InfightGroup = Attacker.Info^.InfightGroup));
+end;
+
 function TDoomWorld.TargetAlive(const A: TDoomActor): Boolean;
 begin
   if A.Target = nil then
@@ -3154,7 +3177,7 @@ var
   OldX, OldY: Single;
   DX, DY, Dist, Ang, Step, TX, TY, TZ, TR, RangeDist: Single;
   Blocked: Integer;
-  Tries: Integer;
+  Tries, MaxHold: Integer;
   Moved, OnFriction: Boolean;
 begin
   { A dead target (monster corpse, or the player) sends the monster back to the player. }
@@ -3208,9 +3231,9 @@ begin
     Dec(A.ReactionTics)
   else
   begin
-    if (A.Info^.Attack = akMelee) or (Dist < 64 + A.Info^.Radius) then
+    if (A.Info^.Attack = akMelee) or (Dist < A.Info^.MeleeRange + A.Info^.Radius) then
     begin
-      if Dist < 64 + A.Info^.Radius then
+      if Dist < A.Info^.MeleeRange + A.Info^.Radius then
       begin
         MonsterAttack(A);
         Exit;
@@ -3221,10 +3244,17 @@ begin
         souls, cyberdemons and spiders count half the distance; Arch-viles
         only attack within 14 * 64 units. }
       RangeDist := Dist;
-      if (A.Info^.Num = 3006) or (A.Info^.Num = 16) or (A.Info^.Num = 7) then
+      if (A.Info^.Num = 3006) or (A.Info^.Num = 16) or (A.Info^.Num = 7) or
+         ((A.Info^.Mbf21Bits and Mbf21RangeHalf) <> 0) then
         RangeDist := Dist / 2;
-      if ((A.Info^.Num <> 64) or (Dist <= 14 * 64)) and
-         (Random(256) >= Min(220, 40 + Trunc(RangeDist / 6))) then
+      { MBF21: SHORTMRANGE fires only within 14 * 64 like the Arch-vile,
+        HIGHERMPROB caps the chance to hold fire lower. }
+      if (A.Info^.Mbf21Bits and Mbf21HigherMissileChance) <> 0 then
+        MaxHold := 160
+      else
+        MaxHold := 220;
+      if (((A.Info^.Num <> 64) and ((A.Info^.Mbf21Bits and Mbf21ShortMissileRange) = 0)) or (Dist <= 14 * 64)) and
+         (Random(256) >= Min(MaxHold, 40 + Trunc(RangeDist / 6))) then
       begin
         MonsterAttack(A);
         Exit;
@@ -3238,7 +3268,9 @@ begin
   if A.Info^.Floats then
     Step := Step * 1.2;
   { Nightmare halves the demons' walking frame tics: twice as fast. }
-  if (Skill = 4) and ((A.Info^.Num = 3002) or (A.Info^.Num = 58)) then
+  if (Skill = 4) and (A.Info^.FastSpeed > 0) then
+    Step := A.Info^.FastSpeed / MoveFrameTics(A.Info^.Num)
+  else if (Skill = 4) and ((A.Info^.Num = 3002) or (A.Info^.Num = 58)) then
     Step := Step * 2;
   { MBF's monster friction (P_Move with P_GetMoveFactor): on the floor of
     a Boom friction sector, sludge slows the walk to (1 + movefactor) / 2
@@ -3323,6 +3355,10 @@ begin
     begin
       if InWater(A) then
         WaterFall(A, WaterSinkSpeed / 3)
+      else
+      if (A.Info^.Mbf21Bits and Mbf21LowGravity) <> 0 then
+        { MBF21's LOGRAV: an eighth of the gravity. }
+        A.VelZ := A.VelZ - Gravity / 8
       else
       if A.VelZ = 0 then A.VelZ := -2 * Gravity else A.VelZ := A.VelZ - Gravity;
       A.DoomZ := A.DoomZ + A.VelZ;
@@ -4695,7 +4731,7 @@ begin
       if (O <> A) and (O <> A.Shooter) and (not O.Removed) and O.Pickable and
          (O.State in [asIdle, asChase, asAttack, asPain]) and
          ((O.Info^.Kind = tkMonster) or (O.Info^.Num = 2035)) and
-         not SameSpecies(O, A.Shooter) and
+         not ProjectileImmune(O, A.Shooter) and
          (Abs(O.DoomX - NX) < O.Info^.Radius + A.Info^.Radius) and
          (Abs(O.DoomY - NY) < O.Info^.Radius + A.Info^.Radius) and
          (NZ > O.DoomZ - 8) and (NZ < O.DoomZ + O.Info^.Height + 8) then
@@ -4985,7 +5021,7 @@ begin
   begin
     if ByPlayer then
       A.Target := nil
-    else if (Attacker <> nil) and (Attacker.Info^.Kind = tkMonster) then
+    else if (Attacker <> nil) and (Attacker.Info^.Kind = tkMonster) and not InfightImmune(A, Attacker) then
       A.Target := Attacker;
     if not A.Awake then
     begin
@@ -5121,7 +5157,7 @@ end;
 procedure TDoomWorld.BossDeath(const A: TDoomActor);
 var
   O: TDoomActor;
-  Num, S, Tag, I, Orig, OrigTag: Integer;
+  Num, S, Tag, I, Orig, OrigTag, Bits: Integer;
   MapName: String;
   Action: String;
   Info: TMapInfoEntry;
@@ -5129,6 +5165,7 @@ var
   Matched, Done: Boolean;
 begin
   Num := A.Info^.Num;
+  Bits := A.Info^.Mbf21Bits;
   MapName := FMap.Name;
   Info := MapInfoFor(MapName);
   if (Info <> nil) and Info.BossActionsSet then
@@ -5168,16 +5205,21 @@ begin
   Tag := 666;
   if FWad.IsDoom2 then
   begin
-    if (MapName = 'MAP07') and (Num = 67) then Action := 'floorlower';
-    if (MapName = 'MAP07') and (Num = 68) then begin Action := 'floortexture'; Tag := 667; end;
+    if (MapName = 'MAP07') and ((Num = 67) or ((Bits and Mbf21Map07Boss1) <> 0)) then Action := 'floorlower';
+    if (MapName = 'MAP07') and ((Num = 68) or ((Bits and Mbf21Map07Boss2) <> 0)) then
+    begin
+      Action := 'floortexture';
+      Tag := 667;
+    end;
     if Num = 72 then Action := 'dooropen'; { Commander Keen, any map }
   end else
   begin
-    if (MapName = 'E1M8') and (Num = 3003) then Action := 'floorlower';
-    if (MapName = 'E2M8') and (Num = 16) then Action := 'exit';
-    if (MapName = 'E3M8') and (Num = 7) then Action := 'exit';
-    if (MapName = 'E4M6') and (Num = 16) then Action := 'doorblaze';
-    if (MapName = 'E4M8') and (Num = 7) then Action := 'floorlower';
+    { MBF21's E?M?BOSS bits make other things such bosses too. }
+    if (MapName = 'E1M8') and ((Num = 3003) or ((Bits and Mbf21E1M8Boss) <> 0)) then Action := 'floorlower';
+    if (MapName = 'E2M8') and ((Num = 16) or ((Bits and Mbf21E2M8Boss) <> 0)) then Action := 'exit';
+    if (MapName = 'E3M8') and ((Num = 7) or ((Bits and Mbf21E3M8Boss) <> 0)) then Action := 'exit';
+    if (MapName = 'E4M6') and ((Num = 16) or ((Bits and Mbf21E4M6Boss) <> 0)) then Action := 'doorblaze';
+    if (MapName = 'E4M8') and ((Num = 7) or ((Bits and Mbf21E4M8Boss) <> 0)) then Action := 'floorlower';
   end;
   if Action = '' then Exit;
   { Only when the last one of that kind dies. }
@@ -5279,8 +5321,13 @@ begin
     if (O = Source) or O.Removed then Continue;
     if not ((O.Info^.Kind = tkMonster) or (O.Info^.Num = 2035)) then Continue;
     if O.State in [asDying, asDead] then Continue;
-    { Cyberdemons and Spider Masterminds ignore splash damage (P_RadiusAttack). }
-    if O.Info^.Num in [16, 7] then Continue;
+    { Cyberdemons and Spider Masterminds ignore splash damage (P_RadiusAttack),
+      and MBF21's BOSS / NORADIUSDMG things, unless the explosion has
+      FORCERADIUSDMG; one splash group does not hurt itself. }
+    if ((O.Info^.Num in [16, 7]) or ((O.Info^.Mbf21Bits and (Mbf21Boss or Mbf21NoRadiusDamage)) <> 0)) and
+       not ((Source <> nil) and ((Source.Info^.Mbf21Bits and Mbf21ForceRadiusDamage) <> 0)) then Continue;
+    if (Attacker <> nil) and (Attacker.Info^.SplashGroup > 0) and
+       (O.Info^.SplashGroup = Attacker.Info^.SplashGroup) then Continue;
     D := Max(Abs(O.DoomX - X), Abs(O.DoomY - Y)) - O.Info^.Radius;
     if D < 0 then D := 0;
     if D >= Radius then Continue;

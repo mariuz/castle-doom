@@ -35,6 +35,33 @@ type
 
   TAttackKind = (akNone, akMelee, akHitscan, akMissile);
 
+const
+  { MBF21's thing bits (DeHackEd "MBF21 Bits"). }
+  Mbf21LowGravity = $1;
+  Mbf21ShortMissileRange = $2;
+  Mbf21DamageIgnored = $4;
+  Mbf21NoRadiusDamage = $8;
+  Mbf21ForceRadiusDamage = $10;
+  Mbf21HigherMissileChance = $20;
+  Mbf21RangeHalf = $40;
+  Mbf21NoThreshold = $80;
+  Mbf21LongMelee = $100;
+  Mbf21Boss = $200;
+  Mbf21Map07Boss1 = $400;
+  Mbf21Map07Boss2 = $800;
+  Mbf21E1M8Boss = $1000;
+  Mbf21E2M8Boss = $2000;
+  Mbf21E3M8Boss = $4000;
+  Mbf21E4M6Boss = $8000;
+  Mbf21E4M8Boss = $10000;
+  Mbf21Rip = $20000;
+  Mbf21FullVolumeSounds = $40000;
+  Mbf21BitNames: array [0..18] of String = ('LOGRAV', 'SHORTMRANGE', 'DMGIGNORED', 'NORADIUSDMG',
+    'FORCERADIUSDMG', 'HIGHERMPROB', 'RANGEHALF', 'NOTHRESHOLD', 'LONGMELEE', 'BOSS', 'MAP07BOSS1',
+    'MAP07BOSS2', 'E1M8BOSS', 'E2M8BOSS', 'E3M8BOSS', 'E4M6BOSS', 'E4M8BOSS', 'RIP', 'FULLVOLSOUNDS');
+
+type
+
   { The frame sequences of a thing, walked from its mobjinfo entry states
     (spawn, see, missile or melee, melee, pain, death, xdeath, raise). }
   TSeqKind = (skIdle, skMove, skAttack, skMelee, skPain, skDeath, skXDeath, skRaise);
@@ -87,6 +114,13 @@ type
     AttackAction, MeleeAction: TStateAction;
     { Hitscan pellets per attack (3 for A_SPosAttack). }
     Shots: Integer;
+    { MBF21 (DeHackEd's MBF21 thing fields): monsters of one infighting
+      group (0 none) never turn on each other, of one projectile group
+      (0: the species; -1: none, not even its own) are not hit by each
+      other's missiles, of one splash group (0 none) not hurt by each
+      other's explosions; the melee range (64), the speed on Nightmare
+      (0: vanilla's), the Mbf21* bits. }
+    InfightGroup, ProjectileGroup, SplashGroup, MeleeRange, FastSpeed, Mbf21Bits: Integer;
   end;
   PThingInfo = ^TThingInfo;
 
@@ -131,6 +165,7 @@ begin
   Result.Mass := 100;
   Result.Mobj := -1;
   Result.Shots := 1;
+  Result.MeleeRange := 64;
 end;
 
 procedure Add(const Info: TThingInfo);

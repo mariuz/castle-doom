@@ -313,6 +313,12 @@ begin
         Inc(I);
       end;
     end else
+    if ((Parameters[I] = '-complevel') or (Parameters[I] = '--complevel')) and (I + 1 <= Parameters.High) then
+    begin
+      { Only MBF21 (21 / mbf21) changes anything; the rest is the default. }
+      Mbf21Forced := (Parameters[I + 1] = '21') or SameText(Parameters[I + 1], 'mbf21');
+      Inc(I);
+    end else
     if (Parameters[I] = '-file') or (Parameters[I] = '--file') then
     begin
       while (I + 1 <= Parameters.High) and (Parameters[I + 1] <> '') and (Parameters[I + 1][1] <> '-') do

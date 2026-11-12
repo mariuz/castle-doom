@@ -452,6 +452,20 @@ TESTS = [
      [r'Map: E1M1: slopes: 0 floors, 1 ceilings', r'Map: E1M1: 1 3D floors'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-3dfloor4.wad'), '--fixed-step'],
      lambda config: check_vertex_heights(config)),
+    # MBF21 (mbf21.wad: a COMPLVL lump saying mbf21, line 834 with the
+    # binary-map bit 0x2000): the player walking east stops at the line.
+    ('mbf21-lines', 'E1M1',
+     'Y,G:-300:256,A:0,W:0.3,F:1,W:0.3,SAVE:1,Q',
+     [r'DeHackEd: MBF21 on \(COMPLVL lump\)'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21.wad'), '--fixed-step'],
+     lambda config: check_line_blocking(config)),
+    # MBF21 DeHackEd (mbf21.deh): the zombieman's E1M8BOSS bit makes its
+    # death run E1M8's boss action too.
+    ('mbf21-boss', 'E1M8',
+     'Y,W:0.5,P:3004:100,W:0.2,D,W:2,Q',
+     [r'DeHackEd: MBF21 on \(an MBF21 DeHackEd patch\)', r'DeHackEd: mbf21\.deh: 7 values applied, 0 not supported',
+      r'BossDeath: E1M8: all POSS dead, action floorlower on tag 666'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21.deh')]),
     # ZDoom's blocking flags (udmf-block.wad): line 834 at x -256 stops
     # the player walking east, bullets both ways and a rocket (it
     # explodes at the line, close to the player); an imp spawned behind

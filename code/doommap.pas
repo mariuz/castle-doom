@@ -33,7 +33,16 @@ const
   ML_BLOCKHITSCAN = $80000;
   ML_BLOCKSIGHT = $100000;
   ML_BLOCKUSE = $200000;
+  { MBF21's binary-map bit 0x1000: blocks monsters that walk (not
+    floaters); its 0x2000 is ML_BLOCKPLAYERS. }
+  ML_BLOCKLANDMONSTERS = $400000;
 
+var
+  { MBF21 compatibility (DoomDehacked.ApplyDehacked sets it): binary Doom
+    maps' line bits 0x1000 / 0x2000 are MBF21's blocking flags. }
+  Mbf21Compat: Boolean;
+
+const
   { Thing flags. }
   MTF_EASY = 1;
   MTF_NORMAL = 2;
@@ -768,6 +777,11 @@ begin
         Linedefs[I].V1 := PUInt16(P + I * 14)^;
         Linedefs[I].V2 := PUInt16(P + I * 14 + 2)^;
         Linedefs[I].Flags := PUInt16(P + I * 14 + 4)^;
+        if Mbf21Compat then
+        begin
+          if (Linedefs[I].Flags and $1000) <> 0 then Linedefs[I].Flags := Linedefs[I].Flags or ML_BLOCKLANDMONSTERS;
+          if (Linedefs[I].Flags and $2000) <> 0 then Linedefs[I].Flags := Linedefs[I].Flags or ML_BLOCKPLAYERS;
+        end;
         Linedefs[I].Special := PInt16(P + I * 14 + 6)^;
         Linedefs[I].Tag := PInt16(P + I * 14 + 8)^;
         Linedefs[I].Side[0] := PUInt16(P + I * 14 + 10)^;
