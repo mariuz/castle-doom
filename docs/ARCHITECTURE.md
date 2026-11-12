@@ -286,6 +286,26 @@ textures) take blocking, blockplayers and blockeverything; monsters'
 `AimLineAttack` blockhitscan; `CheckSight` blocksight; the use trace
 blockuse (each also blockeverything).
 
+### MBF21 (stage 1)
+
+`DoomMap.Mbf21Compat` is on when `ApplyDehacked` sees `-complevel 21`
+(`Mbf21Forced`), a `COMPLVL` lump saying mbf21 or an MBF21 patch
+(`Doom version = 2021`, or MBF21 thing fields). Binary Doom maps then
+read line bits 0x1000 / 0x2000 as `ML_BLOCKLANDMONSTERS` (walking
+monsters, `TryMove2D`) and `ML_BLOCKPLAYERS`. DeHackEd's thing fields
+`Infighting group`, `Projectile group`, `Splash group`, `Melee range`
+(fixed point), `Fast speed` and `MBF21 Bits` (names or a number,
+`Mbf21*` constants in `DoomThings`) fill `TThingInfo`; the world uses
+them in `InfightImmune` (no retaliation within a group or against
+DMGIGNORED), `ProjectileImmune` (the species or the group; -1: none),
+`RadiusDamage` (BOSS / NORADIUSDMG unless the explosion has
+FORCERADIUSDMG, the shooter's splash group), the chase's melee range
+and missile chance (RANGEHALF, SHORTMRANGE, HIGHERMPROB), Nightmare's
+speed, LOGRAV falls and `BossDeath` (the MAP07 / E?M? boss bits). The
+new code pointers and frame arguments (`Args1`..`Args8`) are not read
+yet: monsters play walked frame sequences, so the jump pointers need
+the state machine to follow state numbers first.
+
 ### Hexen-format maps (`TDoomMap.LoadLumps`)
 
 A binary map with a `BEHAVIOR` lump among its lumps is in Hexen's

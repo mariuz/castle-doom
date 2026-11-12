@@ -36,6 +36,18 @@ L = several days). Items inside a section are in suggested order.
   (`TDoomGeometry.SectorChanged`). `udmf-poly.wad` has a SNDINFO and a
   SNDSEQ; unit test `TestSoundSeq`.
 
+- MBF21, stage 1: the compatibility switch (`-complevel 21`, a
+  `COMPLVL` lump, an MBF21 patch; `Mbf21Compat`), binary maps' line
+  bits 0x1000 / 0x2000 (block land monsters, block players), DeHackEd's
+  MBF21 thing fields (groups, melee range, fast speed) and bits (radius
+  damage, boss immunity, missile range and chance, low gravity, boss
+  deaths) in the world. `tools/make_mbf21_wad.py`, `mbf21.deh`;
+  autotests `mbf21-lines`, `mbf21-boss`, unit test `TestMbf21`. Left:
+  the code pointers and frame arguments (`Args1..8`, A_SpawnObject,
+  A_MonsterProjectile, the A_Jump* family...), which need monsters to
+  follow state numbers instead of walked sequences, and the RIP,
+  LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
+
 - 3D floors, vertex heights: a slab's top or bottom follows its
   control sector's planes, so a triangular control sector with
   `zceiling` / `zfloor` on its vertices (`BuildSlopes`) gives a sloped
@@ -1600,10 +1612,12 @@ play.
 
 ## Suggested next three
 
-1. MBF21 (M): the binary-map line flags (block land monsters, block
-   players), the new thing flags and code pointers of MBF21 DeHackEd
-   patches, behind a compatibility setting, so current community
-   maps made for DSDA-Doom play as meant.
+1. MBF21, stage 2 (M-L): monsters that follow state numbers (each
+   actor's current state and tics, actions run per state) so DeHackEd
+   frames with jumps work, then MBF21's code pointers with their frame
+   arguments (A_SpawnObject, A_MonsterProjectile, A_MonsterBulletAttack,
+   A_MonsterMeleeAttack, A_RadiusDamage, the A_Jump* family, A_Add/
+   RemoveFlags...).
 2. TERRAIN lumps (S-M): ZDoom's per-flat terrain (splashes where things
    land in water or 3D-floor water, damage and friction by flat).
 3. Map editor, back sides and scaling (S): the back side's per-part

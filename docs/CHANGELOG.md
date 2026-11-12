@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- MBF21, first stage: switched on by `-complevel 21`, a `COMPLVL` lump or an MBF21 DeHackEd
+  patch; binary maps' MBF21 line flags (block land monsters, block players); DeHackEd's
+  MBF21 thing fields (infighting, projectile and splash groups, melee range, fast speed) and
+  bits (no / forced radius damage, boss immunity, half range, short missile range, higher
+  missile chance, low gravity, the boss-death map bits).
 - Map editor: the properties panel also edits a UDMF line's opacity, its front side's texture
   offsets per part and middle scaling, values with fractions, and named scripts (`arg0str`).
 - 3D floors: slabs whose control sector is a triangle with vertex heights slope accordingly
