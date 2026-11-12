@@ -112,6 +112,8 @@ type
       chains: DoomWorld dispatches on them (A_PosAttack fires one bullet,
       A_SkullAttack charges...). saNone when there is none. }
     AttackAction, MeleeAction: TStateAction;
+    { The states carrying them (MBF21's frame arguments), -1 none. }
+    AttackState, MeleeState: Integer;
     { Hitscan pellets per attack (3 for A_SPosAttack). }
     Shots: Integer;
     { MBF21 (DeHackEd's MBF21 thing fields): monsters of one infighting
@@ -439,18 +441,28 @@ begin
     saSkelFist: begin Kind := akMelee; Dice := 6; Faces := 10; end;
     saVileAttack: begin Kind := akHitscan; Dice := 8; Faces := 8; end;
     saPainAttack: begin Kind := akMissile; Dice := 3; Faces := 8; end;
+    { MBF21's: the damage and the projectile come from the frame's
+      arguments (DoomWorld's Mbf21Attack). }
+    saMonsterProjectile: Kind := akMissile;
+    saMonsterBulletAttack: begin Kind := akHitscan; Sound := ''; end;
+    saMonsterMeleeAttack: Kind := akMelee;
     else ;
   end;
 end;
 
-{ The first attack code pointer of a sequence, saNone if none. }
-function AttackActionIn(const Seq: TFrameSeq): TStateAction;
+{ The first attack code pointer of a sequence, saNone if none, and the
+  state carrying it. }
+function AttackActionIn(const Seq: TFrameSeq; out State: Integer): TStateAction;
 var
   I: Integer;
 begin
+  State := -1;
   for I := 0 to High(Seq.Actions) do
     if IsAttackAction(Seq.Actions[I]) then
+    begin
+      State := Seq.ActionStates[I];
       Exit(Seq.Actions[I]);
+    end;
   Result := saNone;
 end;
 
@@ -520,8 +532,8 @@ begin
         Info^.PainSound := SoundName(Mo.PainSound);
         Info^.DeathSound := SoundName(Mo.DeathSound);
       end;
-      Info^.AttackAction := AttackActionIn(Info^.Seqs[skAttack]);
-      Info^.MeleeAction := AttackActionIn(Info^.Seqs[skMelee]);
+      Info^.AttackAction := AttackActionIn(Info^.Seqs[skAttack], Info^.AttackState);
+      Info^.MeleeAction := AttackActionIn(Info^.Seqs[skMelee], Info^.MeleeState);
       AttackOf(Info^.AttackAction, Kind, Dice, Faces, Shots, Sound);
       Info^.Attack := Kind;
       Info^.DamageDice := Dice;

@@ -22,6 +22,9 @@ type
     Tics: array of Integer;
     Bright: array of Boolean;
     Actions: array of TStateAction;
+    { The state each entry's action comes from (a zero-tic state's for an
+      action carried over), -1 without one: where its MBF21 Args are. }
+    ActionStates: array of Integer;
     { The chain came back to a state already in the sequence (an idle or
       walking loop) / ended on a state that lasts forever (a corpse). }
     Loop, Forever: Boolean;
@@ -43,6 +46,14 @@ var
   States: array of TStateDef;
   Mobjs: array of TMobjDef;
   Sounds: array of String;
+  { MBF21's frame arguments (DeHackEd "Args1".."Args8") per state, and
+    which were given (bit I for ArgsI+1): a missing one takes its code
+    pointer's default (StateArg). }
+  StateArgs: array of array [0..7] of Integer;
+  StateArgsSet: array of Integer;
+
+{ State S's argument I (0..7), Default when the patch did not set it. }
+function StateArg(const S, I, Default: Integer): Integer;
 
 { Back to vanilla. }
 procedure ResetStates;
@@ -129,19 +140,36 @@ begin
   SetLength(Sounds, VanillaSoundCount);
   for I := 0 to VanillaSoundCount - 1 do
     Sounds[I] := VanillaSounds[I];
+  SetLength(StateArgs, VanillaStateCount);
+  SetLength(StateArgsSet, VanillaStateCount);
+  for I := 0 to VanillaStateCount - 1 do
+  begin
+    FillChar(StateArgs[I], SizeOf(StateArgs[I]), 0);
+    StateArgsSet[I] := 0;
+  end;
+end;
+
+function StateArg(const S, I, Default: Integer): Integer;
+begin
+  if (S >= 0) and (S < Length(StateArgs)) and (I >= 0) and (I <= 7) and
+     ((StateArgsSet[S] and (1 shl I)) <> 0) then
+    Result := StateArgs[S][I]
+  else
+    Result := Default;
 end;
 
 function WalkStates(const Start: Integer; const Stop: array of Integer;
   const MaxLen: Integer): TFrameSeq;
 var
   Visited: array of Integer;
-  S, I, N: Integer;
+  S, I, N, PendingState: Integer;
   PendingAction: TStateAction;
   IsStop, Seen: Boolean;
 begin
   Result := Default(TFrameSeq);
   S := Start;
   PendingAction := saNone;
+  PendingState := -1;
   N := 0;
   while (S > 0) and (S < Length(States)) and (N < MaxLen) do
   begin
@@ -173,7 +201,11 @@ begin
     if States[S].Tics = 0 then
     begin
       { An instant state: its action goes with the next frame. }
-      if States[S].Action <> saNone then PendingAction := States[S].Action;
+      if States[S].Action <> saNone then
+      begin
+        PendingAction := States[S].Action;
+        PendingState := S;
+      end;
       S := States[S].Next;
       Continue;
     end;
@@ -181,6 +213,7 @@ begin
     SetLength(Result.Tics, N + 1);
     SetLength(Result.Bright, N + 1);
     SetLength(Result.Actions, N + 1);
+    SetLength(Result.ActionStates, N + 1);
     if (States[S].Sprite >= 0) and (States[S].Sprite < Length(Sprites)) then
       Result.Sprites[N] := Sprites[States[S].Sprite]
     else
@@ -188,10 +221,16 @@ begin
     Result.Frames := Result.Frames + Chr(Ord('A') + (States[S].Frame and $7FFF) mod 32);
     Result.Bright[N] := (States[S].Frame and $8000) <> 0;
     if States[S].Action <> saNone then
-      Result.Actions[N] := States[S].Action
-    else
+    begin
+      Result.Actions[N] := States[S].Action;
+      Result.ActionStates[N] := S;
+    end else
+    begin
       Result.Actions[N] := PendingAction;
+      Result.ActionStates[N] := PendingState;
+    end;
     PendingAction := saNone;
+    PendingState := -1;
     if States[S].Tics < 0 then
     begin
       Result.Tics[N] := 1;
@@ -261,7 +300,8 @@ begin
   Result := Action in [saPosAttack, saSPosAttack, saCPosAttack, saTroopAttack,
     saSargAttack, saHeadAttack, saBruisAttack, saSkullAttack, saCyberAttack,
     saFatAttack1, saFatAttack2, saFatAttack3, saBspiAttack, saSkelMissile,
-    saSkelFist, saVileAttack, saPainAttack, saBrainSpit];
+    saSkelFist, saVileAttack, saPainAttack, saBrainSpit,
+    saMonsterProjectile, saMonsterBulletAttack, saMonsterMeleeAttack];
 end;
 
 initialization

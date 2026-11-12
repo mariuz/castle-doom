@@ -10,7 +10,8 @@ const
   VanillaSoundCount = 109;
 
 type
-  { Every action (code pointer) of the state table, in order of first use. }
+  { Every action (code pointer) of the state table, in order of first use,
+    then MBF21's (from saSpawnObject on; no vanilla state uses them). }
   TStateAction = (
     saNone, saLight0, saWeaponReady, saLower, saRaise, saPunch,
     saReFire, saFirePistol, saLight1, saFireShotgun, saLight2, saFireShotgun2,
@@ -24,7 +25,12 @@ type
     saSargAttack, saHeadAttack, saBruisAttack, saSkullAttack, saMetal, saSpidRefire,
     saBabyMetal, saBspiAttack, saHoof, saCyberAttack, saPainAttack, saPainDie,
     saKeenDie, saBrainPain, saBrainScream, saBrainDie, saBrainAwake, saBrainSpit,
-    saSpawnSound, saSpawnFly, saBrainExplode);
+    saSpawnSound, saSpawnFly, saBrainExplode, saSpawnObject, saMonsterProjectile, saMonsterBulletAttack,
+    saMonsterMeleeAttack, saRadiusDamage, saNoiseAlert, saHealChase, saSeekTracer, saFindTracer,
+    saClearTracer, saJumpIfHealthBelow, saJumpIfTargetInSight, saJumpIfTargetCloser, saJumpIfTracerInSight, saJumpIfTracerCloser,
+    saJumpIfFlagsSet, saAddFlags, saRemoveFlags, saWeaponProjectile, saWeaponBulletAttack, saWeaponMeleeAttack,
+    saWeaponSound, saWeaponAlert, saWeaponJump, saConsumeAmmo, saCheckAmmo, saRefireTo,
+    saGunFlashTo);
 
   TStateDef = record
     Sprite, Frame, Tics: Integer;
@@ -52,7 +58,12 @@ const
     'A_SargAttack', 'A_HeadAttack', 'A_BruisAttack', 'A_SkullAttack', 'A_Metal', 'A_SpidRefire',
     'A_BabyMetal', 'A_BspiAttack', 'A_Hoof', 'A_CyberAttack', 'A_PainAttack', 'A_PainDie',
     'A_KeenDie', 'A_BrainPain', 'A_BrainScream', 'A_BrainDie', 'A_BrainAwake', 'A_BrainSpit',
-    'A_SpawnSound', 'A_SpawnFly', 'A_BrainExplode');
+    'A_SpawnSound', 'A_SpawnFly', 'A_BrainExplode', 'A_SpawnObject', 'A_MonsterProjectile', 'A_MonsterBulletAttack',
+    'A_MonsterMeleeAttack', 'A_RadiusDamage', 'A_NoiseAlert', 'A_HealChase', 'A_SeekTracer', 'A_FindTracer',
+    'A_ClearTracer', 'A_JumpIfHealthBelow', 'A_JumpIfTargetInSight', 'A_JumpIfTargetCloser', 'A_JumpIfTracerInSight', 'A_JumpIfTracerCloser',
+    'A_JumpIfFlagsSet', 'A_AddFlags', 'A_RemoveFlags', 'A_WeaponProjectile', 'A_WeaponBulletAttack', 'A_WeaponMeleeAttack',
+    'A_WeaponSound', 'A_WeaponAlert', 'A_WeaponJump', 'A_ConsumeAmmo', 'A_CheckAmmo', 'A_RefireTo',
+    'A_GunFlashTo');
 
   VanillaSprites: array [0..VanillaSpriteCount - 1] of String[4] = (
     'TROO', 'SHTG', 'PUNG', 'PISG', 'PISF', 'SHTF', 'SHT2', 'CHGG', 'CHGF', 'MISG',

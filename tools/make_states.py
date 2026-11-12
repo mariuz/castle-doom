@@ -17,6 +17,16 @@ import re
 import sys
 
 
+MBF21_ACTIONS = [
+    'A_SpawnObject', 'A_MonsterProjectile', 'A_MonsterBulletAttack', 'A_MonsterMeleeAttack',
+    'A_RadiusDamage', 'A_NoiseAlert', 'A_HealChase', 'A_SeekTracer', 'A_FindTracer', 'A_ClearTracer',
+    'A_JumpIfHealthBelow', 'A_JumpIfTargetInSight', 'A_JumpIfTargetCloser', 'A_JumpIfTracerInSight',
+    'A_JumpIfTracerCloser', 'A_JumpIfFlagsSet', 'A_AddFlags', 'A_RemoveFlags',
+    'A_WeaponProjectile', 'A_WeaponBulletAttack', 'A_WeaponMeleeAttack', 'A_WeaponSound',
+    'A_WeaponAlert', 'A_WeaponJump', 'A_ConsumeAmmo', 'A_CheckAmmo', 'A_RefireTo', 'A_GunFlashTo',
+]
+
+
 def read(path):
     with open(path, encoding='latin-1') as f:
         return f.read()
@@ -69,6 +79,9 @@ def main():
     for r in rows:
         if r[3] not in actions:
             actions.append(r[3])
+    # MBF21's code pointers (no vanilla state uses them; DeHackEd patches
+    # name them in [CODEPTR] and their frames' Args1..Args8).
+    actions += MBF21_ACTIONS
 
     # mobjinfo: 23 fields per row in a fixed order.
     m = re.search(r'mobjinfo\[NUMMOBJTYPES\]\s*=\s*\{(.*)\n\};', info_c, re.S)
@@ -147,7 +160,8 @@ def main():
     w.append('  VanillaSoundCount = %d;' % len(sfx_names))
     w.append('')
     w.append('type')
-    w.append('  { Every action (code pointer) of the state table, in order of first use. }')
+    w.append('  { Every action (code pointer) of the state table, in order of first use,')
+    w.append('    then MBF21\'s (from saSpawnObject on; no vanilla state uses them). }')
     w.append('  TStateAction = (')
     ids = [action_id(a) for a in actions]
     for i in range(0, len(ids), 6):

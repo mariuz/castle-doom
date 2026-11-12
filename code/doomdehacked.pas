@@ -299,6 +299,13 @@ var
     else if SameText(Key, 'Sprite subnumber') then States[N].Frame := Value
     else if SameText(Key, 'Duration') then States[N].Tics := Value
     else if SameText(Key, 'Next frame') then States[N].Next := Max(0, StateNum(Value))
+    else if (Length(Key) = 5) and SameText(Copy(Key, 1, 4), 'Args') and (Key[5] in ['1'..'8']) then
+    begin
+      { MBF21's frame arguments. }
+      StateArgs[N][Ord(Key[5]) - Ord('1')] := Value;
+      StateArgsSet[N] := StateArgsSet[N] or (1 shl (Ord(Key[5]) - Ord('1')));
+      Mbf21Patch := true;
+    end
     else if SameText(Key, 'Unknown 1') or SameText(Key, 'Unknown 2') then
     else
     begin

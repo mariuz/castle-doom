@@ -3080,6 +3080,16 @@ begin
     AssertEquals('fast speed', 20, Imp^.FastSpeed);
     AssertEquals('imp bits', Mbf21NoRadiusDamage or Mbf21RangeHalf, Imp^.Mbf21Bits);
     AssertEquals('zombieman bits', Mbf21E1M8Boss, FindThingInfo(3004)^.Mbf21Bits);
+    { The code pointers and their frame arguments. }
+    AssertTrue('frame 185 pointer', States[185].Action = saMonsterProjectile);
+    AssertEquals('frame 185 Args1', 34, StateArg(185, 0, 0));
+    AssertEquals('frame 185 Args2 unset: the default', -7, StateArg(185, 1, -7));
+    AssertTrue('zombieman attack', FindThingInfo(3004)^.AttackAction = saMonsterProjectile);
+    AssertTrue('zombieman fires missiles', FindThingInfo(3004)^.Attack = akMissile);
+    AssertEquals('zombieman attack state', 185, FindThingInfo(3004)^.AttackState);
+    AssertTrue('imp bullets', FindThingInfo(3001)^.Attack = akHitscan);
+    AssertEquals('imp Args3', 3, StateArg(454, 2, 1));
+    AssertTrue('demon melee', FindThingInfo(3002)^.AttackAction = saMonsterMeleeAttack);
     ClearDehackedFiles;
     ApplyDehacked(W);
     AssertFalse('MBF21 off again', Mbf21Compat);

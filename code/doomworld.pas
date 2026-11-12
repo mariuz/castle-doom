@@ -359,6 +359,8 @@ type
     procedure TraceLineAttack(const Shooter: TDoomActor; const X, Y, Z, Angle, Slope, Range: Single;
       out HitActor: TDoomActor; out HitPlayer, HitWall: Boolean; out HX, HY, HZ: Single);
     procedure SpawnPuff(const X, Y, Z: Single);
+    procedure SpawnMissileOf(const A: TDoomActor; const K: TEffectKind; const AngleOfs, Pitch, HOfs, VOfs: Single);
+    procedure Mbf21Attack(const A: TDoomActor; const Action: TStateAction; const S: Integer);
     procedure SpawnMissile(const A: TDoomActor);
     procedure SpawnPlayerMissile(const Kind: TEffectKind);
     procedure BfgSpray(const X, Y: Single);
@@ -4459,6 +4461,13 @@ begin
         VileStartAttack(A);
         Exit;
       end;
+    saMonsterProjectile, saMonsterBulletAttack, saMonsterMeleeAttack:
+      begin
+        A.State := asAttack;
+        PlayInfoSeq(A, skAttack, false, A.Info^.AttackFrames, 6);
+        Mbf21Attack(A, A.Info^.AttackAction, A.Info^.AttackState);
+        Exit;
+      end;
     else ;
   end;
   A.State := asAttack;
@@ -4479,6 +4488,101 @@ begin
       end;
     akHitscan: MonsterHitscan(A);
     akMissile: SpawnMissile(A);
+  end;
+end;
+
+{ The missile kind of a DeHackEd thing number (MBF21's projectile
+  argument): the vanilla projectiles this port draws, the imp's ball for
+  anything else. }
+function MissileOfThing(const Thing: Integer): TEffectKind;
+begin
+  case Thing of
+    7: Result := ekRevenantRocket;
+    10: Result := ekFatShot;
+    17: Result := ekBal7;
+    33: Result := ekBal2;
+    34: Result := ekRocket;
+    35: Result := ekPlasmaBall;
+    36: Result := ekBfgBall;
+    37: Result := ekArachPlasma;
+    else Result := ekBal1;
+  end;
+end;
+
+{ MBF21's monster attacks, their numbers from state S's arguments
+  (fixed point where MBF21 says so): A_MonsterProjectile (thing,
+  angle, pitch, horizontal and vertical offset), A_MonsterBulletAttack
+  (horizontal and vertical spread, bullets 1, damage base 3 and dice 5:
+  base * 1..dice), A_MonsterMeleeAttack (damage base 3, dice 8, sound,
+  range: the thing's melee range when 0). }
+procedure TDoomWorld.Mbf21Attack(const A: TDoomActor; const Action: TStateAction; const S: Integer);
+const
+  Fixed = 65536;
+var
+  TX, TY, TZ, TR, TH, Aim, Ang, Slope, Dist, ShootZ, HX, HY, HZ, HSpread, VSpread, Range: Single;
+  I, N, Base, Faces, Damage, Thing, Sound: Integer;
+  HitActor: TDoomActor;
+  HitPlayer, HitWall: Boolean;
+begin
+  TargetPosition(A, TX, TY, TZ, TR);
+  Aim := RadToDeg(ArcTan2(TY - A.DoomY, TX - A.DoomX));
+  A.Angle := Aim;
+  case Action of
+    saMonsterProjectile:
+      begin
+        Thing := StateArg(S, 0, 0);
+        WritelnLog('Mbf21', '%s: A_MonsterProjectile, thing %d', [A.Info^.Sprite, Thing]);
+        if Thing <= 0 then Exit;
+        SpawnMissileOf(A, MissileOfThing(Thing), StateArg(S, 1, 0) / Fixed, StateArg(S, 2, 0) / Fixed,
+          StateArg(S, 3, 0) / Fixed, StateArg(S, 4, 0) / Fixed);
+      end;
+    saMonsterBulletAttack:
+      begin
+        HSpread := StateArg(S, 0, 0) / Fixed;
+        VSpread := StateArg(S, 1, 0) / Fixed;
+        N := Max(1, StateArg(S, 2, 1));
+        Base := StateArg(S, 3, 3);
+        Faces := Max(1, StateArg(S, 4, 5));
+        WritelnLog('Mbf21', '%s: A_MonsterBulletAttack, %d bullets of %d x 1..%d', [A.Info^.Sprite, N, Base, Faces]);
+        if A.Info^.AttackSound <> '' then FSounds.PlayAt(A.Info^.AttackSound, A);
+        if A.Target = nil then TH := PlayerHeight else TH := A.Target.Info^.Height;
+        ShootZ := A.DoomZ + A.Info^.Height / 2 + 8;
+        Dist := Max(1, Sqrt(Sqr(TX - A.DoomX) + Sqr(TY - A.DoomY)));
+        if SightToTarget(A) then Slope := (TZ + TH / 2 - ShootZ) / Dist else Slope := 0;
+        for I := 1 to N do
+        begin
+          Ang := Aim + (Random(256) - Random(256)) * HSpread / 255;
+          TraceLineAttack(A, A.DoomX, A.DoomY, ShootZ, Ang,
+            Slope + Tan(DegToRad((Random(256) - Random(256)) * VSpread / 255)), 2048,
+            HitActor, HitPlayer, HitWall, HX, HY, HZ);
+          Damage := Base * (Random(Faces) + 1);
+          if HitPlayer then
+            DamagePlayer(Damage, A)
+          else if HitActor <> nil then
+            DamageActor(HitActor, Damage, HX, HY, HZ, A, false, true, A.DoomX, A.DoomY, A.DoomZ)
+          else if HitWall then
+            SpawnPuff(HX, HY, HZ);
+        end;
+      end;
+    saMonsterMeleeAttack:
+      begin
+        Base := StateArg(S, 0, 3);
+        Faces := Max(1, StateArg(S, 1, 8));
+        Sound := StateArg(S, 2, 0);
+        Range := StateArg(S, 3, 0) / Fixed;
+        if Range <= 0 then Range := A.Info^.MeleeRange;
+        WritelnLog('Mbf21', '%s: A_MonsterMeleeAttack, %d x 1..%d within %.0f', [A.Info^.Sprite, Base, Faces, Range]);
+        if (Sqrt(Sqr(TX - A.DoomX) + Sqr(TY - A.DoomY)) < Range + A.Info^.Radius) and SightToTarget(A) then
+        begin
+          if SoundName(Sound) <> '' then FSounds.PlayAt(SoundName(Sound), A);
+          Damage := Base * (Random(Faces) + 1);
+          if A.Target = nil then
+            DamagePlayer(Damage, A)
+          else
+            DamageActor(A.Target, Damage, TX, TY, TZ + 32, A, false, true, A.DoomX, A.DoomY, A.DoomZ);
+        end;
+      end;
+    else ;
   end;
 end;
 
@@ -4623,8 +4727,6 @@ end;
 procedure TDoomWorld.SpawnMissile(const A: TDoomActor);
 var
   K: TEffectKind;
-  M: TDoomActor;
-  DX, DY, DZ, Len, Speed, TX, TY, TZ, TR: Single;
 begin
   case A.Info^.AttackAction of
     saTroopAttack: K := ekBal1;
@@ -4636,6 +4738,18 @@ begin
     saBspiAttack: K := ekArachPlasma;
     else K := ekBal1;
   end;
+  SpawnMissileOf(A, K, 0, 0, 0, 0);
+end;
+
+{ A missile of kind K from A at its target (P_SpawnMissile), turned by
+  AngleOfs and raised by Pitch degrees, its start moved HOfs to the right
+  and VOfs up (MBF21's A_MonsterProjectile). }
+procedure TDoomWorld.SpawnMissileOf(const A: TDoomActor; const K: TEffectKind;
+  const AngleOfs, Pitch, HOfs, VOfs: Single);
+var
+  M: TDoomActor;
+  DX, DY, DZ, Len, Speed, TX, TY, TZ, TR, HLen, Ang: Single;
+begin
   TargetPosition(A, TX, TY, TZ, TR);
   M := TDoomActor.Create(nil, FGraphics, FSpriteBatch, @EffectInfos[K]);
   M.State := asMissile;
@@ -4643,11 +4757,25 @@ begin
   M.Shooter := A;
   M.DoomX := A.DoomX + Cos(DegToRad(A.Angle)) * (A.Info^.Radius + 8);
   M.DoomY := A.DoomY + Sin(DegToRad(A.Angle)) * (A.Info^.Radius + 8);
-  M.DoomZ := A.DoomZ + A.Info^.Height * 0.6;
+  M.DoomZ := A.DoomZ + A.Info^.Height * 0.6 + VOfs;
+  if HOfs <> 0 then
+  begin
+    M.DoomX := M.DoomX + Cos(DegToRad(A.Angle - 90)) * HOfs;
+    M.DoomY := M.DoomY + Sin(DegToRad(A.Angle - 90)) * HOfs;
+  end;
   M.Sector := A.Sector;
   DX := TX - M.DoomX;
   DY := TY - M.DoomY;
   DZ := (TZ + 28) - M.DoomZ;
+  if AngleOfs <> 0 then
+  begin
+    HLen := Sqrt(DX * DX + DY * DY);
+    Ang := ArcTan2(DY, DX) + DegToRad(AngleOfs);
+    DX := Cos(Ang) * HLen;
+    DY := Sin(Ang) * HLen;
+  end;
+  if Pitch <> 0 then
+    DZ := DZ + Sqrt(DX * DX + DY * DY) * Tan(DegToRad(Max(-80.0, Min(80.0, Pitch))));
   Len := Sqrt(DX * DX + DY * DY + DZ * DZ);
   if Len < 1 then Len := 1;
   Speed := EffectInfos[K].Speed;

@@ -15,3 +15,21 @@ Splash group = 2
 Melee range = 8388608
 Fast speed = 20
 MBF21 Bits = NORADIUSDMG+RANGEHALF
+
+# MBF21 code pointers with frame arguments: the zombieman fires rockets
+# (thing 34), the imp three bullets of 3 x 1..5, the demon bites for
+# exactly 10.
+Frame 185
+Args1 = 34
+
+Frame 454
+Args3 = 3
+
+Frame 487
+Args1 = 10
+Args2 = 1
+
+[CODEPTR]
+FRAME 185 = A_MonsterProjectile
+FRAME 454 = A_MonsterBulletAttack
+FRAME 487 = A_MonsterMeleeAttack

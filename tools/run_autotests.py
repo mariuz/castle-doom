@@ -463,9 +463,17 @@ TESTS = [
     # death run E1M8's boss action too.
     ('mbf21-boss', 'E1M8',
      'Y,W:0.5,P:3004:100,W:0.2,D,W:2,Q',
-     [r'DeHackEd: MBF21 on \(an MBF21 DeHackEd patch\)', r'DeHackEd: mbf21\.deh: 7 values applied, 0 not supported',
+     [r'DeHackEd: MBF21 on \(an MBF21 DeHackEd patch\)', r'DeHackEd: mbf21\.deh: 14 values applied, 0 not supported',
       r'BossDeath: E1M8: all POSS dead, action floorlower on tag 666'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21.deh')], None),
+    # MBF21's code pointers with frame arguments (mbf21.deh): the
+    # zombieman fires rockets (A_MonsterProjectile), the imp three bullets
+    # (A_MonsterBulletAttack), the demon bites for 10 (A_MonsterMeleeAttack).
+    ('mbf21-attacks', 'E1M1',
+     'Y,W:0.3,A:0,P:3004:300,P:3001:200,P:3002:70,W:5,Q',
+     [r'Mbf21: POSS: A_MonsterProjectile, thing 34', r'Mbf21: TROO: A_MonsterBulletAttack, 3 bullets of 3 x 1\.\.5',
+      r'Mbf21: SARG: A_MonsterMeleeAttack, 10 x 1\.\.1 within 64'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21.deh'), '--fixed-step'], None),
     # ZDoom's blocking flags (udmf-block.wad): line 834 at x -256 stops
     # the player walking east, bullets both ways and a rocket (it
     # explodes at the line, close to the player); an imp spawned behind
