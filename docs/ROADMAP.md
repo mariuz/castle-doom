@@ -48,6 +48,14 @@ L = several days). Items inside a section are in suggested order.
   follow state numbers instead of walked sequences, and the RIP,
   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
 
+- MBF21, stage 2a: DeHackEd frame arguments (`Args1..8`,
+  `DoomStates.StateArgs` / `StateArg`), every MBF21 code pointer name
+  (`tools/make_states.py`'s `MBF21_ACTIONS`), and the three monster
+  attacks run with their arguments (`TDoomWorld.Mbf21Attack`,
+  `SpawnMissileOf`; the attack's state is `TThingInfo.AttackState`).
+  `mbf21.deh` gives the zombieman rockets, the imp bullets and the demon
+  a fixed bite; autotest `mbf21-attacks`, unit test `TestMbf21`.
+
 - 3D floors, vertex heights: a slab's top or bottom follows its
   control sector's planes, so a triangular control sector with
   `zceiling` / `zfloor` on its vertices (`BuildSlopes`) gives a sloped
@@ -1612,12 +1620,13 @@ play.
 
 ## Suggested next three
 
-1. MBF21, stage 2 (M-L): monsters that follow state numbers (each
-   actor's current state and tics, actions run per state) so DeHackEd
-   frames with jumps work, then MBF21's code pointers with their frame
-   arguments (A_SpawnObject, A_MonsterProjectile, A_MonsterBulletAttack,
-   A_MonsterMeleeAttack, A_RadiusDamage, the A_Jump* family, A_Add/
-   RemoveFlags...).
+1. MBF21, stage 2b (M-L): actions run per state (each actor knows its
+   state number and runs the action of every state it enters), then the
+   remaining monster pointers (A_SpawnObject, A_RadiusDamage,
+   A_NoiseAlert, A_HealChase, the tracer ones, A_Add/RemoveFlags) and
+   the jumps (A_JumpIfHealthBelow, A_JumpIfTargetInSight,
+   A_JumpIfTargetCloser...), which need monsters that follow state
+   numbers instead of walked sequences; then the weapon pointers.
 2. TERRAIN lumps (S-M): ZDoom's per-flat terrain (splashes where things
    land in water or 3D-floor water, damage and friction by flat).
 3. Map editor, back sides and scaling (S): the back side's per-part

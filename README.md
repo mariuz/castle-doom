@@ -199,7 +199,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 See [docs/ROADMAP.md](docs/ROADMAP.md) and, for UZDoom-style rendering (slopes, 3D floors,
 coloured light, models, post-processing), [docs/RENDERING_ROADMAP.md](docs/RENDERING_ROADMAP.md).
 Headlines:
-MBF21's new code pointers are not run yet, DeHackEd patches cannot rename sprites or sounds (BEX `[SPRITES]` / `[SOUNDS]`),
+most of MBF21's new code pointers are not run yet (its three monster attacks are), DeHackEd patches cannot rename sprites or sounds (BEX `[SPRITES]` / `[SOUNDS]`),
 the browser's music is the approximate FM model (no OPL3 emulator there).
 
 ## Build and run

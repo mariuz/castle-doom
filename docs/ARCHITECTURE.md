@@ -301,10 +301,18 @@ DMGIGNORED), `ProjectileImmune` (the species or the group; -1: none),
 `RadiusDamage` (BOSS / NORADIUSDMG unless the explosion has
 FORCERADIUSDMG, the shooter's splash group), the chase's melee range
 and missile chance (RANGEHALF, SHORTMRANGE, HIGHERMPROB), Nightmare's
-speed, LOGRAV falls and `BossDeath` (the MAP07 / E?M? boss bits). The
-new code pointers and frame arguments (`Args1`..`Args8`) are not read
-yet: monsters play walked frame sequences, so the jump pointers need
-the state machine to follow state numbers first.
+speed, LOGRAV falls and `BossDeath` (the MAP07 / E?M? boss bits). MBF21's code pointer names come after vanilla's in `TStateAction`
+(`tools/make_states.py`'s `MBF21_ACTIONS`); a frame's `Args1`..`Args8`
+go to `DoomStates.StateArgs` (with `StateArgsSet`, so `StateArg` gives a
+pointer's default for a missing one), and `TFrameSeq.ActionStates`
+keeps the state an entry's action comes from, so `TThingInfo.AttackState`
+knows where the attack's arguments are. The world runs the three
+monster attacks (`Mbf21Attack`: `A_MonsterProjectile` through
+`SpawnMissileOf` with the thing number mapped to this port's missile
+kinds, `A_MonsterBulletAttack`, `A_MonsterMeleeAttack`). The other
+pointers (spawns, radius damage, the jumps, the weapon ones) need
+actions run per state, and the jumps monsters that follow state
+numbers instead of walked sequences.
 
 ### Hexen-format maps (`TDoomMap.LoadLumps`)
 

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- MBF21: DeHackEd frame arguments (`Args1`..`Args8`) and the monster attack code pointers
+  `A_MonsterProjectile`, `A_MonsterBulletAttack` and `A_MonsterMeleeAttack`; every MBF21 code
+  pointer name is now accepted in patches.
 - MBF21, first stage: switched on by `-complevel 21`, a `COMPLVL` lump or an MBF21 DeHackEd
   patch; binary maps' MBF21 line flags (block land monsters, block players); DeHackEd's
   MBF21 thing fields (infighting, projectile and splash groups, melee range, fast speed) and

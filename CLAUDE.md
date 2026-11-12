@@ -1059,7 +1059,14 @@ autotest only checks the library loads.
   groups, a 128 melee range, a fast speed and NORADIUSDMG+RANGEHALF and
   the zombieman E1M8BOSS (on E1M8 `Y,W:0.5,P:3004:100,W:0.2,D` logs
   `BossDeath: E1M8: all POSS dead`; autotest `mbf21-boss`, unit test
-  `TestMbf21`, which calls `ClearDehackedFiles`).
+  `TestMbf21`, which calls `ClearDehackedFiles`). Stage 2a: the patch
+  also makes the zombieman fire rockets (`A_MonsterProjectile`, Args1
+  34), the imp three bullets (`A_MonsterBulletAttack`) and the demon bite
+  for 10 (`A_MonsterMeleeAttack`): `Y,W:0.3,A:0,P:3004:300,P:3001:200,
+  P:3002:70,W:5` logs `Mbf21: POSS: A_MonsterProjectile, thing 34` and
+  the like (autotest `mbf21-attacks`). MBF21's code pointer names are
+  appended by `tools/make_states.py` (`MBF21_ACTIONS`), its frame
+  arguments are `DoomStates.StateArgs` / `StateArg`.
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,
