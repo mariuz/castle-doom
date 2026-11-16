@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- ZDoom's `TERRAIN` lumps: splashes where the player lands, monsters step down and missiles
+  hit a liquid floor (ZDoom's splash sprites when the WAD has them, a puff otherwise; sounds
+  through `SNDINFO`), footclip (the player's eye and monsters sink into liquids), damaging
+  terrains and friction by floor flat.
 - MBF21: the jump code pointers (`A_JumpIfHealthBelow`, `A_JumpIfTargetInSight`,
   `A_JumpIfTargetCloser`, `A_JumpIfTracerInSight`, `A_JumpIfTracerCloser`, `A_JumpIfFlagsSet`),
   `A_AddFlags` / `A_RemoveFlags` (fuzz, translucency and solidity follow), `A_HealChase` and

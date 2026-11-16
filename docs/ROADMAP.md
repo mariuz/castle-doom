@@ -48,6 +48,25 @@ L = several days). Items inside a section are in suggested order.
   follow state numbers instead of walked sequences, and the RIP,
   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
 
+- TERRAIN lumps (`DoomTerrain`, `TDoomWorld.LoadTerrain`): ZDoom's
+  splash / terrain / floor / defaultterrain definitions (`ifdoom` read,
+  other games' blocks skipped, `modify`, later lumps override). By
+  sector floor flat (`SectorTerrain`, cached until the flat changes):
+  splashes where the player lands (a fall or a step down, not a
+  lowering floor), monsters step down and missiles hit the floor
+  (`TerrainSplash`: small for missiles and light things, else a base
+  and a chunk thrown up; ZDoom's splash classes drawn with their
+  SPSH / LVAS / SLDG sprites, a puff without them; sounds through
+  SNDINFO; the player's alert monsters unless `noalert`); footclip
+  (monsters drawn lower, `TDoomActor.FootClip`; the player's eye,
+  `PlayerFootClip`); damage (every `damagetimemask` + 1 tics, or on
+  landing, a radiation suit protecting with `allowprotection`) and
+  friction (`TerrainFriction`, where the sector has no Boom friction).
+  `tools/make_terrain_wad.py` (a 16-deep FWATER1 pool in E1M1's
+  corridor 141, generated SPSH sprites); autotest `terrain` (golden),
+  unit test `TestTerrain`. Left: splashes on 3D-floor water, footstep
+  sounds, damage types, items splashing.
+
 - MBF21, stage 3a: the jumps on the walked sequences
   (`TDoomWorld.JumpToState`): a jump plays the thing's chain from the
   target state (`WalkStates` up to the next entry state) in the AI
@@ -88,8 +107,8 @@ L = several days). Items inside a section are in suggested order.
   `zceiling` / `zfloor` on its vertices (`BuildSlopes`) gives a sloped
   slab the player walks up; test map `udmf-3dfloor4.wad`, autotest
   `3d-vertex-heights` (golden), unit test `Test3dWater`. Left for 3D
-  floors: splashes (TERRAIN lumps, not read yet) and sound blocked by
-  slabs.
+  floors: splashes on their water (TERRAIN is read for sector floors
+  only) and sound blocked by slabs.
 
 - Line blocking flags: ZDoom's blockplayers, blockeverything,
   blockprojectiles, blockhitscan, blocksight and blockuse (UDMF; the
@@ -1647,17 +1666,17 @@ play.
 
 ## Suggested next three
 
-1. TERRAIN lumps (S-M): ZDoom's per-flat terrain (splashes where things
-   land in water or 3D-floor water, damage and friction by flat).
-2. Map editor, back sides and scaling (S): the back side's per-part
+1. Map editor, back sides and scaling (S): the back side's per-part
    offsets, top and bottom texture scaling, and texture names typed
    in the panel instead of picked.
-3. MBF21, the weapons (M): the weapon pointers (`A_WeaponProjectile`,
+2. MBF21, the weapons (M): the weapon pointers (`A_WeaponProjectile`,
    `A_WeaponBulletAttack`, `A_WeaponMeleeAttack`, `A_WeaponSound`,
    `A_WeaponAlert`, `A_WeaponJump`, `A_ConsumeAmmo`, `A_CheckAmmo`,
    `A_RefireTo`, `A_GunFlashTo`) on the weapon's frames, then missiles
    that play their own state frames (`A_SeekTracer`, vanilla's
    `A_Tracer` for the revenant's rockets).
+3. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
+   water (the slab's top flat), and sounds blocked by slabs.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

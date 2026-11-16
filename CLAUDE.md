@@ -97,7 +97,7 @@ draw random numbers other code shares, so CI saw other monsters than a
 local run): a new test's screenshots belong there too, after two runs
 agree, here and in CI.
 
-Unit tests (FPCUnit, no window, about 20 s, 66 cases) cover the parsers,
+Unit tests (FPCUnit, no window, about 20 s, 67 cases) cover the parsers,
 every node format, the line grid, Boom's generalized types, scrollers, friction, translucency, random maps, the map editor's data, node builder and exports, and both music synthesizers:
 `castle-engine simple-compile tests/castle_doom_tests.lpr` then
 `tests/castle_doom_tests --all --format=plain` from the project root (exit
@@ -1082,6 +1082,18 @@ autotest only checks the library loads.
   `Raise: TROO raised POSS` (autotest `mbf21-heal`). MBF21's code pointer names are
   appended by `tools/make_states.py` (`MBF21_ACTIONS`), its frame
   arguments are `DoomStates.StateArgs` / `StateArg`.
+- **TERRAIN** (`DoomTerrain`): `tools/testdata/terrain.wad`
+  (`tools/make_terrain_wad.py`) makes E1M1's corridor 141 a 16-deep
+  FWATER1 pool (Water: footclip 10, 2 damage every 16 tics, a splash
+  with generated SPSH sprites) and AQF054 (the start room and nine
+  more) ice; the log says `Terrain: TERRAIN: 3 terrains, 1 splashes, 3
+  floors; 10 sectors have friction`. `Y,G:-280:256,A:0,W:0.3,F:0.3`
+  steps into the pool (`Terrain: player splashes in Water (sector
+  141, ...)`, `Eye 31 above the feet`, `Player hurt by Water: 2`); an
+  imp walking in logs `TROO splashes`, a rocket `MISL splashes`
+  (autotest `terrain` with a golden, unit test `TestTerrain`). The
+  corridor is only x -256..-190 wide but runs y 128..384: fire along
+  it (`G:-224:150,A:90,LOOK:-60`).
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,

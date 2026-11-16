@@ -1226,6 +1226,36 @@ The player record (`TPlayerState`) holds health, armour, ammo, weapons, keys,
 powerup timers, messages, screen-flash intensities and the status-bar face
 state.
 
+### TERRAIN (`DoomTerrain`, `TDoomWorld.LoadTerrain`)
+
+`TTerrainTable` reads every `TERRAIN` lump in load order: `splash`
+blocks (ZDoom's small / base / chunk classes, their sounds, the chunk
+velocity shifts), `terrain` blocks (splash, footclip, liquid, damage
+amount / time mask / on land / allowprotection, friction: ZDoom's 1.0 is
+Doom's friction, `TerrainFriction` turns it into Boom's friction and
+move factor; footstep keys are read and dropped), `floor [optional] FLAT
+TERRAIN` and `defaultterrain`; `ifheretic` / `ifhexen` / `ifstrife` /
+`ifchex` blocks are skipped up to their `endif`. A floor names its
+terrain by name and resolves it on lookup, so the order of definitions
+does not matter. The world loads the table at each level's start when
+the WADs have one (`LoadTerrain`, also SNDINFO for the logical sound
+names), caches each sector's terrain with the flat it was looked up for
+(`SectorTerrain`; a floor whose flat changes gets the new terrain), and
+gives sectors without Boom friction their terrain's
+(`FTerrainFriction`, read by `HasFriction` wherever the friction bit
+was). `TerrainSplash` runs where the player lands (`TicPlayerTerrain`:
+last tic's height above the floor, not on a moving floor), a monster
+steps down (`TDoomActor.LastZ`, its height at the end of the last tic:
+the move code puts it on the highest floor under its radius, the floor
+snap on its centre's) and a missile hits the floor; it spawns the
+splash's classes as effect actors (`SplashInfo` maps ZDoom's
+WaterSplash, LavaSplash, SludgeChunk... to their sprites, a puff when
+the WAD has none; chunks fly and fall, gone on landing) and plays the
+sound. Splash actors are not saved. Footclip lowers a monster's sprite
+(`TDoomActor.FootClip`, the floor hides its feet) and the player's eye
+(`PlayerFootClip`; `TViewPlay` moves the camera down by the change and
+sets the walk navigation's preferred height, so it is no fall).
+
 ---
 
 ### Save games
