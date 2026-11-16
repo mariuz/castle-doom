@@ -286,7 +286,7 @@ textures) take blocking, blockplayers and blockeverything; monsters'
 `AimLineAttack` blockhitscan; `CheckSight` blocksight; the use trace
 blockuse (each also blockeverything).
 
-### MBF21 (stage 1)
+### MBF21
 
 `DoomMap.Mbf21Compat` is on when `ApplyDehacked` sees `-complevel 21`
 (`Mbf21Forced`), a `COMPLVL` lump saying mbf21 or an MBF21 patch
@@ -314,9 +314,27 @@ pointers run when an actor enters a frame of a state sequence
 (`TDoomActor.FrameEntered`, set by `PlayStates` and `AnimateTic`;
 `TDoomWorld.Mbf21FrameAction` with `CurrentActionState`'s arguments):
 `A_SpawnObject` (a map thing through `SpawnMonster`, or a missile kind
-with the given velocity), `A_RadiusDamage`, `A_NoiseAlert`. The jumps
-need monsters that follow state numbers instead of walked sequences,
-and the weapon pointers the weapon's state machine.
+with the given velocity), `A_RadiusDamage`, `A_NoiseAlert`.
+
+Jumps stay on the walked sequences: `JumpToState` walks the thing's
+chain from the target state (stopping at its entry states, like
+`DoomThings.ApplyStateTable`) and plays it in the AI state of the chain
+that holds it (`DoomStates.ChainReaches`: the see chain walks, the
+missile and melee chains attack, the pain chain hurts; the missile
+state itself starts `MonsterAttack`), else in the current one; a
+walking or idle chain that ends returns to `PlayMove` / the idle frames
+(`TicActors`), and the frame a jump lands on runs its own pointer at
+once (up to 16 in a tic). The conditions (`Mbf21FrameAction`) read the
+target or tracer through `OtherPosition` (a nil `Target` / a set
+`TracerSet` with a nil `Tracer` is the player). Each actor keeps its
+own `Flags` (mobjinfo's MF_*) and `Flags2` (the MBF21 bits, read by the
+world instead of `TThingInfo.Mbf21Bits`); `A_AddFlags` /
+`A_RemoveFlags` change them and `TDoomActor.ApplyFlags` shows fuzz,
+translucency and solidity. `A_HealChase` in the walk
+(`HealChaseState`) makes `VileTryRaise` play the given heal state and
+sound. Saves keep `flags` (when they differ from the thing's), `tracer`
+and each sequence's `actionStates`. The weapon pointers need the
+weapon's state machine, and missiles do not play state frames.
 
 ### Hexen-format maps (`TDoomMap.LoadLumps`)
 

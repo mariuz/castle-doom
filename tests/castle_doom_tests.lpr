@@ -3098,6 +3098,27 @@ begin
     AssertTrue('zombieman death sequence has the spawn',
       FindThingInfo(3004)^.Seqs[skDeath].Actions[1] = saSpawnObject);
     AssertEquals('its state', 190, FindThingInfo(3004)^.Seqs[skDeath].ActionStates[1]);
+    { The jump patch: jumps, flags and tracers on Keen's free states. }
+    ClearDehackedFiles;
+    AddDehackedFile(Dir + 'mbf21jump.deh');
+    ApplyDehacked(W);
+    AssertTrue('jump pointer', States[209].Action = saJumpIfTargetCloser);
+    AssertEquals('jump target', 763, StateArg(209, 0, 0));
+    AssertEquals('jump distance (fixed 256.0)', 256 * 65536, StateArg(209, 1, 0));
+    AssertTrue('frame 763 add flags', States[763].Action = saAddFlags);
+    AssertEquals('frame 763 sprite SPOS', SpriteIndexOf('SPOS'), States[763].Sprite);
+    AssertTrue('frame 768 clear tracer', States[768].Action = saClearTracer);
+    AssertEquals('demon health', 90, FindThingInfo(3002)^.Health);
+    AssertTrue('imp heal chase in its walk', FindThingInfo(3001)^.Seqs[skMove].Actions[0] = saHealChase);
+    AssertEquals('heal state', 771, StateArg(444, 0, 0));
+    { Which chain holds a state: 763 jumps out of the walk and back into
+      it at 210; the walk from 209 reaches 216 but not the attack. }
+    AssertTrue('walk reaches its last frame', ChainReaches(209, 216, [207, 209, 217, 220, 222, 227]));
+    AssertFalse('walk does not reach the attack', ChainReaches(209, 217, [207, 209, 217, 220, 222, 227]));
+    AssertFalse('the jump target is in no chain', ChainReaches(209, 763, [207, 209, 217, 220, 222, 227]));
+    AssertTrue('763 goes on to 210', ChainReaches(763, 210, [207, 209]));
+    AssertEquals('the walk from the jump target', 'ABABBCCDD',
+      WalkStates(763, [207, 209, 217, 220, 222, 227]).Frames);
     ClearDehackedFiles;
     ApplyDehacked(W);
     AssertFalse('MBF21 off again', Mbf21Compat);

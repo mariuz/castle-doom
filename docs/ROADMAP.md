@@ -48,6 +48,27 @@ L = several days). Items inside a section are in suggested order.
   follow state numbers instead of walked sequences, and the RIP,
   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
 
+- MBF21, stage 3a: the jumps on the walked sequences
+  (`TDoomWorld.JumpToState`): a jump plays the thing's chain from the
+  target state (`WalkStates` up to the next entry state) in the AI
+  state of the chain holding it (`DoomStates.ChainReaches`: walking,
+  attacking, in pain; a jump to the missile state attacks), else in
+  the current one, and back to the thing's own frames when it ends;
+  S_NULL removes the thing. `A_JumpIfHealthBelow`,
+  `A_JumpIfTargetInSight`, `A_JumpIfTargetCloser`, the tracer jumps,
+  `A_JumpIfFlagsSet`; `A_AddFlags` / `A_RemoveFlags` on the actor's own
+  `Flags` / `Flags2` (MF_SHADOW, MF_TRANSLUCENT and MF_SOLID shown,
+  the MBF21 bits read from the actor); `A_HealChase` (any monster
+  raises corpses with its heal state and sound); `A_FindTracer` (the
+  player within range and view), `A_ClearTracer`, `A_SeekTracer`
+  (turns the thing; a missile's flight with it). Saves keep the flags,
+  the tracer and the frames' argument states. `mbf21jump.deh` (Keen's
+  states as free frames); autotests `mbf21-jumps` (golden),
+  `mbf21-heal`, unit test `TestMbf21`. Left: the weapon pointers, the
+  attack chains entered mid-way (their frames play, the attack does
+  not), missiles' own frames (`A_SeekTracer` on a missile, vanilla's
+  `A_Tracer`), RIP, LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS.
+
 - MBF21, stage 2b: per-frame code pointers run as an actor enters a
   frame (`TDoomActor.FrameEntered`, `TDoomWorld.Mbf21FrameAction`):
   `A_SpawnObject`, `A_RadiusDamage`, `A_NoiseAlert`; `mbf21.deh`'s
@@ -1626,17 +1647,17 @@ play.
 
 ## Suggested next three
 
-1. MBF21, the jumps (M-L): monsters that follow state numbers (each
-   actor's state and tics, `A_Chase` and the attacks as actions of the
-   states they are in) so `A_JumpIfHealthBelow`, `A_JumpIfTargetInSight`,
-   `A_JumpIfTargetCloser`, `A_JumpIfFlagsSet`, `A_HealChase`, the tracer
-   pointers and `A_Add/RemoveFlags` work; then the weapon pointers on the
-   weapon's state machine.
-2. TERRAIN lumps (S-M): ZDoom's per-flat terrain (splashes where things
+1. TERRAIN lumps (S-M): ZDoom's per-flat terrain (splashes where things
    land in water or 3D-floor water, damage and friction by flat).
-3. Map editor, back sides and scaling (S): the back side's per-part
+2. Map editor, back sides and scaling (S): the back side's per-part
    offsets, top and bottom texture scaling, and texture names typed
    in the panel instead of picked.
+3. MBF21, the weapons (M): the weapon pointers (`A_WeaponProjectile`,
+   `A_WeaponBulletAttack`, `A_WeaponMeleeAttack`, `A_WeaponSound`,
+   `A_WeaponAlert`, `A_WeaponJump`, `A_ConsumeAmmo`, `A_CheckAmmo`,
+   `A_RefireTo`, `A_GunFlashTo`) on the weapon's frames, then missiles
+   that play their own state frames (`A_SeekTracer`, vanilla's
+   `A_Tracer` for the revenant's rockets).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

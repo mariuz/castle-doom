@@ -1069,7 +1069,17 @@ autotest only checks the library loads.
   (`A_SpawnObject`), and the imp's death hurt around it
   (`A_RadiusDamage`): shoot it (`Y,K,C:3,W:1,A:0,P:3004:150,W:0.1,X,...`;
   `D` gibs, so the death frames never play) for `Mbf21: POSS:
-  A_SpawnObject, thing 12 (TROO) at -331 256` (autotest `mbf21-frames`). MBF21's code pointer names are
+  A_SpawnObject, thing 12 (TROO) at -331 256` (autotest `mbf21-frames`). Stage 3a,
+  jumps: `tools/testdata/mbf21jump.deh` (Keen's states 763..777 as
+  free frames) turns the shotgun guy to fuzz when closer than 256 and
+  runs the tracer pointers, makes the demon (90 health) non-solid after
+  `A_JumpIfHealthBelow` / `A_JumpIfTargetInSight`, the zombieman attack
+  at once when closer than 200 and the imp raise corpses
+  (`A_HealChase`): `Y,W:0.3,A:0,P:9:200,W:2` logs `Mbf21: SPOS:
+  A_JumpIfTargetCloser 256 (at 200), to state 763` and the rest
+  (autotest `mbf21-jumps` with a golden; saves hold `flags` and
+  `tracer`), `Y,W:0.3,A:0,CORPSE:3004:150,W:2,P:3001:250,W:3` logs
+  `Raise: TROO raised POSS` (autotest `mbf21-heal`). MBF21's code pointer names are
   appended by `tools/make_states.py` (`MBF21_ACTIONS`), its frame
   arguments are `DoomStates.StateArgs` / `StateArg`.
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not

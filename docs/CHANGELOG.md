@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- MBF21: the jump code pointers (`A_JumpIfHealthBelow`, `A_JumpIfTargetInSight`,
+  `A_JumpIfTargetCloser`, `A_JumpIfTracerInSight`, `A_JumpIfTracerCloser`, `A_JumpIfFlagsSet`),
+  `A_AddFlags` / `A_RemoveFlags` (fuzz, translucency and solidity follow), `A_HealChase` and
+  the tracer pointers `A_FindTracer`, `A_ClearTracer` and `A_SeekTracer`.
 - MBF21: the per-frame code pointers `A_SpawnObject`, `A_RadiusDamage` and `A_NoiseAlert`.
 - MBF21: DeHackEd frame arguments (`Args1`..`Args8`) and the monster attack code pointers
   `A_MonsterProjectile`, `A_MonsterBulletAttack` and `A_MonsterMeleeAttack`; every MBF21 code
