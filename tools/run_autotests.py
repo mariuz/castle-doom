@@ -482,6 +482,21 @@ TESTS = [
      [r'Mbf21: POSS: A_NoiseAlert', r'Mbf21: POSS: A_SpawnObject, thing 12 \(TROO\) at -331 256',
       r'Mbf21: TROO: A_RadiusDamage, 64 within 128'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21.deh'), '--fixed-step'], None),
+    # TERRAIN (terrain.wad): the player steps down into the FWATER1 pool
+    # (sector 141, floor -16): a splash, the eye sinks by the footclip,
+    # the water hurts; an imp walking in splashes; walking backwards
+    # into it from the east shows the splash (golden); a rocket fired
+    # into the water splashes.
+    ('terrain', 'E1M1',
+     'Y,G:-280:256,A:0,W:0.3,F:0.3,W:1,SAVE:1,A:180,P:3001:130,W:3,D,'
+     'G:-160:256,A:0,LOOK:-30,W:0.5,B:0.45,W:0.1,S,LOOK:0,'
+     'K,C:5,G:-224:150,A:90,W:1,LOOK:-60,W:0.3,X,W:0.3,Q',
+     [r'Terrain: TERRAIN: 3 terrains, 1 splashes, 3 floors; 10 sectors have friction',
+      r'Terrain: player splashes in Water \(sector 141, Water at', r'Terrain: Eye 31 above the feet',
+      r'Terrain: Player hurt by Water: 2', r'Terrain: TROO splashes in Water \(sector 141',
+      r'Terrain: MISL splashes in Water \(sector 141'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'terrain.wad'), '--fixed-step'],
+     lambda config: check_terrain(config)),
     # MBF21's jumps (mbf21jump.deh): the shotgun guy, closer than 256,
     # turns to fuzz and checks it, finds, checks and clears its tracer;
     # the demon (90 health) checks its health and sight and stops being
@@ -1116,6 +1131,12 @@ def check_friction(config):
     assert 20 < walked < 120, 'mud: walked %s' % walked
 
 
+def check_terrain(config):
+    """terrain.wad: the player stands in the pool (floor -16)."""
+    p = save_json(config, 1)['player']
+    assert -18 < p['z'] < -14 and -256 < p['x'] < -190, 'not in the pool: %s %s %s' % (p['x'], p['y'], p['z'])
+
+
 def check_mbf21_jumps(config):
     """mbf21jump.deh: the shotgun guy keeps MF_SHADOW, the demon loses
     MF_SOLID (it no longer collides), also after the load (the spawned
@@ -1591,6 +1612,7 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'terrain_1.png',
     'mbf21-jumps_1.png',
     'debug-draw_1.png', 'debug-draw_2.png',
     'wiscript-vanilla_1.png', 'wiscript-vanilla_2.png', 'wiscript_1.png', 'wiscript_2.png',

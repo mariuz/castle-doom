@@ -20,7 +20,7 @@ program castle_doom_tests;
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
-  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf, DoomGldefs, DoomAcs, DoomSoundSeq;
+  DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf, DoomGldefs, DoomAcs, DoomSoundSeq, DoomTerrain;
 
 function DataPath(const Name: String): String;
 begin
@@ -77,6 +77,7 @@ type
     procedure TestLineBlocking;
     procedure TestPolyobjs;
     procedure TestSoundSeq;
+    procedure TestTerrain;
     procedure TestDynScrollers;
     procedure TestDeepWater;
     procedure TestSectorSkies;
@@ -1528,6 +1529,78 @@ begin
     AssertEquals('replaced', 2, Q.Find(skDoor, 1));
   finally
     FreeAndNil(Q);
+  end;
+end;
+
+{ ZDoom's TERRAIN: splashes, terrains, floors (by name, before or after
+  their terrain), another game's block skipped, a default terrain,
+  "modify", and tools/testdata/terrain.wad's lump read from the WAD. }
+procedure TTestMap.TestTerrain;
+var
+  T: TTerrainTable;
+  W: TDoomWad;
+  F, MF: Single;
+  K, Path: String;
+  I: Integer;
+begin
+  TerrainFriction(1.0, F, MF);
+  AssertEquals('friction 1.0 is Doom''s', $E800 / $10000, F, 0.002);
+  T := TTerrainTable.Create;
+  try
+    T.Parse('floor fwater1 Water // before its terrain' + LineEnding +
+      'splash Water { smallclass WaterSplashBase smallclip 12 baseclass WaterSplashBase' + LineEnding +
+      '  chunkclass WaterSplash chunkxvelshift 8 chunkbasezvel 2 sound world/watersplash noalert }' + LineEnding +
+      'terrain Water { splash Water footclip 10 liquid damageamount 5 damagetimemask 7' + LineEnding +
+      '  allowprotection leftstepsounds step/water stepvolume 0.5 }' + LineEnding +
+      '/* a comment { } */ terrain Ice { friction 1.5 }' + LineEnding +
+      'ifheretic floor FLTWAWA1 Water terrain Water { footclip 99 } endif' + LineEnding +
+      'ifdoom floor NUKAGE1 Ice endif defaultterrain Ice' + LineEnding);
+    AssertEquals('terrains', 2, Length(T.Terrains));
+    AssertEquals('splashes', 1, Length(T.Splashes));
+    I := T.TerrainOfFlat('FWATER1');
+    AssertEquals('FWATER1 is water', 'Water', T.Terrains[I].Name);
+    AssertEquals('footclip (the Heretic block skipped)', 10, T.Terrains[I].FootClip, 0.001);
+    AssertTrue('liquid', T.Terrains[I].Liquid);
+    AssertEquals('damage', 5, T.Terrains[I].DamageAmount);
+    AssertEquals('mask', 7, T.Terrains[I].DamageTimeMask);
+    AssertTrue('protection', T.Terrains[I].AllowProtection);
+    AssertEquals('its splash', 0, T.Terrains[I].Splash);
+    AssertEquals('chunks', 'WaterSplash', T.Splashes[0].ChunkClass);
+    AssertEquals('x shift', 8, T.Splashes[0].ChunkXVelShift);
+    AssertEquals('no y shift', -1, T.Splashes[0].ChunkYVelShift);
+    AssertEquals('base z', 2, T.Splashes[0].ChunkBaseZVel, 0.001);
+    AssertTrue('noalert', T.Splashes[0].NoAlert);
+    AssertEquals('ifdoom read', 'Ice', T.Terrains[T.TerrainOfFlat('nukage1')].Name);
+    AssertTrue('ice', T.Terrains[T.TerrainByName('Ice')].HasFriction and
+      (T.Terrains[T.TerrainByName('Ice')].Friction > F));
+    AssertEquals('Heretic flat skipped: the default', 'Ice', T.Terrains[T.TerrainOfFlat('FLTWAWA1')].Name);
+    T.Parse('terrain Water modify { footclip 4 }');
+    I := T.TerrainByName('Water');
+    AssertEquals('modified', 4, T.Terrains[I].FootClip, 0.001);
+    AssertTrue('modify keeps the rest', T.Terrains[I].Liquid);
+    T.Parse('terrain Water { footclip 2 }');
+    AssertFalse('a new definition replaces it', T.Terrains[T.TerrainByName('Water')].Liquid);
+    AssertEquals('problems', 0, T.Problems);
+    Path := 'tools/testdata/terrain.wad';
+    if not FileExists(Path) then Path := '../' + Path;
+    if FileExists(Path) then
+    begin
+      W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+      try
+        W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+        T.LoadFromWad(W);
+        AssertEquals('WAD terrains', 3, Length(T.Terrains));
+        AssertEquals('WAD floors', 3, T.FlatCount);
+        K := T.Terrains[T.TerrainOfFlat('FWATER1')].Name;
+        AssertEquals('WAD water', 'Water', K);
+        AssertEquals('WAD default', 'Solid', T.Terrains[T.TerrainOfFlat('FLOOR5_2')].Name);
+        AssertTrue('WAD ice', T.Terrains[T.TerrainOfFlat('AQF054')].HasFriction);
+      finally
+        FreeAndNil(W);
+      end;
+    end;
+  finally
+    FreeAndNil(T);
   end;
 end;
 

@@ -27,6 +27,8 @@ type
     FColormapTint: TCastleRectangleControl;
     { The navigation swims (FWorld.Swimming). }
     FSwimNav: Boolean;
+    { TERRAIN's footclip the eye is lowered by now (PlayerFootClip). }
+    FFootClip: Single;
     FPaletteTints: array [0..13] of TVector4;
     FInfoLabel, FHelpLabel: TCastleLabel;
     FWorldStatus: TDoomWorldStatus;
@@ -228,6 +230,8 @@ type
     procedure LoadPendingMap(Sender: TObject);
     procedure CreateUi;
     procedure SetupNavigation;
+    { The eye above the feet: Doom's 41 less the footclip. }
+    function EyeHeight: Single;
     procedure PlacePlayer(const DoomX, DoomY, DoomZ, AngleDeg: Single);
     procedure UpdateWeaponSprite(const SecondsPassed: Single);
     procedure StartMap(const MapName: String; const KeepInventory: Boolean);
@@ -495,11 +499,16 @@ begin
   FTouch.OnButton := {$ifdef FPC}@{$endif} TouchButton;
 end;
 
+function TViewPlay.EyeHeight: Single;
+begin
+  Result := PlayerViewHeight - FFootClip;
+end;
+
 procedure TViewPlay.SetupNavigation;
 begin
   FNavigation.Gravity := true;
   FSwimNav := false;
-  FNavigation.PreferredHeight := PlayerViewHeight;
+  FNavigation.PreferredHeight := EyeHeight;
   FNavigation.Radius := 14;
   FNavigation.ClimbHeight := 24;
   { Doom: ~290 units/s walking, double when running (Shift). }
@@ -2464,7 +2473,7 @@ procedure TViewPlay.PlacePlayer(const DoomX, DoomY, DoomZ, AngleDeg: Single);
 var
   Pos, Dir: TVector3;
 begin
-  Pos := DoomToCge(DoomX, DoomY, DoomZ + PlayerViewHeight);
+  Pos := DoomToCge(DoomX, DoomY, DoomZ + EyeHeight);
   Dir := DoomToCge(Cos(DegToRad(AngleDeg)), Sin(DegToRad(AngleDeg)), 0);
   FViewport.Camera.SetView(Pos, Dir, Vector3(0, 1, 0));
   FLastCameraPos := Pos;
@@ -3014,10 +3023,20 @@ begin
     end;
   end;
 
+  { TERRAIN: standing in a liquid sinks the eye by its footclip (the feet
+    stay where they are, so this is no fall). }
+  if Abs(FWorld.PlayerFootClip - FFootClip) > 0.01 then
+  begin
+    FViewport.Camera.Translation := FViewport.Camera.Translation +
+      DoomToCge(0, 0, FFootClip - FWorld.PlayerFootClip) - DoomToCge(0, 0, 0);
+    FFootClip := FWorld.PlayerFootClip;
+    FNavigation.PreferredHeight := EyeHeight;
+    WritelnLog('Terrain', 'Eye %.0f above the feet', [EyeHeight]);
+  end;
   CamPos := FViewport.Camera.Translation;
   CamDir := FViewport.Camera.Direction;
   Feet := CgeToDoom(CamPos);
-  Feet.Z := Feet.Z - PlayerViewHeight;
+  Feet.Z := Feet.Z - EyeHeight;
   { Doom never lets the player sink below the floor; the walk navigation
     can (a long frame on a slow machine steps the fall through it, after
     which nothing stops it and the fall speed grows without bound: CI once
@@ -3027,7 +3046,7 @@ begin
   if (Sec >= 0) and (Feet.Z < FWorld.Map.FloorAt(Sec, Feet.X, Feet.Y) - 4) then
   begin
     Feet.Z := FWorld.Map.FloorAt(Sec, Feet.X, Feet.Y);
-    CamPos := DoomToCge(Feet.X, Feet.Y, Feet.Z + PlayerViewHeight);
+    CamPos := DoomToCge(Feet.X, Feet.Y, Feet.Z + EyeHeight);
     FViewport.Camera.Translation := CamPos;
     FNavigation.CancelFalling;
     WritelnLog('Player', 'Below the floor of sector %d, put back on it', [Sec]);

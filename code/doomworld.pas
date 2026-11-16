@@ -13,7 +13,7 @@ interface
 uses SysUtils, Classes, Generics.Collections, FpJson,
   CastleVectors, CastleTransform, CastleScene, CastleUtils,
   DoomWad, DoomGraphics, DoomMap, DoomGeometry, DoomThings, DoomActors, DoomSound, DoomDehacked, DoomLighting, DoomStates,
-  DoomGeneralized, DoomDemo, DoomUdmf, DoomAcs, DoomSoundSeq;
+  DoomGeneralized, DoomDemo, DoomUdmf, DoomAcs, DoomSoundSeq, DoomTerrain;
 
 const
   TicRate = 35;
@@ -262,6 +262,19 @@ type
     FPolyMirrorDepth: Integer;
     { The WADs' SNDINFO and SNDSEQ (polyobjects' sounds). }
     FSoundSeqs: TSoundSequences;
+    { TERRAIN: the WADs' table (nil without one), each sector's terrain
+      (-1 none) cached with the floor flat it was found for, the sectors
+      whose friction is their terrain's, and the splash actor classes
+      drawn here (sprite and frames; pointers stay valid for the level). }
+    FTerrain: TTerrainTable;
+    FSectorTerrain: array of Integer;
+    FSectorTerrainFlat: array of String;
+    FTerrainFriction: array of Boolean;
+    FSplashClasses: TStringList;
+    FSplashInfos: array of TThingInfo;
+    { The player's height last tic (a landing: from above the floor). }
+    FPlayerLastZ: Single;
+    FPlayerFootClip: Single;
     FAcsHost: TAcsHost;
     FAcsGlobals: TAcsGlobals;
     FAcsLogged: TStringList;
@@ -295,6 +308,23 @@ type
       and its corpse falling (lost souls stay where they die). }
     { A thing's middle in a swimmable 3D floor. }
     function InWater(const A: TDoomActor): Boolean;
+    { TERRAIN (LoadTerrain at the level's start). }
+    procedure LoadTerrain;
+    procedure TicPlayerTerrain(const Sec: Integer);
+    { The terrain of the sector's floor flat, -1 none. }
+    function SectorTerrain(const Sec: Integer): Integer;
+    { The info drawing a ZDoom splash class (WaterSplash...), nil none. }
+    function SplashInfo(const SplashClass: String): PThingInfo;
+    function SpawnSplashActor(const SplashClass: String; const X, Y, Z: Single): TDoomActor;
+    { A thing (Who; nil = the player) lands or a missile hits the floor
+      at (X, Y, Z) in sector Sec: its terrain's splash, if any. }
+    procedure TerrainSplash(const X, Y, Z: Single; const Sec: Integer; const Small: Boolean;
+      const Who: TDoomActor; const What: String);
+    { How deep a thing standing at that place sinks (its terrain's
+      footclip), 0 off the floor. }
+    function FootClipAt(const Sec: Integer; const X, Y, Z: Single): Single;
+    { The sector has Boom friction (its type's bit) or its terrain's. }
+    function HasFriction(const Sec: Integer): Boolean;
     procedure WaterFall(const A: TDoomActor; const SinkSpeed: Single);
     procedure TicFloat(const A: TDoomActor);
     { P_XYMovement for knocked-back monsters, corpses and barrels. }
@@ -711,6 +741,9 @@ type
     property Swimming: Boolean read FSwimming;
     { While swimming: the water's top above the player. }
     property SwimSurface: Single read FSwimSurface;
+    { TERRAIN's footclip under the player: the view's eye sinks that much. }
+    property PlayerFootClip: Single read FPlayerFootClip;
+    property Terrain: TTerrainTable read FTerrain;
     { R_SetupFrame's fixedcolormap: InverseColormap during invulnerability,
       colormap 1 with the light amplification visor (both blink in their
       last 4 seconds), NoFixedColormap otherwise. }
@@ -1252,6 +1285,8 @@ begin
   FreeAndNil(FMovers);
   FreeAndNil(FPolyEmitter);
   FreeAndNil(FSoundSeqs);
+  FreeAndNil(FTerrain);
+  FreeAndNil(FSplashClasses);
   FreeAndNil(FActors);
   FreeAndNil(FSpriteBatch);
   FreeAndNil(FSpritesGroup);
@@ -1703,6 +1738,7 @@ begin
       WritelnLog('Sound', 'SNDSEQ: %d sequences, SNDINFO: %d sounds', [Length(FSoundSeqs.Sequences),
         FSoundSeqs.LogicalCount]);
   end;
+  LoadTerrain;
   { A new game clears ACS's world and global variables. }
   if (State = nil) and not KeepInventory then
     FAcsGlobals.Clear;
@@ -2549,6 +2585,38 @@ begin
           end;
         end;
     end;
+  if FTerrain <> nil then TicPlayerTerrain(Sec);
+end;
+
+{ TERRAIN under the player: a splash on landing, the footclip and the
+  damage of the floor's terrain. }
+procedure TDoomWorld.TicPlayerTerrain(const Sec: Integer);
+var
+  T: Integer;
+  Floor: Single;
+  OnFloor, Landed: Boolean;
+begin
+  Floor := FMap.FloorAt(Sec, Player.X, Player.Y);
+  OnFloor := Player.Z <= Floor + 1;
+  { Down from above (a fall or a step down; the walk takes a step in one
+    tic); a floor moving down under the player is no fall. }
+  Landed := OnFloor and (FPlayerLastZ > Floor + 4) and (FMap.Sectors[Sec].Mover = nil);
+  FPlayerLastZ := Player.Z;
+  if FSwimming then
+  begin
+    FPlayerFootClip := 0;
+    Exit;
+  end;
+  if Landed then
+    TerrainSplash(Player.X, Player.Y, Floor, Sec, false, nil, 'player');
+  FPlayerFootClip := FootClipAt(Sec, Player.X, Player.Y, Player.Z);
+  T := SectorTerrain(Sec);
+  if (T < 0) or not OnFloor or (FTerrain.Terrains[T].DamageAmount <= 0) then Exit;
+  if FTerrain.Terrains[T].DamageOnLand and not Landed then Exit;
+  if (not FTerrain.Terrains[T].DamageOnLand) and ((FTic and FTerrain.Terrains[T].DamageTimeMask) <> 0) then Exit;
+  if FTerrain.Terrains[T].AllowProtection and (Player.RadSuitTics > 0) then Exit;
+  WritelnLog('Terrain', 'Player hurt by %s: %d', [FTerrain.Terrains[T].Name, FTerrain.Terrains[T].DamageAmount]);
+  DamagePlayer(FTerrain.Terrains[T].DamageAmount, nil);
 end;
 
 { Mark the linedefs of the player's sector and its neighbours as mapped
@@ -2733,6 +2801,19 @@ begin
             PlayInfoSeq(A, skIdle, true, A.Info^.IdleFrames, A.Info^.IdleTics);
         end;
       asEffect:
+        if A.Chunk then
+        begin
+          { A splash's chunk: thrown, falling, gone when it lands. }
+          A.DoomX := A.DoomX + A.VelX;
+          A.DoomY := A.DoomY + A.VelY;
+          A.DoomZ := A.DoomZ + A.VelZ;
+          A.VelZ := A.VelZ - 1;
+          A.Sector := FMap.SectorAt(A.DoomX, A.DoomY);
+          if (A.Sector < 0) or (A.DoomZ <= FMap.FloorAt(A.Sector, A.DoomX, A.DoomY)) or A.SequenceDone then
+            A.Removed := true
+          else
+            A.UpdateTransform;
+        end else
         if A.SequenceDone then A.Removed := true;
       asDying:
         if A.SequenceDone then
@@ -2820,7 +2901,19 @@ begin
         else if A.Info^.Floats and (A.Info^.Kind = tkMonster) then
           TicFloat(A)
         else
+        begin
           A.DoomZ := FMap.FloorAtZ(Sec, A.DoomX, A.DoomY, SlabSideZ(A));
+          { Stepped or fell down (from where it stood last tic) onto a
+            terrain with a splash. }
+          if (FTerrain <> nil) and (A.LastZ > A.DoomZ + 4) and (A.Info^.Kind = tkMonster) and
+             (A.State <> asDead) and (FMap.Sectors[Sec].Mover = nil) then
+            TerrainSplash(A.DoomX, A.DoomY, A.DoomZ, Sec, A.Info^.Mass < 10, A, A.Info^.Sprite);
+          A.LastZ := A.DoomZ;
+        end;
+        if (FTerrain <> nil) and (A.Info^.Kind = tkMonster) and not A.Info^.Floats and not A.Info^.Hanging then
+          A.FootClip := FootClipAt(Sec, A.DoomX, A.DoomY, A.DoomZ)
+        else
+          A.FootClip := 0;
         LightActor(A, Sec);
       end;
       A.UpdateRotation(Player.X, Player.Y);
@@ -3338,7 +3431,7 @@ begin
     of it (never below 1). MBF's other half, ice turning a step into
     momentum, gives under a unit of slide there (the momentum falls below
     STOPSPEED within a few tics) and nothing with steps made every tic. }
-  OnFriction := (A.Sector >= 0) and ((FMap.Sectors[A.Sector].Special and SectorFrictionBit) <> 0) and
+  OnFriction := HasFriction(A.Sector) and
     (A.DoomZ <= FMap.FloorAt(A.Sector, A.DoomX, A.DoomY) + 1) and not A.Info^.Floats;
   if OnFriction and (FMap.Friction[A.Sector] < Friction) then
     Step := Max(1, Step * (1 + FMap.MoveFactor[A.Sector]) / 2);
@@ -3377,6 +3470,224 @@ begin
   end;
   if Moved then
     MonsterCrossLines(A, OldX, OldY);
+end;
+
+procedure TDoomWorld.LoadTerrain;
+var
+  S, T, Frictions: Integer;
+begin
+  SetLength(FSectorTerrain, 0);
+  SetLength(FSectorTerrainFlat, 0);
+  SetLength(FTerrainFriction, 0);
+  SetLength(FSplashInfos, 0);
+  if FSplashClasses <> nil then FSplashClasses.Clear;
+  FPlayerLastZ := -100000; { no landing on the first tic }
+  FPlayerFootClip := 0;
+  if FWad.FindLumpForward('TERRAIN', 0) < 0 then
+  begin
+    FreeAndNil(FTerrain);
+    Exit;
+  end;
+  if FTerrain = nil then FTerrain := TTerrainTable.Create;
+  FTerrain.LoadFromWad(FWad);
+  { Splash sounds are SNDINFO's logical names. }
+  if FSoundSeqs = nil then
+  begin
+    FSoundSeqs := TSoundSequences.Create;
+    FSoundSeqs.LoadFromWad(FWad);
+  end;
+  SetLength(FSectorTerrain, Length(FMap.Sectors));
+  SetLength(FSectorTerrainFlat, Length(FMap.Sectors));
+  SetLength(FTerrainFriction, Length(FMap.Sectors));
+  Frictions := 0;
+  for S := 0 to High(FMap.Sectors) do
+  begin
+    FSectorTerrainFlat[S] := #0; { not looked up yet }
+    T := SectorTerrain(S);
+    FTerrainFriction[S] := false;
+    { A sector's own (Boom) friction wins over its terrain's. }
+    if (T >= 0) and FTerrain.Terrains[T].HasFriction and
+       ((FMap.Sectors[S].Special and SectorFrictionBit) = 0) then
+    begin
+      FTerrainFriction[S] := true;
+      FMap.Friction[S] := FTerrain.Terrains[T].Friction;
+      FMap.MoveFactor[S] := FTerrain.Terrains[T].MoveFactor;
+      Inc(Frictions);
+    end;
+  end;
+  WritelnLog('Terrain', 'TERRAIN: %d terrains, %d splashes, %d floors; %d sectors have friction', [
+    Length(FTerrain.Terrains), Length(FTerrain.Splashes), FTerrain.FlatCount, Frictions]);
+end;
+
+function TDoomWorld.SectorTerrain(const Sec: Integer): Integer;
+begin
+  if (FTerrain = nil) or (Sec < 0) or (Sec >= Length(FSectorTerrain)) then Exit(-1);
+  if FSectorTerrainFlat[Sec] <> FMap.Sectors[Sec].FloorTex then
+  begin
+    FSectorTerrainFlat[Sec] := FMap.Sectors[Sec].FloorTex;
+    FSectorTerrain[Sec] := FTerrain.TerrainOfFlat(FMap.Sectors[Sec].FloorTex);
+  end;
+  Result := FSectorTerrain[Sec];
+end;
+
+function TDoomWorld.FootClipAt(const Sec: Integer; const X, Y, Z: Single): Single;
+var
+  T: Integer;
+begin
+  Result := 0;
+  T := SectorTerrain(Sec);
+  if (T < 0) or (FTerrain.Terrains[T].FootClip <= 0) then Exit;
+  if Z > FMap.FloorAt(Sec, X, Y) + 1 then Exit;
+  Result := FTerrain.Terrains[T].FootClip;
+end;
+
+{ ZDoom's splash classes (zdoom.pk3's actors) by their sprites. }
+function TDoomWorld.SplashInfo(const SplashClass: String): PThingInfo;
+var
+  I: Integer;
+  Sprite, Frames: String;
+  Info: TThingInfo;
+begin
+  Result := nil;
+  if SplashClass = '' then Exit;
+  if FSplashClasses = nil then
+  begin
+    FSplashClasses := TStringList.Create;
+    FSplashClasses.CaseSensitive := false;
+  end;
+  I := FSplashClasses.IndexOf(SplashClass);
+  if I >= 0 then
+  begin
+    I := Integer(PtrInt(FSplashClasses.Objects[I]));
+    if I < 0 then Exit(nil);
+    Exit(@FSplashInfos[I]);
+  end;
+  case LowerCase(SplashClass) of
+    'watersplash': begin Sprite := 'SPSH'; Frames := 'ABCD'; end;
+    'watersplashbase': begin Sprite := 'SPSH'; Frames := 'EFGHIJK'; end;
+    'lavasplash': begin Sprite := 'LVAS'; Frames := 'ABCDEF'; end;
+    'lavasmoke': begin Sprite := 'LVAS'; Frames := 'GHIJK'; end;
+    'sludgechunk': begin Sprite := 'SLDG'; Frames := 'ABCD'; end;
+    'sludgesplash': begin Sprite := 'SLDG'; Frames := 'EFGH'; end;
+    'bloodsplash', 'bloodsplashbase': begin Sprite := 'BLUD'; Frames := 'CBA'; end;
+    else
+    begin
+      Sprite := '';
+      Frames := '';
+    end;
+  end;
+  if Sprite = '' then
+  begin
+    FSplashClasses.AddObject(SplashClass, TObject(PtrInt(-1)));
+    WritelnLog('Terrain', 'Splash class %s is not drawn here', [SplashClass]);
+    Exit;
+  end;
+  { Freedoom has none of ZDoom's splash sprites: a puff stands in. }
+  if not FGraphics.HasSpriteFrame(Sprite, Frames[1]) then
+  begin
+    WritelnLog('Terrain', 'Splash class %s: no %s sprite, drawn as a puff', [SplashClass, Sprite]);
+    Sprite := 'PUFF';
+    Frames := 'ABCD';
+  end;
+  { The array only grows within a level: pointers to it must stay valid
+    while its splashes are alive, so it is sized once, generously. }
+  if Length(FSplashInfos) = 0 then SetLength(FSplashInfos, 16);
+  I := FSplashClasses.Count;
+  if I >= Length(FSplashInfos) then
+  begin
+    FSplashClasses.AddObject(SplashClass, TObject(PtrInt(-1)));
+    Exit;
+  end;
+  Info := Default(TThingInfo);
+  Info.Num := -1;
+  Info.Sprite := Sprite;
+  Info.Kind := tkNone;
+  Info.Radius := 1;
+  Info.Height := 1;
+  Info.IdleFrames := Frames;
+  Info.IdleTics := 4;
+  Info.PainFrame := #0;
+  Info.Mobj := -1;
+  FSplashInfos[I] := Info;
+  FSplashClasses.AddObject(SplashClass, TObject(PtrInt(I)));
+  Result := @FSplashInfos[I];
+end;
+
+function TDoomWorld.SpawnSplashActor(const SplashClass: String; const X, Y, Z: Single): TDoomActor;
+var
+  Info: PThingInfo;
+begin
+  Result := nil;
+  Info := SplashInfo(SplashClass);
+  if Info = nil then Exit;
+  Result := TDoomActor.Create(nil, FGraphics, FSpriteBatch, Info);
+  Result.State := asEffect;
+  Result.DoomX := X;
+  Result.DoomY := Y;
+  Result.DoomZ := Z;
+  Result.Sector := FMap.SectorAt(X, Y);
+  Result.Collides := false;
+  Result.Pickable := false;
+  if Result.Sector >= 0 then
+    Result.SetLight(FMap.Sectors[Result.Sector].LightLevel)
+  else
+    Result.SetLight(255);
+  Result.PlaySequence(Info^.IdleFrames, Info^.IdleTics, false);
+  Result.UpdateTransform;
+  FActors.Add(Result);
+  FThingsGroup.Add(Result);
+end;
+
+procedure TDoomWorld.TerrainSplash(const X, Y, Z: Single; const Sec: Integer; const Small: Boolean;
+  const Who: TDoomActor; const What: String);
+var
+  T: Integer;
+  Sp: TTerrainSplash;
+  Base, Chunk: TDoomActor;
+  Sound: String;
+begin
+  T := SectorTerrain(Sec);
+  if (T < 0) or (FTerrain.Terrains[T].Splash < 0) then Exit;
+  Sp := FTerrain.Splashes[FTerrain.Terrains[T].Splash];
+  Base := nil;
+  if Small or ((Sp.BaseClass = '') and (Sp.ChunkClass = '')) then
+  begin
+    Base := SpawnSplashActor(Sp.SmallClass, X, Y, Z);
+    Sound := Sp.SmallSound;
+  end else
+  begin
+    Base := SpawnSplashActor(Sp.BaseClass, X, Y, Z);
+    Chunk := SpawnSplashActor(Sp.ChunkClass, X, Y, Z);
+    if Chunk <> nil then
+    begin
+      Chunk.Chunk := true;
+      { (-255..255) shl shift / 65536 across, base + (0..255) shl shift
+        / 65536 up (p_terrain.cpp's P_HitWater). }
+      if Sp.ChunkXVelShift >= 0 then
+        Chunk.VelX := (Random(256) - Random(256)) * (1 shl Sp.ChunkXVelShift) / 65536;
+      if Sp.ChunkYVelShift >= 0 then
+        Chunk.VelY := (Random(256) - Random(256)) * (1 shl Sp.ChunkYVelShift) / 65536;
+      Chunk.VelZ := Sp.ChunkBaseZVel;
+      if Sp.ChunkZVelShift >= 0 then
+        Chunk.VelZ := Chunk.VelZ + Random(256) * (1 shl Sp.ChunkZVelShift) / 65536;
+    end;
+    Sound := Sp.Sound;
+  end;
+  if Sound <> '' then
+  begin
+    Sound := FSoundSeqs.LumpOf(Sound);
+    if Base <> nil then
+      FSounds.PlayAt(Sound, Base)
+    else if Who <> nil then
+      FSounds.PlayAt(Sound, Who)
+    else
+      FSounds.Play(Sound);
+  end;
+  WritelnLog('Terrain', '%s splashes in %s (sector %d, %s at %.0f %.0f)', [What, FTerrain.Terrains[T].Name, Sec,
+    Sp.Name, X, Y]);
+  { The player's splashes are heard by monsters. }
+  if (Who = nil) and not Sp.NoAlert then
+    NoiseAlert;
 end;
 
 function TDoomWorld.InWater(const A: TDoomActor): Boolean;
@@ -3653,9 +3964,15 @@ begin
   end;
 end;
 
+function TDoomWorld.HasFriction(const Sec: Integer): Boolean;
+begin
+  Result := (Sec >= 0) and (((FMap.Sectors[Sec].Special and SectorFrictionBit) <> 0) or
+    ((Sec < Length(FTerrainFriction)) and FTerrainFriction[Sec]));
+end;
+
 function TDoomWorld.FrictionAt(const Sec: Integer): Single;
 begin
-  if (Sec >= 0) and ((FMap.Sectors[Sec].Special and SectorFrictionBit) <> 0) then
+  if HasFriction(Sec) then
     Result := FMap.Friction[Sec]
   else
     Result := Friction;
@@ -3669,7 +3986,7 @@ begin
   Result := 1;
   if FMap = nil then Exit;
   Sec := FMap.SectorAt(Player.X, Player.Y);
-  if (Sec < 0) or ((FMap.Sectors[Sec].Special and SectorFrictionBit) = 0) or
+  if (Sec < 0) or not HasFriction(Sec) or
      (Player.Z > FMap.FloorAt(Sec, Player.X, Player.Y) + 1) then Exit;
   F := FMap.Friction[Sec];
   if F > Friction then
@@ -5272,6 +5589,8 @@ begin
       begin
         Hit := true;
         NZ := FMap.FloorAt(Sec, NX, NY) + 2;
+        if FTerrain <> nil then
+          TerrainSplash(NX, NY, NZ - 2, Sec, true, A, A.Info^.Sprite);
       end else if NZ + A.Info^.Height >= FMap.CeilingAt(Sec, NX, NY) then
       begin
         Hit := true;

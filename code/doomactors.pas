@@ -125,6 +125,13 @@ type
     Removed: Boolean;
     { Missiles: fired by the player (hits monsters, never the player). }
     FromPlayer: Boolean;
+    { TERRAIN: a splash's chunk (thrown with Vel*, falls, gone on landing). }
+    Chunk: Boolean;
+    { TERRAIN's footclip: drawn this much lower, sunk into a liquid floor
+      (the floor hides its feet). }
+    FootClip: Single;
+    { The height it stood at last tic (TERRAIN's landings). }
+    LastZ: Single;
     { Missiles: falling (Thing_ProjectileGravity), 1 unit per tic per tic. }
     MissileGravity: Boolean;
     { Missiles: the monster that fired it (nil for the player). }
@@ -649,6 +656,7 @@ begin
   FShown := true;
   BuildScene;
   Fuzz := Info^.Shadow;
+  LastZ := -100000;
   if (Info^.Mobj >= 0) and (Info^.Mobj < Length(Mobjs)) then
     Flags := Mobjs[Info^.Mobj].Flags
   else
@@ -732,7 +740,7 @@ var
   I, Base: Integer;
 begin
   if FShape = nil then Exit;
-  T := DoomToCge(DoomX, DoomY, DoomZ);
+  T := DoomToCge(DoomX, DoomY, DoomZ - FootClip);
   R := FBatch.Right;
   C[0] := T + R * FX0 + Vector3(0, FY0, 0);
   C[1] := T + R * FX1 + Vector3(0, FY0, 0);
@@ -1027,7 +1035,7 @@ end;
 
 procedure TDoomActor.UpdateTransform;
 begin
-  Translation := DoomToCge(DoomX, DoomY, DoomZ);
+  Translation := DoomToCge(DoomX, DoomY, DoomZ - FootClip);
   WriteCorners;
 end;
 

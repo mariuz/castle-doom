@@ -369,7 +369,9 @@ begin
   Saved := {$ifdef FPC}specialize{$endif} TList<TDoomActor>.Create;
   try
     for A in FActors do
-      if not A.Removed then Saved.Add(A);
+      { TERRAIN's splashes are not kept (no type, no effect kind). }
+      if not A.Removed and not ((A.Info^.Num = -1) and not EffectKindOf(A.Info, Kind)) then
+        Saved.Add(A);
     Arr := TJSONArray.Create;
     for A in Saved do
     begin
