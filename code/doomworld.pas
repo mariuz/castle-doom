@@ -4382,7 +4382,10 @@ begin
         Frames := Frames + C.Info^.DeathFrames[I];
       C.PlaySequence(Frames, 5, false);
     end;
-    WritelnLog('Raise', '%s raised %s', [A.Info^.Sprite, C.Info^.Sprite]);
+    if A.Info^.Num = 64 then
+      WritelnLog('Raise', 'Arch-vile raised %s', [C.Info^.Sprite])
+    else
+      WritelnLog('Raise', '%s raised %s', [A.Info^.Sprite, C.Info^.Sprite]);
     Exit(true);
   end;
 end;
