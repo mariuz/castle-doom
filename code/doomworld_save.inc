@@ -96,6 +96,9 @@ begin
   Arr := TJSONArray.Create;
   for I := 0 to High(Seq.Actions) do Arr.Add(ActionNames[Seq.Actions[I]]);
   Result.Add('actions', Arr);
+  Arr := TJSONArray.Create;
+  for I := 0 to High(Seq.ActionStates) do Arr.Add(Seq.ActionStates[I]);
+  Result.Add('actionStates', Arr);
   Result.Add('loop', Seq.Loop);
   Result.Add('forever', Seq.Forever);
 end;
@@ -113,6 +116,7 @@ begin
   SetLength(Result.Tics, N);
   SetLength(Result.Bright, N);
   SetLength(Result.Actions, N);
+  SetLength(Result.ActionStates, N);
   Bright := J.Get('bright', '');
   for I := 0 to N - 1 do
   begin
@@ -123,6 +127,7 @@ begin
       Result.Actions[I] := A
     else
       Result.Actions[I] := saNone;
+    Result.ActionStates[I] := ArrayItemInt(ObjArray(J, 'actionStates'), I, -1);
   end;
   Result.Loop := J.Get('loop', false);
   Result.Forever := J.Get('forever', false);
@@ -417,6 +422,10 @@ begin
       if Length(StateSeq.Tics) > 0 then
         AJ.Add('states', SeqToJson(StateSeq));
       AJ.Add('target', Ref(A.Target));
+      if A.TracerSet then
+        AJ.Add('tracer', Ref(A.Tracer));
+      if (A.Info^.Mobj >= 0) and ((A.Flags <> Mobjs[A.Info^.Mobj].Flags) or (A.Flags2 <> A.Info^.Mbf21Bits)) then
+        AJ.Add('flags', JsonIntArray([A.Flags, A.Flags2]));
       AJ.Add('shooter', Ref(A.Shooter));
       AJ.Add('fire', Ref(A.Fire));
       Arr.Add(AJ);
@@ -786,6 +795,15 @@ begin
         begin
           AJ := TJSONObject(Arr.Items[I]);
           Loaded[I].Target := Actor(AJ.Get('target', -1));
+          Loaded[I].TracerSet := AJ.Find('tracer') <> nil;
+          if Loaded[I].TracerSet then
+            Loaded[I].Tracer := Actor(AJ.Get('tracer', -1));
+          if ObjArray(AJ, 'flags') <> nil then
+          begin
+            Loaded[I].Flags := ArrayItemInt(ObjArray(AJ, 'flags'), 0, Loaded[I].Flags);
+            Loaded[I].Flags2 := ArrayItemInt(ObjArray(AJ, 'flags'), 1, Loaded[I].Flags2);
+            Loaded[I].ApplyFlags;
+          end;
           Loaded[I].Shooter := Actor(AJ.Get('shooter', -1));
           Loaded[I].Fire := Actor(AJ.Get('fire', -1));
         end;

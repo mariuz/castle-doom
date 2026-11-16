@@ -1,0 +1,114 @@
+Patch File for DeHackEd v3.0
+# MBF21 jump test patch (tools/testdata/mbf21jump.deh): read by the unit
+# test TestMbf21 and the mbf21-jumps autotest. Commander Keen's states
+# (763..777, unused on Freedoom's E1 maps) are the free frames.
+Doom version = 2021
+Patch format = 6
+
+# The zombieman attacks at once when the target is closer than 200
+# (a jump into its missile state).
+Frame 176
+Args1 = 184
+Args2 = 13107200
+
+# The shotgun guy, closer than 256: turns to fuzz (A_AddFlags MF_SHADOW),
+# checks it (A_JumpIfFlagsSet), finds the player as its tracer, checks
+# the tracer is in sight and closer than 512, then clears it.
+Frame 209
+Args1 = 763
+Args2 = 16777216
+
+Frame 763
+Sprite number = 30
+Sprite subnumber = 0
+Duration = 6
+Next frame = 764
+Args1 = 262144
+
+Frame 764
+Sprite number = 30
+Sprite subnumber = 1
+Duration = 2
+Next frame = 210
+Args1 = 765
+Args2 = 262144
+
+Frame 765
+Sprite number = 30
+Sprite subnumber = 2
+Duration = 2
+Next frame = 766
+Args1 = 0
+Args2 = 10
+
+Frame 766
+Sprite number = 30
+Sprite subnumber = 3
+Duration = 2
+Next frame = 210
+Args1 = 767
+
+Frame 767
+Sprite number = 30
+Sprite subnumber = 0
+Duration = 2
+Next frame = 210
+Args1 = 768
+Args2 = 33554432
+
+Frame 768
+Sprite number = 30
+Sprite subnumber = 1
+Duration = 2
+Next frame = 210
+
+# The demon starts with 90 health; below 100 it checks the target is in
+# sight within 90 degrees of its facing and then stops being solid.
+Thing 13 (Demon)
+Hit points = 90
+
+Frame 477
+Args1 = 769
+Args2 = 100
+
+Frame 769
+Sprite number = 39
+Sprite subnumber = 0
+Duration = 2
+Next frame = 478
+Args1 = 770
+Args2 = 5898240
+
+Frame 770
+Sprite number = 39
+Sprite subnumber = 1
+Duration = 4
+Next frame = 478
+Args1 = 2
+
+# The imp raises corpses like an Arch-vile (A_HealChase): its heal frame
+# is 771 (the imp's frame E for 16 tics), the sound DSSLOP (31).
+Frame 444
+Args1 = 771
+Args2 = 31
+
+Frame 771
+Sprite number = 0
+Sprite subnumber = 4
+Duration = 16
+Next frame = 444
+
+[CODEPTR]
+FRAME 176 = A_JumpIfTargetCloser
+FRAME 209 = A_JumpIfTargetCloser
+FRAME 763 = A_AddFlags
+FRAME 764 = A_JumpIfFlagsSet
+FRAME 765 = A_FindTracer
+FRAME 766 = A_JumpIfTracerInSight
+FRAME 767 = A_JumpIfTracerCloser
+FRAME 768 = A_ClearTracer
+FRAME 477 = A_JumpIfHealthBelow
+FRAME 769 = A_JumpIfTargetInSight
+FRAME 770 = A_RemoveFlags
+FRAME 444 = A_HealChase
+FRAME 771 = NULL

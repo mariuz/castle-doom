@@ -176,6 +176,8 @@ type
       one buffer per caller so that none overwrites another's. }
     FLinesSight, FLinesMove, FLinesShot, FLinesMissile: TLineList;
     FFloatZ: Single;
+    { MBF21 jumps and flag changes logged (a cap: they repeat every walk). }
+    FJumpLogs: Integer;
     { Boom's deep water: the colormap of the viewer's region and its tint. }
     FColormapName: String;
     FColormapTint: TVector4;
@@ -361,6 +363,16 @@ type
     procedure SpawnPuff(const X, Y, Z: Single);
     procedure SpawnMissileOf(const A: TDoomActor; const K: TEffectKind; const AngleOfs, Pitch, HOfs, VOfs: Single);
     procedure Mbf21FrameAction(const A: TDoomActor);
+    { MBF21's jumps: play the thing's chain from state S, in the AI state
+      of the chain that holds it (walking, attacking, in pain), else in
+      the current one; S_NULL removes the thing. }
+    procedure JumpToState(const A: TDoomActor; const S: Integer; const Why: String;
+      const Classify: Boolean = true);
+    { The place, height and sector of the thing's target (OfTracer false;
+      awake monsters always have one, the player when Target is nil) or
+      tracer (the player for TracerSet without an actor); false without. }
+    function OtherPosition(const A: TDoomActor; const OfTracer: Boolean; out X, Y, Z, H: Single;
+      out Sec: Integer): Boolean;
     procedure Mbf21Attack(const A: TDoomActor; const Action: TStateAction; const S: Integer);
     procedure SpawnMissile(const A: TDoomActor);
     procedure SpawnPlayerMissile(const Kind: TEffectKind);
@@ -384,7 +396,9 @@ type
     procedure TicCharge(const A: TDoomActor);
     procedure PainShootSkull(const A: TDoomActor; const AngleDeg: Single);
     function CanRaise(const Num: Integer): Boolean;
-    function VileTryRaise(const A: TDoomActor): Boolean;
+    { A_VileChase, and MBF21's A_HealChase with its heal state and sound
+      (HealState -1: the Arch-vile's own frames). }
+    function VileTryRaise(const A: TDoomActor; const HealState: Integer = -1; const HealSound: Integer = 0): Boolean;
     procedure VileStartAttack(const A: TDoomActor);
     procedure VileAttack(const A: TDoomActor);
     procedure FollowVileFire(const F: TDoomActor);
@@ -925,6 +939,22 @@ end;
 procedure PlayMove(const A: TDoomActor);
 begin
   PlayInfoSeq(A, skMove, true, A.Info^.MoveFrames, MoveFrameTics(A.Info^.Num));
+end;
+
+{ MBF21's A_HealChase in the thing's walking frames: the state carrying it
+  (its arguments: heal state, sound). }
+function HealChaseState(const Info: PThingInfo; out S: Integer): Boolean;
+var
+  I: Integer;
+begin
+  for I := 0 to High(Info^.Seqs[skMove].Actions) do
+    if Info^.Seqs[skMove].Actions[I] = saHealChase then
+    begin
+      S := Info^.Seqs[skMove].ActionStates[I];
+      Exit(true);
+    end;
+  S := -1;
+  Result := false;
 end;
 
 function SegmentsIntersect(const AX, AY, BX, BY, CX, CY, DX, DY: Single; out T: Single): Boolean;
@@ -2683,7 +2713,7 @@ end;
 
 procedure TDoomWorld.TicActors;
 var
-  I: Integer;
+  I, Jumps: Integer;
   A, O: TDoomActor;
   Sec: Integer;
 begin
@@ -2693,6 +2723,15 @@ begin
     A := FActors[I];
     A.AnimateTic;
     case A.State of
+      asIdle, asChase:
+        { A chain an MBF21 jump started ended: back to the thing's own. }
+        if A.SequenceDone and (A.Info^.Kind = tkMonster) then
+        begin
+          if A.State = asChase then
+            PlayMove(A)
+          else
+            PlayInfoSeq(A, skIdle, true, A.Info^.IdleFrames, A.Info^.IdleTics);
+        end;
       asEffect:
         if A.SequenceDone then A.Removed := true;
       asDying:
@@ -2743,11 +2782,16 @@ begin
         else
           TicMissile(A);
     end;
-    if A.FrameEntered then
+    { A jump enters another frame whose action runs at once (a chain of
+      checks), up to a limit against jumps in a circle. }
+    Jumps := 0;
+    while A.FrameEntered and (Jumps < 16) do
     begin
       A.FrameEntered := false;
+      Inc(Jumps);
       if not A.Removed then Mbf21FrameAction(A);
     end;
+    A.FrameEntered := false;
     if A.Info^.Num = 89 then
       TicBrainShooter(A);
     if A.Info = @EffectInfos[ekVileFire] then
@@ -2788,6 +2832,11 @@ begin
       for O in FActors do
       begin
         if O.Target = A then O.Target := nil;
+        if O.Tracer = A then
+        begin
+          O.Tracer := nil;
+          O.TracerSet := false;
+        end;
         if O.Shooter = A then O.Shooter := nil;
         if O.Fire = A then O.Fire := nil;
       end;
@@ -3156,7 +3205,7 @@ end;
 function TDoomWorld.InfightImmune(const Target, Attacker: TDoomActor): Boolean;
 begin
   if (Target = nil) or (Attacker = nil) then Exit(false);
-  Result := ((Attacker.Info^.Mbf21Bits and Mbf21DamageIgnored) <> 0) or
+  Result := ((Attacker.Flags2 and Mbf21DamageIgnored) <> 0) or
     ((Target.Info^.InfightGroup > 0) and (Target.Info^.InfightGroup = Attacker.Info^.InfightGroup));
 end;
 
@@ -3185,7 +3234,7 @@ var
   OldX, OldY: Single;
   DX, DY, Dist, Ang, Step, TX, TY, TZ, TR, RangeDist: Single;
   Blocked: Integer;
-  Tries, MaxHold: Integer;
+  Tries, MaxHold, HealS: Integer;
   Moved, OnFriction: Boolean;
 begin
   { A dead target (monster corpse, or the player) sends the monster back to the player. }
@@ -3227,8 +3276,12 @@ begin
   if A.State <> asChase then Exit;
   if A.Info^.Speed = 0 then Exit;
 
-  { A_VileChase: an Arch-vile touching a corpse raises it instead of moving. }
+  { A_VileChase: an Arch-vile touching a corpse raises it instead of moving
+    (MBF21's A_HealChase in the walking frames: any monster, with its own
+    heal state and sound). }
   if (A.Info^.Num = 64) and VileTryRaise(A) then Exit;
+  if HealChaseState(A.Info, HealS) and
+     VileTryRaise(A, StateArg(HealS, 0, 0), StateArg(HealS, 1, 0)) then Exit;
 
   { Face the target. }
   Ang := RadToDeg(ArcTan2(DY, DX));
@@ -3253,15 +3306,15 @@ begin
         only attack within 14 * 64 units. }
       RangeDist := Dist;
       if (A.Info^.Num = 3006) or (A.Info^.Num = 16) or (A.Info^.Num = 7) or
-         ((A.Info^.Mbf21Bits and Mbf21RangeHalf) <> 0) then
+         ((A.Flags2 and Mbf21RangeHalf) <> 0) then
         RangeDist := Dist / 2;
       { MBF21: SHORTMRANGE fires only within 14 * 64 like the Arch-vile,
         HIGHERMPROB caps the chance to hold fire lower. }
-      if (A.Info^.Mbf21Bits and Mbf21HigherMissileChance) <> 0 then
+      if (A.Flags2 and Mbf21HigherMissileChance) <> 0 then
         MaxHold := 160
       else
         MaxHold := 220;
-      if (((A.Info^.Num <> 64) and ((A.Info^.Mbf21Bits and Mbf21ShortMissileRange) = 0)) or (Dist <= 14 * 64)) and
+      if (((A.Info^.Num <> 64) and ((A.Flags2 and Mbf21ShortMissileRange) = 0)) or (Dist <= 14 * 64)) and
          (Random(256) >= Min(MaxHold, 40 + Trunc(RangeDist / 6))) then
       begin
         MonsterAttack(A);
@@ -3364,7 +3417,7 @@ begin
       if InWater(A) then
         WaterFall(A, WaterSinkSpeed / 3)
       else
-      if (A.Info^.Mbf21Bits and Mbf21LowGravity) <> 0 then
+      if (A.Flags2 and Mbf21LowGravity) <> 0 then
         { MBF21's LOGRAV: an eighth of the gravity. }
         A.VelZ := A.VelZ - Gravity / 8
       else
@@ -4267,7 +4320,7 @@ begin
 end;
 
 { A_VileChase: look for a corpse within reach whose spot is free. }
-function TDoomWorld.VileTryRaise(const A: TDoomActor): Boolean;
+function TDoomWorld.VileTryRaise(const A: TDoomActor; const HealState, HealSound: Integer): Boolean;
 var
   C, O: TDoomActor;
   Fits: Boolean;
@@ -4304,8 +4357,15 @@ begin
     A.Angle := RadToDeg(ArcTan2(C.DoomY - A.DoomY, C.DoomX - A.DoomX));
     A.State := asAttack;
     A.AttackFired := true; { no fire attack this time }
-    A.PlaySequence('[\]', 10, false);
-    FSounds.PlayAt('DSSLOP', C);
+    if HealState >= 0 then
+    begin
+      JumpToState(A, HealState, 'A_HealChase', false);
+      if SoundName(HealSound) <> '' then FSounds.PlayAt(SoundName(HealSound), C);
+    end else
+    begin
+      A.PlaySequence('[\]', 10, false);
+      FSounds.PlayAt('DSSLOP', C);
+    end;
     { The corpse comes back: death frames in reverse, full health. }
     C.Health := C.Info^.Health;
     C.Collides := C.Info^.Solid;
@@ -4322,7 +4382,7 @@ begin
         Frames := Frames + C.Info^.DeathFrames[I];
       C.PlaySequence(Frames, 5, false);
     end;
-    WritelnLog('Raise', 'Arch-vile raised %s', [C.Info^.Sprite]);
+    WritelnLog('Raise', '%s raised %s', [A.Info^.Sprite, C.Info^.Sprite]);
     Exit(true);
   end;
 end;
@@ -4596,19 +4656,211 @@ end;
   A_SpawnObject (thing number, angle, forward / left / up offset,
   velocity forward / left / up; fixed point but the thing), A_RadiusDamage
   (damage, radius) and A_NoiseAlert (the target hears it). }
+function TDoomWorld.OtherPosition(const A: TDoomActor; const OfTracer: Boolean; out X, Y, Z, H: Single;
+  out Sec: Integer): Boolean;
+var
+  O: TDoomActor;
+begin
+  X := 0; Y := 0; Z := 0; H := 0; Sec := -1;
+  if OfTracer then
+  begin
+    if not A.TracerSet then Exit(false);
+    O := A.Tracer;
+  end else
+  begin
+    if (A.Target = nil) and not A.Awake then Exit(false);
+    O := A.Target;
+  end;
+  if O = nil then
+  begin
+    if Player.Dead then Exit(false);
+    X := Player.X; Y := Player.Y; Z := Player.Z; H := PlayerHeight; Sec := Player.Sector;
+  end else
+  begin
+    if O.Removed then Exit(false);
+    X := O.DoomX; Y := O.DoomY; Z := O.DoomZ; H := O.Info^.Height; Sec := O.Sector;
+  end;
+  Result := true;
+end;
+
+procedure TDoomWorld.JumpToState(const A: TDoomActor; const S: Integer; const Why: String;
+  const Classify: Boolean);
+var
+  Mo: TMobjDef;
+  Stops: array of Integer;
+  Seq: TFrameSeq;
+  HasMobj: Boolean;
+begin
+  if (S < 0) or (S >= Length(States)) then Exit;
+  if FJumpLogs < 1000 then
+  begin
+    Inc(FJumpLogs);
+    WritelnLog('Mbf21', '%s: %s, to state %d', [A.Info^.Sprite, Why, S]);
+  end;
+  if S = 0 then
+  begin
+    { S_NULL: the thing is gone. }
+    A.Removed := true;
+    Exit;
+  end;
+  HasMobj := (A.Info^.Mobj >= 0) and (A.Info^.Mobj < Length(Mobjs));
+  Mo := Default(TMobjDef);
+  SetLength(Stops, 0);
+  if HasMobj then
+  begin
+    Mo := Mobjs[A.Info^.Mobj];
+    SetLength(Stops, 8);
+    Stops[0] := Mo.Spawn; Stops[1] := Mo.See; Stops[2] := Mo.Pain; Stops[3] := Mo.Melee;
+    Stops[4] := Mo.Missile; Stops[5] := Mo.Death; Stops[6] := Mo.XDeath; Stops[7] := Mo.RaiseState;
+  end;
+  if Classify and HasMobj and (A.Info^.Kind = tkMonster) and not (A.State in [asDying, asDead]) then
+  begin
+    { Into the attack: the attack itself (aimed, fired), like A_Chase's. }
+    if A.Awake and (S > 0) and ((S = Mo.Missile) or ((Mo.Missile = 0) and (S = Mo.Melee))) then
+    begin
+      MonsterAttack(A);
+      Exit;
+    end;
+    if A.Awake and ChainReaches(Mo.See, S, Stops) then
+      A.State := asChase
+    else if ChainReaches(Mo.Missile, S, Stops) or ChainReaches(Mo.Melee, S, Stops) then
+    begin
+      A.State := asAttack;
+      A.AttackFired := true;
+    end else
+    if ChainReaches(Mo.Pain, S, Stops) then
+      A.State := asPain;
+  end;
+  Seq := WalkStates(S, Stops);
+  if Length(Seq.Tics) = 0 then Exit;
+  A.PlayStates(Seq, false);
+end;
+
 procedure TDoomWorld.Mbf21FrameAction(const A: TDoomActor);
 const
   Fixed = 65536;
 var
-  S, Thing, Damage, Radius: Integer;
-  Ang, Fwd, Side, Up, X, Y, Z, VF, VS, VU: Single;
+  S, Thing, Damage, Radius, F1, F2, OSec: Integer;
+  Ang, Fwd, Side, Up, X, Y, Z, VF, VS, VU, OX, OY, OZ, OH, Fov, Diff, Turn, Speed, Dist: Single;
   O: TDoomActor;
   M: TDoomActor;
   K: TEffectKind;
+  Has: Boolean;
 begin
-  if not (A.CurrentAction in [saSpawnObject, saRadiusDamage, saNoiseAlert]) then Exit;
+  if not (A.CurrentAction in [saSpawnObject, saRadiusDamage, saNoiseAlert, saJumpIfHealthBelow,
+    saJumpIfTargetInSight, saJumpIfTargetCloser, saJumpIfTracerInSight, saJumpIfTracerCloser,
+    saJumpIfFlagsSet, saAddFlags, saRemoveFlags, saFindTracer, saClearTracer, saSeekTracer]) then Exit;
   S := A.CurrentActionState;
   case A.CurrentAction of
+    saJumpIfHealthBelow:
+      if A.Health < StateArg(S, 1, 0) then
+        JumpToState(A, StateArg(S, 0, 0), Format('A_JumpIfHealthBelow %d (health %d)', [StateArg(S, 1, 0), A.Health]));
+    saJumpIfTargetInSight, saJumpIfTracerInSight:
+      begin
+        Has := OtherPosition(A, A.CurrentAction = saJumpIfTracerInSight, OX, OY, OZ, OH, OSec) and
+          CheckSight(A.DoomX, A.DoomY, A.DoomZ + A.Info^.Height * 0.75, A.Sector, OX, OY, OZ, OH, OSec);
+        { Within the field of view around the facing (0: all around). }
+        Fov := StateArg(S, 1, 0) / Fixed;
+        if Has and (Fov > 0) then
+        begin
+          Diff := RadToDeg(ArcTan2(OY - A.DoomY, OX - A.DoomX)) - A.Angle;
+          while Diff > 180 do Diff := Diff - 360;
+          while Diff < -180 do Diff := Diff + 360;
+          Has := Abs(Diff) <= Fov / 2;
+        end;
+        if Has then
+          JumpToState(A, StateArg(S, 0, 0), ActionNames[A.CurrentAction]);
+      end;
+    saJumpIfTargetCloser, saJumpIfTracerCloser:
+      if OtherPosition(A, A.CurrentAction = saJumpIfTracerCloser, OX, OY, OZ, OH, OSec) then
+      begin
+        Dist := Sqrt(Sqr(OX - A.DoomX) + Sqr(OY - A.DoomY));
+        if Dist < StateArg(S, 1, 0) / Fixed then
+          JumpToState(A, StateArg(S, 0, 0), Format('%s %.0f (at %.0f)', [ActionNames[A.CurrentAction],
+            StateArg(S, 1, 0) / Fixed, Dist]));
+      end;
+    saJumpIfFlagsSet:
+      begin
+        F1 := StateArg(S, 1, 0);
+        F2 := StateArg(S, 2, 0);
+        if ((A.Flags and F1) = F1) and ((A.Flags2 and F2) = F2) then
+          JumpToState(A, StateArg(S, 0, 0), Format('A_JumpIfFlagsSet %d %d', [F1, F2]));
+      end;
+    saAddFlags, saRemoveFlags:
+      begin
+        F1 := StateArg(S, 0, 0);
+        F2 := StateArg(S, 1, 0);
+        if A.CurrentAction = saAddFlags then
+        begin
+          A.Flags := A.Flags or F1;
+          A.Flags2 := A.Flags2 or F2;
+        end else
+        begin
+          A.Flags := A.Flags and not F1;
+          A.Flags2 := A.Flags2 and not F2;
+        end;
+        A.ApplyFlags;
+        if FJumpLogs < 1000 then
+        begin
+          Inc(FJumpLogs);
+          WritelnLog('Mbf21', '%s: %s %d %d, flags now %d %d', [A.Info^.Sprite, ActionNames[A.CurrentAction],
+            F1, F2, A.Flags, A.Flags2]);
+        end;
+      end;
+    saFindTracer:
+      if not A.TracerSet and not Player.Dead then
+      begin
+        { MBF21's rough search: the player (the only enemy of monsters
+          here) within the range (blocks of 128) and the field of view. }
+        Fov := StateArg(S, 0, 0) / Fixed;
+        Dist := Sqrt(Sqr(Player.X - A.DoomX) + Sqr(Player.Y - A.DoomY));
+        Has := (Dist <= StateArg(S, 1, 10) * 128) and SightToPlayer(A);
+        if Has and (Fov > 0) then
+        begin
+          Diff := RadToDeg(ArcTan2(Player.Y - A.DoomY, Player.X - A.DoomX)) - A.Angle;
+          while Diff > 180 do Diff := Diff - 360;
+          while Diff < -180 do Diff := Diff + 360;
+          Has := Abs(Diff) <= Fov / 2;
+        end;
+        if Has then
+        begin
+          A.TracerSet := true;
+          A.Tracer := nil;
+          WritelnLog('Mbf21', '%s: A_FindTracer, the player at %.0f', [A.Info^.Sprite, Dist]);
+        end;
+      end;
+    saClearTracer:
+      begin
+        A.TracerSet := false;
+        A.Tracer := nil;
+        WritelnLog('Mbf21', '%s: A_ClearTracer', [A.Info^.Sprite]);
+      end;
+    saSeekTracer:
+      if OtherPosition(A, true, OX, OY, OZ, OH, OSec) then
+      begin
+        { P_SeekerMissile: turn half the angle beyond the threshold, at
+          most the maximum turn; a missile's flight turns with it. }
+        Diff := RadToDeg(ArcTan2(OY - A.DoomY, OX - A.DoomX)) - A.Angle;
+        while Diff > 180 do Diff := Diff - 360;
+        while Diff < -180 do Diff := Diff + 360;
+        Turn := Diff;
+        if Abs(Turn) > StateArg(S, 0, 0) / Fixed then
+        begin
+          Turn := Turn / 2;
+          if Abs(Turn) > StateArg(S, 1, 0) / Fixed then
+            Turn := Sign(Turn) * StateArg(S, 1, 0) / Fixed;
+        end;
+        A.Angle := A.Angle + Turn;
+        if A.State = asMissile then
+        begin
+          Speed := Sqrt(Sqr(A.VelX) + Sqr(A.VelY));
+          A.VelX := Cos(DegToRad(A.Angle)) * Speed;
+          A.VelY := Sin(DegToRad(A.Angle)) * Speed;
+          Dist := Sqrt(Sqr(OX - A.DoomX) + Sqr(OY - A.DoomY));
+          if Speed > 0 then
+            A.VelZ := (OZ + OH / 2 - A.DoomZ) / Max(1, Dist / Speed);
+        end;
+      end;
     saRadiusDamage:
       begin
         Damage := StateArg(S, 0, 0);
@@ -5388,7 +5640,7 @@ var
   Matched, Done: Boolean;
 begin
   Num := A.Info^.Num;
-  Bits := A.Info^.Mbf21Bits;
+  Bits := A.Flags2;
   MapName := FMap.Name;
   Info := MapInfoFor(MapName);
   if (Info <> nil) and Info.BossActionsSet then
@@ -5547,8 +5799,8 @@ begin
     { Cyberdemons and Spider Masterminds ignore splash damage (P_RadiusAttack),
       and MBF21's BOSS / NORADIUSDMG things, unless the explosion has
       FORCERADIUSDMG; one splash group does not hurt itself. }
-    if ((O.Info^.Num in [16, 7]) or ((O.Info^.Mbf21Bits and (Mbf21Boss or Mbf21NoRadiusDamage)) <> 0)) and
-       not ((Source <> nil) and ((Source.Info^.Mbf21Bits and Mbf21ForceRadiusDamage) <> 0)) then Continue;
+    if ((O.Info^.Num in [16, 7]) or ((O.Flags2 and (Mbf21Boss or Mbf21NoRadiusDamage)) <> 0)) and
+       not ((Source <> nil) and ((Source.Flags2 and Mbf21ForceRadiusDamage) <> 0)) then Continue;
     if (Attacker <> nil) and (Attacker.Info^.SplashGroup > 0) and
        (O.Info^.SplashGroup = Attacker.Info^.SplashGroup) then Continue;
     D := Max(Abs(O.DoomX - X), Abs(O.DoomY - Y)) - O.Info^.Radius;

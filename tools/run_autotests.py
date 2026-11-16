@@ -482,6 +482,27 @@ TESTS = [
      [r'Mbf21: POSS: A_NoiseAlert', r'Mbf21: POSS: A_SpawnObject, thing 12 \(TROO\) at -331 256',
       r'Mbf21: TROO: A_RadiusDamage, 64 within 128'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21.deh'), '--fixed-step'], None),
+    # MBF21's jumps (mbf21jump.deh): the shotgun guy, closer than 256,
+    # turns to fuzz and checks it, finds, checks and clears its tracer;
+    # the demon (90 health) checks its health and sight and stops being
+    # solid; the flags survive a load.
+    ('mbf21-jumps', 'E1M1',
+     'Y,W:0.3,A:0,P:9:200,W:2,SAVE:1,S,P:3002:300,W:2,SAVE:2,LOAD:2,W:0.5,SAVE:3,Q',
+     [r'Mbf21: SPOS: A_JumpIfTargetCloser 256 \(at 200\), to state 763',
+      r'Mbf21: SPOS: A_AddFlags 262144 0, flags now 4456454 0', r'Mbf21: SPOS: A_JumpIfFlagsSet 262144 0, to state 765',
+      r'Mbf21: SPOS: A_FindTracer, the player at', r'Mbf21: SPOS: A_JumpIfTracerInSight, to state 767',
+      r'Mbf21: SPOS: A_JumpIfTracerCloser 512 \(at \d+\), to state 768', r'Mbf21: SPOS: A_ClearTracer',
+      r'Mbf21: SARG: A_JumpIfHealthBelow 100 \(health 90\), to state 769',
+      r'Mbf21: SARG: A_JumpIfTargetInSight, to state 770', r'Mbf21: SARG: A_RemoveFlags 2 0, flags now 4194308 0'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21jump.deh'), '--fixed-step'],
+     lambda config: check_mbf21_jumps(config)),
+    # MBF21's A_HealChase (mbf21jump.deh): an imp raises a zombieman's
+    # corpse, which then attacks at once (a jump into its missile state).
+    ('mbf21-heal', 'E1M1',
+     'Y,W:0.3,A:0,CORPSE:3004:150,W:2,P:3001:250,W:3,Q',
+     [r'Mbf21: TROO: A_HealChase, to state 771', r'Raise: TROO raised POSS',
+      r'Mbf21: POSS: A_JumpIfTargetCloser 200 \(at \d+\), to state 184'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21jump.deh'), '--fixed-step'], None),
     # ZDoom's blocking flags (udmf-block.wad): line 834 at x -256 stops
     # the player walking east, bullets both ways and a rocket (it
     # explodes at the line, close to the player); an imp spawned behind
@@ -1093,6 +1114,20 @@ def check_friction(config):
     assert p[2]['x'] - p[1]['x'] > 30, 'ice: no slide, %s -> %s' % (p[1]['x'], p[2]['x'])
     walked = p[4]['y'] - p[3]['y']
     assert 20 < walked < 120, 'mud: walked %s' % walked
+
+
+def check_mbf21_jumps(config):
+    """mbf21jump.deh: the shotgun guy keeps MF_SHADOW, the demon loses
+    MF_SOLID (it no longer collides), also after the load (the spawned
+    ones are the last of their kind)."""
+    for n in (1, 2, 3):
+        actors = save_json(config, n)['actors']
+        spos = [a for a in actors if a.get('type') == 9]
+        assert spos and spos[-1].get('flags', [0])[0] & 262144, 'save %d: shotgun guy not fuzz: %s' % (n, spos)
+        if n > 1:
+            sarg = [a for a in actors if a.get('type') == 3002]
+            assert sarg and not sarg[-1]['collides'] and not sarg[-1]['flags'][0] & 2, \
+                'save %d: demon still solid: %s' % (n, sarg)
 
 
 def check_monster_friction(config):

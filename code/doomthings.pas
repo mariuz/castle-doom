@@ -60,6 +60,13 @@ const
     'FORCERADIUSDMG', 'HIGHERMPROB', 'RANGEHALF', 'NOTHRESHOLD', 'LONGMELEE', 'BOSS', 'MAP07BOSS1',
     'MAP07BOSS2', 'E1M8BOSS', 'E2M8BOSS', 'E3M8BOSS', 'E4M6BOSS', 'E4M8BOSS', 'RIP', 'FULLVOLSOUNDS');
 
+const
+  { mobjinfo flags (MF_*) the actors keep their own copy of. }
+  MobjFlagSolid = 2;
+  MobjFlagShootable = 4;
+  MobjFlagShadow = 262144;
+  MobjFlagTranslucent = Integer($80000000);
+
 type
 
   { The frame sequences of a thing, walked from its mobjinfo entry states

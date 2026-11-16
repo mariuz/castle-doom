@@ -66,6 +66,12 @@ procedure ResetStates;
 function WalkStates(const Start: Integer; const Stop: array of Integer;
   const MaxLen: Integer = 64): TFrameSeq;
 
+{ Whether the chain from state Start reaches state Target (zero-tic
+  states too) before S_NULL, a state already visited, one of Stop (but
+  Start) or MaxLen states. }
+function ChainReaches(const Start, Target: Integer; const Stop: array of Integer;
+  const MaxLen: Integer = 64): Boolean;
+
 { The mobjinfo row with this THINGS type number, -1 if none. }
 function MobjIndexOf(const DoomedNum: Integer): Integer;
 
@@ -241,6 +247,25 @@ begin
     Result.Tics[N] := States[S].Tics;
     Inc(N);
     S := States[S].Next;
+  end;
+end;
+
+function ChainReaches(const Start, Target: Integer; const Stop: array of Integer;
+  const MaxLen: Integer): Boolean;
+var
+  S, N, I: Integer;
+begin
+  Result := false;
+  S := Start;
+  N := 0;
+  while (S > 0) and (S < Length(States)) and (N < MaxLen) do
+  begin
+    if S = Target then Exit(true);
+    Inc(N);
+    S := States[S].Next;
+    if S = Start then Exit;
+    for I := 0 to High(Stop) do
+      if Stop[I] = S then Exit;
   end;
 end;
 

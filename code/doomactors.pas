@@ -131,6 +131,14 @@ type
     Shooter: TDoomActor;
     { Monsters: who they are after; nil means the player. }
     Target: TDoomActor;
+    { MBF21's tracer (A_FindTracer): TracerSet with Tracer nil means the
+      player. }
+    Tracer: TDoomActor;
+    TracerSet: Boolean;
+    { The thing's mobjinfo flags (MF_*) and MBF21 bits (Mbf21*), its own
+      copy that A_AddFlags / A_RemoveFlags change (ApplyFlags then shows
+      MF_SHADOW, MF_TRANSLUCENT and MF_SOLID). }
+    Flags, Flags2: Integer;
     { Lost souls: flying at the target (A_SkullAttack / MF_SKULLFLY). }
     Charging: Boolean;
     { Flyer that rose or sank towards an opening this tic (MF_INFLOAT). }
@@ -161,6 +169,9 @@ type
     destructor Destroy; override;
     { Never draw this thing (teleport destinations, boss spots). }
     procedure HideSprite;
+    { Show Flags: fuzz (MF_SHADOW), see-through (MF_TRANSLUCENT) and,
+      unless dead, solid (MF_SOLID). }
+    procedure ApplyFlags;
     { Start playing a frame sequence like 'ABCD' at TicsPerFrame tics each. }
     procedure PlaySequence(const Frames: String; const TicsPerFrame: Integer; const Loop: Boolean);
     { Start playing a sequence from the state table: each frame with its
@@ -638,6 +649,16 @@ begin
   FShown := true;
   BuildScene;
   Fuzz := Info^.Shadow;
+  if (Info^.Mobj >= 0) and (Info^.Mobj < Length(Mobjs)) then
+    Flags := Mobjs[Info^.Mobj].Flags
+  else
+  begin
+    Flags := 0;
+    if Info^.Solid then Flags := Flags or MobjFlagSolid;
+    if Info^.Shadow then Flags := Flags or MobjFlagShadow;
+    if Info^.Translucent then Flags := Flags or MobjFlagTranslucent;
+  end;
+  Flags2 := Info^.Mbf21Bits;
   Billboard := TCastleBillboard.Create(Self);
   Billboard.AxisOfRotation := Vector3(0, 1, 0);
   AddBehavior(Billboard);
@@ -824,6 +845,16 @@ begin
   FFrame := FSequence[1];
   ApplyFrameData;
   ApplySprite;
+end;
+
+procedure TDoomActor.ApplyFlags;
+begin
+  Fuzz := (Flags and MobjFlagShadow) <> 0;
+  if not (State in [asDying, asDead]) then
+    Collides := (Flags and MobjFlagSolid) <> 0;
+  { Regroup the quad (fuzz and translucency are light groups). }
+  FLightValue := Vector2(-1, -1);
+  if FGroup <> nil then SetLight(FLastLight);
 end;
 
 function TDoomActor.GetThingType: Integer;
@@ -1019,7 +1050,7 @@ begin
   if TVector2.PerfectlyEquals(FLightValue, V) and (FGroup <> nil) and (FAppliedLook = Look) then Exit;
   FLightValue := V;
   FAppliedLook := Look;
-  NewGroup := FBatch.GroupFor(Light, Round(V.Y), (not Fuzz) and Info^.Translucent, Look);
+  NewGroup := FBatch.GroupFor(Light, Round(V.Y), (not Fuzz) and ((Flags and MobjFlagTranslucent) <> 0), Look);
   if NewGroup <> FGroup then
   begin
     FGroup := NewGroup;
