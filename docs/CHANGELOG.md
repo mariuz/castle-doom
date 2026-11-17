@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Map editor: the properties panel edits the back side's per-part offsets and scales and the
+  top / bottom scaling of UDMF lines, takes wall textures and flats typed by name (any map
+  format), and scrolls when the list is longer than the screen.
 - ZDoom's `TERRAIN` lumps: splashes where the player lands, monsters step down and missiles
   hit a liquid floor (ZDoom's splash sprites when the WAD has them, a puff otherwise; sounds
   through `SNDINFO`), footclip (the player's eye and monsters sink into liquids), damaging

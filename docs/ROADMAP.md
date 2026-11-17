@@ -130,8 +130,15 @@ L = several days). Items inside a section are in suggested order.
   offsets (top, middle, bottom) and middle scaling (kept in the side's
   UDMF text, `TUdmfProp.OnSide`), fractions typed with a dot and
   string fields (`arg0str`, the script name) in the panel; values are
-  handled as text (`UdmfPropText`, `UdmfValueOf`). Left: the back
-  side's per-part fields and the top / bottom scaling.
+  handled as text (`UdmfPropText`, `UdmfValueOf`). Then the back
+  side's per-part offsets and scales and the front's top / bottom
+  scaling (`TUdmfProp.Side`: -1 the record, 0 / 1 the front / back
+  side's text; appended after the original nine so scripts keep their
+  places), texture names typed in the panel (lines: both sides' upper,
+  middle and lower; sectors: the flats; at the end of the list, any
+  map format, checked against the WADs' names: `TexField`,
+  `SetTexProp`) and a panel that scrolls around the chosen field
+  (`RenderProps`). Autotest `editor-sides` (goldens).
 
 - Hexen-format maps: the binary format with a `BEHAVIOR` lump
   (16-byte linedefs, 20-byte things) read by `TDoomMap.LoadLumps`
@@ -1662,21 +1669,22 @@ play.
 |---|---|---|---|
 | **Random maps, the next steps**: doors, a locked exit door, stairs, windows and secret closets are done (see above); left are more keys (a second lock on later maps, keys in side branches), lifts for height changes over 96, teleporters, outdoor areas with pillars, rooms that are not rectangles (cut a rectangle's corner with a diagonal node), and a seed typed in the menu. | More varied random levels; the BSP-from-splits idea keeps working as long as every leaf stays convex. | `DoomRandomMap`, `DoomMenu` | M |
 | **Demos, the rest**: recording, playback, several levels, the menu, cheats, the browser, ghosts and the compact format are done (see above); left are choosing between several kept demos in the browser, a ghost picked from the menu (Options -> Race ghost...), the ghost's time on the intermission screen, and ghosts of random maps and PWADs (the race loads the IWAD's map today). | Replays; races. | `DoomDemo`, `GameViewPlay`, `GameViewMenu` | S |
-| **Map editor, the rest**: done (see above: the 2D editor, play-test, exports with things and sky, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors with holes, the 3D preview, opening PWADs, picking in 3D, the map list, texture alignment). UDMF maps load and save as UDMF and the panel edits their fields (see above); left: the back side's per-part fields. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M |
+| **Map editor, the rest**: done (see above: the 2D editor, play-test, exports with things and sky, the picture picker, multiple selection, rooms against walls, cuts, deletion, flags, typed values, flipping, copying sectors with holes, the 3D preview, opening PWADs, picking in 3D, the map list, texture alignment). UDMF maps load and save as UDMF and the panel edits their fields (see above); the back side's per-part fields, top / bottom scaling and typed texture names are done too. | A complete small editor. | `GameViewEdit`, `DoomEditMap`, `DoomExport` | M |
 
 ## Suggested next three
 
-1. Map editor, back sides and scaling (S): the back side's per-part
-   offsets, top and bottom texture scaling, and texture names typed
-   in the panel instead of picked.
-2. MBF21, the weapons (M): the weapon pointers (`A_WeaponProjectile`,
+1. MBF21, the weapons (M): the weapon pointers (`A_WeaponProjectile`,
    `A_WeaponBulletAttack`, `A_WeaponMeleeAttack`, `A_WeaponSound`,
    `A_WeaponAlert`, `A_WeaponJump`, `A_ConsumeAmmo`, `A_CheckAmmo`,
    `A_RefireTo`, `A_GunFlashTo`) on the weapon's frames, then missiles
    that play their own state frames (`A_SeekTracer`, vanilla's
    `A_Tracer` for the revenant's rockets).
-3. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
+2. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
    water (the slab's top flat), and sounds blocked by slabs.
+3. Boom specials, the rest (S each): deep water's colormaps as a real
+   palette remapping (a screen tint now), the sky offsets of a sky
+   transfer line's sidedef, and the sky behind upper walls between sky
+   sectors of different skies.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

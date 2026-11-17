@@ -2075,8 +2075,13 @@ and its arguments; `SectorUdmfProps`: light and fade colours, typed
 and shown in hex, plane light and rotation), read and written with
 `UdmfFieldText` / `SetUdmfFieldText` (a value equal to the field's
 default removes the line); lines in any UDMF namespace also get
-`LineLookProps` (alpha and the front side's per-part offsets and
-middle scaling, `OnSide` fields living in the side's text). Values go
+`LineLookProps` (alpha and both sides' per-part offsets and scales;
+`TUdmfProp.Side` names the side whose text a field lives in, -1 the
+line's own). After the UDMF fields come texture fields in any map
+format (`TexField`: lines' upper / middle / lower on both sides,
+sectors' flats; `ApplyProp` checks a typed name against the WADs'
+textures or flats, `-` clears a wall texture). A list longer than the
+screen scrolls around the chosen field (`RenderProps`). Values go
 through the panel as text (`UdmfPropText` shows, `UdmfValueOf` checks
 and formats: booleans 1 / 0, colours in hex, floats with a dot,
 strings quoted). A vertex read with a fraction keeps it

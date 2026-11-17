@@ -736,7 +736,14 @@ in hex: `TYPE:FF8040`), Fade colour, plane light and rotation; things:
 activation booleans come Script name (`TYPE:Greet`, any character),
 Alpha and the front side's Mid / Top / Bottom offsets and Mid scale
 (fractions: `TYPE:0.5`) (autotest `editor-udmf-fields` with goldens
-checks the exported TEXTMAP). A clear spot in E1M1's start room for a
+checks the exported TEXTMAP). Then the front's top / bottom scales and
+the back side's 12 fields, and last the texture fields (lines: Front
+upper ... Back lower; sectors: Floor flat, Ceiling flat; any format):
+`KEY:Up` from the first field wraps to the last, so on line 834 of
+udmf-things.wad `KEY:Up,TYPE:BROWN1,KEY:Enter` sets the back side's
+lower texture (a wrong name logs `Editor: No texture NOSUCH`; autotest
+`editor-sides` with goldens). A zdoom line has 51 fields; the panel
+scrolls. A clear spot in E1M1's start room for a
 room: `DRAW:-480:192:-352:192:-352:288:-480:288` (autotest `editor`
 raises it to 24 and play-tests standing on it; its exported WAD is
 checked with Python `struct`, `check_map_wad`). `--export-map MAP FILE`,
