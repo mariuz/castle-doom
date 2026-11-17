@@ -4,7 +4,7 @@ E1M1, for the terrain autotest and the unit test TestTerrain.
 
 - E1M1's corridor east of the start room (sector 141, floor 0) becomes
   a pool: floor -16 with the FWATER1 flat (the sides facing into it get
-  lower textures, their middle or upper one); TERRAIN makes FWATER1 "Water": liquid, footclip 10,
+  lower textures, their middle or upper one, else BROWN1); TERRAIN makes FWATER1 "Water": liquid, footclip 10,
   2 damage every 16 tics (a radiation suit protects), the "Water" splash
   (small: WaterSplashBase and world/drip; big: WaterSplashBase on the
   surface, WaterSplash chunks thrown up, world/watersplash).
@@ -136,7 +136,7 @@ def main():
         if lower.rstrip(b'\0') in (b'', b'-'):
             tex = middle if middle.rstrip(b'\0') not in (b'', b'-') else upper
             if tex.rstrip(b'\0') in (b'', b'-'):
-                tex = b'STARTAN3'
+                tex = b'BROWN1\0\0'
             struct.pack_into('<8s', sides, 30 * side + 12, tex)
     for i in range(start + 1, start + 11):
         lumps.append((names[i], bytes(raw[names[i]])))

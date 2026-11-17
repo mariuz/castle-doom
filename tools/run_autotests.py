@@ -795,6 +795,20 @@ TESTS = [
       r'Map: E1M1: UDMF look: 1 coloured sectors'],
      ['--edit', '-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad')],
      lambda config: check_editor_udmf_fields(config)),
+    # The panel's side fields and typed textures (udmf-things.wad): line
+    # 834's back side (bottom texture, top X scale 2, mid X offset 16),
+    # its front's top scale and upper texture (a wrong name refused),
+    # sector 140's flats, in the exported TEXTMAP; the long list scrolls.
+    ('editor-sides', 'E1M1',
+     'VIEW:-300:256:0.5,MODE:l,CLICK:-256:256,KEY:E,KEY:Up,TYPE:BROWN1,KEY:Enter,KEY:Up,KEY:Up,KEY:Up,KEY:Up,KEY:Up,TYPE:NOSUCH,KEY:Enter,KEY:BackSpace,KEY:BackSpace,KEY:BackSpace,KEY:BackSpace,KEY:BackSpace,KEY:BackSpace,TYPE:COMPTALL,KEY:Enter,'
+     'KEY:Up,KEY:Up,KEY:Up,KEY:Up,TYPE:2,KEY:Enter,KEY:Up,KEY:Up,KEY:Up,KEY:Up,KEY:Up,KEY:Up,KEY:Up,KEY:Up,TYPE:16,KEY:Enter,KEY:Up,KEY:Up,KEY:Up,KEY:Up,TYPE:0.5,KEY:Enter,S,KEY:Escape,'
+     'MODE:s,CLICK:-416:240,KEY:E,KEY:Up,TYPE:FLOOR7_2,KEY:Enter,KEY:Up,TYPE:GRASS1,KEY:Enter,S,KEY:Escape,EXPORT,Q',
+     [r'Editor: Line 834: Back lower BROWN1', r'Editor: No texture NOSUCH', r'Editor: Line 834: Front upper COMPTALL',
+      r'Editor: Line 834: Back top X scale 2\.0', r'Editor: Line 834: Back mid X offset 16\.0',
+      r'Editor: Line 834: Top X scale 0\.5', r'Editor: Sector 140: Ceiling flat FLOOR7_2',
+      r'Editor: Sector 140: Floor flat GRASS1', r'Editor: Exported E1M1'],
+     ['--edit', '-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-things.wad')],
+     lambda config: check_editor_sides(config)),
     ('editor-props', 'E1M1',
      'VIEW:-416:256:0.5,DRAW:-480:192:-352:192:-352:288:-480:288,MODE:s,CLICK:-416:240,KEY:E,TYPE:24,KEY:Enter,'
      'KEY:Down,KEY:Down,TYPE:255,KEY:Enter,S,KEY:E,KEY:Ctrl+C,MOUSE:-416:-300,KEY:Ctrl+V,MOUSE:-900:256,KEY:Ctrl+V,S,'
@@ -1496,6 +1510,24 @@ def check_editor_udmf_fields(config):
     assert any('id = 77;' in b and 'type = 1;' in b for k, n, b in blocks if k == 'thing'), 'no thing id 77'
 
 
+def check_editor_sides(config):
+    """Line 834's sides and sector 140's flats in the exported TEXTMAP."""
+    lumps = read_wad(os.path.join(os.path.dirname(config), 'editor-sides_e1m1.wad'))
+    text = lumps[1][1].decode('latin-1')
+    blocks = re.findall(r'(\w+) // (\d+)\n\{\n(.*?)\}', text, re.S)
+    line = [b for k, n, b in blocks if k == 'linedef' and n == '834'][0]
+    sides = {}
+    for key in ('sidefront', 'sideback'):
+        num = re.search(key + r' = (\d+);', line).group(1)
+        sides[key] = [b for k, n, b in blocks if k == 'sidedef' and n == num][0]
+    assert 'texturebottom = "BROWN1";' in sides['sideback'], sides['sideback']
+    assert 'scalex_top = 2.0;' in sides['sideback'] and 'offsetx_mid = 16.0;' in sides['sideback'], sides['sideback']
+    assert 'texturetop = "COMPTALL";' in sides['sidefront'] and 'scalex_top = 0.5;' in sides['sidefront'], \
+        sides['sidefront']
+    sec = [b for k, n, b in blocks if k == 'sector' and n == '140'][0]
+    assert 'texturefloor = "GRASS1";' in sec and 'textureceiling = "FLOOR7_2";' in sec, sec
+
+
 def check_editor_props(config):
     """Typed values, pasted sectors and a flipped line in the exported PWAD:
     sector 182 (floor 24, light 255) and its two copies, line 1176 turned
@@ -1612,6 +1644,7 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'editor-sides_edit_1.png', 'editor-sides_edit_2.png',
     'terrain_1.png',
     'mbf21-jumps_1.png',
     'debug-draw_1.png', 'debug-draw_2.png',

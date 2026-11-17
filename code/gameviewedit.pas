@@ -48,14 +48,14 @@ uses Classes, SysUtils,
 type
   TEditMode = (emVertices, emLines, emSectors, emThings);
   TUdmfPropKind = (upInt, upBool, upColor, upFloat, upString);
-  { A UDMF field the panel edits in a record's kept text (OnSide: the
-    line's front side's), written when it differs from Default (else
-    left out). }
+  { A UDMF field the panel edits in a record's kept text (Side 0 / 1:
+    the line's front / back side's, -1 the record's own), written when it
+    differs from Default (else left out). }
   TUdmfProp = record
     Name, Key: String;
     Kind: TUdmfPropKind;
     Default: Double;
-    OnSide: Boolean;
+    Side: Integer;
   end;
   TEditIndexArray = array of Integer;
 
@@ -214,8 +214,14 @@ type
     function PropKind(const Field: Integer): TUdmfPropKind;
     function UdmfPropAt(const U: Integer): TUdmfProp;
     function PropText(const Index, Field: Integer): String;
-    function RecordUdmf(const Index: Integer; const OnSide: Boolean): String;
-    procedure SetRecordUdmf(const Index: Integer; const OnSide: Boolean; const Text: String);
+    function RecordUdmf(const Index: Integer; const Side: Integer): String;
+    procedure SetRecordUdmf(const Index: Integer; const Side: Integer; const Text: String);
+    { The texture fields after the UDMF ones (lines: the sides' upper,
+      middle and lower; sectors: the flats), typed by name. }
+    function TexPropCount: Integer;
+    function TexField(const Field: Integer): Integer;
+    function TexPropText(const Index, T: Integer): String;
+    function SetTexProp(const Index, T: Integer; const TexName: String): Boolean;
     function UdmfPropText(const Index, U: Integer): String;
     function UdmfValueOf(const U: Integer; const Text: String; out Value: String): Boolean;
     procedure SetUdmfPropValue(const Index, U: Integer; const Value: String);
@@ -1272,51 +1278,69 @@ const
 const
   { Lines in Hexen-special namespaces (arg0 is the Tag field). }
   LineHexenProps: array [0..13] of TUdmfProp = (
-    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Line id'; Key: 'id'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Player cross'; Key: 'playercross'; Kind: upBool; Default: 0; OnSide: false),
-    (Name: 'Player use'; Key: 'playeruse'; Kind: upBool; Default: 0; OnSide: false),
-    (Name: 'Monster cross'; Key: 'monstercross'; Kind: upBool; Default: 0; OnSide: false),
-    (Name: 'Monster use'; Key: 'monsteruse'; Kind: upBool; Default: 0; OnSide: false),
-    (Name: 'Impact'; Key: 'impact'; Kind: upBool; Default: 0; OnSide: false),
-    (Name: 'Player push'; Key: 'playerpush'; Kind: upBool; Default: 0; OnSide: false),
-    (Name: 'Missile cross'; Key: 'missilecross'; Kind: upBool; Default: 0; OnSide: false),
-    (Name: 'Repeat'; Key: 'repeatspecial'; Kind: upBool; Default: 0; OnSide: false),
-    (Name: 'Script name'; Key: 'arg0str'; Kind: upString; Default: 0; OnSide: false));
+    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Line id'; Key: 'id'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Player cross'; Key: 'playercross'; Kind: upBool; Default: 0; Side: -1),
+    (Name: 'Player use'; Key: 'playeruse'; Kind: upBool; Default: 0; Side: -1),
+    (Name: 'Monster cross'; Key: 'monstercross'; Kind: upBool; Default: 0; Side: -1),
+    (Name: 'Monster use'; Key: 'monsteruse'; Kind: upBool; Default: 0; Side: -1),
+    (Name: 'Impact'; Key: 'impact'; Kind: upBool; Default: 0; Side: -1),
+    (Name: 'Player push'; Key: 'playerpush'; Kind: upBool; Default: 0; Side: -1),
+    (Name: 'Missile cross'; Key: 'missilecross'; Kind: upBool; Default: 0; Side: -1),
+    (Name: 'Repeat'; Key: 'repeatspecial'; Kind: upBool; Default: 0; Side: -1),
+    (Name: 'Script name'; Key: 'arg0str'; Kind: upString; Default: 0; Side: -1));
   { Lines in any UDMF map: the opacity and the front side's per-part
     texture offsets and scaling. }
-  LineLookProps: array [0..8] of TUdmfProp = (
-    (Name: 'Alpha'; Key: 'alpha'; Kind: upFloat; Default: 1; OnSide: false),
-    (Name: 'Mid X offset'; Key: 'offsetx_mid'; Kind: upFloat; Default: 0; OnSide: true),
-    (Name: 'Mid Y offset'; Key: 'offsety_mid'; Kind: upFloat; Default: 0; OnSide: true),
-    (Name: 'Mid X scale'; Key: 'scalex_mid'; Kind: upFloat; Default: 1; OnSide: true),
-    (Name: 'Mid Y scale'; Key: 'scaley_mid'; Kind: upFloat; Default: 1; OnSide: true),
-    (Name: 'Top X offset'; Key: 'offsetx_top'; Kind: upFloat; Default: 0; OnSide: true),
-    (Name: 'Top Y offset'; Key: 'offsety_top'; Kind: upFloat; Default: 0; OnSide: true),
-    (Name: 'Bottom X offset'; Key: 'offsetx_bottom'; Kind: upFloat; Default: 0; OnSide: true),
-    (Name: 'Bottom Y offset'; Key: 'offsety_bottom'; Kind: upFloat; Default: 0; OnSide: true));
+  { The original nine first (scripts count Down presses to reach them),
+    then the front's top / bottom scales and the back side's. }
+  LineLookProps: array [0..24] of TUdmfProp = (
+    (Name: 'Alpha'; Key: 'alpha'; Kind: upFloat; Default: 1; Side: -1),
+    (Name: 'Mid X offset'; Key: 'offsetx_mid'; Kind: upFloat; Default: 0; Side: 0),
+    (Name: 'Mid Y offset'; Key: 'offsety_mid'; Kind: upFloat; Default: 0; Side: 0),
+    (Name: 'Mid X scale'; Key: 'scalex_mid'; Kind: upFloat; Default: 1; Side: 0),
+    (Name: 'Mid Y scale'; Key: 'scaley_mid'; Kind: upFloat; Default: 1; Side: 0),
+    (Name: 'Top X offset'; Key: 'offsetx_top'; Kind: upFloat; Default: 0; Side: 0),
+    (Name: 'Top Y offset'; Key: 'offsety_top'; Kind: upFloat; Default: 0; Side: 0),
+    (Name: 'Bottom X offset'; Key: 'offsetx_bottom'; Kind: upFloat; Default: 0; Side: 0),
+    (Name: 'Bottom Y offset'; Key: 'offsety_bottom'; Kind: upFloat; Default: 0; Side: 0),
+    (Name: 'Top X scale'; Key: 'scalex_top'; Kind: upFloat; Default: 1; Side: 0),
+    (Name: 'Top Y scale'; Key: 'scaley_top'; Kind: upFloat; Default: 1; Side: 0),
+    (Name: 'Bottom X scale'; Key: 'scalex_bottom'; Kind: upFloat; Default: 1; Side: 0),
+    (Name: 'Bottom Y scale'; Key: 'scaley_bottom'; Kind: upFloat; Default: 1; Side: 0),
+    (Name: 'Back mid X offset'; Key: 'offsetx_mid'; Kind: upFloat; Default: 0; Side: 1),
+    (Name: 'Back mid Y offset'; Key: 'offsety_mid'; Kind: upFloat; Default: 0; Side: 1),
+    (Name: 'Back mid X scale'; Key: 'scalex_mid'; Kind: upFloat; Default: 1; Side: 1),
+    (Name: 'Back mid Y scale'; Key: 'scaley_mid'; Kind: upFloat; Default: 1; Side: 1),
+    (Name: 'Back top X offset'; Key: 'offsetx_top'; Kind: upFloat; Default: 0; Side: 1),
+    (Name: 'Back top Y offset'; Key: 'offsety_top'; Kind: upFloat; Default: 0; Side: 1),
+    (Name: 'Back bottom X offset'; Key: 'offsetx_bottom'; Kind: upFloat; Default: 0; Side: 1),
+    (Name: 'Back bottom Y offset'; Key: 'offsety_bottom'; Kind: upFloat; Default: 0; Side: 1),
+    (Name: 'Back top X scale'; Key: 'scalex_top'; Kind: upFloat; Default: 1; Side: 1),
+    (Name: 'Back top Y scale'; Key: 'scaley_top'; Kind: upFloat; Default: 1; Side: 1),
+    (Name: 'Back bottom X scale'; Key: 'scalex_bottom'; Kind: upFloat; Default: 1; Side: 1),
+    (Name: 'Back bottom Y scale'; Key: 'scaley_bottom'; Kind: upFloat; Default: 1; Side: 1));
   { Things in any UDMF map; the special and its arguments only with
     Hexen's specials. }
   ThingUdmfProps: array [0..7] of TUdmfProp = (
-    (Name: 'Thing id'; Key: 'id'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Height'; Key: 'height'; Kind: upFloat; Default: 0; OnSide: false),
-    (Name: 'Special'; Key: 'special'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Arg 0'; Key: 'arg0'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0; OnSide: false));
+    (Name: 'Thing id'; Key: 'id'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Height'; Key: 'height'; Kind: upFloat; Default: 0; Side: -1),
+    (Name: 'Special'; Key: 'special'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Arg 0'; Key: 'arg0'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Arg 1'; Key: 'arg1'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Arg 2'; Key: 'arg2'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Arg 3'; Key: 'arg3'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Arg 4'; Key: 'arg4'; Kind: upInt; Default: 0; Side: -1));
   { Sectors in any UDMF map: the look fields (colours in hex). }
   SectorUdmfProps: array [0..5] of TUdmfProp = (
-    (Name: 'Light colour'; Key: 'lightcolor'; Kind: upColor; Default: $FFFFFF; OnSide: false),
-    (Name: 'Fade colour'; Key: 'fadecolor'; Kind: upColor; Default: 0; OnSide: false),
-    (Name: 'Floor light'; Key: 'lightfloor'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Ceiling light'; Key: 'lightceiling'; Kind: upInt; Default: 0; OnSide: false),
-    (Name: 'Floor rotation'; Key: 'rotationfloor'; Kind: upFloat; Default: 0; OnSide: false),
-    (Name: 'Ceiling rotation'; Key: 'rotationceiling'; Kind: upFloat; Default: 0; OnSide: false));
+    (Name: 'Light colour'; Key: 'lightcolor'; Kind: upColor; Default: $FFFFFF; Side: -1),
+    (Name: 'Fade colour'; Key: 'fadecolor'; Kind: upColor; Default: 0; Side: -1),
+    (Name: 'Floor light'; Key: 'lightfloor'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Ceiling light'; Key: 'lightceiling'; Kind: upInt; Default: 0; Side: -1),
+    (Name: 'Floor rotation'; Key: 'rotationfloor'; Kind: upFloat; Default: 0; Side: -1),
+    (Name: 'Ceiling rotation'; Key: 'rotationceiling'; Kind: upFloat; Default: 0; Side: -1));
 
 function TViewEdit.BasePropCount: Integer;
 begin
@@ -1362,7 +1386,70 @@ end;
 
 function TViewEdit.PropCount: Integer;
 begin
-  Result := BasePropCount + UdmfPropCount;
+  Result := BasePropCount + UdmfPropCount + TexPropCount;
+end;
+
+const
+  LineTexProps: array [0..5] of String = ('Front upper', 'Front middle', 'Front lower', 'Back upper',
+    'Back middle', 'Back lower');
+  SectorTexProps: array [0..1] of String = ('Floor flat', 'Ceiling flat');
+
+function TViewEdit.TexPropCount: Integer;
+begin
+  case FMode of
+    emLines: Result := Length(LineTexProps);
+    emSectors: Result := Length(SectorTexProps);
+    else Result := 0;
+  end;
+end;
+
+{ The texture field Field is (-1 another kind). }
+function TViewEdit.TexField(const Field: Integer): Integer;
+begin
+  Result := Field - BasePropCount - UdmfPropCount;
+  if (Result < 0) or (Result >= TexPropCount) then Result := -1;
+end;
+
+{ A texture field's name: '-' for none, '' for a side the line lacks. }
+function TViewEdit.TexPropText(const Index, T: Integer): String;
+var
+  S: Integer;
+begin
+  Result := '';
+  if FMode = emSectors then
+  begin
+    if T = 0 then Result := FEdit.Sectors[Index].FloorTex else Result := FEdit.Sectors[Index].CeilingTex;
+    Exit;
+  end;
+  S := FEdit.Lines[Index].Side[T div 3];
+  if S < 0 then Exit;
+  case T mod 3 of
+    0: Result := FEdit.Sides[S].Upper;
+    1: Result := FEdit.Sides[S].Middle;
+    else Result := FEdit.Sides[S].Lower;
+  end;
+  if Result = '' then Result := '-';
+end;
+
+{ Set a texture field (the name checked by ApplyProp); false when the
+  line has no such side. }
+function TViewEdit.SetTexProp(const Index, T: Integer; const TexName: String): Boolean;
+var
+  S: Integer;
+begin
+  Result := true;
+  if FMode = emSectors then
+  begin
+    if T = 0 then FEdit.Sectors[Index].FloorTex := TexName else FEdit.Sectors[Index].CeilingTex := TexName;
+    Exit;
+  end;
+  S := FEdit.Lines[Index].Side[T div 3];
+  if S < 0 then Exit(false);
+  case T mod 3 of
+    0: FEdit.Sides[S].Upper := TexName;
+    1: FEdit.Sides[S].Middle := TexName;
+    else FEdit.Sides[S].Lower := TexName;
+  end;
 end;
 
 { The UDMF field Field is (-1 a base field). }
@@ -1376,6 +1463,11 @@ function TViewEdit.PropName(const Field: Integer): String;
 begin
   if UdmfField(Field) >= 0 then
     Exit(UdmfPropAt(UdmfField(Field)).Name);
+  if TexField(Field) >= 0 then
+  begin
+    if FMode = emSectors then Exit(SectorTexProps[TexField(Field)]);
+    Exit(LineTexProps[TexField(Field)]);
+  end;
   case FMode of
     emSectors: Result := SectorProps[Field];
     emLines: Result := LineProps[Field];
@@ -1389,14 +1481,14 @@ end;
 
 { The kept text a field lives in: the record's, or its line's front
   side's (-1: a line without a front side). }
-function TViewEdit.RecordUdmf(const Index: Integer; const OnSide: Boolean): String;
+function TViewEdit.RecordUdmf(const Index: Integer; const Side: Integer): String;
 var
   S: Integer;
 begin
   Result := '';
-  if OnSide then
+  if Side >= 0 then
   begin
-    S := FEdit.Lines[Index].Side[0];
+    S := FEdit.Lines[Index].Side[Side];
     if S >= 0 then Result := FEdit.Sides[S].Udmf;
     Exit;
   end;
@@ -1408,13 +1500,13 @@ begin
   end;
 end;
 
-procedure TViewEdit.SetRecordUdmf(const Index: Integer; const OnSide: Boolean; const Text: String);
+procedure TViewEdit.SetRecordUdmf(const Index: Integer; const Side: Integer; const Text: String);
 var
   S: Integer;
 begin
-  if OnSide then
+  if Side >= 0 then
   begin
-    S := FEdit.Lines[Index].Side[0];
+    S := FEdit.Lines[Index].Side[Side];
     if S >= 0 then FEdit.Sides[S].Udmf := Text;
     Exit;
   end;
@@ -1458,7 +1550,7 @@ var
   C: Integer;
 begin
   P := UdmfPropAt(U);
-  T := UdmfFieldText(RecordUdmf(Index, P.OnSide), P.Key);
+  T := UdmfFieldText(RecordUdmf(Index, P.Side), P.Key);
   case P.Kind of
     upBool: if LowerCase(T) = 'true' then Result := '1' else Result := '0';
     upColor:
@@ -1539,16 +1631,18 @@ var
   T: String;
 begin
   P := UdmfPropAt(U);
-  if P.OnSide and (FEdit.Lines[Index].Side[0] < 0) then Exit;
-  T := RecordUdmf(Index, P.OnSide);
+  if (P.Side >= 0) and (FEdit.Lines[Index].Side[P.Side] < 0) then Exit;
+  T := RecordUdmf(Index, P.Side);
   SetUdmfFieldText(T, P.Key, Value);
-  SetRecordUdmf(Index, P.OnSide, T);
+  SetRecordUdmf(Index, P.Side, T);
 end;
 
 function TViewEdit.PropKind(const Field: Integer): TUdmfPropKind;
 begin
   if UdmfField(Field) >= 0 then
     Result := UdmfPropAt(UdmfField(Field)).Kind
+  else if TexField(Field) >= 0 then
+    Result := upString
   else
     Result := upInt;
 end;
@@ -1563,6 +1657,8 @@ function TViewEdit.PropText(const Index, Field: Integer): String;
 begin
   if UdmfField(Field) >= 0 then
     Result := UdmfPropText(Index, UdmfField(Field))
+  else if TexField(Field) >= 0 then
+    Result := TexPropText(Index, TexField(Field))
   else
     Result := IntToStr(PropValue(Index, Field));
 end;
@@ -1574,6 +1670,7 @@ begin
   Result := 0;
   if UdmfField(Field) >= 0 then
     Exit(StrToIntDef(UdmfPropText(Index, UdmfField(Field)), 0));
+  if TexField(Field) >= 0 then Exit;
   case FMode of
     emSectors:
       case Field of
@@ -1680,10 +1777,34 @@ end;
 
 procedure TViewEdit.ApplyProp;
 var
-  Value, I: Integer;
+  Value, I, Missing: Integer;
   Sel: TEditIndexArray;
   Written: String;
 begin
+  if TexField(FPropField) >= 0 then
+  begin
+    { A texture (lines; '-' clears it) or flat (sectors) by its name. }
+    Written := UpperCase(Trim(FPropText));
+    if (FMode = emLines) and (Written = '') then Written := '-';
+    if ((FMode = emLines) and (Written <> '-') and (FTextures.IndexOf(Written) < 0)) or
+       ((FMode = emSectors) and (FFlats.IndexOf(Written) < 0)) then
+    begin
+      if FMode = emSectors then LogAction('No flat ' + Written) else LogAction('No texture ' + Written);
+      Exit;
+    end;
+    Sel := Selection;
+    FEdit.Snapshot;
+    Missing := 0;
+    for I := 0 to High(Sel) do
+      if not SetTexProp(Sel[I], TexField(FPropField), Written) then Inc(Missing);
+    if FSelected >= 0 then
+      LogAction(Format('%s %d: %s %s%s', [Copy(ModeNames[FMode], 1, Length(ModeNames[FMode]) - 1), FSelected,
+        PropName(FPropField), PropText(FSelected, FPropField), MoreText]));
+    if Missing > 0 then
+      LogAction(Format('%d of the lines have no such side', [Missing]));
+    FPropText := '';
+    Exit;
+  end;
   if UdmfField(FPropField) >= 0 then
   begin
     if not UdmfValueOf(UdmfField(FPropField), FPropText, Written) then
@@ -1751,6 +1872,11 @@ begin
   end;
   if (PropKind(FPropField) = upString) and (C >= ' ') and (C <= '~') then
   begin
+    { Texture names: eight characters, upper case. }
+    if TexField(FPropField) >= 0 then
+    begin
+      if (Length(FPropText) < 8) and (C <> ' ') then FPropText := FPropText + UpCase(C);
+    end else
     if Length(FPropText) < 32 then FPropText := FPropText + C;
     Exit;
   end;
@@ -1783,7 +1909,7 @@ end;
 procedure TViewEdit.RenderProps;
 var
   Font: TCastleFont;
-  I, Count: Integer;
+  I, Count, Rows, First: Integer;
   X, Y, LineH, W: Single;
   Text: String;
   Color: TCastleColor;
@@ -1795,11 +1921,15 @@ begin
   try
     Font.Size := Max(12, Container.PixelsHeight / 60);
     LineH := Font.Height * 1.35;
-    W := Font.TextWidth('> Ceiling rotation   -0000000.00_') + 20;
+    W := Font.TextWidth('> Back bottom X offset   -0000000.00_') + 20;
     X := Container.PixelsWidth - W - 10;
     Y := 10;
-    DrawRectangle(FloatRectangle(X - 8, Y - 6, W + 8, LineH * (Count + 1) + 10), Vector4(0.1, 0.12, 0.2, 0.95));
-    for I := 0 to Count - 1 do
+    { A long list (a UDMF line has over forty fields) shows the rows
+      around the chosen one. }
+    Rows := Min(Count, Max(5, Trunc((Container.PixelsHeight - 80) / LineH) - 1));
+    First := EnsureRange(FPropField - Rows div 2, 0, Count - Rows);
+    DrawRectangle(FloatRectangle(X - 8, Y - 6, W + 8, LineH * (Rows + 1) + 10), Vector4(0.1, 0.12, 0.2, 0.95));
+    for I := First to First + Rows - 1 do
     begin
       if I = FPropField then
       begin
@@ -1811,9 +1941,13 @@ begin
         Color := Vector4(0.9, 0.9, 0.9, 1);
         Text := '  ' + PropName(I) + '   ' + PropText(FSelected, I);
       end;
-      Font.Print(X, Y + LineH * (Count - 1 - I), Color, Text);
+      Font.Print(X, Y + LineH * (First + Rows - 1 - I), Color, Text);
     end;
-    Font.Print(X, Y + LineH * Count, Vector4(1, 0.85, 0.4, 1), 'Properties (E: close)');
+    if Rows < Count then
+      Font.Print(X, Y + LineH * Rows, Vector4(1, 0.85, 0.4, 1),
+        Format('Properties %d-%d of %d (E: close)', [First + 1, First + Rows, Count]))
+    else
+      Font.Print(X, Y + LineH * Rows, Vector4(1, 0.85, 0.4, 1), 'Properties (E: close)');
   finally
     Font.PopProperties;
   end;
