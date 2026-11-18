@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- MBF21: the weapon code pointers (`A_WeaponProjectile`, `A_WeaponBulletAttack`,
+  `A_WeaponMeleeAttack`, `A_WeaponSound`, `A_WeaponAlert`, `A_WeaponJump`, `A_ConsumeAmmo`,
+  `A_CheckAmmo`, `A_RefireTo`, `A_GunFlashTo`), DeHackEd's `Ammo per shot` and the weapons'
+  `MBF21 Bits` (`SILENT`).
 - Map editor: the properties panel edits the back side's per-part offsets and scales and the
   top / bottom scaling of UDMF lines, takes wall textures and flats typed by name (any map
   format), and scrolls when the list is longer than the screen.

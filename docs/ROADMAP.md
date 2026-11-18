@@ -48,6 +48,22 @@ L = several days). Items inside a section are in suggested order.
   follow state numbers instead of walked sequences, and the RIP,
   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
 
+- MBF21, the weapons: the ten weapon pointers on the attack frames
+  (`TDoomWorld.Mbf21WeaponAction`, arguments from the frame's state:
+  `RunWeaponFrame` passes `TFrameSeq.ActionStates`); jumps
+  (`A_WeaponJump`, `A_CheckAmmo`, `A_RefireTo`) replace the attack
+  frames playing (`FCurWeaponSeq`, `JumpWeapon`: the chain from the
+  state up to the ready / raise / lower state, whose own states end the
+  attack), `A_GunFlashTo` the flash playing (`FCurFlashSeq`);
+  `A_RefireTo` reads the trigger (`Player.FireHeld`, set by every
+  `DoFireWeapon`, cleared by `ReleaseFire`, so demos replay it); ammo
+  per shot (`AmmoCost`, DeHackEd's `Ammo per shot`, also for vanilla
+  pointers) and the weapons' `MBF21 Bits` (`SILENT`: no noise alert).
+  Autotests release fire after a script step only while no pad fire is
+  held (`PADDOWN:RT` holds the trigger through the tics).
+  `mbf21weapon.deh`; autotest `mbf21-weapons`, unit test `TestMbf21`.
+  Left: NOTHRUST, NOAUTOFIRE, FLEEMELEE and the auto-switch bits.
+
 - TERRAIN lumps (`DoomTerrain`, `TDoomWorld.LoadTerrain`): ZDoom's
   splash / terrain / floor / defaultterrain definitions (`ifdoom` read,
   other games' blocks skipped, `modify`, later lumps override). By
@@ -1673,12 +1689,11 @@ play.
 
 ## Suggested next three
 
-1. MBF21, the weapons (M): the weapon pointers (`A_WeaponProjectile`,
-   `A_WeaponBulletAttack`, `A_WeaponMeleeAttack`, `A_WeaponSound`,
-   `A_WeaponAlert`, `A_WeaponJump`, `A_ConsumeAmmo`, `A_CheckAmmo`,
-   `A_RefireTo`, `A_GunFlashTo`) on the weapon's frames, then missiles
-   that play their own state frames (`A_SeekTracer`, vanilla's
-   `A_Tracer` for the revenant's rockets).
+1. MBF21, missiles with state frames (M): projectiles that play their
+   own frames from the state table with their code pointers
+   (`A_SeekTracer`, vanilla's `A_Tracer` for the revenant's homing
+   rockets, MBF21's `A_SpawnObject` from a missile), and the RIP,
+   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
 2. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
    water (the slab's top flat), and sounds blocked by slabs.
 3. Boom specials, the rest (S each): deep water's colormaps as a real

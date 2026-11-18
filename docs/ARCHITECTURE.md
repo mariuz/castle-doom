@@ -333,8 +333,22 @@ world instead of `TThingInfo.Mbf21Bits`); `A_AddFlags` /
 translucency and solidity. `A_HealChase` in the walk
 (`HealChaseState`) makes `VileTryRaise` play the given heal state and
 sound. Saves keep `flags` (when they differ from the thing's), `tracer`
-and each sequence's `actionStates`. The weapon pointers need the
-weapon's state machine, and missiles do not play state frames.
+and each sequence's `actionStates`. Missiles do not play state frames.
+
+Weapons fire through the same walked sequences: `DoFireWeapon` starts
+the weapon's attack frames (`FCurWeaponSeq`, a copy of
+`FWeaponSeqs[W]`), `AdvanceWeaponFrames` runs each reached frame's
+pointer (`RunWeaponFrame`, with its `ActionStates` entry for MBF21's
+arguments) and `Mbf21WeaponAction` the ten MBF21 weapon pointers. A
+weapon jump (`FWeaponJump`, set by `A_WeaponJump`, `A_CheckAmmo`,
+`A_RefireTo`) makes `JumpWeapon` walk the chain from the state up to
+the weapon's ready / raise / lower state and restart the attack's clock
+on it (the flash keeps its own); a jump to one of those states ends the
+attack. `A_GunFlashTo` replaces the flash playing (`FCurFlashSeq`).
+`A_RefireTo` reads `Player.FireHeld` (set by every `DoFireWeapon`, so
+also before a cycle's first shot, unlike `Refire`, the accuracy flag).
+`AmmoCost` is DeHackEd's `Ammo per shot` when a patch gives one, else
+vanilla's; a SILENT weapon (`Weapons[W].Mbf21Bits`) makes no noise.
 
 ### Hexen-format maps (`TDoomMap.LoadLumps`)
 

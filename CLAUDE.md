@@ -1086,7 +1086,14 @@ autotest only checks the library loads.
   A_JumpIfTargetCloser 256 (at 200), to state 763` and the rest
   (autotest `mbf21-jumps` with a golden; saves hold `flags` and
   `tracer`), `Y,W:0.3,A:0,CORPSE:3004:150,W:2,P:3001:250,W:3` logs
-  `Raise: TROO raised POSS` (autotest `mbf21-heal`). MBF21's code pointer names are
+  `Raise: TROO raised POSS` (autotest `mbf21-heal`). Weapons:
+  `tools/testdata/mbf21weapon.deh` makes the pistol silent and 2
+  bullets a shot with MBF21 pointers on all its frames (three exact
+  bullets, `A_RefireTo` while held), the shotgun fire a rocket, flash,
+  alert, jump and end early, the fist reach 128: `Y,K,SHOTS,C:2,W:1,
+  A:0,PADDOWN:RT,W:1,PADUP:RT` logs `Mbf21: Weapon: A_RefireTo` and
+  `to state 13 (4 frames)` (autotest `mbf21-weapons`). A held fire in a
+  demo script is `PADDOWN:RT` (`X` fires for one frame). MBF21's code pointer names are
   appended by `tools/make_states.py` (`MBF21_ACTIONS`), its frame
   arguments are `DoomStates.StateArgs` / `StateArg`.
 - **TERRAIN** (`DoomTerrain`): `tools/testdata/terrain.wad`
