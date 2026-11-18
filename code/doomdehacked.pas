@@ -111,6 +111,23 @@ begin
         Result := Result or (1 shl I);
 end;
 
+{ A weapon's "MBF21 Bits" (NOTHRUST+SILENT...) or a number. }
+function WeaponBitsValue(const S: String): Integer;
+var
+  Words: TStringArray;
+  W: String;
+  I: Integer;
+begin
+  Result := StrToIntDef(Trim(S), -1);
+  if Result >= 0 then Exit;
+  Result := 0;
+  Words := S.Split(['+', '|', ',', ' ', #9], TStringSplitOptions.ExcludeEmpty);
+  for W in Words do
+    for I := 0 to High(WeaponBitNames) do
+      if SameText(W, WeaponBitNames[I]) then
+        Result := Result or (1 shl I);
+end;
+
 var
   DehFileNames, DehFileTexts: TStringList;
   DehPars: {$ifdef FPC}specialize{$endif} TDictionary<String, Integer>;
@@ -329,6 +346,12 @@ var
     else if SameText(Key, 'Bobbing frame') then Weapons[N].Ready := Max(0, StateNum(Value))
     else if SameText(Key, 'Shooting frame') then Weapons[N].Attack := Max(0, StateNum(Value))
     else if SameText(Key, 'Firing frame') then Weapons[N].Flash := Max(0, StateNum(Value))
+    else if SameText(Key, 'Ammo per shot') then begin Weapons[N].AmmoPerShot := Max(0, Value); Mbf21Patch := true; end
+    else if SameText(Key, 'MBF21 Bits') then
+    begin
+      Weapons[N].Mbf21Bits := WeaponBitsValue(ValueStr);
+      Mbf21Patch := true;
+    end
     else
     begin
       Inc(Ignored);

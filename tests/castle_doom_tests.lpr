@@ -3171,6 +3171,20 @@ begin
     AssertTrue('zombieman death sequence has the spawn',
       FindThingInfo(3004)^.Seqs[skDeath].Actions[1] = saSpawnObject);
     AssertEquals('its state', 190, FindThingInfo(3004)^.Seqs[skDeath].ActionStates[1]);
+    { The weapon patch: ammo per shot, weapon bits, weapon pointers. }
+    ClearDehackedFiles;
+    AddDehackedFile(Dir + 'mbf21weapon.deh');
+    ApplyDehacked(W);
+    AssertEquals('pistol ammo per shot', 2, Weapons[1].AmmoPerShot);
+    AssertEquals('pistol silent', WeaponSilent, Weapons[1].Mbf21Bits);
+    AssertEquals('shotgun ammo per shot: vanilla', -1, Weapons[2].AmmoPerShot);
+    AssertTrue('refire pointer', States[16].Action = saRefireTo);
+    AssertEquals('refire state', 13, StateArg(16, 0, 0));
+    AssertTrue('melee pointer', States[6].Action = saWeaponMeleeAttack);
+    AssertEquals('melee range (fixed 128.0)', 128 * 65536, StateArg(6, 4, 0));
+    AssertTrue('jump pointer', States[25].Action = saWeaponJump);
+    AssertEquals('jump chance', 256, StateArg(25, 1, 0));
+    AssertEquals('the pistol''s frames carry the states', 16, WalkStates(13, [10, 11, 12]).ActionStates[3]);
     { The jump patch: jumps, flags and tracers on Keen's free states. }
     ClearDehackedFiles;
     AddDehackedFile(Dir + 'mbf21jump.deh');

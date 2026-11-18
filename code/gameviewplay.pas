@@ -2891,7 +2891,9 @@ begin
   if AutoTestDemo <> '' then
   begin
     RunDemo(SecondsPassed);
-    if FWorld <> nil then FWorld.ReleaseFire;
+    { X fires once; a fire button a script holds (PADDOWN:RT) stays held
+      through the tics, like in play (MBF21's A_RefireTo). }
+    if (FWorld <> nil) and not GamepadFireHeld then FWorld.ReleaseFire;
     if FWorld = nil then Exit;
   end;
   { Touch controls while the game is played (the browser's fingers are

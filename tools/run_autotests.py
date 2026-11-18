@@ -511,6 +511,22 @@ TESTS = [
       r'Mbf21: SARG: A_JumpIfTargetInSight, to state 770', r'Mbf21: SARG: A_RemoveFlags 2 0, flags now 4194308 0'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21jump.deh'), '--fixed-step'],
      lambda config: check_mbf21_jumps(config)),
+    # MBF21's weapon pointers (mbf21weapon.deh): the pistol (silent, 2
+    # bullets a shot) fires three exact bullets a cycle while the trigger
+    # is held (A_RefireTo); the shotgun fires a rocket, starts its flash,
+    # alerts, jumps and ends its attack (A_CheckAmmo); the fist reaches
+    # an imp 100 away.
+    ('mbf21-weapons', 'E1M1',
+     'Y,K,SHOTS,C:2,W:1,A:0,PADDOWN:RT,W:1,PADUP:RT,W:1,SAVE:1,C:3,W:1,A:180,X,W:1.5,SAVE:2,'
+     'C:1,W:1,A:0,P:3001:100,W:0.1,X,W:1,Q',
+     [r'Mbf21: Weapon: A_WeaponSound, DSPISTOL', r'Mbf21: Weapon: A_WeaponBulletAttack, 3 bullets of 5 x 1\.\.1',
+      r'Mbf21: Weapon: A_ConsumeAmmo, 2, 398 left', r'Mbf21: Weapon: A_RefireTo', r'Mbf21: Weapon: to state 13 \(4 frames\)',
+      r'Mbf21: Weapon: A_WeaponProjectile, thing 34', r'Mbf21: Weapon: A_GunFlashTo, state 30',
+      r'Mbf21: Weapon: A_WeaponAlert', r'Mbf21: Weapon: to state 28 \(2 frames\)',
+      r'Mbf21: Weapon: A_CheckAmmo, 100 is less than 1000', r'Mbf21: Weapon: to state 18, the attack ends',
+      r'Mbf21: Weapon: A_WeaponMeleeAttack, 3 damage within 128', r'Shot: .* range 128: hit TROO'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21weapon.deh'), '--fixed-step'],
+     lambda config: check_mbf21_weapons(config)),
     # MBF21's A_HealChase (mbf21jump.deh): an imp raises a zombieman's
     # corpse, which then attacks at once (a jump into its missile state).
     ('mbf21-heal', 'E1M1',
@@ -1149,6 +1165,15 @@ def check_terrain(config):
     """terrain.wad: the player stands in the pool (floor -16)."""
     p = save_json(config, 1)['player']
     assert -18 < p['z'] < -14 and -256 < p['x'] < -190, 'not in the pool: %s %s %s' % (p['x'], p['y'], p['z'])
+
+
+def check_mbf21_weapons(config):
+    """mbf21weapon.deh: three pistol cycles took 2 bullets each; the
+    shotgun's MBF21 frames took no shells."""
+    a = save_json(config, 1)['player']['ammo']
+    b = save_json(config, 2)['player']['ammo']
+    assert a[0] == 394, 'bullets after the pistol: %s' % a
+    assert b[1] == a[1], 'shells: %s -> %s' % (a, b)
 
 
 def check_mbf21_jumps(config):

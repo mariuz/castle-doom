@@ -37,7 +37,21 @@ type
     chainsaw, super shotgun). DeHackEd's "Weapon N". }
   TWeaponDef = record
     Ammo, Up, Down, Ready, Attack, Flash: Integer;
+    { MBF21: ammo a shot takes (-1: vanilla's, 1, the BFG's cells, 2 for
+      the super shotgun) and the Weapon* bits. }
+    AmmoPerShot, Mbf21Bits: Integer;
   end;
+
+const
+  { MBF21's weapon flags ("MBF21 Bits" of a "Weapon N"). }
+  WeaponNoThrust = 1;
+  WeaponSilent = 2;
+  WeaponNoAutofire = 4;
+  WeaponFleeMelee = 8;
+  WeaponAutoSwitchFrom = 16;
+  WeaponNoAutoSwitchTo = 32;
+  WeaponBitNames: array [0..5] of String = ('NOTHRUST', 'SILENT', 'NOAUTOFIRE', 'FLEEMELEE',
+    'AUTOSWITCHFROM', 'NOAUTOSWITCHTO');
 
 var
   { The live tables (vanilla after ResetStates, then DeHackEd's edits). }
@@ -133,6 +147,8 @@ begin
     Weapons[I].Ready := StateByName(VanillaWeaponStates[I, 2]);
     Weapons[I].Attack := StateByName(VanillaWeaponStates[I, 3]);
     Weapons[I].Flash := StateByName(VanillaWeaponStates[I, 4]);
+    Weapons[I].AmmoPerShot := -1;
+    Weapons[I].Mbf21Bits := 0;
   end;
   SetLength(Sprites, VanillaSpriteCount);
   for I := 0 to VanillaSpriteCount - 1 do

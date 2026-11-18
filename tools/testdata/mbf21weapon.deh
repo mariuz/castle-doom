@@ -1,0 +1,58 @@
+Patch File for DeHackEd v3.0
+# MBF21 weapon test patch (tools/testdata/mbf21weapon.deh): read by the
+# unit test TestMbf21 and the mbf21-weapons autotest.
+Doom version = 2021
+Patch format = 6
+
+# The fist: a 3 x 1 punch reaching 128, DSPUNCH (83) on a hit.
+Frame 6
+Args1 = 3
+Args2 = 1
+Args4 = 83
+Args5 = 8388608
+
+# The pistol: silent, two bullets a shot; its sound (DSPISTOL, 1), three
+# exact bullets of 5, the ammo taken, and again while the trigger is held.
+Weapon 1 (Pistol)
+Ammo per shot = 2
+MBF21 Bits = SILENT
+
+Frame 13
+Args1 = 1
+
+Frame 14
+Args3 = 3
+Args4 = 5
+Args5 = 1
+
+Frame 16
+Args1 = 13
+
+# The shotgun: a rocket (thing 34), the flash from SGUNFLASH1 (30), an
+# alert, a jump over two frames (SGUN5 -> SGUN8, always) and, with less
+# than 1000 shells, the end of the attack (the ready state 18).
+Frame 22
+Args1 = 34
+
+Frame 23
+Args1 = 30
+
+Frame 25
+Args1 = 28
+Args2 = 256
+
+Frame 28
+Args1 = 18
+Args2 = 1000
+
+[CODEPTR]
+FRAME 6 = A_WeaponMeleeAttack
+FRAME 13 = A_WeaponSound
+FRAME 14 = A_WeaponBulletAttack
+FRAME 15 = A_ConsumeAmmo
+FRAME 16 = A_RefireTo
+FRAME 22 = A_WeaponProjectile
+FRAME 23 = A_GunFlashTo
+FRAME 24 = A_WeaponAlert
+FRAME 25 = A_WeaponJump
+FRAME 28 = A_CheckAmmo
