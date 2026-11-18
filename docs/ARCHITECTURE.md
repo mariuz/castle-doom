@@ -333,7 +333,11 @@ world instead of `TThingInfo.Mbf21Bits`); `A_AddFlags` /
 translucency and solidity. `A_HealChase` in the walk
 (`HealChaseState`) makes `VileTryRaise` play the given heal state and
 sound. Saves keep `flags` (when they differ from the thing's), `tracer`
-and each sequence's `actionStates`. Missiles do not play state frames.
+and each sequence's `actionStates`. Missiles play their spawn state's
+frames too (`EffectFlySeqs`, started by `StartFlyFrames` on their first
+tic), so `A_Tracer` (the revenant's rocket, every fourth tic) and
+MBF21's `A_SeekTracer` steer them; a monster missile's tracer is its
+shooter's target.
 
 Weapons fire through the same walked sequences: `DoFireWeapon` starts
 the weapon's attack frames (`FCurWeaponSeq`, a copy of

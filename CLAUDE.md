@@ -1093,7 +1093,12 @@ autotest only checks the library loads.
   alert, jump and end early, the fist reach 128: `Y,K,SHOTS,C:2,W:1,
   A:0,PADDOWN:RT,W:1,PADUP:RT` logs `Mbf21: Weapon: A_RefireTo` and
   `to state 13 (4 frames)` (autotest `mbf21-weapons`). A held fire in a
-  demo script is `PADDOWN:RT` (`X` fires for one frame). MBF21's code pointer names are
+  demo script is `PADDOWN:RT` (`X` fires for one frame). Missiles play
+  their flight frames: `Y,G:-416:256,A:0,W:0.3,P:66:450,W:1.5,L:0.6`
+  logs `Tracer: FATB homing, angle ...` (the revenant's rocket, autotest
+  `revenant-tracer`), `-deh tools/testdata/mbf21missile.deh` with
+  `P:3001:400` instead `Mbf21: BAL1: A_SeekTracer, turned -6.5`
+  (autotest `mbf21-missiles`). MBF21's code pointer names are
   appended by `tools/make_states.py` (`MBF21_ACTIONS`), its frame
   arguments are `DoomStates.StateArgs` / `StateArg`.
 - **TERRAIN** (`DoomTerrain`): `tools/testdata/terrain.wad`

@@ -48,6 +48,20 @@ L = several days). Items inside a section are in suggested order.
   follow state numbers instead of walked sequences, and the RIP,
   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
 
+- Projectiles with state frames: a missile plays its spawn state's
+  frames from the state table (`EffectFlySeqs`, filled by
+  `SyncProjectileInfos`; `TDoomWorld.StartFlyFrames` on its first tic),
+  so its code pointers run through `Mbf21FrameAction`: vanilla's
+  `A_Tracer` (every fourth tic a puff and a turn of up to 16.875
+  degrees towards the tracer, the climb nudged by 1/8; the revenant's
+  2-tic frames meet those tics only when fired on an even tic, so half
+  the rockets home, like vanilla's) and MBF21's `A_SeekTracer`,
+  `A_SpawnObject`... on missiles. Every monster missile gets its
+  shooter's target as tracer (`SpawnMissileOf`). `mbf21missile.deh`;
+  autotests `revenant-tracer` (golden), `mbf21-missiles`, unit test
+  `TestMbf21`. Left: player missiles' tracers (A_WeaponProjectile's
+  autoaim target) and the death frames' pointers.
+
 - MBF21, the weapons: the ten weapon pointers on the attack frames
   (`TDoomWorld.Mbf21WeaponAction`, arguments from the frame's state:
   `RunWeaponFrame` passes `TFrameSeq.ActionStates`); jumps
@@ -1689,11 +1703,10 @@ play.
 
 ## Suggested next three
 
-1. MBF21, missiles with state frames (M): projectiles that play their
-   own frames from the state table with their code pointers
-   (`A_SeekTracer`, vanilla's `A_Tracer` for the revenant's homing
-   rockets, MBF21's `A_SpawnObject` from a missile), and the RIP,
-   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
+1. MBF21, the bits left (S-M): RIP (missiles through monsters),
+   LONGMELEE, NOTHRESHOLD, FULLVOLSOUNDS and the weapons' NOTHRUST,
+   NOAUTOFIRE, FLEEMELEE and auto-switch bits; missiles' MBF21 thing
+   fields (their DeHackEd rows have no `TThingInfo`).
 2. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
    water (the slab's top flat), and sounds blocked by slabs.
 3. Boom specials, the rest (S each): deep water's colormaps as a real

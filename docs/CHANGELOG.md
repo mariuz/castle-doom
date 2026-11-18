@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Projectiles play their flight frames from the state table with their code pointers: the
+  revenant's rockets home again (vanilla's `A_Tracer`, half of them, like vanilla), and MBF21's
+  `A_SeekTracer` works on missiles.
 - MBF21: the weapon code pointers (`A_WeaponProjectile`, `A_WeaponBulletAttack`,
   `A_WeaponMeleeAttack`, `A_WeaponSound`, `A_WeaponAlert`, `A_WeaponJump`, `A_ConsumeAmmo`,
   `A_CheckAmmo`, `A_RefireTo`, `A_GunFlashTo`), DeHackEd's `Ammo per shot` and the weapons'
