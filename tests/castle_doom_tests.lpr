@@ -3171,6 +3171,15 @@ begin
     AssertTrue('zombieman death sequence has the spawn',
       FindThingInfo(3004)^.Seqs[skDeath].Actions[1] = saSpawnObject);
     AssertEquals('its state', 190, FindThingInfo(3004)^.Seqs[skDeath].ActionStates[1]);
+    { The missile patch: the imp's fireball frames seek; vanilla's
+      revenant rocket traces. }
+    ClearDehackedFiles;
+    AddDehackedFile(Dir + 'mbf21missile.deh');
+    ApplyDehacked(W);
+    AssertTrue('fireball seeks', States[97].Action = saSeekTracer);
+    AssertEquals('seek threshold (fixed 5.0)', 5 * 65536, StateArg(98, 0, 0));
+    AssertTrue('the revenant rocket traces', States[316].Action = saTracer);
+    AssertEquals('its flight frames', 'AB', WalkStates(316, [318]).Frames);
     { The weapon patch: ammo per shot, weapon bits, weapon pointers. }
     ClearDehackedFiles;
     AddDehackedFile(Dir + 'mbf21weapon.deh');

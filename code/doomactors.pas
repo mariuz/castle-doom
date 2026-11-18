@@ -125,6 +125,9 @@ type
     Removed: Boolean;
     { Missiles: fired by the player (hits monsters, never the player). }
     FromPlayer: Boolean;
+    { Projectiles: the flight frames from the state table were started
+      (TDoomWorld.StartFlyFrames). }
+    FlyFramesStarted: Boolean;
     { TERRAIN: a splash's chunk (thrown with Vel*, falls, gone on landing). }
     Chunk: Boolean;
     { TERRAIN's footclip: drawn this much lower, sunk into a liquid floor

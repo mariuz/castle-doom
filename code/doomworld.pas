@@ -401,6 +401,9 @@ type
     procedure SpawnPuff(const X, Y, Z: Single);
     procedure SpawnMissileOf(const A: TDoomActor; const K: TEffectKind; const AngleOfs, Pitch, HOfs, VOfs: Single);
     procedure Mbf21FrameAction(const A: TDoomActor);
+    { A projectile's flight frames from the state table (with their code
+      pointers), once, on its first tic. }
+    procedure StartFlyFrames(const A: TDoomActor);
     { MBF21's jumps: play the thing's chain from state S, in the AI state
       of the chain that holds it (walking, attacking, in pain), else in
       the current one; S_NULL removes the thing. }
@@ -824,6 +827,9 @@ const
 
 var
   EffectInfos: array [TEffectKind] of TThingInfo;
+  { The projectiles' flight frames from the state table (their spawn
+    states, code pointers included: A_Tracer, MBF21's A_SeekTracer...). }
+  EffectFlySeqs: array [TEffectKind] of TFrameSeq;
 
 procedure InitEffectInfos;
 forward;
@@ -851,6 +857,7 @@ begin
     if SoundName(Mo.DeathSound) <> '' then EffectInfos[K].DeathSound := SoundName(Mo.DeathSound);
     Fly := WalkStates(Mo.Spawn, [Mo.Death]);
     Death := WalkStates(Mo.Death, [Mo.Spawn]);
+    EffectFlySeqs[K] := Fly;
     if Fly.Frames <> '' then
     begin
       EffectInfos[K].Sprite := Fly.Sprites[0];
@@ -5141,6 +5148,20 @@ begin
   A.PlayStates(Seq, false);
 end;
 
+procedure TDoomWorld.StartFlyFrames(const A: TDoomActor);
+var
+  K: TEffectKind;
+begin
+  A.FlyFramesStarted := true;
+  for K := ekBal1 to ekBfgBall do
+    if A.Info = @EffectInfos[K] then
+    begin
+      if Length(EffectFlySeqs[K].Tics) > 0 then
+        A.PlayStates(EffectFlySeqs[K], true);
+      Exit;
+    end;
+end;
+
 procedure TDoomWorld.Mbf21FrameAction(const A: TDoomActor);
 const
   Fixed = 65536;
@@ -5154,7 +5175,7 @@ var
 begin
   if not (A.CurrentAction in [saSpawnObject, saRadiusDamage, saNoiseAlert, saJumpIfHealthBelow,
     saJumpIfTargetInSight, saJumpIfTargetCloser, saJumpIfTracerInSight, saJumpIfTracerCloser,
-    saJumpIfFlagsSet, saAddFlags, saRemoveFlags, saFindTracer, saClearTracer, saSeekTracer]) then Exit;
+    saJumpIfFlagsSet, saAddFlags, saRemoveFlags, saFindTracer, saClearTracer, saSeekTracer, saTracer]) then Exit;
   S := A.CurrentActionState;
   case A.CurrentAction of
     saJumpIfHealthBelow:
@@ -5240,6 +5261,41 @@ begin
         A.Tracer := nil;
         WritelnLog('Mbf21', '%s: A_ClearTracer', [A.Info^.Sprite]);
       end;
+    saTracer:
+      { A_Tracer (the revenant's rocket): on every fourth tic a puff, and
+        a turn of up to 16.875 degrees (TRACEANGLE) towards the tracer,
+        the climb changed by 1/8 towards 40 above its feet. The rocket's
+        2-tic frames meet those tics only when it was fired on an even
+        tic: half of them home, like vanilla's. }
+      if (FTic and 3) = 0 then
+      begin
+        SpawnPuff(A.DoomX, A.DoomY, A.DoomZ);
+        if OtherPosition(A, true, OX, OY, OZ, OH, OSec) and
+           ((A.Tracer = nil) or (A.Tracer.Health > 0)) then
+        begin
+          Diff := RadToDeg(ArcTan2(OY - A.DoomY, OX - A.DoomX)) - A.Angle;
+          while Diff > 180 do Diff := Diff - 360;
+          while Diff < -180 do Diff := Diff + 360;
+          if Abs(Diff) <= 16.875 then
+            A.Angle := A.Angle + Diff
+          else
+            A.Angle := A.Angle + Sign(Diff) * 16.875;
+          Speed := A.Info^.Speed;
+          A.VelX := Cos(DegToRad(A.Angle)) * Speed;
+          A.VelY := Sin(DegToRad(A.Angle)) * Speed;
+          Dist := Max(1, Sqrt(Sqr(OX - A.DoomX) + Sqr(OY - A.DoomY)) / Max(1, Speed));
+          if (OZ + 40 - A.DoomZ) / Dist < A.VelZ then
+            A.VelZ := A.VelZ - 1 / 8
+          else
+            A.VelZ := A.VelZ + 1 / 8;
+          if FJumpLogs < 1000 then
+          begin
+            Inc(FJumpLogs);
+            WritelnLog('Tracer', '%s homing, angle %.1f, %.0f away', [A.Info^.Sprite, A.Angle,
+              Sqrt(Sqr(OX - A.DoomX) + Sqr(OY - A.DoomY))]);
+          end;
+        end;
+      end;
     saSeekTracer:
       if OtherPosition(A, true, OX, OY, OZ, OH, OSec) then
       begin
@@ -5256,6 +5312,11 @@ begin
             Turn := Sign(Turn) * StateArg(S, 1, 0) / Fixed;
         end;
         A.Angle := A.Angle + Turn;
+        if FJumpLogs < 1000 then
+        begin
+          Inc(FJumpLogs);
+          WritelnLog('Mbf21', '%s: A_SeekTracer, turned %.1f', [A.Info^.Sprite, Turn]);
+        end;
         if A.State = asMissile then
         begin
           Speed := Sqrt(Sqr(A.VelX) + Sqr(A.VelY));
@@ -5507,6 +5568,10 @@ begin
   M.State := asMissile;
   M.Bright := true;
   M.Shooter := A;
+  { The shooter's target is the missile's tracer (A_SkelMissile, MBF21's
+    A_MonsterProjectile): what A_Tracer and A_SeekTracer home on. }
+  M.Tracer := A.Target;
+  M.TracerSet := true;
   M.DoomX := A.DoomX + Cos(DegToRad(A.Angle)) * (A.Info^.Radius + 8);
   M.DoomY := A.DoomY + Sin(DegToRad(A.Angle)) * (A.Info^.Radius + 8);
   M.DoomZ := A.DoomZ + A.Info^.Height * 0.6 + VOfs;
@@ -5576,6 +5641,8 @@ var
   K, N: Integer;
 begin
   if A.State <> asMissile then Exit;
+  if not A.FlyFramesStarted then
+    StartFlyFrames(A);
   if A.MissileGravity then
   begin
     if InWater(A) then

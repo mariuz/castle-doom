@@ -1,0 +1,19 @@
+Patch File for DeHackEd v3.0
+# MBF21 missile test patch (tools/testdata/mbf21missile.deh): read by the
+# unit test TestMbf21 and the mbf21-missiles autotest. The imp's
+# fireball seeks its tracer (the imp's target) on both flight frames:
+# beyond 5 degrees it turns half the angle, at most 10.
+Doom version = 2021
+Patch format = 6
+
+Frame 97
+Args1 = 327680
+Args2 = 655360
+
+Frame 98
+Args1 = 327680
+Args2 = 655360
+
+[CODEPTR]
+FRAME 97 = A_SeekTracer
+FRAME 98 = A_SeekTracer

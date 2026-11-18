@@ -527,6 +527,18 @@ TESTS = [
       r'Mbf21: Weapon: A_WeaponMeleeAttack, 3 damage within 128', r'Shot: .* range 128: hit TROO'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21weapon.deh'), '--fixed-step'],
      lambda config: check_mbf21_weapons(config)),
+    # Projectiles play their flight frames from the state table: the
+    # revenant's rocket homes on the player stepping aside (A_Tracer, every
+    # fourth tic); with mbf21missile.deh the imp's fireball seeks its
+    # tracer (A_SeekTracer).
+    ('revenant-tracer', 'E1M1',
+     'Y,G:-416:256,A:0,W:0.3,P:66:450,W:1.5,L:0.6,W:0.3,S,W:2,Q',
+     [r'Tracer: FATB homing, angle 1[0-6]\d\.\d'], ['--fixed-step'], None),
+    ('mbf21-missiles', 'E1M1',
+     'Y,G:-416:256,A:0,W:0.3,P:3001:400,W:1,L:0.6,W:2,Q',
+     [r'Mbf21: BAL1: A_SeekTracer, turned -6\.5'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21missile.deh'), '--fixed-step'],
+     None),
     # MBF21's A_HealChase (mbf21jump.deh): an imp raises a zombieman's
     # corpse, which then attacks at once (a jump into its missile state).
     ('mbf21-heal', 'E1M1',
@@ -1669,6 +1681,7 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'revenant-tracer_1.png',
     'editor-sides_edit_1.png', 'editor-sides_edit_2.png',
     'terrain_1.png',
     'mbf21-jumps_1.png',
