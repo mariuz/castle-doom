@@ -48,6 +48,25 @@ L = several days). Items inside a section are in suggested order.
   follow state numbers instead of walked sequences, and the RIP,
   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
 
+- MBF21, the bits left: DeHackEd's "MBF21 Bits" on any mobjinfo row
+  (`DoomStates.MobjMbf21Bits`, copied to the projectiles' infos by
+  `SyncProjectileInfos`); RIP (a missile goes through bodies, hurting
+  each (2..5) x damage every tic it passes, `RipLog`), LONGMELEE and the
+  revenant (no missile within 196; the revenant also counts half the
+  distance), Doom's threshold (`TDoomActor.Threshold`: 100 tics after
+  turning on an attacker, counted down by the chase; the Arch-vile and
+  NOTHRESHOLD have none; nobody turns on an Arch-vile; saved),
+  full-volume sight and death sounds (`PlayThingSound`: the spider, the
+  cyberdemon, FULLVOLSOUNDS). Weapons: MBF21's default bits
+  (`ResetStates`), P_GiveAmmo's switch away from an AUTOSWITCHFROM
+  weapon (`AmmoAutoSwitch`, vanilla's fist / pistol rule) and, with
+  MBF21 on (`WeaponHasBit`), NOAUTOSWITCHTO, NOTHRUST and NOAUTOFIRE
+  (`FNoAutofire` until the trigger is let go). The harness takes
+  `!regex` for a line that must not appear. `mbf21bits.deh`; autotests
+  `mbf21-bits`, `mbf21-rip`, unit test `TestMbf21`. Left: FLEEMELEE
+  (MBF's monsters backing away) and the projectiles' other MBF21 thing
+  fields (groups).
+
 - Projectiles with state frames: a missile plays its spawn state's
   frames from the state table (`EffectFlySeqs`, filled by
   `SyncProjectileInfos`; `TDoomWorld.StartFlyFrames` on its first tic),
@@ -1703,10 +1722,10 @@ play.
 
 ## Suggested next three
 
-1. MBF21, the bits left (S-M): RIP (missiles through monsters),
-   LONGMELEE, NOTHRESHOLD, FULLVOLSOUNDS and the weapons' NOTHRUST,
-   NOAUTOFIRE, FLEEMELEE and auto-switch bits; missiles' MBF21 thing
-   fields (their DeHackEd rows have no `TThingInfo`).
+1. MBF's monster backing and friends (M): monsters backing away from a
+   melee attacker (MBF's `monster_backing`, MBF21's FLEEMELEE), MBF's
+   helper dogs and friendly monsters (MF_FRIEND), and the projectiles'
+   MBF21 groups.
 2. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
    water (the slab's top flat), and sounds blocked by slabs.
 3. Boom specials, the rest (S each): deep water's colormaps as a real

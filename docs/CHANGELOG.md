@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- MBF21's remaining thing and weapon bits: RIP projectiles, LONGMELEE, NOTHRESHOLD,
+  FULLVOLSOUNDS, NOTHRUST, NOAUTOFIRE, AUTOSWITCHFROM and NOAUTOSWITCHTO; projectiles take
+  DeHackEd's MBF21 bits too.
+- Vanilla behaviour: monsters keep a new target for 100 tics before another attacker can take
+  it over (nobody fights back an Arch-vile), the revenant punches instead of firing closer than
+  196 units and counts half the distance, the spider mastermind's and cyberdemon's sight and death
+  sounds are heard everywhere, and ammo for an empty weapon switches away from the fist or pistol.
 - Projectiles play their flight frames from the state table with their code pointers: the
   revenant's rockets home again (vanilla's `A_Tracer`, half of them, like vanilla), and MBF21's
   `A_SeekTracer` works on missiles.

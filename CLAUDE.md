@@ -1098,7 +1098,11 @@ autotest only checks the library loads.
   logs `Tracer: FATB homing, angle ...` (the revenant's rocket, autotest
   `revenant-tracer`), `-deh tools/testdata/mbf21missile.deh` with
   `P:3001:400` instead `Mbf21: BAL1: A_SeekTracer, turned -6.5`
-  (autotest `mbf21-missiles`). MBF21's code pointer names are
+  (autotest `mbf21-missiles`). `tools/testdata/mbf21bits.deh`: the
+  zombieman FULLVOLSOUNDS (`Sound: POSS: ... at full volume`), the rocket
+  RIP (`Mbf21: MISL rips through TROO`, autotest `mbf21-rip`) and the
+  fist NOTHRUST (no `Push: TROO` after a punch; autotest `mbf21-bits`:
+  the harness's `!regex` is a line that must not appear). MBF21's code pointer names are
   appended by `tools/make_states.py` (`MBF21_ACTIONS`), its frame
   arguments are `DoomStates.StateArgs` / `StateArg`.
 - **TERRAIN** (`DoomTerrain`): `tools/testdata/terrain.wad`
