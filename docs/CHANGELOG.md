@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- MBF's friendly monsters: a monster with the FRIEND bit (DeHackEd, the THINGS flag 128 or UDMF's
+  `friend`) fights the hostile monsters it sees, follows the player otherwise, and never hurts the
+  player.
 - MBF21's remaining thing and weapon bits: RIP projectiles, LONGMELEE, NOTHRESHOLD,
   FULLVOLSOUNDS, NOTHRUST, NOAUTOFIRE, AUTOSWITCHFROM and NOAUTOSWITCHTO; projectiles take
   DeHackEd's MBF21 bits too.

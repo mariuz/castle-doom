@@ -1102,7 +1102,11 @@ autotest only checks the library loads.
   zombieman FULLVOLSOUNDS (`Sound: POSS: ... at full volume`), the rocket
   RIP (`Mbf21: MISL rips through TROO`, autotest `mbf21-rip`) and the
   fist NOTHRUST (no `Push: TROO` after a punch; autotest `mbf21-bits`:
-  the harness's `!regex` is a line that must not appear). MBF21's code pointer names are
+  the harness's `!regex` is a line that must not appear). MBF's
+  friends: `FRIEND:type:dist` in a demo spawns a monster with
+  MF_FRIEND; `G:-416:256,A:0,W:0.3,FRIEND:3001:80,P:3004:350,W:6` logs
+  `Friend: TROO at (...) goes for POSS` and `Infight: TROO killed
+  POSS`, and the player is not hurt (autotest `friends`, golden). MBF21's code pointer names are
   appended by `tools/make_states.py` (`MBF21_ACTIONS`), its frame
   arguments are `DoomStates.StateArgs` / `StateArg`.
 - **TERRAIN** (`DoomTerrain`): `tools/testdata/terrain.wad`

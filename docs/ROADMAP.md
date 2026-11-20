@@ -48,6 +48,22 @@ L = several days). Items inside a section are in suggested order.
   follow state numbers instead of walked sequences, and the RIP,
   LONGMELEE, NOTHRESHOLD and FULLVOLSOUNDS bits.
 
+- MBF's friends: MF_FRIEND (`MobjFlagFriend`; DeHackEd's `FRIEND`
+  bit, the THINGS flag 128 unless 256 marks junk flags, UDMF's
+  `friend`). `TicFriend` / `FindEnemyFor`: a friend goes for the
+  nearest hostile monster it sees within 2048 (every 10 tics), and with
+  none wakes on seeing the player and walks back to within 128 of
+  them; hostile monsters of its own species turn on it and its
+  missiles hit them (`ProjectileImmune`); friends and their missiles
+  never hurt the player (`FriendSource` in `DamagePlayer` and the
+  missiles' player check), never turn on the player or on each other,
+  are skipped by the player's autoaim and do not count as kills. The
+  demo cheat `FRIEND:type:dist` spawns one. Autotest `friends`
+  (golden). Left: MBF's helper dogs (thing 888: new state-table rows,
+  and sprites Freedoom does not have), hostile monsters looking for
+  friends by themselves, monster backing (FLEEMELEE, an MBF option off
+  by default).
+
 - MBF21, the bits left: DeHackEd's "MBF21 Bits" on any mobjinfo row
   (`DoomStates.MobjMbf21Bits`, copied to the projectiles' infos by
   `SyncProjectileInfos`); RIP (a missile goes through bodies, hurting
@@ -1722,10 +1738,10 @@ play.
 
 ## Suggested next three
 
-1. MBF's monster backing and friends (M): monsters backing away from a
-   melee attacker (MBF's `monster_backing`, MBF21's FLEEMELEE), MBF's
-   helper dogs and friendly monsters (MF_FRIEND), and the projectiles'
-   MBF21 groups.
+1. MBF's helper dogs (S-M): thing 888 with MBF's dog states and
+   sounds appended to the state table (`tools/make_states.py`), drawn
+   when a PWAD brings the DOGS sprites; hostile monsters that look for
+   friends themselves.
 2. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
    water (the slab's top flat), and sounds blocked by slabs.
 3. Boom specials, the rest (S each): deep water's colormaps as a real

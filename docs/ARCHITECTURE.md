@@ -341,7 +341,10 @@ shooter's target. Projectiles take DeHackEd's MBF21 bits through
 `MobjMbf21Bits` (RIP: through bodies). Monsters keep a target for 100
 tics (`Threshold`) unless the Arch-vile or NOTHRESHOLD; the weapons'
 MBF21 bits act through `WeaponHasBit` (only with MBF21 on) and
-`AmmoAutoSwitch`.
+`AmmoAutoSwitch`. MBF's friends (`MobjFlagFriend` in an actor's
+`Flags`) are handled at the top of `TicMonster` by `TicFriend`: an
+enemy from `FindEnemyFor`, else following the player; their `Target`
+is never nil while they fight (nil would mean the player).
 
 Weapons fire through the same walked sequences: `DoFireWeapon` starts
 the weapon's attack frames (`FCurWeaponSeq`, a copy of
