@@ -49,6 +49,10 @@ const
   MTF_HARD = 4;
   MTF_AMBUSH = 8;
   MTF_NOTSINGLE = 16;
+  { MBF: a friendly monster (unless 256, MTF_RESERVED, says the flags
+    are junk). }
+  MTF_FRIEND = 128;
+  MTF_RESERVED = 256;
 
 type
   TDoomVertex = record
@@ -1190,6 +1194,8 @@ begin
           Things[NT].Flags := Things[NT].Flags or MTF_HARD;
         if UdmfBool(B^, 'ambush') then
           Things[NT].Flags := Things[NT].Flags or MTF_AMBUSH;
+        if UdmfBool(B^, 'friend') then
+          Things[NT].Flags := Things[NT].Flags or MTF_FRIEND;
         if not UdmfBool(B^, 'single') then
           Things[NT].Flags := Things[NT].Flags or MTF_NOTSINGLE;
         Inc(NT);

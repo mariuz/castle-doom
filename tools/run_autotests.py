@@ -539,6 +539,14 @@ TESTS = [
      [r'Mbf21: BAL1: A_SeekTracer, turned -6\.5'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21missile.deh'), '--fixed-step'],
      None),
+    # MBF's friends (FRIEND:type:dist spawns one with MF_FRIEND): the imp
+    # goes for a zombieman, which turns on it and dies; nobody hurts the
+    # player (no god mode); then it walks back to the player.
+    ('friends', 'E1M1',
+     'G:-416:256,A:0,W:0.3,FRIEND:3001:80,P:3004:350,W:6,SAVE:1,G:-100:256,A:180,W:4,SAVE:2,S,Q',
+     [r'Friend: TROO spawned on the player\'s side', r'Friend: TROO at \(-?\d+, 256\) goes for POSS',
+      r'Infight: POSS turns on TROO', r'Infight: TROO killed POSS'],
+     ['--fixed-step'], lambda config: check_friends(config)),
     # MBF21's bits (mbf21bits.deh): the fist pushes nothing (NOTHRUST), the
     # zombieman's sounds are heard everywhere (FULLVOLSOUNDS); the rocket
     # rips through two imps (RIP, a projectile's bits).
@@ -1192,6 +1200,17 @@ def check_terrain(config):
     assert -18 < p['z'] < -14 and -256 < p['x'] < -190, 'not in the pool: %s %s %s' % (p['x'], p['y'], p['z'])
 
 
+def check_friends(config):
+    """The player was not hurt; the friend followed the player east and
+    stopped within 128."""
+    a, b = save_json(config, 1), save_json(config, 2)
+    assert a['player']['health'] == 100, 'player hurt: %s' % a['player']['health']
+    friends = [t for t in b['actors'] if t.get('flags') and t['flags'][0] & 0x40000000]
+    assert len(friends) == 1, 'friends: %s' % friends
+    d = abs(friends[0]['x'] - b['player']['x'])
+    assert friends[0]['x'] > -260 and d < 140, 'friend at %s, player at %s' % (friends[0]['x'], b['player']['x'])
+
+
 def check_mbf21_weapons(config):
     """mbf21weapon.deh: three pistol cycles took 2 bullets each; the
     shotgun's MBF21 frames took no shells."""
@@ -1694,6 +1713,7 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'friends_1.png',
     'revenant-tracer_1.png',
     'editor-sides_edit_1.png', 'editor-sides_edit_2.png',
     'terrain_1.png',

@@ -318,6 +318,16 @@ type
       and its corpse falling (lost souls stay where they die). }
     { A thing's middle in a swimmable 3D floor. }
     function InWater(const A: TDoomActor): Boolean;
+    { MBF's friends: on the player's side (MF_FRIEND). }
+    function IsFriend(const A: TDoomActor): Boolean;
+    { A friend, or a missile a friend fired. }
+    function FriendSource(const A: TDoomActor): Boolean;
+    { The nearest hostile monster a friend sees (within 2048), nil none. }
+    function FindEnemyFor(const A: TDoomActor): TDoomActor;
+    { A friend without an enemy: wakes on seeing the player or an enemy,
+      walks back to within 128 of the player. True when the chase should
+      not go on (no target to chase). }
+    function TicFriend(const A: TDoomActor): Boolean;
     { TERRAIN (LoadTerrain at the level's start). }
     procedure LoadTerrain;
     procedure TicPlayerTerrain(const Sec: Integer);
@@ -1725,13 +1735,16 @@ begin
       A.HideSprite;
     if Info^.Num = 2035 then
       A.Health := 20; { barrel }
+    { MBF's friendly monsters (THINGS flag 128, unless 256 says junk). }
+    if (Info^.Kind = tkMonster) and ((T.Flags and MTF_FRIEND) <> 0) and ((T.Flags and MTF_RESERVED) = 0) then
+      A.Flags := A.Flags or MobjFlagFriend;
     A.Bright := Info^.Pickup in [pkSoulsphere, pkMegasphere, pkInvulnerability, pkInvisibility, pkBerserk, pkRadSuit, pkComputerMap, pkLightAmp];
     LightActor(A, Sec);
     A.UpdateTransform;
     FActors.Add(A);
     FThingsGroup.Add(A);
     { The boss brain has no MF_COUNTKILL. }
-    if (Info^.Kind = tkMonster) and (Info^.Num <> 88) then Inc(Player.TotalKills);
+    if (Info^.Kind = tkMonster) and (Info^.Num <> 88) and not IsFriend(A) then Inc(Player.TotalKills);
     if (Info^.Kind = tkPickup) and (Info^.Pickup in [pkStimpack, pkMedikit, pkHealthBonus, pkArmorBonus,
       pkArmorGreen, pkArmorBlue, pkSoulsphere, pkMegasphere, pkBerserk, pkInvulnerability, pkInvisibility,
       pkRadSuit, pkComputerMap, pkLightAmp]) then Inc(Player.TotalItems);
@@ -2107,7 +2120,8 @@ begin
 end;
 
 const
-  CheatCommands: array [0..9] of String = ('K', 'Y', 'P', 'CORPSE', 'D', 'V', 'INVIS', 'INVUL', 'AMP', 'LINE');
+  CheatCommands: array [0..10] of String = ('K', 'Y', 'P', 'CORPSE', 'D', 'V', 'INVIS', 'INVUL', 'AMP', 'LINE',
+    'FRIEND');
 
 class function TDoomWorld.IsCheat(const Command: String): Boolean;
 var
@@ -2143,6 +2157,17 @@ begin
     A := DebugSpawn(Round(Arg), Arg2);
     if A <> nil then
       DamageActor(A, 100000, A.DoomX, A.DoomY, A.DoomZ + 32);
+  end
+  else if Command = 'FRIEND' then
+  begin
+    { A monster on the player's side (MBF's MF_FRIEND), awake. }
+    A := DebugSpawn(Round(Arg), Arg2);
+    if A <> nil then
+    begin
+      A.Flags := A.Flags or MobjFlagFriend;
+      A.Angle := Player.Angle;
+      WritelnLog('Friend', '%s spawned on the player''s side', [A.Info^.Sprite]);
+    end;
   end
   else if Command = 'D' then
     DebugKillAll
@@ -3434,6 +3459,8 @@ end;
 function TDoomWorld.ProjectileImmune(const Target, Shooter: TDoomActor): Boolean;
 begin
   if (Target = nil) or (Shooter = nil) then Exit(false);
+  { A friend's missile hits a hostile monster of its own species. }
+  if IsFriend(Target) <> IsFriend(Shooter) then Exit(false);
   if Target.Info^.ProjectileGroup = -1 then Exit(false);
   Result := SameSpecies(Target, Shooter) or
     ((Target.Info^.ProjectileGroup > 0) and (Target.Info^.ProjectileGroup = Shooter.Info^.ProjectileGroup));
@@ -3476,6 +3503,12 @@ var
   Tries, MaxHold, HealS: Integer;
   Moved, OnFriction: Boolean;
 begin
+  { MBF's friends pick their own enemies and follow the player. }
+  if IsFriend(A) then
+  begin
+    if TicFriend(A) then Exit;
+    if A.State <> asChase then Exit;
+  end;
   { A dead target (monster corpse, or the player) sends the monster back to the player. }
   if (A.Target <> nil) and not TargetAlive(A) then A.Target := nil;
   if (A.Target = nil) and Player.Dead then Exit;
@@ -3534,10 +3567,11 @@ begin
   Ang := RadToDeg(ArcTan2(DY, DX));
   A.Angle := Ang;
 
-  { Attack? }
+  { Attack? (A friend walking back to the player does not.) }
   if A.ReactionTics > 0 then
     Dec(A.ReactionTics)
   else
+  if not (IsFriend(A) and (A.Target = nil)) then
   begin
     if (A.Info^.Attack = akMelee) or (Dist < A.Info^.MeleeRange + A.Info^.Radius) then
     begin
@@ -3848,6 +3882,89 @@ begin
   { The player's splashes are heard by monsters. }
   if (Who = nil) and not Sp.NoAlert then
     NoiseAlert;
+end;
+
+function TDoomWorld.IsFriend(const A: TDoomActor): Boolean;
+begin
+  Result := (A <> nil) and ((A.Flags and MobjFlagFriend) <> 0);
+end;
+
+function TDoomWorld.FriendSource(const A: TDoomActor): Boolean;
+begin
+  Result := (A <> nil) and (IsFriend(A) or ((A.Shooter <> nil) and IsFriend(A.Shooter)));
+end;
+
+function TDoomWorld.FindEnemyFor(const A: TDoomActor): TDoomActor;
+var
+  O: TDoomActor;
+  D, BestD: Single;
+begin
+  Result := nil;
+  BestD := 2048;
+  for O in FActors do
+  begin
+    if (O = A) or O.Removed or (O.Info^.Kind <> tkMonster) or IsFriend(O) or
+       not (O.State in [asIdle, asChase, asAttack, asPain]) or (O.Info^.Num = 88) then Continue;
+    D := Sqrt(Sqr(O.DoomX - A.DoomX) + Sqr(O.DoomY - A.DoomY));
+    if D >= BestD then Continue;
+    if not CheckSight(A.DoomX, A.DoomY, A.DoomZ + A.Info^.Height * 0.75, A.Sector,
+       O.DoomX, O.DoomY, O.DoomZ, O.Info^.Height, O.Sector) then Continue;
+    BestD := D;
+    Result := O;
+  end;
+end;
+
+function TDoomWorld.TicFriend(const A: TDoomActor): Boolean;
+var
+  Reason: String;
+begin
+  Result := false;
+  if (A.Target <> nil) and not TargetAlive(A) then A.Target := nil;
+  if (A.Target = nil) and ((FTic + A.MapFlags) mod 10 = 0) then
+  begin
+    A.Target := FindEnemyFor(A);
+    if A.Target <> nil then
+    begin
+      WritelnLog('Friend', '%s at (%.0f, %.0f) goes for %s', [A.Info^.Sprite, A.DoomX, A.DoomY,
+        A.Target.Info^.Sprite]);
+      A.Awake := true;
+      A.Threshold := 0;
+    end;
+  end;
+  if A.Target <> nil then
+  begin
+    if A.State = asIdle then
+    begin
+      A.State := asChase;
+      PlayMove(A);
+    end;
+    Exit;
+  end;
+  { No enemy: wake on seeing the player, then keep near them. }
+  if not A.Awake then
+  begin
+    if ((FTic + A.MapFlags) mod 10 = 0) and MonsterLook(A, Reason) then
+    begin
+      A.Awake := true;
+      WritelnLog('Friend', '%s at (%.0f, %.0f) follows the player', [A.Info^.Sprite, A.DoomX, A.DoomY]);
+    end;
+    Exit(true);
+  end;
+  if Sqrt(Sqr(Player.X - A.DoomX) + Sqr(Player.Y - A.DoomY)) < 128 then
+  begin
+    { Close enough: stand. }
+    if A.State = asChase then
+    begin
+      A.State := asIdle;
+      PlayInfoSeq(A, skIdle, true, A.Info^.IdleFrames, A.Info^.IdleTics);
+    end;
+    Exit(true);
+  end;
+  if A.State = asIdle then
+  begin
+    A.State := asChase;
+    PlayMove(A);
+  end;
 end;
 
 function TDoomWorld.InWater(const A: TDoomActor): Boolean;
@@ -5796,7 +5913,8 @@ begin
         Break;
       end;
     { The player? }
-    if (not Hit) and (not Player.Dead) and (Abs(Player.X - NX) < PlayerRadius + A.Info^.Radius) and
+    if (not Hit) and (not Player.Dead) and not FriendSource(A) and
+       (Abs(Player.X - NX) < PlayerRadius + A.Info^.Radius) and
        (Abs(Player.Y - NY) < PlayerRadius + A.Info^.Radius) and
        (NZ > Player.Z - 8) and (NZ < Player.Z + PlayerHeight + 8) then
     begin
@@ -5992,6 +6110,8 @@ var
   Dmg, Saved: Integer;
 begin
   if Player.Dead or (Damage <= 0) then Exit;
+  { Friends (and their missiles and explosions) never hurt the player. }
+  if FriendSource(FromActor) then Exit;
   { Knockback comes before invulnerability and god mode, like in Doom. }
   if (FromActor <> nil) and (Damage < 10000) then
   begin
@@ -6090,7 +6210,9 @@ begin
     { P_DamageMobj: the attacker becomes the target unless the monster is
       still set on another (its threshold; the Arch-vile and MBF21's
       NOTHRESHOLD have none); nobody turns on an Arch-vile. }
-    if (A.Threshold = 0) or (A.Info^.Num = 64) or ((A.Flags2 and Mbf21NoThreshold) <> 0) then
+    if ((A.Threshold = 0) or (A.Info^.Num = 64) or ((A.Flags2 and Mbf21NoThreshold) <> 0)) and
+       { Friends never turn on the player or on each other. }
+       not (IsFriend(A) and (ByPlayer or ((Attacker <> nil) and IsFriend(Attacker)))) then
     begin
       if ByPlayer then
       begin
@@ -6173,7 +6295,7 @@ begin
   else
   if A.Info^.Kind = tkMonster then
   begin
-    Inc(Player.Kills);
+    if not IsFriend(A) then Inc(Player.Kills);
     if ByPlayer then
     begin
       Player.FaceState := 3; { evil grin }
@@ -6503,6 +6625,8 @@ begin
   for O in FActors do
   begin
     if (O = Shooter) or not Shootable(O) then Continue;
+    { The player's autoaim passes over friends (MBF). }
+    if (Shooter = nil) and IsFriend(O) then Continue;
     Along := (O.DoomX - X) * DX + (O.DoomY - Y) * DY;
     if (Along <= 0) or (Along >= Range) then Continue;
     Side := Abs((O.DoomX - X) * DY - (O.DoomY - Y) * DX);

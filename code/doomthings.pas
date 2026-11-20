@@ -65,6 +65,8 @@ const
   MobjFlagSolid = 2;
   MobjFlagShootable = 4;
   MobjFlagShadow = 262144;
+  { MBF's MF_FRIEND: on the player's side. }
+  MobjFlagFriend = $40000000;
   MobjFlagTranslucent = Integer($80000000);
 
 type
