@@ -230,6 +230,8 @@ type
       jump to this frame (-1 none). }
     FCurWeaponSeq, FCurFlashSeq: TFrameSeq;
     FWeaponJump: Integer;
+    { MBF21's NOAUTOFIRE: the held trigger waits for a release. }
+    FNoAutofire: Boolean;
     { Demos (DoomDemo): the recorder or the player (the view owns them),
       the world's own random numbers while one runs, and the last
       checksum a replayed tic made. }
@@ -404,6 +406,10 @@ type
     { A projectile's flight frames from the state table (with their code
       pointers), once, on its first tic. }
     procedure StartFlyFrames(const A: TDoomActor);
+    procedure RipLog(const A: TDoomActor; const What: String);
+    { A monster's see / death sound: at full volume (everywhere) for the
+      spider mastermind, the cyberdemon and MBF21's FULLVOLSOUNDS. }
+    procedure PlayThingSound(const A: TDoomActor; const Sound: String);
     { MBF21's jumps: play the thing's chain from state S, in the AI state
       of the chain that holds it (walking, attacking, in pain), else in
       the current one; S_NULL removes the thing. }
@@ -688,6 +694,13 @@ type
     procedure SelectWeapon(const W: TWeapon);
     { Start lowering the current weapon to bring up W (P_SetPsprite S_LOWER). }
     procedure ChangeWeapon(const W: TWeapon);
+    { P_GiveAmmo's switch when ammo comes for none before: from a weapon
+      with MBF21's AUTOSWITCHFROM (by default the fist and pistol) to the
+      one the ammo is for. }
+    procedure AmmoAutoSwitch(const T: TAmmoType);
+    { MBF21's weapon bit (only with MBF21 on: vanilla's chainsaw pushes
+      and is switched to). }
+    function WeaponHasBit(const W: TWeapon; const Bit: Integer): Boolean;
     procedure NextWeapon(const Delta: Integer);
     { The fire button was let go (A_ReFire stops repeating). }
     procedure ReleaseFire;
@@ -853,6 +866,7 @@ begin
     EffectInfos[K].Height := Mo.Height;
     EffectInfos[K].DamageDice := Mo.Damage;
     EffectInfos[K].DamageFaces := 8;
+    if Rows[K] < Length(MobjMbf21Bits) then EffectInfos[K].Mbf21Bits := MobjMbf21Bits[Rows[K]];
     if SoundName(Mo.SeeSound) <> '' then EffectInfos[K].AttackSound := SoundName(Mo.SeeSound);
     if SoundName(Mo.DeathSound) <> '' then EffectInfos[K].DeathSound := SoundName(Mo.DeathSound);
     Fly := WalkStates(Mo.Spawn, [Mo.Death]);
@@ -1969,6 +1983,37 @@ begin
   ChangeWeapon(W);
 end;
 
+function TDoomWorld.WeaponHasBit(const W: TWeapon; const Bit: Integer): Boolean;
+begin
+  Result := Mbf21Compat and ((Weapons[Ord(W)].Mbf21Bits and Bit) <> 0);
+end;
+
+procedure TDoomWorld.AmmoAutoSwitch(const T: TAmmoType);
+var
+  Ready, W: TWeapon;
+begin
+  Ready := Player.Weapon;
+  if (Weapons[Ord(Ready)].Mbf21Bits and WeaponAutoSwitchFrom) = 0 then Exit;
+  case T of
+    amClip:
+      begin
+        if Ready = wpPistol then Exit;
+        if wpChaingun in Player.Weapons then W := wpChaingun else W := wpPistol;
+      end;
+    amShell: W := wpShotgun;
+    amCell: W := wpPlasma;
+    amMisl:
+      begin
+        if Ready = wpPistol then Exit;
+        W := wpMissile;
+      end;
+    else Exit;
+  end;
+  if (W = Ready) or not (W in Player.Weapons) or WeaponHasBit(W, WeaponNoAutoSwitchTo) then Exit;
+  WritelnLog('Weapon', 'Ammo for an empty weapon: switching to weapon %d', [Ord(W)]);
+  ChangeWeapon(W);
+end;
+
 procedure TDoomWorld.ChangeWeapon(const W: TWeapon);
 begin
   if (W = Player.Weapon) and (Player.WeaponSwitch <> 1) then Exit;
@@ -2050,6 +2095,7 @@ begin
   if (FDemoRec <> nil) and (Player.Refire or Player.FireHeld) then FDemoRec.Event(deReleaseFire);
   Player.Refire := false;
   Player.FireHeld := false;
+  FNoAutofire := false;
 end;
 
 procedure TDoomWorld.StopPush;
@@ -2238,6 +2284,7 @@ begin
         begin
           Player.Refire := false;
           Player.FireHeld := false;
+          FNoAutofire := false;
         end;
       deStopPush:
         begin
@@ -2852,6 +2899,13 @@ begin
         begin
           Player.WeaponOffset := 0;
           Player.WeaponSwitch := 0;
+          { MBF21's NOAUTOFIRE: a trigger held through the switch fires
+            only once let go and pressed again. }
+          if Player.FireHeld and WeaponHasBit(Player.Weapon, WeaponNoAutofire) then
+          begin
+            FNoAutofire := true;
+            WritelnLog('Weapon', 'No autofire: the trigger must be pressed again', []);
+          end;
         end;
       end;
   end;
@@ -3452,13 +3506,21 @@ begin
     end;
     A.State := asChase;
     PlayMove(A);
-    if A.Info^.SeeSound <> '' then
-      FSounds.PlayAt(A.Info^.SeeSound, A);
+    PlayThingSound(A, A.Info^.SeeSound);
     A.ReactionTics := 10 + Random1(20);
     Exit;
   end;
 
   if A.State <> asChase then Exit;
+  { A_Chase: the threshold (tics before another attacker can take the
+    target over) runs down, at once when the target is gone. }
+  if A.Threshold > 0 then
+  begin
+    if (A.Target <> nil) and not TargetAlive(A) then
+      A.Threshold := 0
+    else
+      Dec(A.Threshold);
+  end;
   if A.Info^.Speed = 0 then Exit;
 
   { A_VileChase: an Arch-vile touching a corpse raises it instead of moving
@@ -3490,7 +3552,12 @@ begin
         souls, cyberdemons and spiders count half the distance; Arch-viles
         only attack within 14 * 64 units. }
       RangeDist := Dist;
-      if (A.Info^.Num = 3006) or (A.Info^.Num = 16) or (A.Info^.Num = 7) or
+      { The revenant (and MBF21's LONGMELEE) never fires closer than 196:
+        it punches there. }
+      if ((A.Info^.Num = 66) or ((A.Flags2 and Mbf21LongMelee) <> 0)) and (Dist < 196) then
+        RangeDist := -1
+      else
+      if (A.Info^.Num = 3006) or (A.Info^.Num = 16) or (A.Info^.Num = 7) or (A.Info^.Num = 66) or
          ((A.Flags2 and Mbf21RangeHalf) <> 0) then
         RangeDist := Dist / 2;
       { MBF21: SHORTMRANGE fires only within 14 * 64 like the Arch-vile,
@@ -3499,7 +3566,8 @@ begin
         MaxHold := 160
       else
         MaxHold := 220;
-      if (((A.Info^.Num <> 64) and ((A.Flags2 and Mbf21ShortMissileRange) = 0)) or (Dist <= 14 * 64)) and
+      if (RangeDist >= 0) and
+         (((A.Info^.Num <> 64) and ((A.Flags2 and Mbf21ShortMissileRange) = 0)) or (Dist <= 14 * 64)) and
          (Random(256) >= Min(MaxHold, 40 + Trunc(RangeDist / 6))) then
       begin
         MonsterAttack(A);
@@ -5148,6 +5216,30 @@ begin
   A.PlayStates(Seq, false);
 end;
 
+procedure TDoomWorld.RipLog(const A: TDoomActor; const What: String);
+begin
+  if FJumpLogs < 1000 then
+  begin
+    Inc(FJumpLogs);
+    WritelnLog('Mbf21', '%s rips through %s', [A.Info^.Sprite, What]);
+  end;
+end;
+
+procedure TDoomWorld.PlayThingSound(const A: TDoomActor; const Sound: String);
+begin
+  if Sound = '' then Exit;
+  if (A.Info^.Num in [7, 16]) or ((A.Flags2 and Mbf21FullVolumeSounds) <> 0) then
+  begin
+    FSounds.Play(Sound);
+    if FJumpLogs < 1000 then
+    begin
+      Inc(FJumpLogs);
+      WritelnLog('Sound', '%s: %s at full volume', [A.Info^.Sprite, Sound]);
+    end;
+  end else
+    FSounds.PlayAt(Sound, A);
+end;
+
 procedure TDoomWorld.StartFlyFrames(const A: TDoomActor);
 var
   K: TEffectKind;
@@ -5665,6 +5757,14 @@ begin
          (Abs(O.DoomY - NY) < O.Info^.Radius + A.Info^.Radius) and
          (NZ > O.DoomZ - 8) and (NZ < O.DoomZ + O.Info^.Height + 8) then
       begin
+        if (A.Flags2 and Mbf21Rip) <> 0 then
+        begin
+          { MBF21's RIP: through the body, hurting it every tic it passes. }
+          DamageActor(O, (Random(4) + 2) * A.MissileDamageDice, NX, NY, NZ, nil, true, true,
+            A.DoomX, A.DoomY, A.DoomZ);
+          RipLog(A, O.Info^.Sprite);
+          Continue;
+        end;
         DamageActor(O, Dice(A.MissileDamageDice, A.MissileDamageFaces), NX, NY, NZ, nil, true,
           true, A.DoomX, A.DoomY, A.DoomZ);
         Hit := true;
@@ -5683,6 +5783,13 @@ begin
          (Abs(O.DoomY - NY) < O.Info^.Radius + A.Info^.Radius) and
          (NZ > O.DoomZ - 8) and (NZ < O.DoomZ + O.Info^.Height + 8) then
       begin
+        if (A.Flags2 and Mbf21Rip) <> 0 then
+        begin
+          DamageActor(O, (Random(4) + 2) * A.MissileDamageDice, NX, NY, NZ, A.Shooter, false, true,
+            A.DoomX, A.DoomY, A.DoomZ);
+          RipLog(A, O.Info^.Sprite);
+          Continue;
+        end;
         DamageActor(O, Dice(A.MissileDamageDice, A.MissileDamageFaces), NX, NY, NZ, A.Shooter, false,
           true, A.DoomX, A.DoomY, A.DoomZ);
         Hit := true;
@@ -5693,8 +5800,15 @@ begin
        (Abs(Player.Y - NY) < PlayerRadius + A.Info^.Radius) and
        (NZ > Player.Z - 8) and (NZ < Player.Z + PlayerHeight + 8) then
     begin
-      DamagePlayer(Dice(A.MissileDamageDice, A.MissileDamageFaces), A);
-      Hit := true;
+      if (A.Flags2 and Mbf21Rip) <> 0 then
+      begin
+        DamagePlayer((Random(4) + 2) * A.MissileDamageDice, A);
+        RipLog(A, 'the player');
+      end else
+      begin
+        DamagePlayer(Dice(A.MissileDamageDice, A.MissileDamageFaces), A);
+        Hit := true;
+      end;
     end;
   end;
 
@@ -5941,8 +6055,9 @@ begin
     A.Charging := false;
     A.VelX := 0; A.VelY := 0; A.VelZ := 0;
   end;
-  { Knockback (not for telefrags, which only kill). }
-  if Push and (Damage < 10000) then
+  { Knockback (not for telefrags, which only kill; not from the player's
+    MBF21 NOTHRUST weapons). }
+  if Push and (Damage < 10000) and not (ByPlayer and WeaponHasBit(Player.Weapon, WeaponNoThrust)) then
   begin
     AddThrust(A.DoomX, A.DoomY, A.DoomZ, A.Info^.Mass, Damage, A.Health,
       FromX, FromY, FromZ, A.VelX, A.VelY);
@@ -5972,10 +6087,25 @@ begin
     (P_DamageMobj: the damage source becomes the new target). }
   if A.Info^.Kind = tkMonster then
   begin
-    if ByPlayer then
-      A.Target := nil
-    else if (Attacker <> nil) and (Attacker.Info^.Kind = tkMonster) and not InfightImmune(A, Attacker) then
-      A.Target := Attacker;
+    { P_DamageMobj: the attacker becomes the target unless the monster is
+      still set on another (its threshold; the Arch-vile and MBF21's
+      NOTHRESHOLD have none); nobody turns on an Arch-vile. }
+    if (A.Threshold = 0) or (A.Info^.Num = 64) or ((A.Flags2 and Mbf21NoThreshold) <> 0) then
+    begin
+      if ByPlayer then
+      begin
+        A.Target := nil;
+        A.Threshold := 100;
+      end else
+      if (Attacker <> nil) and (Attacker.Info^.Kind = tkMonster) and (Attacker.Info^.Num <> 64) and
+         not InfightImmune(A, Attacker) then
+      begin
+        if A.Target <> Attacker then
+          WritelnLog('Infight', '%s turns on %s', [A.Info^.Sprite, Attacker.Info^.Sprite]);
+        A.Target := Attacker;
+        A.Threshold := 100;
+      end;
+    end;
     if not A.Awake then
     begin
       A.Awake := true;
@@ -6036,7 +6166,7 @@ begin
   end else
   begin
     PlayInfoSeq(A, skDeath, false, A.Info^.DeathFrames, 5);
-    if A.Info^.DeathSound <> '' then FSounds.PlayAt(A.Info^.DeathSound, A);
+    PlayThingSound(A, A.Info^.DeathSound);
   end;
   if A.Info^.Num = 88 then
     StartBrainDeath(A)
@@ -6903,6 +7033,7 @@ var
   Cost, I, Total: Integer;
 begin
   Player.FireHeld := true;
+  if FNoAutofire then Exit;
   if Player.Dead or (FMap = nil) or not FHaveRay then Exit;
   if Player.AttackTics > 0 then Exit;
   { A_WeaponReady only: no firing while the weapon goes down or up. }
@@ -6941,13 +7072,17 @@ var
   AmmoT: TAmmoType;
 
   function GiveAmmo(const T: TAmmoType; const Amount: Integer): Boolean;
+  var
+    Had: Integer;
   begin
     if Player.Ammo[T] >= Player.MaxAmmo[T] then Exit(false);
+    Had := Player.Ammo[T];
     { P_GiveAmmo: double ammo on the easiest and the Nightmare skill. }
     if Skill in [0, 4] then
       Player.Ammo[T] := Min(Player.MaxAmmo[T], Player.Ammo[T] + Amount * 2)
     else
       Player.Ammo[T] := Min(Player.MaxAmmo[T], Player.Ammo[T] + Amount);
+    if Had = 0 then AmmoAutoSwitch(T);
     Result := true;
   end;
 
@@ -6965,7 +7100,8 @@ var
     HadWeapon := W in Player.Weapons;
     Include(Player.Weapons, W);
     if T <> amNoAmmo then GiveAmmo(T, Amount);
-    if not HadWeapon then
+    { MBF21's NOAUTOSWITCHTO: picked up, not taken in hand. }
+    if not HadWeapon and not WeaponHasBit(W, WeaponNoAutoSwitchTo) then
       ChangeWeapon(W);
     Result := true;
   end;

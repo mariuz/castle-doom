@@ -263,6 +263,13 @@ var
     else if SameText(Key, 'Action sound') then begin if M >= 0 then Mobjs[M].ActiveSound := SoundNum(Value); end
     else if SameText(Key, 'Bits') then begin if M >= 0 then Mobjs[M].Flags := BitsValue(ValueStr); end
     else if SameText(Key, 'Missile damage') then begin if M >= 0 then Mobjs[M].Damage := Value; end
+    else if SameText(Key, 'MBF21 Bits') then
+    begin
+      { Any row's (projectiles have no thing of this port). }
+      if M >= 0 then MobjMbf21Bits[M] := Mbf21BitsValue(ValueStr);
+      if Info <> nil then Info^.Mbf21Bits := Mbf21BitsValue(ValueStr);
+      Mbf21Patch := true;
+    end
     else if (Info = nil) and (M >= 0) and SameText(Key, 'Speed') then
       { Projectiles (no thing of this port): fixed point when large. }
       begin if Value >= 65536 then Mobjs[M].Speed := Value div 65536 else Mobjs[M].Speed := Value; end
@@ -289,7 +296,6 @@ var
       if Value >= 65536 then Info^.FastSpeed := Value div 65536 else Info^.FastSpeed := Value;
       Mbf21Patch := true;
     end
-    else if SameText(Key, 'MBF21 Bits') then begin Info^.Mbf21Bits := Mbf21BitsValue(ValueStr); Mbf21Patch := true; end
     else
     begin
       Inc(Ignored);

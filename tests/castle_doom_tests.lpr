@@ -3171,6 +3171,19 @@ begin
     AssertTrue('zombieman death sequence has the spawn',
       FindThingInfo(3004)^.Seqs[skDeath].Actions[1] = saSpawnObject);
     AssertEquals('its state', 190, FindThingInfo(3004)^.Seqs[skDeath].ActionStates[1]);
+    { MBF21's default weapon bits, then the bits patch: a projectile's
+      bits (no thing of the map), a thing's, a weapon's. }
+    ClearDehackedFiles;
+    ApplyDehacked(W);
+    AssertEquals('pistol: switched away from', WeaponAutoSwitchFrom, Weapons[1].Mbf21Bits);
+    AssertEquals('chainsaw: no thrust, not switched to', WeaponNoThrust or WeaponFleeMelee or WeaponNoAutoSwitchTo,
+      Weapons[7].Mbf21Bits);
+    AddDehackedFile(Dir + 'mbf21bits.deh');
+    ApplyDehacked(W);
+    AssertEquals('rocket rips', Mbf21Rip, MobjMbf21Bits[33]);
+    AssertEquals('zombieman full volume', Mbf21FullVolumeSounds, FindThingInfo(3004)^.Mbf21Bits);
+    AssertEquals('and its row', Mbf21FullVolumeSounds, MobjMbf21Bits[1]);
+    AssertEquals('fist no thrust', WeaponNoThrust, Weapons[0].Mbf21Bits);
     { The missile patch: the imp's fireball frames seek; vanilla's
       revenant rocket traces. }
     ClearDehackedFiles;

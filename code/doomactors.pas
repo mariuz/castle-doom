@@ -133,6 +133,9 @@ type
     { TERRAIN's footclip: drawn this much lower, sunk into a liquid floor
       (the floor hides its feet). }
     FootClip: Single;
+    { Monsters: tics before another attacker can become the target
+      (Doom's threshold). }
+    Threshold: Integer;
     { The height it stood at last tic (TERRAIN's landings). }
     LastZ: Single;
     { Missiles: falling (Thing_ProjectileGravity), 1 unit per tic per tic. }

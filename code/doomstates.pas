@@ -65,6 +65,8 @@ var
     pointer's default (StateArg). }
   StateArgs: array of array [0..7] of Integer;
   StateArgsSet: array of Integer;
+  { DeHackEd's "MBF21 Bits" per mobjinfo row (things and projectiles). }
+  MobjMbf21Bits: array of Integer;
 
 { State S's argument I (0..7), Default when the patch did not set it. }
 function StateArg(const S, I, Default: Integer): Integer;
@@ -150,6 +152,14 @@ begin
     Weapons[I].AmmoPerShot := -1;
     Weapons[I].Mbf21Bits := 0;
   end;
+  { MBF21's defaults: the fist and pistol are switched away from when
+    ammo for a better weapon comes, the fist and chainsaw are not
+    switched to on pickup, the chainsaw does not push, the BFG does not
+    fire on its own when switched to with the trigger held. }
+  Weapons[0].Mbf21Bits := WeaponFleeMelee or WeaponAutoSwitchFrom or WeaponNoAutoSwitchTo;
+  Weapons[1].Mbf21Bits := WeaponAutoSwitchFrom;
+  Weapons[6].Mbf21Bits := WeaponNoAutofire;
+  Weapons[7].Mbf21Bits := WeaponNoThrust or WeaponFleeMelee or WeaponNoAutoSwitchTo;
   SetLength(Sprites, VanillaSpriteCount);
   for I := 0 to VanillaSpriteCount - 1 do
     Sprites[I] := VanillaSprites[I];
@@ -162,6 +172,9 @@ begin
   SetLength(Sounds, VanillaSoundCount);
   for I := 0 to VanillaSoundCount - 1 do
     Sounds[I] := VanillaSounds[I];
+  SetLength(MobjMbf21Bits, VanillaMobjCount);
+  for I := 0 to VanillaMobjCount - 1 do
+    MobjMbf21Bits[I] := 0;
   SetLength(StateArgs, VanillaStateCount);
   SetLength(StateArgsSet, VanillaStateCount);
   for I := 0 to VanillaStateCount - 1 do

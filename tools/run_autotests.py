@@ -539,6 +539,19 @@ TESTS = [
      [r'Mbf21: BAL1: A_SeekTracer, turned -6\.5'],
      ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21missile.deh'), '--fixed-step'],
      None),
+    # MBF21's bits (mbf21bits.deh): the fist pushes nothing (NOTHRUST), the
+    # zombieman's sounds are heard everywhere (FULLVOLSOUNDS); the rocket
+    # rips through two imps (RIP, a projectile's bits).
+    ('mbf21-bits', 'E1M1',
+     'Y,K,SHOTS,C:1,W:1,A:0,P:3001:55,W:0.1,X,W:1,P:3004:200,W:0.2,D,W:0.5,Q',
+     [r'Shot: .* hit TROO', r'!Push: TROO', r'Sound: POSS: \w+ at full volume'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21bits.deh'), '--fixed-step'],
+     None),
+    ('mbf21-rip', 'E1M1',
+     'Y,K,C:5,W:1,A:0,P:3001:150,P:3001:300,W:0.1,X,W:1.5,Q',
+     [r'Mbf21: MISL rips through TROO'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mbf21bits.deh'), '--fixed-step'],
+     None),
     # MBF21's A_HealChase (mbf21jump.deh): an imp raises a zombieman's
     # corpse, which then attacks at once (a jump into its missile state).
     ('mbf21-heal', 'E1M1',
@@ -1804,7 +1817,11 @@ def run_test(exe, out, test):
             problems.append(line.strip())
             break
     for rx in expected:
-        if not re.search(rx, log):
+        # '!regex': a line that must not be there.
+        if rx.startswith('!'):
+            if re.search(rx[1:], log):
+                problems.append('unexpected log line /%s/' % rx[1:])
+        elif not re.search(rx, log):
             problems.append('missing log line /%s/' % rx)
     if check and not problems:
         try:

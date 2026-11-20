@@ -1,0 +1,17 @@
+Patch File for DeHackEd v3.0
+# MBF21 bits test patch (tools/testdata/mbf21bits.deh): read by the unit
+# test TestMbf21 and the mbf21-bits / mbf21-rip autotests.
+Doom version = 2021
+Patch format = 6
+
+# The zombieman's sounds at full volume.
+Thing 2 (Zombieman)
+MBF21 Bits = FULLVOLSOUNDS
+
+# The rocket (a projectile: no thing of the map) rips through bodies.
+Thing 34 (Rocket)
+MBF21 Bits = RIP
+
+# The fist pushes nothing.
+Weapon 0 (Fist)
+MBF21 Bits = NOTHRUST

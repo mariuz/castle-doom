@@ -411,6 +411,7 @@ begin
       begin
         AJ.Add('spawn', JsonFloatArray([A.SpawnX, A.SpawnY, A.SpawnAngle]));
         AJ.Add('deadTics', A.DeadTics);
+        if A.Threshold > 0 then AJ.Add('threshold', A.Threshold);
       end;
       AJ.Add('collides', A.Collides);
       AJ.Add('pickable', A.Pickable);
@@ -770,6 +771,7 @@ begin
             A.SpawnY := ArrayItemFloat(ObjArray(AJ, 'spawn'), 1, A.DoomY);
             A.SpawnAngle := ArrayItemFloat(ObjArray(AJ, 'spawn'), 2, A.Angle);
             A.DeadTics := AJ.Get('deadTics', 0);
+            A.Threshold := AJ.Get('threshold', 0);
             A.Collides := AJ.Get('collides', Info^.Solid);
             A.Pickable := AJ.Get('pickable', false);
             A.SetAnimation(AJ.Get('frames', Info^.IdleFrames), AJ.Get('frameIndex', 0),
