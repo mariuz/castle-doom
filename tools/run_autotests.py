@@ -554,6 +554,16 @@ TESTS = [
       r'Friend: A helper dog at \(-416, 208\)', r'Friend: DOGS at \(-?\d+, -?\d+\) goes for POSS',
       r'Infight: DOGS killed POSS', r'Things: 209 things spawned, 29 monsters'],
      ['-dogs', '3', '--fixed-step'], lambda config: check_helper_dogs(config)),
+    # MBF's monster backing (-monster-backing): an imp keeps away from the
+    # player's fist (about 190), comes close once BACKING turns it off;
+    # a friendly imp backs away from a demon (melee only) within 128.
+    ('monster-backing', 'E1M1', 'Y,K,C:1,W:1,G:-416:256,A:0,P:3001:150,W:3,SAVE:1,BACKING,W:3,SAVE:2,Q',
+     [r'Backing: TROO at \(-266, 256\) backs away from the player\'s melee weapon \(150 away\)',
+      r'Backing: Monster backing off'],
+     ['--monster-backing', '--fixed-step'], lambda config: check_monster_backing(config)),
+    ('monster-backing-friend', 'E1M1', 'Y,G:-416:256,A:0,W:0.3,FRIEND:3001:60,P:3002:300,W:4,S,Q',
+     [r'Friend: TROO at \(-356, 256\) goes for SARG', r'Backing: TROO at \(-?\d+, -?\d+\) backs away from SARG'],
+     ['--monster-backing', '--fixed-step'], None),
     # dogs.wad (tools/make_dogs_wad.py): DOGS sprites and sounds, a sleeping
     # zombieman facing away from the player and a friendly dog in front of
     # it: the hostile monster goes for the friend (P_LookForTargets).
@@ -1253,6 +1263,20 @@ def check_friends(config):
     assert friends[0]['x'] > -260 and d < 140, 'friend at %s, player at %s' % (friends[0]['x'], b['player']['x'])
 
 
+def check_monster_backing(config):
+    """The imp held off from the fist while backing was on, and came
+    close after it was turned off (the setting saved both times)."""
+    def imp_distance(save):
+        imps = [a for a in save['actors'] if a.get('type') == 3001 and abs(a['y'] - 256) < 100 and -500 < a['x'] < 0]
+        assert len(imps) == 1, 'imps: %s' % imps
+        return abs(imps[0]['x'] - save['player']['x'])
+    a, b = save_json(config, 1), save_json(config, 2)
+    assert a['monsterBacking'] is True and b['monsterBacking'] is False, 'setting: %s %s' % (
+        a.get('monsterBacking'), b.get('monsterBacking'))
+    assert imp_distance(a) > 160, 'imp too close while backing: %s' % imp_distance(a)
+    assert imp_distance(b) < 90, 'imp still away: %s' % imp_distance(b)
+
+
 def check_helper_dogs(config):
     """Three friendly dogs in the save, and the player not hurt."""
     a = save_json(config, 1)
@@ -1763,6 +1787,7 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'monster-backing-friend_1.png',
     'sky-offsets_1.png',
     'sky-offsets_2.png',
     '3d-water-splash_1.png',

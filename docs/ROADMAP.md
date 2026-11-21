@@ -66,8 +66,19 @@ L = several days). Items inside a section are in suggested order.
   `helper-dogs`); hostile monsters that see no player go for a friend
   they see (`LookForFriend`; `tools/testdata/dogs.wad` with generated
   DOGS sprites and sounds, autotest `dogs` with goldens). Left: monster
-  backing (FLEEMELEE, an MBF option off by default), MBF's dog jumping
-  across gaps.
+  backing (done, see below), MBF's dog jumping across gaps.
+
+- MBF's monster backing (`-monster-backing`, off by default as in
+  MBF's `monster_backing`; world state, saved, the demo command
+  `BACKING` toggles it): a monster with a missile attack (not a lost
+  soul) steps away from its target instead of towards it when that
+  fights in melee only and is within 128, or is the player within 192
+  holding a FLEEMELEE weapon (the fist and the chainsaw by default;
+  `TDoomWorld.BacksAway`, P_NewChaseDir's check); friends do not back
+  from friends and already keep within 128 of the player (`TicFriend`).
+  Log `Backing: TROO at (...) backs away from ...`; autotests
+  `monster-backing` (the fist, and the switch saved and turned off),
+  `monster-backing-friend` (a friendly imp and a demon).
 
 - Boom specials, the rest (colormaps, sky offsets): deep water's
   colormaps remap the palette like Boom's fullcolormap: TDoomGraphics
@@ -116,9 +127,9 @@ L = several days). Items inside a section are in suggested order.
   MBF21 on (`WeaponHasBit`), NOAUTOSWITCHTO, NOTHRUST and NOAUTOFIRE
   (`FNoAutofire` until the trigger is let go). The harness takes
   `!regex` for a line that must not appear. `mbf21bits.deh`; autotests
-  `mbf21-bits`, `mbf21-rip`, unit test `TestMbf21`. Left: FLEEMELEE
-  (MBF's monsters backing away) and the projectiles' other MBF21 thing
-  fields (groups).
+  `mbf21-bits`, `mbf21-rip`, unit test `TestMbf21`. Left: the
+  projectiles' other MBF21 thing fields (groups); FLEEMELEE acts with
+  MBF's monster backing (see above).
 
 - Projectiles with state frames: a missile plays its spawn state's
   frames from the state table (`EffectFlySeqs`, filled by
@@ -1773,16 +1784,17 @@ play.
 
 ## Suggested next three
 
-1. MBF's monster backing (S): monsters backing away from a melee
-   target (`P_SmartMove` / FLEEMELEE weapons), an option off by default
-   as in MBF, and friends keeping their distance.
-2. TERRAIN, the rest (S): footstep sounds (ZDoom's `footstep` sounds
+1. TERRAIN, the rest (S): footstep sounds (ZDoom's `footstep` sounds
    when walking on a terrain), items splashing when they land, and the
    damage types of a terrain's `damagetype`.
-3. Boom specials, the last one (S): the sky behind upper walls between
+2. Boom specials, the last one (S): the sky behind upper walls between
    two sky sectors of different skies (Doom skips an upper wall whose
    both sides have sky ceilings; with per-sector skies the two skies
    meet there).
+3. MBF's smarter moves (S-M, P_SmartMove): monsters staying on a lift
+   their target is on, avoiding crushing ceilings and damaging floors
+   (`monster_avoid_hazards`), and helper dogs jumping down ledges up to
+   128 high after their target (`dog_jumping`).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

@@ -1126,6 +1126,11 @@ autotest only checks the library loads.
   MF_FRIEND; `G:-416:256,A:0,W:0.3,FRIEND:3001:80,P:3004:350,W:6` logs
   `Friend: TROO at (...) goes for POSS` and `Infight: TROO killed
   POSS`, and the player is not hurt (autotest `friends`, golden).
+  Monster backing: `--monster-backing` (the demo command `BACKING`
+  toggles it, saved as `monsterBacking`); `Y,K,C:1,W:1,G:-416:256,A:0,
+  P:3001:150,W:3` logs `Backing: TROO at (-266, 256) backs away from
+  the player's melee weapon` and the imp stays about 190 away (autotests
+  `monster-backing`, `monster-backing-friend`).
   Helper dogs: `-dogs N` (0..3) puts friendly dogs (thing 888) at the
   other players' starts (log `Friend: A helper dog at (-416, 304)`;
   autotest `helper-dogs`); Freedoom has no DOGS sprites or DSDG*

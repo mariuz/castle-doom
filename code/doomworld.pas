@@ -177,6 +177,9 @@ type
     FFloatOk: Boolean;
     { Some living monster is a friend this tic (TicActors). }
     FHaveFriends: Boolean;
+    { MBF's monster_backing (from MonsterBacking, saved; the demo command
+      BACKING toggles it). }
+    FMonsterBacking: Boolean;
     { Line grid query results (TDoomMap.LinesInBox / LinesNearSegment),
       one buffer per caller so that none overwrites another's. }
     FLinesSight, FLinesMove, FLinesShot, FLinesMissile: TLineList;
@@ -331,6 +334,11 @@ type
       not go on (no target to chase). }
     function TicFriend(const A: TDoomActor): Boolean;
     function LookForFriend(const A: TDoomActor): Boolean;
+    { MBF's P_NewChaseDir: A (a monster with a missile attack, not a lost
+      soul) backs away from its target when that fights in melee only and
+      is within 128, or is the player within 192 with a FLEEMELEE weapon
+      (the fist, the chainsaw); friends do not back from friends. }
+    function BacksAway(const A: TDoomActor; const Dist: Single; out Why: String): Boolean;
     procedure SpawnHelperDog(const X, Y, Angle: Single);
     { TERRAIN (LoadTerrain at the level's start). }
     procedure LoadTerrain;
@@ -832,6 +840,9 @@ var
   { MBF's -dogs N: helper dogs (friends) at the other players' starts of
     each level, up to N (0..3). }
   HelperDogs: Integer;
+  { MBF's monster backing (-monster-backing; off by default as in MBF):
+    monsters with a missile attack back away from melee attackers. }
+  MonsterBacking: Boolean;
 
 implementation
 
@@ -1340,6 +1351,7 @@ begin
   FPlayerEmitter := TCastleTransform.Create(nil);
   FAcsHost := NewAcsHost;
   FAcsGlobals := TAcsGlobals.Create;
+  FMonsterBacking := MonsterBacking;
   Skill := 2;
   ResetPlayer;
 end;
@@ -2142,8 +2154,8 @@ begin
 end;
 
 const
-  CheatCommands: array [0..10] of String = ('K', 'Y', 'P', 'CORPSE', 'D', 'V', 'INVIS', 'INVUL', 'AMP', 'LINE',
-    'FRIEND');
+  CheatCommands: array [0..11] of String = ('K', 'Y', 'P', 'CORPSE', 'D', 'V', 'INVIS', 'INVUL', 'AMP', 'LINE',
+    'FRIEND', 'BACKING');
 
 class function TDoomWorld.IsCheat(const Command: String): Boolean;
 var
@@ -2179,6 +2191,11 @@ begin
     A := DebugSpawn(Round(Arg), Arg2);
     if A <> nil then
       DamageActor(A, 100000, A.DoomX, A.DoomY, A.DoomZ + 32);
+  end
+  else if Command = 'BACKING' then
+  begin
+    FMonsterBacking := not FMonsterBacking;
+    WritelnLog('Backing', 'Monster backing %s', [BoolToStr(FMonsterBacking, 'on', 'off')]);
   end
   else if Command = 'FRIEND' then
   begin
@@ -3552,7 +3569,8 @@ var
   DX, DY, Dist, Ang, Step, TX, TY, TZ, TR, RangeDist: Single;
   Blocked: Integer;
   Tries, MaxHold, HealS: Integer;
-  Moved, OnFriction: Boolean;
+  Moved, OnFriction, Backing: Boolean;
+  Why: String;
 begin
   { MBF's friends pick their own enemies and follow the player. }
   if IsFriend(A) then
@@ -3686,6 +3704,16 @@ begin
     (A.DoomZ <= FMap.FloorAt(A.Sector, A.DoomX, A.DoomY) + 1) and not A.Info^.Floats;
   if OnFriction and (FMap.Friction[A.Sector] < Friction) then
     Step := Max(1, Step * (1 + FMap.MoveFactor[A.Sector]) / 2);
+  { MBF's monster backing: away from a melee attacker instead. }
+  Backing := FMonsterBacking and BacksAway(A, Dist, Why);
+  if Backing then
+    Ang := Ang + 180;
+  if Backing and not A.Backing then
+  begin
+    WritelnLog('Backing', '%s at (%.0f, %.0f) backs away from %s (%.0f away)', [A.Info^.Sprite, A.DoomX,
+      A.DoomY, Why, Dist]);
+    A.Backing := true;
+  end;
   Moved := false;
   Tries := 0;
   OldX := A.DoomX;
@@ -3989,6 +4017,25 @@ begin
     BestD := D;
     Result := O;
   end;
+end;
+
+function TDoomWorld.BacksAway(const A: TDoomActor; const Dist: Single; out Why: String): Boolean;
+begin
+  Result := false;
+  Why := '';
+  if (A.Info^.Attack = akMelee) or (A.Info^.Num = 3006) then Exit;
+  if A.Target = nil then
+  begin
+    if Player.Dead or (Dist >= 192) or
+       ((Weapons[Ord(Player.Weapon)].Mbf21Bits and WeaponFleeMelee) = 0) then Exit;
+    Why := 'the player''s melee weapon';
+  end else
+  begin
+    if (A.Target.Info^.Kind <> tkMonster) or (A.Target.Info^.Attack <> akMelee) or (Dist >= 128) or
+       (IsFriend(A) and IsFriend(A.Target)) then Exit;
+    Why := A.Target.Info^.Sprite;
+  end;
+  Result := true;
 end;
 
 function TDoomWorld.LookForFriend(const A: TDoomActor): Boolean;

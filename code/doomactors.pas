@@ -128,6 +128,9 @@ type
     { Projectiles: the flight frames from the state table were started
       (TDoomWorld.StartFlyFrames). }
     FlyFramesStarted: Boolean;
+    { Has backed away from a melee attacker (MBF's monster backing; for
+      the log, once a monster). }
+    Backing: Boolean;
     { TERRAIN: a splash's chunk (thrown with Vel*, falls, gone on landing). }
     Chunk: Boolean;
     { TERRAIN's footclip: drawn this much lower, sunk into a liquid floor

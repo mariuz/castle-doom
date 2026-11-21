@@ -313,6 +313,8 @@ begin
         Inc(I);
       end;
     end else
+    if (Parameters[I] = '-monster-backing') or (Parameters[I] = '--monster-backing') then
+      MonsterBacking := true;
     if ((Parameters[I] = '-dogs') or (Parameters[I] = '--dogs')) and (I + 1 <= Parameters.High) then
       HelperDogs := Max(0, Min(3, StrToIntDef(Parameters[I + 1], 0)));
     if ((Parameters[I] = '-complevel') or (Parameters[I] = '--complevel')) and (I + 1 <= Parameters.High) then

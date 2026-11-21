@@ -349,7 +349,10 @@ monsters that see no player look for a friend (`LookForFriend`, the
 same `FindEnemyFor`, only while `FHaveFriends`, counted once a tic in
 `TicActors`). MBF's helper dogs (thing 888, the state table's MBF rows)
 spawn at the other players' starts up to `HelperDogs` (`-dogs N`,
-`SpawnHelperDog`).
+`SpawnHelperDog`). MBF's monster backing (`FMonsterBacking`, from the
+`MonsterBacking` option, saved, toggled by the recorded demo command
+`BACKING`) turns the chase step around when `BacksAway` says the target
+is a melee attacker close by.
 
 Weapons fire through the same walked sequences: `DoFireWeapon` starts
 the weapon's attack frames (`FCurWeaponSeq`, a copy of
