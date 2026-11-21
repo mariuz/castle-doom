@@ -184,7 +184,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   ice and mud, wind, currents and point pushers, translucent middle textures and things (MBF's DeHackEd bit), elevators, line-to-line
   teleports, light and sky transfers (each sky sector its own sky), scrollers driven by moving
   sectors, MBF's slower monsters in mud, deep water
-  (pools drawn at another sector's heights, tinted under the surface), `ANIMATED` and
+  (pools drawn at another sector's heights, under the surface in their own colormap), `ANIMATED` and
   `SWITCHES` lumps give PWADs their own animated textures and switches, and a `UMAPINFO`
   lump (or ZDoom's `MAPINFO` / `ZMAPINFO`, old or new syntax: maps, clusters, episodes) their
   level names, music, skies, par times, map order, story texts, intermission pictures and

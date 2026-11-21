@@ -18,7 +18,7 @@ program castle_doom_tests;
 {$unitpath ../code}
 
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
-  CastleVectors, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
+  CastleVectors, CastleImages, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
   DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
   DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf, DoomGldefs, DoomAcs, DoomSoundSeq, DoomTerrain;
 
@@ -869,6 +869,27 @@ begin
         if M.SectorSky[I] <> '' then Inc(Own);
       AssertEquals('one sector', 1, Own);
       AssertEquals('no main transfer', '', M.SkyTransferTexture);
+      { The line's own offsets (E1M1's west wall: 112, 0). }
+      AssertEquals('wall offset x', 112, M.SectorSkyOffset[29].X, 1e-4);
+      AssertEquals('wall offset y', 0, M.SectorSkyOffset[29].Y, 1e-4);
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+  { skies-offset.wad: Boom's sky offsets, on sector 29's sky and on the
+    main transfer (line 1046 to the other 18 sky sectors). }
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(ExtractFilePath(Path) + 'skies-offset.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('sector offset x', 4096, M.SectorSkyOffset[29].X, 1e-4);
+      AssertEquals('sector offset y', 60, M.SectorSkyOffset[29].Y, 1e-4);
+      AssertEquals('main transfer', 'SKY1', M.SkyTransferTexture);
+      AssertEquals('main offset x', 8192, M.SkyTransferOffset.X, 1e-4);
+      AssertEquals('main offset y', 60, M.SkyTransferOffset.Y, 1e-4);
     finally
       FreeAndNil(M);
     end;
@@ -885,6 +906,9 @@ var
   I, Count: Integer;
   Tint: TVector3;
   Amount: Single;
+  G: TDoomGraphics;
+  Img, Copy, Plain: TCastleImage;
+  X, Y, Changed: Integer;
 begin
   Path := 'tools/testdata/water.wad';
   if not FileExists(Path) then
@@ -906,11 +930,37 @@ begin
     finally
       FreeAndNil(M);
     end;
-    { WATERMAP pulls colours 40% towards a blue-green. }
+    { WATERMAP pulls colours 65% towards a sea blue (by palette
+      colours, so less: about 0.55 as a blend). }
     AssertTrue('tint', W.ColormapTint('WATERMAP', Tint, Amount));
-    AssertTrue(Format('amount %g', [Amount]), (Amount > 0.3) and (Amount < 0.5));
+    AssertTrue(Format('amount %g', [Amount]), (Amount > 0.45) and (Amount < 0.65));
     AssertTrue('blue-green', (Tint.Z > Tint.X) and (Tint.Y > Tint.X));
     AssertFalse('COLORMAP is no tint', W.ColormapTint('COLORMAP', Tint, Amount));
+    { The palette lookup holds WATERMAP as block 1 after COLORMAP: a patch
+      lit through it differs from the same row of COLORMAP. }
+    G := TDoomGraphics.Create(W);
+    try
+      AssertEquals('WATERMAP block', 1, G.ColormapBlock('WATERMAP'));
+      AssertEquals('no such colormap', 0, G.ColormapBlock('NOSUCH'));
+      AssertEquals('COLORMAP is block 0', 0, G.ColormapBlock(''));
+      Img := G.Patch('PISGA0').Image;
+      Copy := G.ColormapCopy(Img, 8, 1);
+      Plain := G.ColormapCopy(Img, 8);
+      Changed := 0;
+      try
+        for Y := 0 to Img.Height - 1 do
+          for X := 0 to Img.Width - 1 do
+            if (PVector4Byte(Img.PixelPtr(X, Y))^.W > 0) and
+               not CompareMem(Copy.PixelPtr(X, Y), Plain.PixelPtr(X, Y), 3) then
+              Inc(Changed);
+      finally
+        FreeAndNil(Copy);
+        FreeAndNil(Plain);
+      end;
+      AssertTrue(Format('pistol pixels remapped: %d', [Changed]), Changed > 50);
+    finally
+      FreeAndNil(G);
+    end;
   finally
     FreeAndNil(W);
   end;

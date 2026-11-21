@@ -731,11 +731,20 @@ one per texture with `--no-atlas`. Each batch becomes one `TShapeNode` with:
   sector the player is in) its real floor in the control's floor flat and
   a ceiling just under the water surface in the control's ceiling flat
   and light; above the control's ceiling the opposite. A change of view
-  regenerates those sectors. The colormap of the viewer's region becomes
-  a screen tint (`TDoomWad.ColormapTint`: row 0 of the colormap fitted as
-  a blend towards one colour; the play design's `ColormapTint`
-  rectangle, over the 3D view and the weapon, under the HUD). Things need
-  nothing: the drawn surfaces hide what is below or above them.
+  regenerates those sectors. The colormap of the viewer's region
+  replaces COLORMAP like Boom's fullcolormap: `TDoomGraphics` stacks
+  COLORMAP and the WADs' other colormaps (`FindExtraColormaps`: between
+  `C_START` / `C_END`, or colormap-sized) in the colormap lookup image,
+  64 rows each, the shaders add `doom_colormap_base` (the block,
+  `TDoomLighting.ColormapBlock`, set by the play view from the world's
+  `ColormapName` through `TDoomGraphics.ColormapBlock`) to their row
+  (invulnerability keeps COLORMAP's row 32), and the weapon sprite is
+  lit through the same block (`ColormapCopy`). Without palette mapping
+  (`PALMAP`) the colormap is a screen tint instead
+  (`TDoomWad.ColormapTint`: row 0 fitted as a blend towards one colour;
+  the play design's `ColormapTint` rectangle, over the 3D view and the
+  weapon, under the HUD), as for 3D-floor water. Things need nothing:
+  the drawn surfaces hide what is below or above them.
 
 The atlas (`TDoomGraphics.BuildAtlas`, called by `TDoomGeometry.Create`
 with every texture and flat the map's sidedefs and sectors name): pages
@@ -1073,10 +1082,17 @@ vertex's Doom position goes into the `doom_tile` attribute, and the
 fragment samples the sky by the direction from the eye (the effect's
 `doom_sky_eye`, sent every frame by `TMapChunk.UpdateScroll`) the way
 `BuildSky` maps the cylinder (4 tiles a turn, row R at the slope
-(100 - R) / 160, row 0 stretched up, rows repeating down), so the two
+(Mid - R) / 160, row 0 stretched up, rows repeating down), so the two
 meet without a seam and, unlike the open-topped cylinder, have no hole
-straight up. Upper walls between two sky sectors are still skipped (the
-sky hack), where the cylinder's sky shows.
+straight up. A transfer line's front side offsets act like Boom's
+r_plane.c: X is added to the view angle as a fixed-point number (X /
+65536 of a turn, `SkyOffsetOf` in texture widths), Y gives the row at
+the horizon, Mid = Y - 28 (100 for the plain sky; `SkyMidOf`, kept
+within one texture height so equal looks compare equal): the cylinder
+is turned and its rows moved, a per-sector sky gets `doom_sky_offset` /
+`doom_sky_mid`, and different offsets make a sector's sky its own.
+Upper walls between two sky sectors are still skipped (the sky hack),
+where the cylinder's sky shows.
 
 MBF's translucent things: `BitsValue` knows MBF's bit names up to 31
 (`TRANSLUCENT`) and numbers with bit 31 set; `TThingInfo.Translucent`

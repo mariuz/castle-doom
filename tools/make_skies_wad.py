@@ -9,6 +9,14 @@ unit test:
   tag 14 and SKY3 as its upper texture: sector 29 shows SKY3 while the
   other 18 sky sectors keep the map's SKY1 (the one sky cylinder).
 
+It also writes skies-offset.wad beside it, the same with offsets on
+line 829's front side (Boom's sky offsets): x 4096 turns SKY3 by a
+sixteenth of a turn (a quarter of its width), y 60 puts its row 32 at
+the horizon (texturemid y - 28, against 100 for the plain sky); and
+line 1046 (one-sided, north of the window) a 271 giving the other 18
+sky sectors SKY1 turned by an eighth of a turn, its row 32 at the
+horizon too: the sky cylinder's offsets.
+
 Usage: make_skies_wad.py [IWAD] [OUTFILE]
 """
 import os
@@ -20,6 +28,19 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 
 def name8(s):
     return s.encode('ascii').ljust(8, b'\0')
+
+
+def write(path, lumps):
+    blob = b''
+    directory = b''
+    pos = 12
+    for name, body in lumps:
+        directory += struct.pack('<ii8s', pos, len(body), name.encode('ascii'))
+        blob += body
+        pos += len(body)
+    with open(path, 'wb') as f:
+        f.write(b'PWAD' + struct.pack('<ii', len(lumps), pos) + blob + directory)
+    print('%s: %d lumps' % (path, len(lumps)))
 
 
 def main():
@@ -42,17 +63,20 @@ def main():
     side = struct.unpack_from('<h', lines, 14 * 829 + 10)[0]
     struct.pack_into('<8s', sides, 30 * side + 4, name8('SKY3'))
     lumps = [('E1M1', b'')] + [(names[i], bytes(bodies[names[i]])) for i in range(start + 1, start + 11)]
-    blob = b''
-    directory = b''
-    pos = 12
-    for name, body in lumps:
-        directory += struct.pack('<ii8s', pos, len(body), name.encode('ascii'))
-        blob += body
-        pos += len(body)
-    with open(out, 'wb') as f:
-        f.write(b'PWAD' + struct.pack('<ii', len(lumps), pos) + blob + directory)
-    print('%s: %d lumps' % (out, len(lumps)))
-
+    write(out, lumps)
+    struct.pack_into('<hh', sides, 30 * side, 4096, 60)
+    # The other sky sectors (F_SKY1 ceilings) get tag 15 and line 1046 (the
+    # west wall north of the window, one-sided) a 271 with SKY1 and
+    # offsets 8192 (an eighth of a turn) and 60: the sky cylinder's sky.
+    for k in range(len(sectors) // 26):
+        if k != 29 and sectors[26 * k + 12:26 * k + 20].rstrip(b'\0') == b'F_SKY1':
+            struct.pack_into('<h', sectors, 26 * k + 24, 15)
+    struct.pack_into('<hh', lines, 14 * 1046 + 6, 271, 15)
+    side2 = struct.unpack_from('<h', lines, 14 * 1046 + 10)[0]
+    struct.pack_into('<8s', sides, 30 * side2 + 4, name8('SKY1'))
+    struct.pack_into('<hh', sides, 30 * side2, 8192, 60)
+    lumps = [('E1M1', b'')] + [(names[i], bytes(bodies[names[i]])) for i in range(start + 1, start + 11)]
+    write(os.path.join(os.path.dirname(out), 'skies-offset.wad'), lumps)
 
 if __name__ == '__main__':
     main()

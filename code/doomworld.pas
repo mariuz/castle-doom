@@ -792,6 +792,9 @@ type
     { The colormap of the viewer's deep water region as a screen tint
       (RGB, opacity; zero when none). }
     property ColormapTint: TVector4 read FColormapTint;
+    { The Boom colormap the view is in ('' none, '3D water' a swimmable
+      3D floor's tint only). }
+    property ColormapName: String read FColormapName;
     { The player is in a swimmable 3D floor (the view lets it swim). }
     property Swimming: Boolean read FSwimming;
     { While swimming: the water's top above the player. }
@@ -1828,7 +1831,7 @@ begin
   { Boom's sky transfer (271, 272) when it covers most of the sky. }
   if (FMap.SkyTransferTexture <> '') and (FGraphics.Texture(FMap.SkyTransferTexture) <> nil) then
     FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FMap.SkyTransferTexture, FMap.SkyTransferFlipped,
-      FGraphics.SkyTextureName(MapName))
+      FGraphics.SkyTextureName(MapName), true, FMap.SkyTransferOffset.X, FMap.SkyTransferOffset.Y)
   else
     FGeometry := TDoomGeometry.Create(FMap, FGraphics, FDynamic, FGraphics.SkyTextureName(MapName), false,
       FGraphics.SkyTextureName(MapName));

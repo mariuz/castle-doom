@@ -69,6 +69,25 @@ L = several days). Items inside a section are in suggested order.
   backing (FLEEMELEE, an MBF option off by default), MBF's dog jumping
   across gaps.
 
+- Boom specials, the rest (colormaps, sky offsets): deep water's
+  colormaps remap the palette like Boom's fullcolormap: TDoomGraphics
+  stacks COLORMAP and every other colormap of the WADs (the lumps
+  between C_START and C_END, and colormap-sized lumps; `ColormapBlock`)
+  in the colormap lookup image, 64 rows each, and the shaders' row
+  `doom_colormap_base` picks the one the view is in
+  (`TDoomLighting.ColormapBlock`, set by the play view from the world's
+  `ColormapName`; invulnerability keeps COLORMAP's row 32); the weapon
+  sprite is lit through it too (`ColormapCopy`'s block), and the screen
+  tint stays only without palette mapping (`PALMAP`) and for 3D-floor
+  water. A sky transfer line's front side offsets act like Boom's
+  r_plane.c: X turns the sky by X / 65536 of a turn, Y puts texture row
+  Y - 28 at the horizon (`SkyOffsetOf` / `SkyMidOf`; the cylinder is
+  turned and its rows moved, a per-sector sky's shader gets
+  `doom_sky_offset` / `doom_sky_mid`). `water.wad`'s WATERMAP has 32
+  light levels now; `skies-offset.wad` (`tools/make_skies_wad.py`),
+  autotest `sky-offsets` (goldens), unit tests `TestDeepWater`,
+  `TestSectorSkies`.
+
 - 3D floors, the rest (splashes, sound): falling into a swimmable
   slab's water splashes with the TERRAIN of its top flat (the control
   sector's ceiling flat; `TDoomMap.WaterSurfaceCrossed`,
@@ -1712,7 +1731,7 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile`, ACS libraries (`LOAD`, `LOADACS`) and thing specials done too; polyobjects (stage 1) done too; left are polyobjects' rest, the UDMF fields the map editor's panel does not edit yet (the back side's per-part ones), and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
-| **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies and MBF's monster friction too (see above); left: deep water's colormaps as a real remapping (a screen tint now), the sky offsets of a transfer line's sidedef, and the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
+| **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies, MBF's monster friction, deep water's colormaps as a palette remapping and the sky offsets of a transfer line too (see above); left: the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Heretic / Hexen games**: Hexen's map format is read (ZDoom-style maps for Doom, see above); the games themselves (their things, actions, classes, hubs) are out of scope unless someone wants them. | - | - | - |
 
@@ -1754,16 +1773,16 @@ play.
 
 ## Suggested next three
 
-1. Boom specials, the rest (S each): deep water's colormaps as a real
-   palette remapping (a screen tint now), the sky offsets of a sky
-   transfer line's sidedef, and the sky behind upper walls between sky
-   sectors of different skies.
-2. MBF's monster backing (S): monsters backing away from a melee
+1. MBF's monster backing (S): monsters backing away from a melee
    target (`P_SmartMove` / FLEEMELEE weapons), an option off by default
    as in MBF, and friends keeping their distance.
-3. TERRAIN, the rest (S): footstep sounds (ZDoom's `footstep` sounds
+2. TERRAIN, the rest (S): footstep sounds (ZDoom's `footstep` sounds
    when walking on a terrain), items splashing when they land, and the
    damage types of a terrain's `damagetype`.
+3. Boom specials, the last one (S): the sky behind upper walls between
+   two sky sectors of different skies (Doom skips an upper wall whose
+   both sides have sky ceilings; with per-sector skies the two skies
+   meet there).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

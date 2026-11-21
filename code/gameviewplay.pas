@@ -2626,8 +2626,8 @@ begin
   end else
   if Mapped then
   begin
-    WeaponSuffix := '/colormap' + IntToStr(WeaponLevel);
-    FlashSuffix := '/colormap' + IntToStr(FlashLevel);
+    WeaponSuffix := '/colormap' + IntToStr(WeaponLevel) + '.' + IntToStr(DoomLightingInstance.ColormapBlock);
+    FlashSuffix := '/colormap' + IntToStr(FlashLevel) + '.' + IntToStr(DoomLightingInstance.ColormapBlock);
   end else
   if Inverted then
   begin
@@ -2651,7 +2651,7 @@ begin
       if Fuzzy then
         FWeaponImage.Image := FuzzCopy(Img.Image, FuzzPhaseOfTic(FWorld.Tic))
       else if Mapped then
-        FWeaponImage.Image := Graphics.ColormapCopy(Img.Image, WeaponLevel)
+        FWeaponImage.Image := Graphics.ColormapCopy(Img.Image, WeaponLevel, DoomLightingInstance.ColormapBlock)
       else if Inverted then
         FWeaponImage.Image := InvertedCopy(Img.Image)
       else
@@ -2684,7 +2684,7 @@ begin
       if Fuzzy then
         FFlashImage.Image := FuzzCopy(Img.Image, FuzzPhaseOfTic(FWorld.Tic))
       else if Mapped then
-        FFlashImage.Image := Graphics.ColormapCopy(Img.Image, FlashLevel)
+        FFlashImage.Image := Graphics.ColormapCopy(Img.Image, FlashLevel, DoomLightingInstance.ColormapBlock)
       else if Inverted then
         FFlashImage.Image := InvertedCopy(Img.Image)
       else
@@ -2840,7 +2840,7 @@ procedure TViewPlay.Update(const SecondsPassed: Single; var HandleInput: Boolean
 var
   Info: TMapInfoEntry;
   Lift, MaxEye: Single;
-  Sec: Integer;
+  Sec, Block: Integer;
   CamPos, CamDir, TurnPos, TurnDir, TurnUp: TVector3;
   Feet, SwimEye: TVector3;
   P: TPlayerState;
@@ -3156,8 +3156,18 @@ begin
     if SwimEye.Z - PlayerViewHeight > FWorld.SwimSurface - 8 then
       FViewport.Camera.Translation := DoomToCge(SwimEye.X, SwimEye.Y, FWorld.SwimSurface - 8 + PlayerViewHeight);
   end;
+  { Boom's deep water colormaps: the palette lookup's block of that
+    colormap (Boom's fullcolormap) when the colours are palette mapped,
+    else the screen tint that approximates it. }
+  if DoomLightingInstance.PaletteMapped then
+    Block := Graphics.ColormapBlock(FWorld.ColormapName)
+  else
+    Block := 0;
+  if Block <> DoomLightingInstance.ColormapBlock then
+    WritelnLog('Water', 'Colormap block %d (%s)', [Block, FWorld.ColormapName]);
+  DoomLightingInstance.ColormapBlock := Block;
   FColormapTint.Color := FWorld.ColormapTint;
-  FColormapTint.Exists := (FWorld.ColormapTint.W > 0) and not FAutomap.Exists;
+  FColormapTint.Exists := (FWorld.ColormapTint.W > 0) and (Block = 0) and not FAutomap.Exists;
   { Doom's colormaps: the gun flash lights the room, invulnerability and
     the light amplification visor fix the colormap (DoomLighting). }
   DoomLightingInstance.ExtraLight := FWorld.Player.ExtraLight;

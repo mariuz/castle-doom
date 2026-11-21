@@ -123,6 +123,11 @@ type
       index, and COLORMAP's rows as colours. Made on first request. }
     FLutId: Integer;
     FIndexLut, FColormapLut: TRGBAlphaImage;
+    { Boom's colormaps after COLORMAP in the colormap lookup (64 rows
+      each): the lumps between C_START and C_END, and colormap-sized
+      lumps elsewhere (TDoomMap.ColormapName accepts those too). }
+    FExtraColormaps: TStringList;
+    procedure FindExtraColormaps;
     procedure MakeLuts;
     procedure ReadPNames;
     { Mark an image (and the rest of its animation) as used by this level. }
@@ -157,7 +162,11 @@ type
       (0..31, 32 = invulnerability): every pixel back to its PLAYPAL index,
       then that row's colour, like Doom draws the player's weapon. Alpha is
       kept. }
-    function ColormapCopy(const Source: TCastleImage; const Level: Integer): TCastleImage;
+    function ColormapCopy(const Source: TCastleImage; const Level: Integer;
+      const Block: Integer = 0): TCastleImage;
+    { The block of colormap Name in the lookup image (1..), 0 for none
+      (or COLORMAP). }
+    function ColormapBlock(const Name: String): Integer;
     { Sprite frame: Prefix like 'POSS', Frame 'A'..'Z', Rot 1..8 (0 = any).
       Falls back to rotation 0 when a rotation is missing. }
     function Sprite(const Prefix: String; const Frame: Char; const Rot: Integer;
@@ -419,9 +428,10 @@ begin
     images of the previous WAD's palette. }
   Inc(LutCounter);
   FLutId := LutCounter;
+  FindExtraColormaps;
   DoomLightingInstance.SetLookupUrls(
     Format('doomgfx:/lut/index%d.tga', [FLutId]),
-    Format('doomgfx:/lut/colormap%d.tga', [FLutId]));
+    Format('doomgfx:/lut/colormap%d.tga', [FLutId]), 64 * (1 + FExtraColormaps.Count));
   ReadPNames;
   ReadTextureLump('TEXTURE1');
   if FWad.HasLump('TEXTURE2') then
@@ -439,6 +449,7 @@ begin
   UnregisterUrlProtocol('doomgfx');
   FreeAndNil(FIndexLut);
   FreeAndNil(FColormapLut);
+  FreeAndNil(FExtraColormaps);
   FreeAndNil(FAnimGroups);
   FreeAndNil(FSwitchPairs);
   FreeAndNil(FAnimByName);
@@ -792,15 +803,22 @@ begin
     PVector4Byte(FIndexLut.PixelPtr(R + 64 * (B mod 8), G + 64 * (B div 8)))^ := Vector4Byte(I, I, I, 255);
   end;
 
-  FColormapLut := TRGBAlphaImage.Create(256, 64);
-  Lump := FWad.FindLump('COLORMAP');
-  for Y := 0 to 63 do
+  FColormapLut := TRGBAlphaImage.Create(256, 64 * (1 + FExtraColormaps.Count));
+  for Y := 0 to FColormapLut.Height - 1 do
   begin
-    Row := Min(Y, 33);
+    { Block 0 COLORMAP, then the extra colormaps; rows past a lump's end
+      repeat its last one. }
+    if Y < 64 then
+      Lump := FWad.FindLump('COLORMAP')
+    else
+      Lump := FWad.FindLump(FExtraColormaps[Y div 64 - 1]);
+    Row := Min(Y mod 64, 33);
+    if Lump >= 0 then
+      Row := Min(Row, FWad.LumpSize(Lump) div 256 - 1);
     for X := 0 to 255 do
     begin
       P := PVector4Byte(FColormapLut.PixelPtr(X, Y));
-      if Lump >= 0 then
+      if (Lump >= 0) and (Row >= 0) then
       begin
         Map := FWad.LumpPointer(Lump);
         P^ := FWad.PaletteColor(Map[Row * 256 + X]);
@@ -814,10 +832,47 @@ begin
       P^.W := 255;
     end;
   end;
-  WritelnLog('Graphics', 'Palette lookup images made (PLAYPAL to index, COLORMAP)');
+  if FExtraColormaps.Count > 0 then
+    WritelnLog('Graphics', 'Palette lookup images made (PLAYPAL to index, COLORMAP and %d more: %s)',
+      [FExtraColormaps.Count, FExtraColormaps.CommaText])
+  else
+    WritelnLog('Graphics', 'Palette lookup images made (PLAYPAL to index, COLORMAP)');
 end;
 
-function TDoomGraphics.ColormapCopy(const Source: TCastleImage; const Level: Integer): TCastleImage;
+procedure TDoomGraphics.FindExtraColormaps;
+const
+  MaxExtra = 31;
+var
+  I, CStart, CEnd: Integer;
+  N: String;
+begin
+  FExtraColormaps := TStringList.Create;
+  FExtraColormaps.CaseSensitive := false;
+  CStart := FWad.FindLump('C_START');
+  CEnd := FWad.FindLump('C_END');
+  for I := 0 to FWad.LumpCount - 1 do
+  begin
+    N := UpperCase(FWad.LumpName(I));
+    if (N = 'COLORMAP') or (N = 'C_START') or (N = 'C_END') then Continue;
+    if not (((CStart >= 0) and (CEnd > CStart) and (I > CStart) and (I < CEnd)) or
+       (FWad.LumpSize(I) = 33 * 256) or (FWad.LumpSize(I) = 34 * 256)) then Continue;
+    if FWad.LumpSize(I) < 256 then Continue;
+    { The last lump of a name wins, as FindLump finds it. }
+    if FWad.FindLump(N) <> I then Continue;
+    if FExtraColormaps.IndexOf(N) >= 0 then Continue;
+    if FExtraColormaps.Count >= MaxExtra then Break;
+    FExtraColormaps.Add(N);
+  end;
+end;
+
+function TDoomGraphics.ColormapBlock(const Name: String): Integer;
+begin
+  if (Name = '') or (FExtraColormaps = nil) then Exit(0);
+  Result := FExtraColormaps.IndexOf(Name) + 1;
+end;
+
+function TDoomGraphics.ColormapCopy(const Source: TCastleImage; const Level: Integer;
+  const Block: Integer): TCastleImage;
 var
   X, Y, Row, Index: Integer;
   C: TVector4Byte;
@@ -826,6 +881,8 @@ var
 begin
   MakeLuts;
   Row := Max(0, Min(Level, 33));
+  if (Block > 0) and (Block * 64 < FColormapLut.Height) and (Level <> 32) then
+    Row := Block * 64 + Row;
   if Source is TRGBAlphaImage then
     Copy := TRGBAlphaImage(Source.MakeCopy)
   else

@@ -370,11 +370,16 @@ type
       when it covers more than half of them; empty when none is. }
     SkyTransferTexture: String;
     SkyTransferFlipped: Boolean;
+    { The transfer line's front side offsets (Boom's r_plane.c): X turns
+      the sky by X / 65536 of a turn, Y moves its rows (texturemid
+      Y - 28 instead of 100). }
+    SkyTransferOffset: TVector2;
     { Each sky sector's own sky by a 271 / 272 tagging it ('' = the map's
       sky): the geometry draws the ones that differ from the one sky
       cylinder as sky-textured ceilings (per-sector skies). }
     SectorSky: array of String;
     SectorSkyFlipped: array of Boolean;
+    SectorSkyOffset: array of TVector2;
     { Boom's deep water (242, "height transfer"): the control sector (the
       242 line's front sector) of each tagged sector, -1 for none; such a
       sector is drawn at its control sector's heights, and differently
@@ -3100,12 +3105,15 @@ begin
   end;
   SkyTransferTexture := '';
   SkyTransferFlipped := false;
+  SkyTransferOffset := TVector2.Zero;
   SetLength(SectorSky, Length(Sectors));
   SetLength(SectorSkyFlipped, Length(Sectors));
+  SetLength(SectorSkyOffset, Length(Sectors));
   for I := 0 to High(Sectors) do
   begin
     SectorSky[I] := '';
     SectorSkyFlipped[I] := false;
+    SectorSkyOffset[I] := TVector2.Zero;
   end;
   SkySectors := 0;
   for I := 0 to High(Sectors) do
@@ -3160,6 +3168,8 @@ begin
               begin
                 SectorSky[S] := UpperCase(Sidedefs[Linedefs[I].Side[0]].UpperTex);
                 SectorSkyFlipped[S] := Linedefs[I].Special = 272;
+                SectorSkyOffset[S] := Vector2(Sidedefs[Linedefs[I].Side[0]].XOffset,
+                  Sidedefs[Linedefs[I].Side[0]].YOffset);
               end;
             end;
           until false;
@@ -3177,8 +3187,12 @@ begin
     begin
       SkyTransferTexture := UpperCase(Sidedefs[Linedefs[BestLine].Side[0]].UpperTex);
       SkyTransferFlipped := Linedefs[BestLine].Special = 272;
+      SkyTransferOffset := Vector2(Sidedefs[Linedefs[BestLine].Side[0]].XOffset,
+        Sidedefs[Linedefs[BestLine].Side[0]].YOffset);
       WritelnLog('Map', '%s: sky transfer: line %d gives %s%s to %d of %d sky sectors', [FName, BestLine,
         SkyTransferTexture, BoolToStr(SkyTransferFlipped, ' (mirrored)', ''), Best, SkySectors]);
+      if not SkyTransferOffset.IsPerfectlyZero then
+        WritelnLog('Map', '%s: sky transfer offsets %.0f, %.0f', [FName, SkyTransferOffset.X, SkyTransferOffset.Y]);
     end else
       WritelnLog('Map', '%s: sky transfer of line %d covers only %d of %d sky sectors: the map''s sky stays the main one',
         [FName, BestLine, Best, SkySectors]);

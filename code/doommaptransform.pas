@@ -321,7 +321,7 @@ begin
   { Every sector static: one chunk for the whole map. }
   if (FMap.SkyTransferTexture <> '') and (FGraphics.Texture(FMap.SkyTransferTexture) <> nil) then
     FGeometry := TDoomGeometry.Create(FMap, FGraphics, [], FMap.SkyTransferTexture, FMap.SkyTransferFlipped,
-      FGraphics.SkyTextureName(Lump))
+      FGraphics.SkyTextureName(Lump), true, FMap.SkyTransferOffset.X, FMap.SkyTransferOffset.Y)
   else
     FGeometry := TDoomGeometry.Create(FMap, FGraphics, [], FGraphics.SkyTextureName(Lump), false,
       FGraphics.SkyTextureName(Lump));

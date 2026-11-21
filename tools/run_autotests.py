@@ -725,6 +725,14 @@ TESTS = [
       r'Geometry: E1M1: 1 sky sectors show their own sky'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'skies.wad'), '--fixed-step'],
      None),
+    # Boom's sky offsets (skies-offset.wad): sector 29's SKY3 turned a
+    # quarter of its width and its row 32 at the horizon; the main transfer
+    # gives the other sky sectors SKY1 turned an eighth of a turn.
+    ('sky-offsets', 'E1M1', 'Y,G:-600:240,A:90,LOOK:60,W:0.3,S,G:1600:1000,A:0,LOOK:25,W:0.3,S,Q',
+     [r'Map: E1M1: sky transfer: line 1046 gives SKY1 to 18 of 19 sky sectors',
+      r'Map: E1M1: sky transfer offsets 8192, 60', r'Geometry: E1M1: 1 sky sectors show their own sky'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'skies-offset.wad'), '--fixed-step'],
+     None),
     # Random maps (DoomRandomMap): seed 42's first map, its exit switch
     # (where the log line says to stand), the second map's locked door
     # without and with the key (K), a save of the first loaded back; then
@@ -1755,6 +1763,8 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'sky-offsets_1.png',
+    'sky-offsets_2.png',
     '3d-water-splash_1.png',
     '3d-water-splash_2.png',
     'dogs_1.png',

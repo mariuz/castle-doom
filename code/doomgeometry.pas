@@ -95,6 +95,9 @@ type
       ceilings are drawn with the sky texture mapped by the view direction
       (DoomLighting.SkyTextureEffect); SkyEye is its eye position. }
     IsSky, SkyFlipped: Boolean;
+    { Boom's sky offsets: SkyOffset turns it (texture widths, a quarter
+      turn each), SkyMid is the texture row at the horizon. }
+    SkyOffset, SkyMid: Single;
     SkyEye: TSFVec3f;
     { Vertex count the nodes were created with; topology changes force a rebuild. }
     CommittedVertices: Integer;
@@ -142,7 +145,7 @@ type
     { What collision mode discards (passable middle textures). }
     FDiscard: TGeomBatch;
     function IsWaterLine(const Line: Integer): Boolean;
-    function SkyBatch(const Img: TDoomImage; const Flipped: Boolean): TGeomBatch;
+    function SkyBatch(const Img: TDoomImage; const Flipped: Boolean; const Offset, Mid: Single): TGeomBatch;
     function IsWaterSub(const Sub: Integer): Boolean;
     function Batch(const Img: TDoomImage; const Passable: Boolean; const ScrollPerTic: TVector2;
       const SwitchLine: Integer = -1; const Alpha: Single = 1;
@@ -204,6 +207,8 @@ type
     FVisible: Boolean;
     FSkyTexture, FMapSky: String;
     FSkyFlipped: Boolean;
+    { The cylinder's sky offsets (SkyOffsetOf / SkyMidOf). }
+    FSkyOffset, FSkyMid: Single;
     FWaterView: TWaterView;
     { The deep water sectors' real state while ApplyFakeSectors runs. }
     FSavedSectors: array of TDoomSector;
@@ -219,12 +224,17 @@ type
     { SkyFlipped mirrors the sky (Boom's 272 sky transfer). }
     { SkyTexture / SkyFlipped: the sky cylinder; MapSky: the map's own sky
       (the sky sectors without a 271 / 272), for the per-sector skies. }
+    { SkyOffset (Boom's transfer line's offsets: X turns the sky, Y sets
+      its row at the horizon, Y - 28) is zero for a map's own sky. }
     constructor Create(const AMap: TDoomMap; const AGraphics: TDoomGraphics;
       const DynamicSectors: array of Boolean; const SkyTexture: String; const SkyFlipped: Boolean = false;
-      const MapSky: String = '');
+      const MapSky: String = ''; const SkyTransfer: Boolean = false; const SkyOffsetX: Single = 0;
+      const SkyOffsetY: Single = 0);
     { The sky a sky sector shows when it is not the cylinder's (per-sector
-      skies), False when it is the cylinder's or the sector has no sky. }
-    function SectorOwnSky(const Sec: Integer; out Texture: String; out Flipped: Boolean): Boolean;
+      skies), False when it is the cylinder's or the sector has no sky;
+      Offset and Mid as TGeomBatch.SkyOffset / SkyMid. }
+    function SectorOwnSky(const Sec: Integer; out Texture: String; out Flipped: Boolean;
+      out Offset, Mid: Single): Boolean;
     destructor Destroy; override;
     { Add all scenes to a viewport's Items. }
     procedure AddToWorld(const Parent: TCastleTransform);
@@ -455,7 +465,7 @@ begin
   if IsSky and (Img <> nil) then
   begin
     TexNode := Img.MakeTextureNode(false);
-    TexNode.SetEffects([DoomLightingInstance.SkyTextureEffect(SkyFlipped, Img.Height, SkyEye)]);
+    TexNode.SetEffects([DoomLightingInstance.SkyTextureEffect(SkyFlipped, Img.Height, SkyEye, SkyOffset, SkyMid)]);
     Appearance.Texture := TexNode;
   end else
   if Img <> nil then
@@ -984,6 +994,7 @@ var
   Pts, DoomPts: array of TVector3;
   SkyName: String;
   SkyFlip: Boolean;
+  SkyOffset, SkyMid: Single;
   Tex: array of TVector2;
   I, N, F, Ctl: Integer;
   Z: Single;
@@ -1029,7 +1040,7 @@ begin
   { A sky ceiling with a sky of its own (per-sector skies): drawn with
     that sky, mapped by the view direction. Other sky ceilings are not
     drawn: the cylinder shows through. }
-  if (FEmitMode <> emCollision) and FOwner.SectorOwnSky(Sec, SkyName, SkyFlip) then
+  if (FEmitMode <> emCollision) and FOwner.SectorOwnSky(Sec, SkyName, SkyFlip, SkyOffset, SkyMid) then
   begin
     Img := FOwner.Graphics.Texture(SkyName);
     SetLength(DoomPts, N);
@@ -1039,7 +1050,7 @@ begin
       Pts[I] := DoomToCge(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y, Z);
       DoomPts[I] := Vector3(S.Poly[N - 1 - I].X, S.Poly[N - 1 - I].Y, Z);
     end;
-    SkyBatch(Img, SkyFlip).AddSkyPolygon(Pts, DoomPts, Vector2(255, DoomLightFullBright));
+    SkyBatch(Img, SkyFlip, SkyOffset, SkyMid).AddSkyPolygon(Pts, DoomPts, Vector2(255, DoomLightFullBright));
   end;
   { Ceiling: reversed order = facing down. Sky ceilings are not drawn. }
   if not Map.HasSkyCeiling(Sec) then
@@ -1109,11 +1120,11 @@ begin
   end;
 end;
 
-function TMapChunk.SkyBatch(const Img: TDoomImage; const Flipped: Boolean): TGeomBatch;
+function TMapChunk.SkyBatch(const Img: TDoomImage; const Flipped: Boolean; const Offset, Mid: Single): TGeomBatch;
 var
   Key: String;
 begin
-  Key := 'sky' + Img.Url + BoolToStr(Flipped, 'F', '');
+  Key := 'sky' + Img.Url + BoolToStr(Flipped, 'F', '') + Format('@%g,%g', [Offset, Mid]);
   if not FBatches.TryGetValue(Key, Result) then
   begin
     Result := TGeomBatch.Create;
@@ -1126,6 +1137,8 @@ begin
     Result.Passable := true;
     Result.IsSky := true;
     Result.SkyFlipped := Flipped;
+    Result.SkyOffset := Offset;
+    Result.SkyMid := Mid;
     FBatches.Add(Key, Result);
   end;
 end;
@@ -1259,16 +1272,40 @@ begin
     end;
 end;
 
+{ Boom's sky offsets (r_plane.c): a transfer line's X offset is added to
+  the view angle (as a fixed-point number, so 65536 of it make a turn):
+  that many quarter turns / 16384 (texture widths, four a turn); its Y
+  offset gives texturemid Y - 28 (100 for the plain sky: Y = 128), kept
+  within one texture height so equal looks compare equal. }
+function SkyOffsetOf(const OffsetX: Single): Single;
+begin
+  Result := OffsetX / 16384;
+  Result := Result - 4 * Floor(Result / 4);
+end;
+
+function SkyMidOf(const OffsetY: Single; const Img: TDoomImage): Single;
+var
+  H: Single;
+begin
+  Result := OffsetY - 28;
+  if (Img <> nil) and (Img.Height > 0) then
+  begin
+    H := Img.Height;
+    Result := Result - H * Floor(Result / H);
+  end;
+end;
+
 { TDoomGeometry -------------------------------------------------------------- }
 
 constructor TDoomGeometry.Create(const AMap: TDoomMap; const AGraphics: TDoomGraphics;
   const DynamicSectors: array of Boolean; const SkyTexture: String; const SkyFlipped: Boolean;
-  const MapSky: String);
+  const MapSky: String; const SkyTransfer: Boolean; const SkyOffsetX, SkyOffsetY: Single);
 var
   I, Own: Integer;
   C: TMapChunk;
   Tex: String;
   Flip: Boolean;
+  Offset, Mid: Single;
 begin
   inherited Create;
   FMap := AMap;
@@ -1276,9 +1313,14 @@ begin
   FSkyTexture := UpperCase(SkyTexture);
   FSkyFlipped := SkyFlipped;
   FMapSky := UpperCase(MapSky);
+  FSkyOffset := SkyOffsetOf(SkyOffsetX);
+  if SkyTransfer then
+    FSkyMid := SkyMidOf(SkyOffsetY, FGraphics.Texture(FSkyTexture))
+  else
+    FSkyMid := SkyMidOf(128, FGraphics.Texture(FSkyTexture));
   Own := 0;
   for I := 0 to High(FMap.Sectors) do
-    if SectorOwnSky(I, Tex, Flip) then Inc(Own);
+    if SectorOwnSky(I, Tex, Flip, Offset, Mid) then Inc(Own);
   if Own > 0 then
     WritelnLog('Geometry', '%s: %d sky sectors show their own sky', [FMap.Name, Own]);
   FChunks := TMapChunkList.Create(true);
@@ -1527,8 +1569,8 @@ const
   Segments = 16; { per quarter }
   { Doom draws one sky row per screen row and projects heights with a focal
     length of 160 pixels, so texture row R sits at a slope of
-    (100 - R) / 160 from the eye, relative to the world like the walls. }
-  SkyTextureMid = 100;
+    (Mid - R) / 160 from the eye, relative to the world like the walls
+    (Mid: FSkyMid, 100 for the plain sky). }
   SkyFocal = 160;
   Tiles = 4;
 var
@@ -1541,7 +1583,7 @@ var
 
   function RowHeight(const Row: Single): Single;
   begin
-    Result := Radius * (SkyTextureMid - Row) / SkyFocal;
+    Result := Radius * (FSkyMid - Row) / SkyFocal;
   end;
 
   { The texture column (0..1 in a tile), mirrored for Boom's 272. }
@@ -1583,8 +1625,9 @@ begin
       for Q := 0 to 3 do
         for I := 0 to Segments - 1 do
         begin
-          A0 := (Q * Segments + I) / (4 * Segments) * 2 * Pi;
-          A1 := (Q * Segments + I + 1) / (4 * Segments) * 2 * Pi;
+          { Turned back by Boom's offset: column C shows at angle C - offset. }
+          A0 := (Q * Segments + I) / (4 * Segments) * 2 * Pi - FSkyOffset * Pi / 2;
+          A1 := (Q * Segments + I + 1) / (4 * Segments) * 2 * Pi - FSkyOffset * Pi / 2;
           { Facing inward (we are inside the cylinder). Doom angles grow
             counter-clockwise; texture columns grow with the angle. }
           P0 := DoomToCge(Cos(A1) * Radius, Sin(A1) * Radius, Y1);
@@ -1668,20 +1711,29 @@ begin
           FDirty.Add(C);
 end;
 
-function TDoomGeometry.SectorOwnSky(const Sec: Integer; out Texture: String; out Flipped: Boolean): Boolean;
+function TDoomGeometry.SectorOwnSky(const Sec: Integer; out Texture: String; out Flipped: Boolean;
+  out Offset, Mid: Single): Boolean;
 begin
   Texture := '';
   Flipped := false;
+  Offset := 0;
+  Mid := 100;
   Result := false;
   if (Sec < 0) or (Sec > High(FMap.Sectors)) or not FMap.HasSkyCeiling(Sec) then Exit;
   if (Sec <= High(FMap.SectorSky)) and (FMap.SectorSky[Sec] <> '') then
   begin
     Texture := FMap.SectorSky[Sec];
     Flipped := FMap.SectorSkyFlipped[Sec];
+    Offset := SkyOffsetOf(FMap.SectorSkyOffset[Sec].X);
+    Mid := SkyMidOf(FMap.SectorSkyOffset[Sec].Y, FGraphics.Texture(Texture));
   end else
+  begin
     Texture := FMapSky;
+    Mid := SkyMidOf(128, FGraphics.Texture(Texture));
+  end;
   if (Texture = '') or (FGraphics.Texture(Texture) = nil) then Exit(false);
-  Result := (Texture <> FSkyTexture) or (Flipped <> FSkyFlipped);
+  Result := (Texture <> FSkyTexture) or (Flipped <> FSkyFlipped) or (Abs(Offset - FSkyOffset) > 1e-6) or
+    (Abs(Mid - FSkyMid) > 1e-3);
 end;
 
 procedure TDoomGeometry.SetWaterView(const Value: TWaterView);

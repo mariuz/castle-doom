@@ -66,6 +66,7 @@ type
     FExtraLight, FFixedColormap, FGamma: Integer;
     FDiminish, FSmooth: Boolean;
     FIndexLutUrl, FColormapLutUrl: String;
+    FColormapRows, FColormapBlock: Integer;
     FPaletteMapped: Boolean;
     FFuzzScale: Single;
     FFuzzPhase: Integer;
@@ -84,6 +85,7 @@ type
     procedure SetDiminish(const Value: Boolean);
     procedure SetSmooth(const Value: Boolean);
     procedure SetGamma(const Value: Integer);
+    procedure SetColormapBlock(const Value: Integer);
     procedure SendAll(const FieldName: String; const Value: Single);
   public
     constructor Create;
@@ -120,7 +122,7 @@ type
       the way the sky cylinder maps it; Flipped mirrors it (Boom's 272),
       TextureHeight is the sky's height in rows. }
     function SkyTextureEffect(const Flipped: Boolean; const TextureHeight: Integer;
-      out EyeField: TSFVec3f): TEffectNode;
+      out EyeField: TSFVec3f; const Offset: Single = 0; const Mid: Single = 100): TEffectNode;
     { Doom's colormap index (0 = full bright, 31 = darkest) for a light
       level seen at the nearest scale, as the player's weapon is lit. }
     function WeaponColormap(const Light: Integer): Integer;
@@ -143,7 +145,10 @@ type
     function GammaExponent: Single;
     { The lookup images (TDoomGraphics serves them) for palette-mapped
       colours; effects made after this use them. }
-    procedure SetLookupUrls(const IndexUrl, ColormapUrl: String);
+    procedure SetLookupUrls(const IndexUrl, ColormapUrl: String; const ColormapRows: Integer = 64);
+    { The colormap in use: 0 COLORMAP, N the Nth extra one of the lookup
+      image (TDoomGraphics.ColormapBlock; Boom's deep water). }
+    property ColormapBlock: Integer read FColormapBlock write SetColormapBlock;
     { Doom's real COLORMAP rows instead of darkening by (32 - level) / 32
       (needs the lookup images). }
     property PaletteMapped: Boolean read FPaletteMapped write SetPaletteMapped;
@@ -189,7 +194,7 @@ function FogDensity(const Light: Integer): Single;
 
 implementation
 
-uses SysUtils, Math, CastleUtils, CastleRenderOptions;
+uses SysUtils, Math, CastleUtils, CastleRenderOptions, CastleLog;
 
 const
   NL = LineEnding;
@@ -211,6 +216,10 @@ const
     'uniform float doom_palette_mapped;' + NL +
     'uniform sampler2D doom_index_lut;' + NL +
     'uniform sampler2D doom_colormap_lut;' + NL +
+    { The colormap lookup's rows (64 per colormap: COLORMAP, then Boom's)
+      and the first row of the one in use (deep water's). }
+    'uniform float doom_colormap_rows;' + NL +
+    'uniform float doom_colormap_base;' + NL +
     'uniform float doom_fuzz_scale;' + NL +
     'uniform float doom_fuzz_phase;' + NL +
     'uniform float doom_gamma;' + NL +
@@ -243,12 +252,17 @@ const
     '' + NL +
     { Doom's exact colour: the texel back to its palette index (6 bits a
       channel, TDoomGraphics.MakeLuts), then COLORMAP row "level". }
-    'vec3 doom_colormapped(vec3 c, float level)' + NL +
+    'vec3 doom_lut_row(vec3 c, float row)' + NL +
     '{' + NL +
     '  vec3 q = floor(floor(clamp(c, 0.0, 1.0) * 255.0 + 0.5) / 4.0);' + NL +
     '  vec2 cell = vec2(q.r + 64.0 * mod(q.b, 8.0), q.g + 64.0 * floor(q.b / 8.0));' + NL +
     '  float index = floor(texture2D(doom_index_lut, (cell + 0.5) / 512.0).r * 255.0 + 0.5);' + NL +
-    '  return texture2D(doom_colormap_lut, vec2((index + 0.5) / 256.0, (level + 0.5) / 64.0)).rgb;' + NL +
+    '  return texture2D(doom_colormap_lut, vec2((index + 0.5) / 256.0, (row + 0.5) / doom_colormap_rows)).rgb;' + NL +
+    '}' + NL +
+    { Row "level" of the colormap in use (Boom's fullcolormap). }
+    'vec3 doom_colormapped(vec3 c, float level)' + NL +
+    '{' + NL +
+    '  return doom_lut_row(c, doom_colormap_base + level);' + NL +
     '}' + NL +
     '' + NL +
     'void PLUG_fragment_modify(inout vec4 fragment_color)' + NL +
@@ -278,7 +292,7 @@ const
     '  }' + NL +
     '  if (doom_fixed_colormap > 31.5) {' + NL +
     '    if (doom_palette_mapped > 0.5)' + NL +
-    '      fragment_color.rgb = doom_colormapped(fragment_color.rgb, 32.0);' + NL +
+    '      fragment_color.rgb = doom_lut_row(fragment_color.rgb, 32.0);' + NL +
     '    else' + NL +
     '      fragment_color.rgb = vec3(1.0 - dot(fragment_color.rgb, vec3(0.299, 0.587, 0.114)));' + NL +
     '    if (doom_gamma < 0.999) fragment_color.rgb = pow(max(fragment_color.rgb, vec3(0.0)), vec3(doom_gamma));' + NL +
@@ -403,11 +417,13 @@ const
     'uniform vec3 doom_sky_eye;' + NL +
     'uniform float doom_sky_flip;' + NL +
     'uniform float doom_sky_height;' + NL +
+    'uniform float doom_sky_offset;' + NL +
+    'uniform float doom_sky_mid;' + NL +
     'void PLUG_texture_color(inout vec4 texture_color, const in sampler2D sky, const in vec4 tex_coord)' + NL +
     '{' + NL +
     '  vec3 d = doom_tile_v.xyz - doom_sky_eye;' + NL +
-    '  float u = atan(d.y, d.x) / 1.5707963 * doom_sky_flip;' + NL +
-    '  float row = 100.0 - 160.0 * d.z / max(length(d.xy), 0.001);' + NL +
+    '  float u = (atan(d.y, d.x) / 1.5707963 + doom_sky_offset) * doom_sky_flip;' + NL +
+    '  float row = doom_sky_mid - 160.0 * d.z / max(length(d.xy), 0.001);' + NL +
     '  float v = row < 0.0 ? 1.0 : 1.0 - fract(row / doom_sky_height);' + NL +
     '  texture_color = texture2D(sky, vec2(u, v));' + NL +
     '}';
@@ -539,6 +555,7 @@ begin
   FEffects := TEffectNodeList.Create;
   FExtraLight := 0;
   FFixedColormap := NoFixedColormap;
+  FColormapRows := 64;
   FDiminish := true;
   FPaletteMapped := true;
   FFuzzScale := 1;
@@ -558,10 +575,21 @@ begin
   SendAll('doom_fuzz_phase', Value);
 end;
 
-procedure TDoomLighting.SetLookupUrls(const IndexUrl, ColormapUrl: String);
+procedure TDoomLighting.SetLookupUrls(const IndexUrl, ColormapUrl: String; const ColormapRows: Integer);
 begin
   FIndexLutUrl := IndexUrl;
   FColormapLutUrl := ColormapUrl;
+  FColormapRows := Max(64, ColormapRows);
+  FColormapBlock := 0;
+  SendAll('doom_colormap_rows', FColormapRows);
+  SendAll('doom_colormap_base', 0);
+end;
+
+procedure TDoomLighting.SetColormapBlock(const Value: Integer);
+begin
+  if (FColormapBlock = Value) or (Value < 0) or (Value * 64 >= FColormapRows) then Exit;
+  FColormapBlock := Value;
+  SendAll('doom_colormap_base', Value * 64);
 end;
 
 { A lookup image as a texture: exact texels (no filtering, no mipmaps).
@@ -624,6 +652,8 @@ begin
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_scale', FFuzzScale));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_fuzz_phase', FFuzzPhase));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_gamma', GammaExponent));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_colormap_rows', Max(64, FColormapRows)));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_colormap_base', FColormapBlock * 64));
   Vectors := LightVectors;
   Colors := LightColors;
   try
@@ -726,7 +756,7 @@ begin
 end;
 
 function TDoomLighting.SkyTextureEffect(const Flipped: Boolean; const TextureHeight: Integer;
-  out EyeField: TSFVec3f): TEffectNode;
+  out EyeField: TSFVec3f; const Offset, Mid: Single): TEffectNode;
 var
   FragmentPart: TEffectPartNode;
 begin
@@ -739,6 +769,8 @@ begin
   else
     Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_sky_flip', 1));
   Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_sky_height', Max(1, TextureHeight)));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_sky_offset', Offset));
+  Result.AddCustomField(TSFFloat.Create(Result, true, 'doom_sky_mid', Mid));
   FragmentPart := TEffectPartNode.Create;
   FragmentPart.ShaderType := stFragment;
   FragmentPart.Contents := SkyTextureFragment;

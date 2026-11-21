@@ -14,8 +14,9 @@ and unit test:
   real floor in the start room's flat AQF054 and the surface's underside
   at -1 in its ceiling flat;
 - its front side's lower texture names WATERMAP, a colormap lump added
-  here (Freedoom has none): palette colours pulled 40% towards a
-  blue-green, the screen tint under water.
+  here (Freedoom has none): COLORMAP's 32 light levels with the
+  palette colours pulled 65% towards a sea blue, Boom's colormap under
+  water (the palette remap; a screen tint without palette mapping).
 
 Usage: make_water_wad.py [IWAD] [OUTFILE]
 """
@@ -25,22 +26,27 @@ import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 
-TINT = (0.1, 0.35, 0.55)
-AMOUNT = 0.4
+TINT = (0.05, 0.3, 0.7)
+AMOUNT = 0.65
 
 
 def name8(s):
     return s.encode('ascii').ljust(8, b'\0')
 
 
-def make_colormap(playpal):
+def make_colormap(playpal, colormap):
+    """34 rows like COLORMAP: rows 0..31 the palette darkened by
+    (32 - row) / 32, then pulled AMOUNT towards TINT; rows 32 and 33
+    (invulnerability, black) COLORMAP's own."""
     pal = [tuple(playpal[3 * i:3 * i + 3]) for i in range(256)]
-    row = bytearray()
-    for r, g, b in pal:
-        want = [c * (1 - AMOUNT) + t * 255 * AMOUNT for c, t in zip((r, g, b), TINT)]
-        best = min(range(256), key=lambda j: sum((pal[j][k] - want[k]) ** 2 for k in range(3)))
-        row.append(best)
-    return bytes(row) * 34
+    out = bytearray()
+    for level in range(32):
+        dark = (32 - level) / 32
+        for r, g, b in pal:
+            want = [c * dark * (1 - AMOUNT) + t * 255 * dark * AMOUNT for c, t in zip((r, g, b), TINT)]
+            best = min(range(256), key=lambda j: sum((pal[j][k] - want[k]) ** 2 for k in range(3)))
+            out.append(best)
+    return bytes(out) + colormap[32 * 256:34 * 256]
 
 
 def main():
@@ -54,6 +60,8 @@ def main():
     names = [e[2].rstrip(b'\0').decode('ascii') for e in entries]
     pp = entries[names.index('PLAYPAL')]
     playpal = data[pp[0]:pp[0] + 768]
+    cm = entries[names.index('COLORMAP')]
+    colormap = data[cm[0]:cm[0] + 34 * 256]
     start = names.index('E1M1')
     bodies = {}
     for i in range(start + 1, start + 11):
@@ -70,7 +78,7 @@ def main():
     side = struct.unpack_from('<h', lines, 14 * 829 + 10)[0]
     struct.pack_into('<8s', sides, 30 * side + 12, name8('WATERMAP'))
     lumps = [('E1M1', b'')] + [(names[i], bytes(bodies[names[i]])) for i in range(start + 1, start + 11)]
-    lumps.append(('WATERMAP', make_colormap(playpal)))
+    lumps.append(('WATERMAP', make_colormap(playpal, colormap)))
     blob = b''
     directory = b''
     pos = 12

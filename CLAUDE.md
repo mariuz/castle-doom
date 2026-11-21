@@ -621,7 +621,11 @@ puts a 271 with SKY3 on sector 29 only (behind the start room's west
 window); the log says `sky transfer of line 829 covers only 1 of 19 sky
 sectors` and `Geometry: E1M1: 1 sky sectors show their own sky`
 (autotest `sector-skies` with golden screenshots through the window and
-looking up inside sector 29, unit test `TestSectorSkies`). MBF monster
+looking up inside sector 29, unit test `TestSectorSkies`).
+`skies-offset.wad` (same script) adds Boom's sky offsets: line 829's
+side x 4096 / y 60 on sector 29's SKY3 and line 1046 a 271 giving the
+other 18 sky sectors SKY1 with 8192 / 60 (log `Map: E1M1: sky transfer
+offsets 8192, 60`; autotest `sky-offsets` with goldens). MBF monster
 friction: an imp spawned in `friction.wad`'s mud corridor walks half as
 far (autotest `monster-friction` reads the actors in its saves).
 Boom deep water: `tools/testdata/water.wad` (`tools/make_water_wad.py`)
@@ -629,7 +633,11 @@ makes the corridor east of E1M1's start room (141) a 96-unit pool
 controlled by the start room (242 on line 829, WATERMAP colormap);
 `G:-240:256` sinks the player to z -96 and logs `Water: View under
 water (sector 141, control 140)` and the colormap's tint (autotest
-`deep-water` with golden screenshots, unit test `TestDeepWater`). A
+`deep-water` with golden screenshots, unit test `TestDeepWater`). With
+palette mapping (the default) the colormap remaps the palette instead
+of tinting: log `Graphics: Palette lookup images made (... COLORMAP and
+1 more: WATERMAP)` and `Water: Colormap block 1 (WATERMAP)`; `PALMAP`
+brings the tint back. A
 deep water sector's sides need lower textures for the pool's walls, or
 nothing is drawn there (Doom's HOM).
 Random maps (`DoomRandomMap`): `-random SEED` (or `-file random:/SEED`)
