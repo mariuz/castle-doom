@@ -173,8 +173,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   sector light, fog, texture scaling, offsets and rotation and per-surface light, and their
   ACS scripts (with their libraries) run, their floors and ceilings can slope and their 3D floors (solid slabs,
   opaque or translucent, sloped, lighting what is under them, or water to swim in, tinted
-  in its sector's colour, where things sink slowly) are drawn
-  and walked on, and their polyobjects (moving
+  in its sector's colour, where things sink slowly and splash going in) are drawn
+  and walked on and stop sound, and their polyobjects (moving
   doors and walls) slide and turn. A PWAD's GLDEFS lights
   (point, pulse, flicker, bound to sprite frames) become dynamic lights, and its
   brightmaps make the marked parts of textures and flats glow; UDMF light things light

@@ -660,6 +660,19 @@ TESTS = [
       r'Udmf: Thing_ProjectileGravity \(40, 10, 64, 40, 48\): 1 things'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-3dfloor3.wad'), '--fixed-step'],
      lambda config: check_water_inside(config)),
+    # udmf-3dfloor5.wad: water in the pit east of the lift whose top flat
+    # is TERRAIN's Water: the player walking off the lift splashes at its
+    # surface, so does an imp's fireball at the swimming player; a solid
+    # slab filling the corridor east of the start room keeps the start
+    # room's shot from the sectors beyond (18 sectors, 38 without).
+    ('3d-water-splash', 'E1M1',
+     'Y,G:150:256,A:0,F:0.5,W:0.2,S,W:1.3,A:180,P:3001:250,W:8,S,SAVE:1,G:-416:256,A:0,W:0.5,X,W:1,Q',
+     [r'Map: E1M1: 3 3D floors',
+      r'Terrain: player splashes in Water \(3D floor 0 in sector 17, Water at 208 256\)',
+      r'Terrain: BAL1 splashes in Water \(3D floor 0 in sector 17',
+      r'Noise: Shot heard in 18 sectors \(\d+ new\); line openings closed by 3D floors: 1'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'udmf-3dfloor5.wad'), '--fixed-step'],
+     lambda config: check_3d_water_splash(config)),
     ('3d-water', 'E1M1',
      'Y,G:-416:256,A:0,W:0.3,S,LOOK:89,F:0.6,W:0.5,LOOK:30,W:0.1,SAVE:1,S,LOOK:-60,F:0.4,W:0.3,SAVE:2,G:-224:150,A:90,LOOK:0,'
      'W:0.5,S,P:3001:120,W:0.5,SAVE:3,Q',
@@ -1114,6 +1127,12 @@ def check_line_blocking(config):
     """udmf-block.wad: the player walking east stops before x -256."""
     x = save_json(config, 1)['player']['x']
     assert -290 < x < -256, 'not stopped by the blockplayers line: x %s' % x
+
+
+def check_3d_water_splash(config):
+    """udmf-3dfloor5.wad: the player in the pit's water."""
+    a = save_json(config, 1)
+    assert a['player']['z'] < -100, 'not in the pit: %s' % a['player']
 
 
 def check_3d_water(config):
@@ -1736,6 +1755,8 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    '3d-water-splash_1.png',
+    '3d-water-splash_2.png',
     'dogs_1.png',
     'dogs_2.png',
     'friends_1.png',

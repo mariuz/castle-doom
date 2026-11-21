@@ -1002,6 +1002,17 @@ autotest only checks the library loads.
   takes a slab's top from a triangular control sector's vertex
   heights (8 + (y - 128) / 8 over the corridor 141):
   `G:-224:150,A:90,F:1` walks up it (autotest `3d-vertex-heights`).
+  `udmf-3dfloor5.wad` (same script) fills the pit east of the lift
+  (sectors 17, 142) with water up to -80 whose top flat FWATER1 is
+  TERRAIN's Water (make_terrain_wad.py's lump and sprites) and the
+  corridor 141 with a solid slab: `Y,G:150:256,A:0,F:0.5` falls in
+  (`Terrain: player splashes in Water (3D floor 0 in sector 17, ...)`;
+  `G` right before `F`, or the lift lowers first), an imp's fireball
+  logs `BAL1 splashes`, and a shot in the start room reaches 18
+  sectors, not 38 (`Noise: ...; line openings closed by 3D floors: 1`;
+  autotest `3d-water-splash` with goldens, unit test
+  `Test3dWaterSplash`). Monsters never walk off drops over 24, so a
+  falling-monster splash needs a push.
   Polyobjects: `udmf-poly.wad` (same script) draws a 64 x 16 slab out
   in the void and places it at (-416, 384) in the start room (log `Map:
   E1M1: polyobject 1: 4 lines at (-416, 384) in sector 140`); from

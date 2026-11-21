@@ -5,6 +5,8 @@
 - MBF's friendly monsters: a monster with the FRIEND bit (DeHackEd, the THINGS flag 128 or UDMF's
   `friend`) fights the hostile monsters it sees, follows the player otherwise, and never hurts the
   player.
+- 3D floors: falling into a swimmable 3D floor's water splashes with its top flat's TERRAIN
+  (the player, monsters and missiles), and solid 3D floors filling a doorway stop sound.
 - MBF's helper dogs: `-dogs N` brings up to three friendly dogs (thing 888, MBF's states and
   sounds), drawn when a PWAD has the DOGS sprites; hostile monsters that see no player go for
   friends.

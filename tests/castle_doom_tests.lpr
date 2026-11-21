@@ -72,6 +72,7 @@ type
     procedure TestSlopes;
     procedure Test3dFloors;
     procedure Test3dWater;
+    procedure Test3dWaterSplash;
     procedure TestThingSpecials;
     procedure TestHexenFormat;
     procedure TestLineBlocking;
@@ -1698,6 +1699,67 @@ end;
 
 { Sector_Set3dFloor in tools/testdata/udmf-3dfloor.wad: a translucent
   slab (64..80) in the start room (140) and a solid step (0..24) in 141. }
+{ udmf-3dfloor5.wad: water in the pit east of E1M1's lift (-128..-80,
+  sectors 17 and 142) and a solid slab filling the corridor east of the
+  start room (141, 0..128). }
+procedure TTestMap.Test3dWaterSplash;
+var
+  Dir: String;
+  W: TDoomWad;
+  M: TDoomMap;
+  Water, I: Integer;
+  Top: Single;
+begin
+  Dir := 'tools/testdata/';
+  if not FileExists(Dir + 'udmf-3dfloor5.wad') then Dir := '../tools/testdata/';
+  if not FileExists(Dir + 'udmf-3dfloor5.wad') then
+  begin
+    WriteLn('Test3dWaterSplash: no udmf-3dfloor5.wad (python3 tools/make_udmf_wad.py), skipped');
+    Exit;
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-3dfloor5.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertEquals('3D floors', 3, Length(M.Floors3D));
+      Water := -1;
+      for I := 0 to High(M.Floors3D) do
+        if M.Floors3D[I].Swimmable and (M.Floors3D[I].Target = 17) then Water := I;
+      AssertTrue('pit water', Water >= 0);
+      AssertEquals('top flat', 'FWATER1', M.Sectors[M.Floors3D[Water].Control].CeilingTex);
+      { A fall from above through the surface, not one under it or up. }
+      AssertEquals('fall in', Water, M.WaterSurfaceCrossed(17, 300, 256, 0, -100, Top));
+      AssertEquals('surface', -80, Top, 0.01);
+      AssertEquals('under the surface', -1, M.WaterSurfaceCrossed(17, 300, 256, -90, -110, Top));
+      AssertEquals('going up', -1, M.WaterSurfaceCrossed(17, 300, 256, -100, 0, Top));
+      AssertEquals('no water there', -1, M.WaterSurfaceCrossed(140, -416, 256, 50, -10, Top));
+      { Sound: the corridor's slab closes the start room's east edge; the
+        water does not close the pit's edges. }
+      AssertTrue('corridor closed', M.SlabsCloseLine(834));
+      AssertFalse('water lets sound through', M.SlabsCloseLine(1159));
+      AssertFalse('a line without 3D floors', M.SlabsCloseLine(1045));
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+  { udmf-3dfloor.wad's step (0..24) leaves the corridor open above it. }
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Dir + 'udmf-3dfloor.wad')));
+    M := TDoomMap.Create(W, 'E1M1');
+    try
+      AssertFalse('a low step', M.SlabsCloseLine(834));
+    finally
+      FreeAndNil(M);
+    end;
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
 procedure TTestMap.Test3dWater;
 var
   Dir: String;

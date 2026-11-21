@@ -342,6 +342,12 @@ type
     function SpawnSplashActor(const SplashClass: String; const X, Y, Z: Single): TDoomActor;
     { A thing (Who; nil = the player) lands or a missile hits the floor
       at (X, Y, Z) in sector Sec: its terrain's splash, if any. }
+    procedure SplashOf(const T: Integer; const X, Y, Z: Single; const Where: String;
+      const Small: Boolean; const Who: TDoomActor; const What: String);
+    { A splash where a fall or a missile from OldZ to NewZ went into a
+      swimmable 3D floor's water (its top flat's terrain). }
+    function WaterSlabSplash(const Sec: Integer; const X, Y, OldZ, NewZ: Single; const Small: Boolean;
+      const Who: TDoomActor; const What: String): Boolean;
     procedure TerrainSplash(const X, Y, Z: Single; const Sec: Integer; const Small: Boolean;
       const Who: TDoomActor; const What: String);
     { How deep a thing standing at that place sinks (its terrain's
@@ -2717,13 +2723,15 @@ begin
   { Down from above (a fall or a step down; the walk takes a step in one
     tic); a floor moving down under the player is no fall. }
   Landed := OnFloor and (FPlayerLastZ > Floor + 4) and (FMap.Sectors[Sec].Mover = nil);
+  { Into a swimmable 3D floor's water from above. }
+  WaterSlabSplash(Sec, Player.X, Player.Y, FPlayerLastZ, Player.Z, false, nil, 'player');
   FPlayerLastZ := Player.Z;
   if FSwimming then
   begin
     FPlayerFootClip := 0;
     Exit;
   end;
-  if Landed then
+  if Landed and (FMap.WaterSlabAt(Sec, Player.X, Player.Y, Floor + 1) < 0) then
     TerrainSplash(Player.X, Player.Y, Floor, Sec, false, nil, 'player');
   FPlayerFootClip := FootClipAt(Sec, Player.X, Player.Y, Player.Z);
   T := SectorTerrain(Sec);
@@ -3100,7 +3108,13 @@ begin
             terrain with a splash. }
           if (FTerrain <> nil) and (A.LastZ > A.DoomZ + 4) and (A.Info^.Kind = tkMonster) and
              (A.State <> asDead) and (FMap.Sectors[Sec].Mover = nil) then
-            TerrainSplash(A.DoomX, A.DoomY, A.DoomZ, Sec, A.Info^.Mass < 10, A, A.Info^.Sprite);
+          begin
+            { Through a swimmable 3D floor's surface, else onto the floor
+              (under such water no floor splash). }
+            if not WaterSlabSplash(Sec, A.DoomX, A.DoomY, A.LastZ, A.DoomZ, A.Info^.Mass < 10, A,
+               A.Info^.Sprite) and (FMap.WaterSlabAt(Sec, A.DoomX, A.DoomY, A.DoomZ + 1) < 0) then
+              TerrainSplash(A.DoomX, A.DoomY, A.DoomZ, Sec, A.Info^.Mass < 10, A, A.Info^.Sprite);
+          end;
           A.LastZ := A.DoomZ;
         end;
         if (FTerrain <> nil) and (A.Info^.Kind = tkMonster) and not A.Info^.Floats and not A.Info^.Hanging then
@@ -3371,9 +3385,11 @@ procedure TDoomWorld.NoiseAlert;
 var
   Traversed: array of Integer; { 0 = not reached, else sound blocks + 1 }
   StackSec, StackBlocks: array of Integer;
-  Count, Sec, Blocks, L, Other, I, Reached, Fresh: Integer;
+  Count, Sec, Blocks, L, Other, I, Reached, Fresh, Closed: Integer;
   Line: ^TDoomLinedef;
   A: TDoomActor;
+  { Lines whose opening solid 3D floors fill (only with 3D floors). }
+  ClosedLines: array of Boolean;
 
   procedure Push(const S, B: Integer);
   begin
@@ -3393,6 +3409,8 @@ begin
   Count := 0;
   Reached := 0;
   Fresh := 0;
+  Closed := 0;
+  if Length(FMap.Floors3D) > 0 then SetLength(ClosedLines, Length(FMap.Linedefs));
   Push(Player.Sector, 0);
   while Count > 0 do
   begin
@@ -3414,6 +3432,12 @@ begin
       if Min(FMap.Sectors[Line^.FrontSector].CeilingHeight, FMap.Sectors[Line^.BackSector].CeilingHeight) -
          Max(FMap.Sectors[Line^.FrontSector].FloorHeight, FMap.Sectors[Line^.BackSector].FloorHeight) <= 0 then
         Continue;
+      if (ClosedLines <> nil) and FMap.SlabsCloseLine(L) then
+      begin
+        if not ClosedLines[L] then Inc(Closed);
+        ClosedLines[L] := true;
+        Continue;
+      end;
       if Line^.FrontSector = Sec then Other := Line^.BackSector else Other := Line^.FrontSector;
       if (Line^.Flags and ML_SOUNDBLOCK) <> 0 then
       begin
@@ -3422,7 +3446,9 @@ begin
         Push(Other, Blocks);
     end;
   end;
-  if Fresh > 0 then
+  if (Fresh > 0) and (Closed > 0) then
+    WritelnLog('Noise', 'Shot heard in %d sectors (%d new); line openings closed by 3D floors: %d', [Reached, Fresh, Closed])
+  else if Fresh > 0 then
     WritelnLog('Noise', 'Shot heard in %d sectors (%d new)', [Reached, Fresh]);
   { The Icon of Sin's shooter listens the same way. }
   for A in FActors do
@@ -3862,13 +3888,33 @@ end;
 
 procedure TDoomWorld.TerrainSplash(const X, Y, Z: Single; const Sec: Integer; const Small: Boolean;
   const Who: TDoomActor; const What: String);
+begin
+  SplashOf(SectorTerrain(Sec), X, Y, Z, Format('sector %d', [Sec]), Small, Who, What);
+end;
+
+function TDoomWorld.WaterSlabSplash(const Sec: Integer; const X, Y, OldZ, NewZ: Single; const Small: Boolean;
+  const Who: TDoomActor; const What: String): Boolean;
 var
-  T: Integer;
+  K: Integer;
+  Top: Single;
+begin
+  Result := false;
+  if (FTerrain = nil) or (Length(FMap.Floors3D) = 0) then Exit;
+  K := FMap.WaterSurfaceCrossed(Sec, X, Y, OldZ, NewZ, Top);
+  if K < 0 then Exit;
+  { The surface's terrain is its top flat's (the control's ceiling). }
+  SplashOf(FTerrain.TerrainOfFlat(FMap.Sectors[FMap.Floors3D[K].Control].CeilingTex), X, Y, Top,
+    Format('3D floor %d in sector %d', [K, Sec]), Small, Who, What);
+  Result := true;
+end;
+
+procedure TDoomWorld.SplashOf(const T: Integer; const X, Y, Z: Single; const Where: String;
+  const Small: Boolean; const Who: TDoomActor; const What: String);
+var
   Sp: TTerrainSplash;
   Base, Chunk: TDoomActor;
   Sound: String;
 begin
-  T := SectorTerrain(Sec);
   if (T < 0) or (FTerrain.Terrains[T].Splash < 0) then Exit;
   Sp := FTerrain.Splashes[FTerrain.Terrains[T].Splash];
   Base := nil;
@@ -3905,7 +3951,7 @@ begin
     else
       FSounds.Play(Sound);
   end;
-  WritelnLog('Terrain', '%s splashes in %s (sector %d, %s at %.0f %.0f)', [What, FTerrain.Terrains[T].Name, Sec,
+  WritelnLog('Terrain', '%s splashes in %s (%s, %s at %.0f %.0f)', [What, FTerrain.Terrains[T].Name, Where,
     Sp.Name, X, Y]);
   { The player's splashes are heard by monsters. }
   if (Who = nil) and not Sp.NoAlert then
@@ -6025,6 +6071,9 @@ begin
   if not Hit then
   begin
     Sec := FMap.SectorAt(NX, NY);
+    { Into a swimmable 3D floor's water: a small splash, on it flies. }
+    if (Sec >= 0) and (FTerrain <> nil) then
+      WaterSlabSplash(Sec, NX, NY, A.DoomZ, NZ, true, A, A.Info^.Sprite);
     if Sec >= 0 then
     begin
       if NZ <= FMap.FloorAt(Sec, NX, NY) then

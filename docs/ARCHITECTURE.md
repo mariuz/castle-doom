@@ -468,7 +468,12 @@ covers gravity missiles and falling corpses of floating monsters. A
 slab of type bit 4 (`RenderInside`) is drawn from inside too: its top
 and bottom once more facing the other way (`AddReversed`) and its
 sides on the lines where the neighbour lacks it, facing in
-(`Emit3dFloorSides`).
+(`Emit3dFloorSides`). A fall or a missile from above through a
+swimmable slab's surface (`WaterSurfaceCrossed`) splashes with the
+TERRAIN of the slab's top flat (`WaterSlabSplash` -> `SplashOf`; a
+floor under such water does not splash). `NoiseAlert` skips a line
+whose opening the solid slabs of its two sides fill from the bottom
+up (`SlabsCloseLine`, at the line's middle).
 
 ### ACS scripts (`DoomAcs`, `doomworld_acs.inc`)
 

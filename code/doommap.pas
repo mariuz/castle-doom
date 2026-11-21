@@ -435,6 +435,13 @@ type
     function LightAt(const Sec: Integer; const X, Y, Z: Single): Integer;
     { The swimmable 3D floor of Sec that holds height Z, -1 none. }
     function WaterSlabAt(const Sec: Integer; const X, Y, Z: Single): Integer;
+    { The swimmable 3D floor of Sec whose surface (top) a move from OldZ
+      down to NewZ at (X, Y) went through, -1 none; Top is that surface. }
+    function WaterSurfaceCrossed(const Sec: Integer; const X, Y, OldZ, NewZ: Single;
+      out Top: Single): Integer;
+    { Solid 3D floors of either side fill the whole opening of two-sided
+      line L (at its middle): sound does not pass (P_RecursiveSound). }
+    function SlabsCloseLine(const L: Integer): Boolean;
     { Put polyobject P's vertices where its X, Y and Angle say. }
     procedure PlacePolyobj(const P: Integer);
     { The polyobject with that number, -1 none. }
@@ -1644,6 +1651,60 @@ begin
       if Floors3D[K].Swimmable and (Z > SlabBottom(K, X, Y)) and (Z < SlabTop(K, X, Y)) then
         Exit(K);
   Result := -1;
+end;
+
+function TDoomMap.WaterSurfaceCrossed(const Sec: Integer; const X, Y, OldZ, NewZ: Single;
+  out Top: Single): Integer;
+var
+  K: Integer;
+begin
+  Top := 0;
+  if (Sec >= 0) and (Sec <= High(SectorFloors3D)) and (NewZ < OldZ) then
+    for K in SectorFloors3D[Sec] do
+      if Floors3D[K].Swimmable then
+      begin
+        Top := SlabTop(K, X, Y);
+        if (OldZ > Top) and (NewZ <= Top) and (NewZ > SlabBottom(K, X, Y) - 1) then Exit(K);
+      end;
+  Result := -1;
+end;
+
+function TDoomMap.SlabsCloseLine(const L: Integer): Boolean;
+var
+  X, Y, Lo, Hi, Bottom, Top: Single;
+  Side, Sec, K: Integer;
+  Moved: Boolean;
+begin
+  Result := false;
+  if Length(Floors3D) = 0 then Exit;
+  if (Linedefs[L].FrontSector < 0) or (Linedefs[L].BackSector < 0) then Exit;
+  X := (Vertices[Linedefs[L].V1].X + Vertices[Linedefs[L].V2].X) / 2;
+  Y := (Vertices[Linedefs[L].V1].Y + Vertices[Linedefs[L].V2].Y) / 2;
+  Lo := Max(FloorAt(Linedefs[L].FrontSector, X, Y), FloorAt(Linedefs[L].BackSector, X, Y));
+  Hi := Min(CeilingAt(Linedefs[L].FrontSector, X, Y), CeilingAt(Linedefs[L].BackSector, X, Y));
+  if Hi <= Lo then Exit;
+  { Raise the open gap's bottom past every solid slab reaching it, until
+    none does (slabs can stack). }
+  repeat
+    Moved := false;
+    for Side := 0 to 1 do
+    begin
+      if Side = 0 then Sec := Linedefs[L].FrontSector else Sec := Linedefs[L].BackSector;
+      if Sec > High(SectorFloors3D) then Continue;
+      for K in SectorFloors3D[Sec] do
+        if Floors3D[K].Solid then
+        begin
+          Bottom := SlabBottom(K, X, Y);
+          Top := SlabTop(K, X, Y);
+          if (Bottom <= Lo + 0.01) and (Top > Lo) then
+          begin
+            Lo := Top;
+            Moved := true;
+          end;
+        end;
+    end;
+  until not Moved;
+  Result := Lo >= Hi - 0.01;
 end;
 
 function TDoomMap.FloorAt(const Sec: Integer; const X, Y: Single): Single;

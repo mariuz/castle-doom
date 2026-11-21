@@ -91,6 +91,10 @@ too, with udmf-things.wad's lines (see FLOOR3D_CONTROLS3).
 udmf-3dfloor4.wad: a slab whose top follows a triangular control
 sector's vertex heights (see FLOOR3D_CONTROLS4).
 
+udmf-3dfloor5.wad: water in the pit east of the lift with TERRAIN
+splashes, and a slab filling a corridor's openings (see
+FLOOR3D_CONTROLS5).
+
 udmf-block.wad: ZDoom's blocking flags on line 834 (players, hitscans,
 sight, projectiles) and 1045 (everything, use); see BLOCK_LINES.
 
@@ -111,6 +115,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import make_znodes as zn  # noqa: E402  (reads Freedoom's E1M1, computes its GL nodes)
 import make_acs  # noqa: E402
+import make_terrain_wad  # noqa: E402
 
 # Doom special -> (Hexen action, args, activation flags); args with 'tag'
 # take the line's tag. Activation: c cross, u use, m monsters, r repeat.
@@ -168,7 +173,7 @@ POLY_THINGS = [(-2936, -1936, 1, 9300, 7), (-416, 384, 1, 9301, 7), (-2936, -189
 POLY_LINES = {829: (4, (1, 16, 64, 32), 'u'), 830: (2, (1, 32, 64), 'u'), 831: (8, (1, 16, 0, 48, 35), 'u'),
               1046: (86, (1, 32, 41), 'u')}
 SLOPE_FILL = (99, 141)
-FLOOR3D_IDS = {140: 15, 141: 9}
+FLOOR3D_IDS = {140: 15, 141: 9, 17: 21, 142: 21}
 # Control sectors (x, y of the corner, floor, ceiling, Sector_Set3dFloor
 # args): a 64-unit square each, far from the map.
 FLOOR3D_CONTROLS = [(-3000, -3000, 64, 80, (15, 1, 0, 160)), (-2800, -3000, 0, 24, (9, 1, 0, 255))]
@@ -198,6 +203,15 @@ BLOCK_LINES = {834: ['blockplayers', 'blockhitscan', 'blocksight', 'blockproject
 # a ramp the player walks up.
 FLOOR3D_CONTROLS4 = [(-3000, 128, 0, 8, (9, 1, 0, 255),
                       {'_corners': [(-3000, 128, 8), (-3000, 384, 40), (-2900, 128, 8)]})]
+# udmf-3dfloor5.wad (3D floors, the rest): swimmable water from -128 to
+# -80 in the pit east of the lift (sectors 17 and 142, id 21) whose top
+# flat FWATER1 is TERRAIN's Water (tools/make_terrain_wad.py's lump and
+# splash sprites): the player, a monster walking off the lift and a
+# rocket going in splash; a solid slab (0..128) fills the corridor east
+# of the start room (141), so the start room's shots are not heard
+# through its openings.
+FLOOR3D_CONTROLS5 = [(-3000, -3000, -128, -80, (21, 2, 0, 128), {'lightlevel': '128', 'textureceiling': '"FWATER1"'}),
+                     (-2800, -3000, 0, 128, (9, 1, 0, 255))]
 THING_LINES = {829: (135, (20, 5, 64, 21), 'u'), 1045: (119, (21, 1000), 'u'),
                1046: (137, (20, 4, 0, 22), 'u'), 1052: (132, (22,), 'u'), 898: (223, (9, 64, 0, 2), ''),
                830: (29, (12, 16, 0), 'u'), 831: (219, (12, 200), ''), 833: (218, (12, 32, 64, 0), ''),
@@ -424,9 +438,12 @@ def textmap(hexen, look=False, acs=False, slopes=False, things=False, floors3d=F
                     body += ['arg%d = %d;' % (i, a) for i, a in enumerate(args) if a]
                 out.append('linedef\n{\n%s\n}\n' % '\n'.join(body))
                 out.append('sidedef\n{\nsector = %d;\ntexturemiddle = "STARTAN3";\n}\n' % nsec)
-            body = ['heightfloor = %d;' % fh, 'heightceiling = %d;' % ch, 'texturefloor = "FLOOR7_2";',
-                    'textureceiling = "FLOOR7_2";', 'lightlevel = %s;' % fields.get('lightlevel', '160')]
-            body += ['%s = %s;' % kv for kv in fields.items() if kv[0] not in ('lightlevel', '_corners')]
+            body = ['heightfloor = %d;' % fh, 'heightceiling = %d;' % ch,
+                    'texturefloor = %s;' % fields.get('texturefloor', '"FLOOR7_2"'),
+                    'textureceiling = %s;' % fields.get('textureceiling', '"FLOOR7_2"'),
+                    'lightlevel = %s;' % fields.get('lightlevel', '160')]
+            body += ['%s = %s;' % kv for kv in fields.items()
+                     if kv[0] not in ('lightlevel', '_corners', 'texturefloor', 'textureceiling')]
             out.append('sector\n{\n%s\n}\n' % '\n'.join(body))
             nv += n
             nl += n
@@ -500,6 +517,10 @@ def main():
               [('E1M1', b''), ('TEXTMAP', textmap(True, things=True, floors3d=FLOOR3D_CONTROLS3)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-3dfloor4.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, floors3d=FLOOR3D_CONTROLS4)), ('ENDMAP', b'')])
+    write_wad(os.path.join(outdir, 'udmf-3dfloor5.wad'),
+              [('E1M1', b''), ('TEXTMAP', textmap(True, floors3d=FLOOR3D_CONTROLS5)), ('ENDMAP', b''),
+               ('TERRAIN', make_terrain_wad.TERRAIN), ('SNDINFO', make_terrain_wad.SNDINFO),
+               ('SS_START', b'')] + make_terrain_wad.sprites() + [('SS_END', b'')])
     write_wad(os.path.join(outdir, 'udmf-block.wad'),
               [('E1M1', b''), ('TEXTMAP', textmap(True, block=True)), ('ENDMAP', b'')])
     write_wad(os.path.join(outdir, 'udmf-acslib.wad'),

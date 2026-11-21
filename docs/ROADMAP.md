@@ -69,6 +69,19 @@ L = several days). Items inside a section are in suggested order.
   backing (FLEEMELEE, an MBF option off by default), MBF's dog jumping
   across gaps.
 
+- 3D floors, the rest (splashes, sound): falling into a swimmable
+  slab's water splashes with the TERRAIN of its top flat (the control
+  sector's ceiling flat; `TDoomMap.WaterSurfaceCrossed`,
+  `TDoomWorld.WaterSlabSplash`: the player, monsters falling and
+  missiles going in, which fly on; no floor splash under such water),
+  and a shot's sound does not pass a line whose opening solid slabs
+  fill (`TDoomMap.SlabsCloseLine`, at the line's middle; log `Noise:
+  ...; line openings closed by 3D floors: N`). Test map
+  `udmf-3dfloor5.wad` (water in the pit east of E1M1's lift, TERRAIN's
+  Water on FWATER1, a slab filling the corridor east of the start
+  room), autotest `3d-water-splash` (goldens), unit test
+  `Test3dWaterSplash`.
+
 - MBF21, the bits left: DeHackEd's "MBF21 Bits" on any mobjinfo row
   (`DoomStates.MobjMbf21Bits`, copied to the projectiles' infos by
   `SyncProjectileInfos`); RIP (a missile goes through bodies, hurting
@@ -134,8 +147,8 @@ L = several days). Items inside a section are in suggested order.
   friction (`TerrainFriction`, where the sector has no Boom friction).
   `tools/make_terrain_wad.py` (a 16-deep FWATER1 pool in E1M1's
   corridor 141, generated SPSH sprites); autotest `terrain` (golden),
-  unit test `TestTerrain`. Left: splashes on 3D-floor water, footstep
-  sounds, damage types, items splashing.
+  unit test `TestTerrain`. Left: footstep sounds, damage types, items
+  splashing (splashes on 3D-floor water are done, see above).
 
 - MBF21, stage 3a: the jumps on the walked sequences
   (`TDoomWorld.JumpToState`): a jump plays the thing's chain from the
@@ -176,9 +189,7 @@ L = several days). Items inside a section are in suggested order.
   control sector's planes, so a triangular control sector with
   `zceiling` / `zfloor` on its vertices (`BuildSlopes`) gives a sloped
   slab the player walks up; test map `udmf-3dfloor4.wad`, autotest
-  `3d-vertex-heights` (golden), unit test `Test3dWater`. Left for 3D
-  floors: splashes on their water (TERRAIN is read for sector floors
-  only) and sound blocked by slabs.
+  `3d-vertex-heights` (golden), unit test `Test3dWater`.
 
 - Line blocking flags: ZDoom's blockplayers, blockeverything,
   blockprojectiles, blockhitscan, blocksight and blockuse (UDMF; the
@@ -245,8 +256,8 @@ L = several days). Items inside a section are in suggested order.
   are drawn from inside too (`TFloor3D.RenderInside`). Test map
   `udmf-3dfloor3.wad` (green water drawn from inside, a falling imp
   ball fired in it), autotest `3d-water-inside` (goldens), unit test
-  `Test3dWater`. Left: vertex-height control sectors, sounds blocked
-  by slabs, splashes.
+  `Test3dWater`. (Vertex heights, splashes and sound are done, see
+  above.)
 
 - Polyobjects (UDMF, stage 1): `TDoomMap.BuildPolyobjs` gathers each
   polyobject's lines (`Polyobj_StartLine`'s loop of joined lines or the
@@ -1743,15 +1754,16 @@ play.
 
 ## Suggested next three
 
-1. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
-   water (the slab's top flat), and sounds blocked by slabs.
-2. Boom specials, the rest (S each): deep water's colormaps as a real
+1. Boom specials, the rest (S each): deep water's colormaps as a real
    palette remapping (a screen tint now), the sky offsets of a sky
    transfer line's sidedef, and the sky behind upper walls between sky
    sectors of different skies.
-3. MBF's monster backing (S): monsters backing away from a melee
+2. MBF's monster backing (S): monsters backing away from a melee
    target (`P_SmartMove` / FLEEMELEE weapons), an option off by default
    as in MBF, and friends keeping their distance.
+3. TERRAIN, the rest (S): footstep sounds (ZDoom's `footstep` sounds
+   when walking on a terrain), items splashing when they land, and the
+   damage types of a terrain's `damagetype`.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.
