@@ -5,12 +5,12 @@ interface
 
 implementation
 
-uses SysUtils, Classes,
+uses SysUtils, Classes, Math,
   CastleWindow, CastleLog, CastleUIControls, CastleApplicationProperties, CastleParameters, CastleConfig,
   CastleKeysMouse,
   CastleUtils, CastleTimeUtils,
   CastleFilesUtils, CastleUriUtils, CastleGLShaders,
-  DoomLighting, DoomDehacked, DoomEditMap, DoomMusic, DoomGeometry, DoomRandomMap, DoomWad, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameViewEdit, DoomExport, DoomGraphics, GameSettings, GameSaveBundle, GameSaveStorage, GameLogFilter, GameCrash, GameTouch;
+  DoomLighting, DoomDehacked, DoomWorld, DoomEditMap, DoomMusic, DoomGeometry, DoomRandomMap, DoomWad, GameGamepad, GameViewMenu, GameViewPlay, GameViewDesign, GameViewEdit, DoomExport, DoomGraphics, GameSettings, GameSaveBundle, GameSaveStorage, GameLogFilter, GameCrash, GameTouch;
 
 var
   Window: TCastleWindow;
@@ -313,6 +313,8 @@ begin
         Inc(I);
       end;
     end else
+    if ((Parameters[I] = '-dogs') or (Parameters[I] = '--dogs')) and (I + 1 <= Parameters.High) then
+      HelperDogs := Max(0, Min(3, StrToIntDef(Parameters[I + 1], 0)));
     if ((Parameters[I] = '-complevel') or (Parameters[I] = '--complevel')) and (I + 1 <= Parameters.High) then
     begin
       { Only MBF21 (21 / mbf21) changes anything; the rest is the default. }

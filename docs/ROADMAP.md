@@ -59,10 +59,15 @@ L = several days). Items inside a section are in suggested order.
   missiles' player check), never turn on the player or on each other,
   are skipped by the player's autoaim and do not count as kills. The
   demo cheat `FRIEND:type:dist` spawns one. Autotest `friends`
-  (golden). Left: MBF's helper dogs (thing 888: new state-table rows,
-  and sprites Freedoom does not have), hostile monsters looking for
-  friends by themselves, monster backing (FLEEMELEE, an MBF option off
-  by default).
+  (golden). Helper dogs: thing 888 with MBF's rows after vanilla's in
+  the state table (`tools/make_states.py`: TNT1, the dog's 31 states,
+  its five sounds, MT_PUSH / MT_PULL / MT_DOGS), `-dogs N` spawning
+  them at the other players' starts (`SpawnHelperDog`; autotest
+  `helper-dogs`); hostile monsters that see no player go for a friend
+  they see (`LookForFriend`; `tools/testdata/dogs.wad` with generated
+  DOGS sprites and sounds, autotest `dogs` with goldens). Left: monster
+  backing (FLEEMELEE, an MBF option off by default), MBF's dog jumping
+  across gaps.
 
 - MBF21, the bits left: DeHackEd's "MBF21 Bits" on any mobjinfo row
   (`DoomStates.MobjMbf21Bits`, copied to the projectiles' infos by
@@ -1738,16 +1743,15 @@ play.
 
 ## Suggested next three
 
-1. MBF's helper dogs (S-M): thing 888 with MBF's dog states and
-   sounds appended to the state table (`tools/make_states.py`), drawn
-   when a PWAD brings the DOGS sprites; hostile monsters that look for
-   friends themselves.
-2. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
+1. 3D floors, the rest (S-M): TERRAIN splashes on swimmable 3D-floor
    water (the slab's top flat), and sounds blocked by slabs.
-3. Boom specials, the rest (S each): deep water's colormaps as a real
+2. Boom specials, the rest (S each): deep water's colormaps as a real
    palette remapping (a screen tint now), the sky offsets of a sky
    transfer line's sidedef, and the sky behind upper walls between sky
    sectors of different skies.
+3. MBF's monster backing (S): monsters backing away from a melee
+   target (`P_SmartMove` / FLEEMELEE weapons), an option off by default
+   as in MBF, and friends keeping their distance.
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

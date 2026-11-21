@@ -344,7 +344,12 @@ MBF21 bits act through `WeaponHasBit` (only with MBF21 on) and
 `AmmoAutoSwitch`. MBF's friends (`MobjFlagFriend` in an actor's
 `Flags`) are handled at the top of `TicMonster` by `TicFriend`: an
 enemy from `FindEnemyFor`, else following the player; their `Target`
-is never nil while they fight (nil would mean the player).
+is never nil while they fight (nil would mean the player). Hostile
+monsters that see no player look for a friend (`LookForFriend`, the
+same `FindEnemyFor`, only while `FHaveFriends`, counted once a tic in
+`TicActors`). MBF's helper dogs (thing 888, the state table's MBF rows)
+spawn at the other players' starts up to `HelperDogs` (`-dogs N`,
+`SpawnHelperDog`).
 
 Weapons fire through the same walked sequences: `DoFireWeapon` starts
 the weapon's attack frames (`FCurWeaponSeq`, a copy of

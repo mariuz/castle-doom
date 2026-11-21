@@ -17,6 +17,59 @@ import re
 import sys
 
 
+# MBF's additions after vanilla's tables, in MBF's numbering (DeHackEd
+# patches name them by number): the invisible sprite, the grenade
+# (A_Die, A_Detonate) and the helper dog (killough's "Marine's best
+# friend", thing 888), from prboom-plus / dsda-doom's info.c.
+MBF_SPRITES = ['TNT1', 'DOGS']
+MBF_SOUNDS = ['sfx_dgsit', 'sfx_dgatk', 'sfx_dgact', 'sfx_dgdth', 'sfx_dgpain']
+MBF_STATES = [
+    # name, sprite, frame, tics, action, next
+    ('S_TNT1', 'TNT1', 0, -1, 'NULL', 'S_TNT1'),
+    ('S_GRENADE', 'MISL', 32768, 1000, 'A_Die', 'S_GRENADE'),
+    ('S_DETONATE', 'MISL', 32769, 4, 'A_Scream', 'S_DETONATE2'),
+    ('S_DETONATE2', 'MISL', 32770, 6, 'A_Detonate', 'S_DETONATE3'),
+    ('S_DETONATE3', 'MISL', 32771, 10, 'NULL', 'S_NULL'),
+    ('S_DOGS_STND', 'DOGS', 0, 10, 'A_Look', 'S_DOGS_STND2'),
+    ('S_DOGS_STND2', 'DOGS', 1, 10, 'A_Look', 'S_DOGS_STND'),
+    ('S_DOGS_RUN1', 'DOGS', 0, 2, 'A_Chase', 'S_DOGS_RUN2'),
+    ('S_DOGS_RUN2', 'DOGS', 0, 2, 'A_Chase', 'S_DOGS_RUN3'),
+    ('S_DOGS_RUN3', 'DOGS', 1, 2, 'A_Chase', 'S_DOGS_RUN4'),
+    ('S_DOGS_RUN4', 'DOGS', 1, 2, 'A_Chase', 'S_DOGS_RUN5'),
+    ('S_DOGS_RUN5', 'DOGS', 2, 2, 'A_Chase', 'S_DOGS_RUN6'),
+    ('S_DOGS_RUN6', 'DOGS', 2, 2, 'A_Chase', 'S_DOGS_RUN7'),
+    ('S_DOGS_RUN7', 'DOGS', 3, 2, 'A_Chase', 'S_DOGS_RUN8'),
+    ('S_DOGS_RUN8', 'DOGS', 3, 2, 'A_Chase', 'S_DOGS_RUN1'),
+    ('S_DOGS_ATK1', 'DOGS', 4, 8, 'A_FaceTarget', 'S_DOGS_ATK2'),
+    ('S_DOGS_ATK2', 'DOGS', 5, 8, 'A_FaceTarget', 'S_DOGS_ATK3'),
+    ('S_DOGS_ATK3', 'DOGS', 6, 8, 'A_SargAttack', 'S_DOGS_RUN1'),
+    ('S_DOGS_PAIN', 'DOGS', 7, 2, 'NULL', 'S_DOGS_PAIN2'),
+    ('S_DOGS_PAIN2', 'DOGS', 7, 2, 'A_Pain', 'S_DOGS_RUN1'),
+    ('S_DOGS_DIE1', 'DOGS', 8, 8, 'NULL', 'S_DOGS_DIE2'),
+    ('S_DOGS_DIE2', 'DOGS', 9, 8, 'A_Scream', 'S_DOGS_DIE3'),
+    ('S_DOGS_DIE3', 'DOGS', 10, 4, 'NULL', 'S_DOGS_DIE4'),
+    ('S_DOGS_DIE4', 'DOGS', 11, 4, 'A_Fall', 'S_DOGS_DIE5'),
+    ('S_DOGS_DIE5', 'DOGS', 12, 4, 'NULL', 'S_DOGS_DIE6'),
+    ('S_DOGS_DIE6', 'DOGS', 13, -1, 'NULL', 'S_NULL'),
+    ('S_DOGS_RAISE1', 'DOGS', 13, 5, 'NULL', 'S_DOGS_RAISE2'),
+    ('S_DOGS_RAISE2', 'DOGS', 12, 5, 'NULL', 'S_DOGS_RAISE3'),
+    ('S_DOGS_RAISE3', 'DOGS', 11, 5, 'NULL', 'S_DOGS_RAISE4'),
+    ('S_DOGS_RAISE4', 'DOGS', 10, 5, 'NULL', 'S_DOGS_RAISE5'),
+    ('S_DOGS_RAISE5', 'DOGS', 9, 5, 'NULL', 'S_DOGS_RAISE6'),
+    ('S_DOGS_RAISE6', 'DOGS', 8, 5, 'NULL', 'S_DOGS_RUN1'),
+]
+MBF_MOBJS = [
+    {'name': 'MT_PUSH', 'doomednum': 5001, 'spawn': 'S_TNT1', 'health': 1000, 'radius': 8, 'height': 8,
+     'mass': 10, 'flags': 16},
+    {'name': 'MT_PULL', 'doomednum': 5002, 'spawn': 'S_TNT1', 'health': 1000, 'radius': 8, 'height': 8,
+     'mass': 10, 'flags': 16},
+    {'name': 'MT_DOGS', 'doomednum': 888, 'spawn': 'S_DOGS_STND', 'see': 'S_DOGS_RUN1', 'pain': 'S_DOGS_PAIN',
+     'melee': 'S_DOGS_ATK1', 'death': 'S_DOGS_DIE1', 'raise': 'S_DOGS_RAISE1', 'seesound': 'sfx_dgsit',
+     'attacksound': 'sfx_dgatk', 'painsound': 'sfx_dgpain', 'deathsound': 'sfx_dgdth', 'activesound': 'sfx_dgact',
+     'health': 500, 'speed': 10, 'radius': 12, 'height': 28, 'mass': 100, 'painchance': 180,
+     'flags': 2 | 4 | 4194304},
+]
+
 MBF21_ACTIONS = [
     'A_SpawnObject', 'A_MonsterProjectile', 'A_MonsterBulletAttack', 'A_MonsterMeleeAttack',
     'A_RadiusDamage', 'A_NoiseAlert', 'A_HealChase', 'A_SeekTracer', 'A_FindTracer', 'A_ClearTracer',
@@ -66,6 +119,10 @@ def main():
     state_names = enum_names(info_h, 'S_NULL', 'S_TECH2LAMP4')
     mobj_names = enum_names(info_h, 'MT_PLAYER', 'MT_MISC86')
     sfx_names = enum_names(sounds_h, 'sfx_None', 'sfx_radio')
+    vanilla_states = len(state_names)
+    sprites += MBF_SPRITES
+    sfx_names += MBF_SOUNDS
+    state_names += [st[0] for st in MBF_STATES]
     sprite_index = {name: i for i, name in enumerate(sprites)}
     state_index = {name: i for i, name in enumerate(state_names)}
     sfx_index = {name: i for i, name in enumerate(sfx_names)}
@@ -74,7 +131,8 @@ def main():
     m = re.search(r'states\[NUMSTATES\]\s*=\s*\{(.*?)\n\};', info_c, re.S)
     rows = re.findall(r'\{SPR_([A-Z0-9]{4})\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*\{(\w+)\}\s*,\s*(S_\w+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\}',
                       m.group(1))
-    assert len(rows) == len(state_names), (len(rows), len(state_names))
+    assert len(rows) == vanilla_states, (len(rows), vanilla_states)
+    rows += [(st[1], str(st[2]), str(st[3]), st[4], st[5], '0', '0') for st in MBF_STATES]
     actions = ['NULL']
     for r in rows:
         if r[3] not in actions:
@@ -144,13 +202,28 @@ def main():
             'painchance': number(d['painchance']), 'flags': flags(d['flags']),
         })
 
+    for mo in MBF_MOBJS:
+        mobjs.append({
+            'name': mo['name'], 'doomednum': mo['doomednum'],
+            'spawn': state(mo.get('spawn', 'S_NULL')), 'see': state(mo.get('see', 'S_NULL')),
+            'pain': state(mo.get('pain', 'S_NULL')), 'melee': state(mo.get('melee', 'S_NULL')),
+            'missile': state(mo.get('missile', 'S_NULL')), 'death': state(mo.get('death', 'S_NULL')),
+            'xdeath': state(mo.get('xdeath', 'S_NULL')), 'raise': state(mo.get('raise', 'S_NULL')),
+            'seesound': sfx(mo.get('seesound', 'sfx_None')), 'attacksound': sfx(mo.get('attacksound', 'sfx_None')),
+            'painsound': sfx(mo.get('painsound', 'sfx_None')), 'deathsound': sfx(mo.get('deathsound', 'sfx_None')),
+            'activesound': sfx(mo.get('activesound', 'sfx_None')),
+            'health': mo['health'], 'speed': mo.get('speed', 0), 'radius': mo['radius'], 'height': mo['height'],
+            'mass': mo['mass'], 'damage': 0, 'painchance': mo.get('painchance', 0), 'flags': mo['flags'],
+        })
+
     def action_id(a):
         return 'sa' + (a[2:] if a.startswith('A_') else 'None')
 
     w = []
     w.append('{ Generated by tools/make_states.py from Doom\'s info.c, info.h and')
     w.append('  sounds.h (linuxdoom-1.10): vanilla Doom\'s sprite names, state table,')
-    w.append('  the state and sound fields of its thing types, and the sound names.')
+    w.append('  the state and sound fields of its thing types, and the sound names;')
+    w.append('  then MBF\'s additions in MBF\'s numbering (states 967.., things 138..).')
     w.append('  Do not edit: regenerate. }')
     w.append('')
     w.append('const')

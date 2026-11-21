@@ -5,6 +5,9 @@
 - MBF's friendly monsters: a monster with the FRIEND bit (DeHackEd, the THINGS flag 128 or UDMF's
   `friend`) fights the hostile monsters it sees, follows the player otherwise, and never hurts the
   player.
+- MBF's helper dogs: `-dogs N` brings up to three friendly dogs (thing 888, MBF's states and
+  sounds), drawn when a PWAD has the DOGS sprites; hostile monsters that see no player go for
+  friends.
 - MBF21's remaining thing and weapon bits: RIP projectiles, LONGMELEE, NOTHRESHOLD,
   FULLVOLSOUNDS, NOTHRUST, NOAUTOFIRE, AUTOSWITCHFROM and NOAUTOSWITCHTO; projectiles take
   DeHackEd's MBF21 bits too.

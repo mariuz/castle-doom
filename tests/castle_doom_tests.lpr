@@ -3341,10 +3341,11 @@ var
   A: TStateAction;
 begin
   ResetStates;
-  AssertEquals('states', 967, Length(States));
-  AssertEquals('sprites', 138, Length(Sprites));
-  AssertEquals('things', 137, Length(Mobjs));
-  AssertEquals('sounds', 109, Length(Sounds));
+  { Vanilla's rows, then MBF's (TNT1, the dog; tools/make_states.py). }
+  AssertEquals('states', 999, Length(States));
+  AssertEquals('sprites', 140, Length(Sprites));
+  AssertEquals('things', 140, Length(Mobjs));
+  AssertEquals('sounds', 114, Length(Sounds));
   AssertEquals('S_NULL sprite', 'TROO', Sprites[States[0].Sprite]);
   AssertEquals('S_TROO_ATK3 tics', 6, States[454].Tics);
   AssertTrue('S_TROO_ATK3 action', States[454].Action = saTroopAttack);
@@ -3354,6 +3355,13 @@ begin
   AssertEquals('MT_TROOP see sound', 'DSBGSIT1', SoundName(Mobjs[11].SeeSound));
   AssertEquals('imp mobj row', 11, MobjIndexOf(3001));
   AssertEquals('no row for 12345', -1, MobjIndexOf(12345));
+  { MBF's helper dog: Mobjs[139] (DeHackEd's Thing 141), doomednum 888. }
+  AssertEquals('dog mobj row', 139, MobjIndexOf(888));
+  AssertEquals('S_DOGS_STND', 972, StateByName('DOGS_STND'));
+  AssertEquals('dog spawn state', 972, Mobjs[139].Spawn);
+  AssertEquals('dog see sound', 'DSDGSIT', SoundName(Mobjs[139].SeeSound));
+  AssertEquals('dog sprite', 'DOGS', Sprites[States[972].Sprite]);
+  AssertEquals('MT_PUSH doomednum', 5001, Mobjs[137].DoomedNum);
   AssertTrue('A_PosAttack by name', ActionByName('A_PosAttack', A) and (A = saPosAttack));
   AssertTrue('posattack without prefix', ActionByName('posattack', A) and (A = saPosAttack));
   AssertFalse('unknown action', ActionByName('A_Nothing', A));

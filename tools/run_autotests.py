@@ -547,6 +547,21 @@ TESTS = [
      [r'Friend: TROO spawned on the player\'s side', r'Friend: TROO at \(-?\d+, 256\) goes for POSS',
       r'Infight: POSS turns on TROO', r'Infight: TROO killed POSS'],
      ['--fixed-step'], lambda config: check_friends(config)),
+    # MBF's helper dogs: -dogs 3 puts friendly dogs (thing 888) at the
+    # other players' starts; they follow the player and bite a zombieman.
+    ('helper-dogs', 'E1M1', 'Y,W:0.5,A:0,P:3004:350,W:6,SAVE:1,Q',
+     [r'Friend: A helper dog at \(-416, 304\)', r'Friend: A helper dog at \(-464, 258\)',
+      r'Friend: A helper dog at \(-416, 208\)', r'Friend: DOGS at \(-?\d+, -?\d+\) goes for POSS',
+      r'Infight: DOGS killed POSS', r'Things: 209 things spawned, 29 monsters'],
+     ['-dogs', '3', '--fixed-step'], lambda config: check_helper_dogs(config)),
+    # dogs.wad (tools/make_dogs_wad.py): DOGS sprites and sounds, a sleeping
+    # zombieman facing away from the player and a friendly dog in front of
+    # it: the hostile monster goes for the friend (P_LookForTargets).
+    ('dogs', 'E1M1', 'Y,W:0.3,S,W:4,S,Q',
+     [r'Friend: POSS at \(-300, 256\) sees a friendly DOGS and goes for it',
+      r'Friend: DOGS at \(-224, 300\) goes for POSS', r'Infight: DOGS killed POSS',
+      r'!Missing sound lump DSDG'],
+     ['-file', 'tools/testdata/dogs.wad', '--fixed-step'], None),
     # MBF21's bits (mbf21bits.deh): the fist pushes nothing (NOTHRUST), the
     # zombieman's sounds are heard everywhere (FULLVOLSOUNDS); the rocket
     # rips through two imps (RIP, a projectile's bits).
@@ -1211,6 +1226,14 @@ def check_friends(config):
     assert friends[0]['x'] > -260 and d < 140, 'friend at %s, player at %s' % (friends[0]['x'], b['player']['x'])
 
 
+def check_helper_dogs(config):
+    """Three friendly dogs in the save, and the player not hurt."""
+    a = save_json(config, 1)
+    assert a['player']['health'] == 100, 'player hurt: %s' % a['player']['health']
+    dogs = [t for t in a['actors'] if t.get('flags') and t['flags'][0] & 0x40000000]
+    assert len(dogs) == 3, 'dogs: %s' % dogs
+
+
 def check_mbf21_weapons(config):
     """mbf21weapon.deh: three pistol cycles took 2 bullets each; the
     shotgun's MBF21 frames took no shells."""
@@ -1713,6 +1736,8 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'dogs_1.png',
+    'dogs_2.png',
     'friends_1.png',
     'revenant-tracer_1.png',
     'editor-sides_edit_1.png', 'editor-sides_edit_2.png',

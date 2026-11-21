@@ -286,6 +286,9 @@ begin
   Monster(68, 'BSPI', 64, 64, 500, 12, 128, 'AB', 'ABCDEF', 'GH', 'I', 'JKLMNOP', akMissile, 5, 8, 'DSBSPSIT', 'DSPLASMA', 'DSDMPAIN', 'DSBSPDTH');
   Monster(71, 'PAIN', 31, 56, 400, 8, 128, 'AB', 'ABC', 'DEF', 'G', 'HIJKLM', akMissile, 3, 8, 'DSPESIT', 'DSSKLATK', 'DSPEPAIN', 'DSPEDTH', 0, true);
   Monster(84, 'SSWV', 20, 56, 50, 8, 170, 'AB', 'ABCD', 'EFG', 'H', 'IJKLM', akHitscan, 3, 5, 'DSSSSIT', 'DSPISTOL', 'DSPOPAIN', 'DSSSDTH', 2007);
+  { MBF's helper dog (killough's "Marine's best friend"): the demon's
+    bite; its sprites (DOGS) come with a PWAD, Freedoom has none. }
+  Monster(888, 'DOGS', 12, 28, 500, 10, 180, 'AB', 'ABCD', 'EFG', 'H', 'IJKLMN', akMelee, 4, 10, 'DSDGSIT', 'DSDGATK', 'DSDGPAIN', 'DSDGDTH');
   Monster(72, 'KEEN', 16, 72, 100, 0, 256, 'A', 'A', '', 'M', 'BCDEFGHIJKL', akNone, 0, 0, '', '', 'DSKEENPN', 'DSKEENDT');
   { Boss brain: its pain and death sounds play at full volume from DoomWorld. }
   Monster(88, 'BBRN', 16, 16, 250, 0, 255, 'A', 'A', '', 'B', 'A', akNone, 0, 0, '', '', '', '');

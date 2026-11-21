@@ -175,6 +175,8 @@ type
     { Set by a failed TryMove2D when only the mover's height was wrong
       (P_TryMove's floatok), with the floor height of the opening. }
     FFloatOk: Boolean;
+    { Some living monster is a friend this tic (TicActors). }
+    FHaveFriends: Boolean;
     { Line grid query results (TDoomMap.LinesInBox / LinesNearSegment),
       one buffer per caller so that none overwrites another's. }
     FLinesSight, FLinesMove, FLinesShot, FLinesMissile: TLineList;
@@ -328,6 +330,8 @@ type
       walks back to within 128 of the player. True when the chase should
       not go on (no target to chase). }
     function TicFriend(const A: TDoomActor): Boolean;
+    function LookForFriend(const A: TDoomActor): Boolean;
+    procedure SpawnHelperDog(const X, Y, Angle: Single);
     { TERRAIN (LoadTerrain at the level's start). }
     procedure LoadTerrain;
     procedure TicPlayerTerrain(const Sec: Integer);
@@ -814,6 +818,12 @@ type
 { Next map after Current (Doom 1 / Doom 2 progression, with secret levels). }
 function NextMapName(const Current: String; const Secret: Boolean; const IsDoom2: Boolean): String;
 
+
+var
+  { MBF's -dogs N: helper dogs (friends) at the other players' starts of
+    each level, up to N (0..3). }
+  HelperDogs: Integer;
+
 implementation
 
 uses Math, CastleLog, CastleStringUtils, CastleBehaviors, CastleTimeUtils, DoomMapInfo;
@@ -999,7 +1009,7 @@ function MoveFrameTics(const Num: Integer): Integer;
 begin
   case Num of
     3004: Result := 4;
-    3002, 58, 64, 66: Result := 2;
+    3002, 58, 64, 66, 888: Result := 2;
     67: Result := 4;
     3006: Result := 6;
     else Result := 3;
@@ -1709,6 +1719,9 @@ begin
         FDoomStartAngle := T.Angle;
         FHaveStart := true;
       end;
+      { MBF: a helper dog at each other player's start, up to -dogs N. }
+      if (T.TypeNum in [2, 3, 4]) and (T.TypeNum - 1 <= HelperDogs) then
+        SpawnHelperDog(T.X, T.Y, T.Angle);
       Continue;
     end;
     if Info^.Kind = tkInvisible then Continue;
@@ -2957,6 +2970,15 @@ var
   Sec: Integer;
 begin
   FSpriteBatch.ViewAngle := Player.Angle;
+  { Hostile monsters look for friends only when there are any. }
+  FHaveFriends := false;
+  for A in FActors do
+    if (A.Info^.Kind = tkMonster) and IsFriend(A) and not A.Removed and
+       (A.State in [asIdle, asChase, asAttack, asPain]) then
+    begin
+      FHaveFriends := true;
+      Break;
+    end;
   for I := FActors.Count - 1 downto 0 do
   begin
     A := FActors[I];
@@ -3530,6 +3552,12 @@ begin
         { P_SpawnMobj: no reaction time on Nightmare. }
         if Skill = 4 then A.ReactionTics := 0 else A.ReactionTics := Random1(8);
       end else
+      { MBF's P_LookForTargets: no player in view, so a friend in sight. }
+      if FHaveFriends and LookForFriend(A) then
+      begin
+        A.Awake := true;
+        if Skill = 4 then A.ReactionTics := 0 else A.ReactionTics := Random1(8);
+      end else
         Exit;
     end;
     if A.ReactionTics > 0 then
@@ -3903,7 +3931,7 @@ begin
   BestD := 2048;
   for O in FActors do
   begin
-    if (O = A) or O.Removed or (O.Info^.Kind <> tkMonster) or IsFriend(O) or
+    if (O = A) or O.Removed or (O.Info^.Kind <> tkMonster) or (IsFriend(O) = IsFriend(A)) or
        not (O.State in [asIdle, asChase, asAttack, asPain]) or (O.Info^.Num = 88) then Continue;
     D := Sqrt(Sqr(O.DoomX - A.DoomX) + Sqr(O.DoomY - A.DoomY));
     if D >= BestD then Continue;
@@ -3912,6 +3940,36 @@ begin
     BestD := D;
     Result := O;
   end;
+end;
+
+function TDoomWorld.LookForFriend(const A: TDoomActor): Boolean;
+var
+  O: TDoomActor;
+begin
+  O := FindEnemyFor(A);
+  Result := O <> nil;
+  if not Result then Exit;
+  A.Target := O;
+  A.Threshold := 0;
+  WritelnLog('Friend', '%s at (%.0f, %.0f) sees a friendly %s and goes for it',
+    [A.Info^.Sprite, A.DoomX, A.DoomY, O.Info^.Sprite]);
+end;
+
+procedure TDoomWorld.SpawnHelperDog(const X, Y, Angle: Single);
+var
+  A: TDoomActor;
+  Sec: Integer;
+begin
+  Sec := FMap.SectorAt(X, Y);
+  if Sec < 0 then Exit;
+  A := SpawnMonster(888, X, Y, FMap.FloorAt(Sec, X, Y));
+  if A = nil then Exit;
+  A.Angle := Angle;
+  A.Awake := false;
+  A.State := asIdle;
+  PlayInfoSeq(A, skIdle, true, A.Info^.IdleFrames, A.Info^.IdleTics);
+  A.Flags := A.Flags or MobjFlagFriend;
+  WritelnLog('Friend', 'A helper dog at (%.0f, %.0f)', [X, Y]);
 end;
 
 function TDoomWorld.TicFriend(const A: TDoomActor): Boolean;

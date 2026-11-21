@@ -1106,7 +1106,19 @@ autotest only checks the library loads.
   friends: `FRIEND:type:dist` in a demo spawns a monster with
   MF_FRIEND; `G:-416:256,A:0,W:0.3,FRIEND:3001:80,P:3004:350,W:6` logs
   `Friend: TROO at (...) goes for POSS` and `Infight: TROO killed
-  POSS`, and the player is not hurt (autotest `friends`, golden). MBF21's code pointer names are
+  POSS`, and the player is not hurt (autotest `friends`, golden).
+  Helper dogs: `-dogs N` (0..3) puts friendly dogs (thing 888) at the
+  other players' starts (log `Friend: A helper dog at (-416, 304)`;
+  autotest `helper-dogs`); Freedoom has no DOGS sprites or DSDG*
+  sounds, `tools/testdata/dogs.wad` (`tools/make_dogs_wad.py`) brings
+  them and a sleeping zombieman facing away from the player with a
+  friendly dog before it, which it goes for (`Friend: POSS at (-300,
+  256) sees a friendly DOGS and goes for it`: hostile monsters look for
+  friends when they see no player; autotest `dogs`, goldens). MBF's
+  extra state-table rows (TNT1, the dog's states, sprites, sounds,
+  MT_PUSH / MT_PULL / MT_DOGS) come from `tools/make_states.py`
+  (`MBF_STATES`, `MBF_MOBJS`...), after vanilla's, so vanilla's numbers
+  stay. MBF21's code pointer names are
   appended by `tools/make_states.py` (`MBF21_ACTIONS`), its frame
   arguments are `DoomStates.StateArgs` / `StateArg`.
 - **TERRAIN** (`DoomTerrain`): `tools/testdata/terrain.wad`
