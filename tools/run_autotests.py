@@ -741,9 +741,11 @@ TESTS = [
      lambda config: check_deep_water(config)),
     # Per-sector skies (tools/make_skies_wad.py): the sky behind the start
     # room's west window is SKY3, the rest of the map keeps SKY1.
-    ('sector-skies', 'E1M1', 'Y,G:-450:256,A:180,LOOK:30,W:0.3,S,G:-600:240,A:90,LOOK:60,W:0.3,S,Q',
+    ('sector-skies', 'E1M1',
+     'Y,G:-450:256,A:180,LOOK:30,W:0.3,S,G:-600:240,A:90,LOOK:60,W:0.3,S,G:-580:240,A:180,LOOK:25,W:0.3,S,Q',
      [r'Map: E1M1: sky transfer of line 829 covers only 1 of 19 sky sectors',
-      r'Geometry: E1M1: 1 sky sectors show their own sky'],
+      r'Geometry: E1M1: 1 sky sectors show their own sky',
+      r'Geometry: E1M1: 1 sky gaps between sky sectors drawn in their own sky'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'skies.wad'), '--fixed-step'],
      None),
     # Boom's sky offsets (skies-offset.wad): sector 29's SKY3 turned a
@@ -1828,7 +1830,7 @@ GOLDEN = [
     'donut_1.png', 'select-thing_1.png', 'key-bindings_1.png', 'translucency_1.png',
     'translucent-things_1.png', 'transfers_1.png', 'touch-controls_1.png',
     'controls-pad_menucontrolspad.png', 'deep-water_1.png', 'deep-water_2.png',
-    'mapinfo_1.png', 'mapinfo_2.png', 'sector-skies_1.png', 'sector-skies_2.png',
+    'mapinfo_1.png', 'mapinfo_2.png', 'sector-skies_1.png', 'sector-skies_2.png', 'sector-skies_3.png',
     'random-maps_1.png', 'random-maps_2.png', 'random-maps_3.png', 'random-maps_4.png',
     'level-stats_1.png', 'level-stats_2.png', 'level-stats_3.png', 'level-stats_4.png',
     'gamma_1.png', 'gamma_2.png', 'gamma_3.png', 'captions_1.png', 'captions_2.png', 'captions-menu_1.png',

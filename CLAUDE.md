@@ -621,7 +621,10 @@ puts a 271 with SKY3 on sector 29 only (behind the start room's west
 window); the log says `sky transfer of line 829 covers only 1 of 19 sky
 sectors` and `Geometry: E1M1: 1 sky sectors show their own sky`
 (autotest `sector-skies` with golden screenshots through the window and
-looking up inside sector 29, unit test `TestSectorSkies`).
+looking up inside sector 29, unit test `TestSectorSkies`; its third
+screenshot, `G:-580:240,A:180,LOOK:25`, sees the gap above sector 40's
+lower sky ceiling in sector 29's sky: log `1 sky gaps between sky
+sectors drawn in their own sky`).
 `skies-offset.wad` (same script) adds Boom's sky offsets: line 829's
 side x 4096 / y 60 on sector 29's SKY3 and line 1046 a 271 giving the
 other 18 sky sectors SKY1 with 8192 / 60 (log `Map: E1M1: sky transfer

@@ -1094,8 +1094,10 @@ the horizon, Mid = Y - 28 (100 for the plain sky; `SkyMidOf`, kept
 within one texture height so equal looks compare equal): the cylinder
 is turned and its rows moved, a per-sector sky gets `doom_sky_offset` /
 `doom_sky_mid`, and different offsets make a sector's sky its own.
-Upper walls between two sky sectors are still skipped (the sky hack),
-where the cylinder's sky shows.
+Upper walls between two sky sectors are skipped (the sky hack): the
+cylinder's sky shows there, unless the higher sector has a sky of its
+own, whose sky batch then gets the gap as a quad (`EmitLineSide`), the
+way Doom's sky plane of that sector comes down to the lower ceiling.
 
 MBF's translucent things: `BitsValue` knows MBF's bit names up to 31
 (`TRANSLUCENT`) and numbers with bit 31 set; `TThingInfo.Translucent`

@@ -68,6 +68,15 @@ L = several days). Items inside a section are in suggested order.
   DOGS sprites and sounds, autotest `dogs` with goldens). Left: monster
   backing (done, see below), MBF's dog jumping across gaps.
 
+- Boom specials, the last one: an upper wall between two sky sectors
+  is skipped (Doom's sky hack), so the higher sector's sky plane comes
+  down to the lower ceiling there; when that sector has a sky of its
+  own (per-sector skies), `EmitLineSide` now draws the gap in it (a
+  quad in its `SkyBatch`) instead of leaving the cylinder's sky (log
+  `Geometry: E1M1: 1 sky gaps between sky sectors drawn in their own
+  sky`; `skies.wad`'s sector 29 next to sector 40, autotest
+  `sector-skies`'s third golden).
+
 - TERRAIN, the rest: footsteps (GZDoom's `MakeFootsteps`):
   `stepsounds`, else `leftstepsounds` / `rightstepsounds` in turn, every
   `walkingsteptime` / `runningsteptime` (seconds, as tics; faster than 12
@@ -1755,7 +1764,7 @@ L = several days). Items inside a section are in suggested order.
 |---|---|---|---|
 | **UDMF, the rest**: maps load and play, ACS scripts run (done, see above); thing actions, `Thing_Move`, floor scrollers, pillars, friction / wind / current, `Plane_Copy`, ACS spawning and inventory done too; ACS's ACSF functions (CVars, user variables), `Thing_Projectile`, ACS libraries (`LOAD`, `LOADACS`) and thing specials done too; polyobjects (stage 1) done too; left are polyobjects' rest, the UDMF fields the map editor's panel does not edit yet (the back side's per-part ones), and the rendering fields (`docs/RENDERING_ROADMAP.md`). Also glBSP's `GL_LEVEL` markers for map names over 5 letters. | UZDoom maps that run their scripts. | `DoomUdmf`, `DoomMap`, `DoomWorld`, `DoomEditMap` | L (ACS), S-M others |
 | **Rendering toward UZDoom**: per-wall texture offsets and scaling, coloured light and fog, brightmaps, GLDEFS lights, slopes, 3D floors, PK3 / long texture names, models, portals, post-processing; the staged plan with CGE mappings and tests is `docs/RENDERING_ROADMAP.md`. | Modern maps look as meant. | `DoomGeometry`, `DoomLighting`, `DoomActors`, `DoomWad` | S-L each |
-| **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies, MBF's monster friction, deep water's colormaps as a palette remapping and the sky offsets of a transfer line too (see above); left: the sky behind upper walls skipped between two sky sectors of different skies. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
+| **Boom/MBF specials**: generalized, numbered, scrolling, friction / pusher, translucency, elevator, line teleport and transfer types, displacement and accelerative scrollers and deep water are done, per-sector skies, MBF's monster friction, deep water's colormaps as a palette remapping, the sky offsets of a transfer line and the sky behind upper walls between sky sectors of different skies too (see above); nothing left from Boom's list. | Big community map support. | `DoomMap`, `DoomGeometry`, `DoomLighting` | S each |
 | **Demo playback** of `DEMO1..3` lumps (needs tic-exact movement; the player is driven by CGE's navigation, so this would need a Doom-style player physics mode). | Attract mode; hard. | large | L |
 | **Heretic / Hexen games**: Hexen's map format is read (ZDoom-style maps for Doom, see above); the games themselves (their things, actions, classes, hubs) are out of scope unless someone wants them. | - | - | - |
 
@@ -1797,17 +1806,17 @@ play.
 
 ## Suggested next three
 
-1. Boom specials, the last one (S): the sky behind upper walls between
-   two sky sectors of different skies (Doom skips an upper wall whose
-   both sides have sky ceilings; with per-sector skies the two skies
-   meet there).
-2. MBF's smarter moves (S-M, P_SmartMove): monsters staying on a lift
+1. MBF's smarter moves (S-M, P_SmartMove): monsters staying on a lift
    their target is on, avoiding crushing ceilings and damaging floors
    (`monster_avoid_hazards`), and helper dogs jumping down ledges up to
    128 high after their target (`dog_jumping`).
-3. BEX renaming (S-M): DeHackEd's `[SPRITES]` and `[SOUNDS]` blocks
+2. BEX renaming (S-M): DeHackEd's `[SPRITES]` and `[SOUNDS]` blocks
    (new names for sprite prefixes and sound lumps), which many BEX
    patches use (`DoomDehacked`, `DoomStates.Sprites` / `Sounds`).
+3. Doom's sound falloff (S): positional sounds fading like
+   `S_AdjustSoundParams` (full volume within 160 units, silent beyond
+   1200, `S_CLIPPING_DIST`) and its stereo separation, instead of the
+   engine's default curve (`DoomSound`).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

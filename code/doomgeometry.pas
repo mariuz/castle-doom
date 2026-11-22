@@ -748,6 +748,10 @@ var
   OpenBottomA, OpenBottomB, OpenTopA, OpenTopB: Single;
   Passable: Boolean;
   Rate: TVector2;
+  SkyName: String;
+  SkyFlip: Boolean;
+  SkyOffset, SkyMid: Single;
+  SkyPts, SkyDoom: array [0..3] of TVector3;
   B: TGeomBatch;
 begin
   Map := FOwner.Map;
@@ -849,6 +853,23 @@ begin
         U0 + Sd.PartOffsetX[0], U1 + Sd.PartOffsetX[0], TexTopZ, Img, Light, ScaleOr1(Sd.PartScaleX[0]),
         ScaleOr1(Sd.PartScaleY[0]));
     end;
+  end else
+  if (FEmitMode <> emCollision) and ((CeilA > OCeilA + 0.01) or (CeilB > OCeilB + 0.01)) and
+     FOwner.SectorOwnSky(Sec, SkyName, SkyFlip, SkyOffset, SkyMid) then
+  begin
+    { Both skies, ours higher and our own (per-sector skies): Doom's sky
+      plane of this sector comes down to the neighbour's ceiling there,
+      so the gap shows our sky, not the cylinder's. }
+    Img := FOwner.Graphics.Texture(SkyName);
+    SkyPts[0] := DoomToCge(VA.X, VA.Y, Max(OCeilA, FloorA));
+    SkyPts[1] := DoomToCge(VB.X, VB.Y, Max(OCeilB, FloorB));
+    SkyPts[2] := DoomToCge(VB.X, VB.Y, CeilB);
+    SkyPts[3] := DoomToCge(VA.X, VA.Y, CeilA);
+    SkyDoom[0] := Vector3(VA.X, VA.Y, Max(OCeilA, FloorA));
+    SkyDoom[1] := Vector3(VB.X, VB.Y, Max(OCeilB, FloorB));
+    SkyDoom[2] := Vector3(VB.X, VB.Y, CeilB);
+    SkyDoom[3] := Vector3(VA.X, VA.Y, CeilA);
+    SkyBatch(Img, SkyFlip, SkyOffset, SkyMid).AddSkyPolygon(SkyPts, SkyDoom, Vector2(255, DoomLightFullBright));
   end;
 
   { Masked middle texture (grates, vines...): one texture height, clipped
@@ -1301,7 +1322,7 @@ constructor TDoomGeometry.Create(const AMap: TDoomMap; const AGraphics: TDoomGra
   const DynamicSectors: array of Boolean; const SkyTexture: String; const SkyFlipped: Boolean;
   const MapSky: String; const SkyTransfer: Boolean; const SkyOffsetX, SkyOffsetY: Single);
 var
-  I, Own: Integer;
+  I, Own, C2: Integer;
   C: TMapChunk;
   Tex: String;
   Flip: Boolean;
@@ -1322,7 +1343,27 @@ begin
   for I := 0 to High(FMap.Sectors) do
     if SectorOwnSky(I, Tex, Flip, Offset, Mid) then Inc(Own);
   if Own > 0 then
+  begin
     WritelnLog('Geometry', '%s: %d sky sectors show their own sky', [FMap.Name, Own]);
+    { Lines between two sky sectors where the higher one has its own
+      sky: the gap down to the lower ceiling is drawn in it (EmitLineSide). }
+    Own := 0;
+    for I := 0 to High(FMap.Linedefs) do
+      if (FMap.Linedefs[I].FrontSector >= 0) and (FMap.Linedefs[I].BackSector >= 0) and
+         FMap.HasSkyCeiling(FMap.Linedefs[I].FrontSector) and FMap.HasSkyCeiling(FMap.Linedefs[I].BackSector) and
+         (FMap.Sectors[FMap.Linedefs[I].FrontSector].CeilingHeight <>
+          FMap.Sectors[FMap.Linedefs[I].BackSector].CeilingHeight) then
+      begin
+        if FMap.Sectors[FMap.Linedefs[I].FrontSector].CeilingHeight >
+           FMap.Sectors[FMap.Linedefs[I].BackSector].CeilingHeight then
+          C2 := FMap.Linedefs[I].FrontSector
+        else
+          C2 := FMap.Linedefs[I].BackSector;
+        if SectorOwnSky(C2, Tex, Flip, Offset, Mid) then Inc(Own);
+      end;
+    if Own > 0 then
+      WritelnLog('Geometry', '%s: %d sky gaps between sky sectors drawn in their own sky', [FMap.Name, Own]);
+  end;
   FChunks := TMapChunkList.Create(true);
   FDirty := TChunkSet.Create;
   SetLength(FLineChunk, Length(FMap.Linedefs));
