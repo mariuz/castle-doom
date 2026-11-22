@@ -1602,7 +1602,8 @@ begin
       'splash Water { smallclass WaterSplashBase smallclip 12 baseclass WaterSplashBase' + LineEnding +
       '  chunkclass WaterSplash chunkxvelshift 8 chunkbasezvel 2 sound world/watersplash noalert }' + LineEnding +
       'terrain Water { splash Water footclip 10 liquid damageamount 5 damagetimemask 7' + LineEnding +
-      '  allowprotection leftstepsounds step/water stepvolume 0.5 }' + LineEnding +
+      '  allowprotection leftstepsounds step/water stepvolume 0.5 walkingsteptime 0.4' + LineEnding +
+      '  runningsteptime 0.2 stepdistance 16 damagetype Slime }' + LineEnding +
       '/* a comment { } */ terrain Ice { friction 1.5 }' + LineEnding +
       'ifheretic floor FLTWAWA1 Water terrain Water { footclip 99 } endif' + LineEnding +
       'ifdoom floor NUKAGE1 Ice endif defaultterrain Ice' + LineEnding);
@@ -1616,6 +1617,12 @@ begin
     AssertEquals('mask', 7, T.Terrains[I].DamageTimeMask);
     AssertTrue('protection', T.Terrains[I].AllowProtection);
     AssertEquals('its splash', 0, T.Terrains[I].Splash);
+    AssertEquals('left steps', 'step/water', T.Terrains[I].LeftStepSound);
+    AssertEquals('no right steps', '', T.Terrains[I].RightStepSound);
+    AssertEquals('step volume', 0.5, T.Terrains[I].StepVolume, 0.001);
+    AssertEquals('walking step tics (0.4 s)', 14, T.Terrains[I].WalkStepTics);
+    AssertEquals('running step tics (0.2 s)', 7, T.Terrains[I].RunStepTics);
+    AssertEquals('damage type', 'Slime', T.Terrains[I].DamageType);
     AssertEquals('chunks', 'WaterSplash', T.Splashes[0].ChunkClass);
     AssertEquals('x shift', 8, T.Splashes[0].ChunkXVelShift);
     AssertEquals('no y shift', -1, T.Splashes[0].ChunkYVelShift);
@@ -1646,6 +1653,9 @@ begin
         AssertEquals('WAD water', 'Water', K);
         AssertEquals('WAD default', 'Solid', T.Terrains[T.TerrainOfFlat('FLOOR5_2')].Name);
         AssertTrue('WAD ice', T.Terrains[T.TerrainOfFlat('AQF054')].HasFriction);
+        AssertEquals('WAD ice steps', 'world/stepr', T.Terrains[T.TerrainOfFlat('AQF054')].RightStepSound);
+        AssertEquals('WAD water steps', 'world/drip', T.Terrains[T.TerrainOfFlat('FWATER1')].StepSound);
+        AssertEquals('default step volume', 1, T.Terrains[T.TerrainByName('Solid')].StepVolume, 0.001);
       finally
         FreeAndNil(W);
       end;

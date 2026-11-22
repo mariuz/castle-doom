@@ -1287,7 +1287,8 @@ blocks (ZDoom's small / base / chunk classes, their sounds, the chunk
 velocity shifts), `terrain` blocks (splash, footclip, liquid, damage
 amount / time mask / on land / allowprotection, friction: ZDoom's 1.0 is
 Doom's friction, `TerrainFriction` turns it into Boom's friction and
-move factor; footstep keys are read and dropped), `floor [optional] FLAT
+move factor; the footstep sounds, step times in tics and volume; the
+damage type), `floor [optional] FLAT
 TERRAIN` and `defaultterrain`; `ifheretic` / `ifhexen` / `ifstrife` /
 `ifchex` blocks are skipped up to their `endif`. A floor names its
 terrain by name and resolves it on lookup, so the order of definitions
@@ -1309,6 +1310,12 @@ sound. Splash actors are not saved. Footclip lowers a monster's sprite
 (`TDoomActor.FootClip`, the floor hides its feet) and the player's eye
 (`PlayerFootClip`; `TViewPlay` moves the camera down by the change and
 sets the walk navigation's preferred height, so it is no fall).
+Footsteps run in `TicPlayerTerrain` too: while the player moves (the
+distance since last tic, `FStepLastX/Y`) within 4 of the floor, every
+walking or running step time of `FTic` a step sound plays (one sound,
+or left and right in turn, `FStepRightFoot`) with a small splash that
+does not alert monsters (`SplashOf`'s `Alert`). A monster's dropped
+item is put on the floor and splashes there (`DropItem`'s caller).
 
 ---
 

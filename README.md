@@ -192,8 +192,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   endings; ZDoom's `LANGUAGE` lumps give the strings those name (and replace the game's own
   messages and texts like BEX strings). ZDoom's `TERRAIN` lumps say what each floor flat is:
   things landing in a liquid and missiles hitting it splash (with ZDoom's splash sprites
-  when the WAD has them), the player and monsters sink in by its footclip, and a terrain
-  can hurt or be slippery.
+  when the WAD has them), the player and monsters sink in by its footclip, a terrain
+  can hurt or be slippery, and its footstep sounds play as the player walks.
 - Music: MUS and MIDI lumps played on an emulated OPL3 (Nuked OPL3, loaded as a shared
   library packaged with the game) driven by the WAD's GENMIDI instrument bank, the AdLib /
   Sound Blaster sound of the original; a built-in FM model plays when the library is

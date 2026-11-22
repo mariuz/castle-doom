@@ -5,15 +5,18 @@ E1M1, for the terrain autotest and the unit test TestTerrain.
 - E1M1's corridor east of the start room (sector 141, floor 0) becomes
   a pool: floor -16 with the FWATER1 flat (the sides facing into it get
   lower textures, their middle or upper one, else BROWN1); TERRAIN makes FWATER1 "Water": liquid, footclip 10,
-  2 damage every 16 tics (a radiation suit protects), the "Water" splash
+  2 damage of type Slime every 16 tics (a radiation suit protects),
+  a step sound (world/drip) every 0.5 s walking, 0.3 s running, the
+  "Water" splash
   (small: WaterSplashBase and world/drip; big: WaterSplashBase on the
   surface, WaterSplash chunks thrown up, world/watersplash).
 - AQF054 (the start room's floor and nine other sectors) is "Slippery",
-  friction 1.5 (ice).
+  friction 1.5 (ice), with left and right footsteps (world/stepl,
+  world/stepr) every 0.4 s walking, 0.25 s running.
 - SPSHA0..SPSHK0: blue drops (A..D, the chunks) and rings (E..K, the
   base), since Freedoom has none of ZDoom's splash sprites.
-- SNDINFO names the splash sounds: world/watersplash DSSLOP, world/drip
-  DSPLASMA.
+- SNDINFO names the splash and step sounds: world/watersplash DSSLOP,
+  world/drip DSPLASMA, world/stepl DSPSTOP, world/stepr DSSWTCHN.
 - The TERRAIN lump also has an ifheretic block (skipped), a floor line
   before its terrain, an optional floor and a default terrain (Solid,
   nothing special), which the unit test reads.
@@ -54,13 +57,23 @@ terrain Water
     footclip 10
     liquid
     damageamount 2
+    damagetype Slime
     damagetimemask 15
     allowprotection
+    stepsounds world/drip
+    walkingsteptime 0.5
+    runningsteptime 0.3
 }
 
 terrain Slippery
 {
     friction 1.5
+    leftstepsounds world/stepl
+    rightstepsounds world/stepr
+    stepvolume 0.6
+    walkingsteptime 0.4
+    runningsteptime 0.25
+    stepdistance 32
 }
 
 terrain Solid
@@ -79,6 +92,8 @@ defaultterrain Solid
 
 SNDINFO = b"""world/watersplash DSSLOP
 world/drip DSPLASMA
+world/stepl DSPSTOP
+world/stepr DSSWTCHN
 """
 
 BLUE, LIGHT = 200, 196

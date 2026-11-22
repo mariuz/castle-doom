@@ -289,6 +289,10 @@ type
     FSplashInfos: array of TThingInfo;
     { The player's height last tic (a landing: from above the floor). }
     FPlayerLastZ: Single;
+    { Footsteps (TicPlayerTerrain): where the player was last tic, and
+      which foot steps next. }
+    FStepLastX, FStepLastY: Single;
+    FStepRightFoot: Boolean;
     FPlayerFootClip: Single;
     FAcsHost: TAcsHost;
     FAcsGlobals: TAcsGlobals;
@@ -351,7 +355,7 @@ type
     { A thing (Who; nil = the player) lands or a missile hits the floor
       at (X, Y, Z) in sector Sec: its terrain's splash, if any. }
     procedure SplashOf(const T: Integer; const X, Y, Z: Single; const Where: String;
-      const Small: Boolean; const Who: TDoomActor; const What: String);
+      const Small: Boolean; const Who: TDoomActor; const What: String; const Alert: Boolean = true);
     { A splash where a fall or a missile from OldZ to NewZ went into a
       swimmable 3D floor's water (its top flat's terrain). }
     function WaterSlabSplash(const Sec: Integer; const X, Y, OldZ, NewZ: Single; const Small: Boolean;
@@ -2734,9 +2738,10 @@ end;
   damage of the floor's terrain. }
 procedure TDoomWorld.TicPlayerTerrain(const Sec: Integer);
 var
-  T: Integer;
-  Floor: Single;
+  T, Delay: Integer;
+  Floor, Moved: Single;
   OnFloor, Landed: Boolean;
+  Step: String;
 begin
   Floor := FMap.FloorAt(Sec, Player.X, Player.Y);
   OnFloor := Player.Z <= Floor + 1;
@@ -2755,11 +2760,44 @@ begin
     TerrainSplash(Player.X, Player.Y, Floor, Sec, false, nil, 'player');
   FPlayerFootClip := FootClipAt(Sec, Player.X, Player.Y, Player.Z);
   T := SectorTerrain(Sec);
+  { Footsteps (GZDoom's MakeFootsteps): while moving on the floor, a step
+    every walking or running step time (faster than 12 units a tic is
+    running: Doom's walk is about 8, its run about 16), with a small
+    splash that alerts nobody. The walk's height wobbles a unit or so
+    around the floor, so a step counts within 4 of it. }
+  Moved := Sqrt(Sqr(Player.X - FStepLastX) + Sqr(Player.Y - FStepLastY));
+  FStepLastX := Player.X;
+  FStepLastY := Player.Y;
+  if (T >= 0) and (Player.Z <= Floor + 4) and (Moved > 0.5) and (Moved < 64) then
+  begin
+    if Moved > 12 then Delay := FTerrain.Terrains[T].RunStepTics else Delay := FTerrain.Terrains[T].WalkStepTics;
+    if (Delay > 0) and (FTic mod Delay = 0) then
+    begin
+      Step := FTerrain.Terrains[T].StepSound;
+      if Step = '' then
+      begin
+        if FStepRightFoot then Step := FTerrain.Terrains[T].RightStepSound
+        else Step := FTerrain.Terrains[T].LeftStepSound;
+        FStepRightFoot := not FStepRightFoot;
+      end;
+      if Step <> '' then
+      begin
+        FSounds.Play(FSoundSeqs.LumpOf(Step));
+        WritelnLog('Terrain', 'Footstep on %s: %s (%s), every %d tics', [FTerrain.Terrains[T].Name, Step,
+          FSoundSeqs.LumpOf(Step), Delay]);
+      end;
+      SplashOf(T, Player.X, Player.Y, Floor, Format('sector %d', [Sec]), true, nil, 'player''s step', false);
+    end;
+  end;
   if (T < 0) or not OnFloor or (FTerrain.Terrains[T].DamageAmount <= 0) then Exit;
   if FTerrain.Terrains[T].DamageOnLand and not Landed then Exit;
   if (not FTerrain.Terrains[T].DamageOnLand) and ((FTic and FTerrain.Terrains[T].DamageTimeMask) <> 0) then Exit;
   if FTerrain.Terrains[T].AllowProtection and (Player.RadSuitTics > 0) then Exit;
-  WritelnLog('Terrain', 'Player hurt by %s: %d', [FTerrain.Terrains[T].Name, FTerrain.Terrains[T].DamageAmount]);
+  if FTerrain.Terrains[T].DamageType <> '' then
+    WritelnLog('Terrain', 'Player hurt by %s (damage type %s): %d', [FTerrain.Terrains[T].Name,
+      FTerrain.Terrains[T].DamageType, FTerrain.Terrains[T].DamageAmount])
+  else
+    WritelnLog('Terrain', 'Player hurt by %s: %d', [FTerrain.Terrains[T].Name, FTerrain.Terrains[T].DamageAmount]);
   DamagePlayer(FTerrain.Terrains[T].DamageAmount, nil);
 end;
 
@@ -3940,7 +3978,7 @@ begin
 end;
 
 procedure TDoomWorld.SplashOf(const T: Integer; const X, Y, Z: Single; const Where: String;
-  const Small: Boolean; const Who: TDoomActor; const What: String);
+  const Small: Boolean; const Who: TDoomActor; const What: String; const Alert: Boolean);
 var
   Sp: TTerrainSplash;
   Base, Chunk: TDoomActor;
@@ -3985,7 +4023,7 @@ begin
   WritelnLog('Terrain', '%s splashes in %s (%s, %s at %.0f %.0f)', [What, FTerrain.Terrains[T].Name, Where,
     Sp.Name, X, Y]);
   { The player's splashes are heard by monsters. }
-  if (Who = nil) and not Sp.NoAlert then
+  if (Who = nil) and not Sp.NoAlert and Alert then
     NoiseAlert;
 end;
 
@@ -6476,6 +6514,14 @@ begin
       Drop.DoomX := A.DoomX; Drop.DoomY := A.DoomY; Drop.DoomZ := A.DoomZ;
       Drop.Sector := A.Sector;
       Drop.Dropped := true;
+      { It lands on the floor at once (vanilla's ONFLOORZ): a small splash
+        on a splashing terrain, like ZDoom's tossed items landing. }
+      if (FTerrain <> nil) and (A.Sector >= 0) then
+      begin
+        Drop.DoomZ := FMap.FloorAtZ(A.Sector, A.DoomX, A.DoomY, A.DoomZ + 24);
+        if FMap.WaterSlabAt(A.Sector, A.DoomX, A.DoomY, Drop.DoomZ + 1) < 0 then
+          TerrainSplash(Drop.DoomX, Drop.DoomY, Drop.DoomZ, A.Sector, true, Drop, Info^.Sprite);
+      end;
       LightActor(Drop, Max(0, A.Sector));
       Drop.UpdateTransform;
       FActors.Add(Drop);

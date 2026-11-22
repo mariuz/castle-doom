@@ -493,10 +493,21 @@ TESTS = [
      'K,C:5,G:-224:150,A:90,W:1,LOOK:-60,W:0.3,X,W:0.3,Q',
      [r'Terrain: TERRAIN: 3 terrains, 1 splashes, 3 floors; 10 sectors have friction',
       r'Terrain: player splashes in Water \(sector 141, Water at', r'Terrain: Eye 31 above the feet',
-      r'Terrain: Player hurt by Water: 2', r'Terrain: TROO splashes in Water \(sector 141',
+      r'Terrain: Player hurt by Water \(damage type Slime\): 2', r'Terrain: TROO splashes in Water \(sector 141',
       r'Terrain: MISL splashes in Water \(sector 141'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'terrain.wad'), '--fixed-step'],
      lambda config: check_terrain(config)),
+    # TERRAIN's footsteps (terrain.wad): left and right steps on the start
+    # room's ice, the pool's step sound with a quiet splash; a zombieman
+    # killed in the pool drops its clip with a splash.
+    ('terrain-steps', 'E1M1',
+     'Y,G:-500:256,A:0,W:0.3,F:0.8,W:0.5,G:-224:150,A:90,W:0.3,F:1.2,W:0.3,A:270,P:3004:60,W:0.3,D,W:0.5,Q',
+     [r'Terrain: Footstep on Slippery: world/stepl \(DSPSTOP\), every 14 tics',
+      r'Terrain: Footstep on Slippery: world/stepr \(DSSWTCHN\), every 14 tics',
+      r'Terrain: Footstep on Water: world/drip \(DSPLASMA\), every 18 tics',
+      r'Terrain: player\'s step splashes in Water \(sector 141', r'Terrain: CLIP splashes in Water \(sector 141'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'terrain.wad'), '--fixed-step'],
+     None),
     # MBF21's jumps (mbf21jump.deh): the shotgun guy, closer than 256,
     # turns to fuzz and checks it, finds, checks and clears its tracer;
     # the demon (90 health) checks its health and sight and stops being

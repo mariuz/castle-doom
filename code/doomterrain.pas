@@ -65,6 +65,12 @@ type
     DamageAmount, DamageTimeMask: Integer;
     DamageType: String;
     DamageOnLand, AllowProtection: Boolean;
+    { Footsteps (GZDoom's MakeFootsteps): StepSound for every step, else
+      LeftStepSound and RightStepSound in turn, every WalkStepTics while
+      walking, RunStepTics while running (0: none); StepVolume 0..1. }
+    StepSound, LeftStepSound, RightStepSound: String;
+    StepVolume: Single;
+    WalkStepTics, RunStepTics: Integer;
     { ZDoom's friction (1.0 normal): Boom's friction and move factor. }
     HasFriction: Boolean;
     Friction, MoveFactor: Single;
@@ -275,6 +281,7 @@ begin
   Terrains[Result].Splash := -1;
   Terrains[Result].DamageTimeMask := 31;
   Terrains[Result].Friction := 1;
+  Terrains[Result].StepVolume := 1;
   Terrains[Result].MoveFactor := 1;
 end;
 
@@ -381,10 +388,15 @@ begin
             Terrains[T].HasFriction := true;
             TerrainFriction(F, Terrains[T].Friction, Terrains[T].MoveFactor);
           end
-          else if (Key = 'leftstepsounds') or (Key = 'rightstepsounds') or (Key = 'stepsounds') or
-            (Key = 'stepvolume') or (Key = 'walkingsteptime') or (Key = 'runningsteptime') or
-            (Key = 'stepdistance') or (Key = 'stepdistanceminvel') or (Key = 'splashmass') then
-            { Footsteps: not played here. }
+          else if Key = 'stepsounds' then begin Sc.Next; Terrains[T].StepSound := Sc.Tok; end
+          else if Key = 'leftstepsounds' then begin Sc.Next; Terrains[T].LeftStepSound := Sc.Tok; end
+          else if Key = 'rightstepsounds' then begin Sc.Next; Terrains[T].RightStepSound := Sc.Tok; end
+          else if Key = 'stepvolume' then Terrains[T].StepVolume := Sc.Num
+          { Times in seconds (p_terrain.cpp's GEN_Time: * TICRATE). }
+          else if Key = 'walkingsteptime' then Terrains[T].WalkStepTics := Round(Sc.Num * 35)
+          else if Key = 'runningsteptime' then Terrains[T].RunStepTics := Round(Sc.Num * 35)
+          else if (Key = 'stepdistance') or (Key = 'stepdistanceminvel') or (Key = 'splashmass') then
+            { GZDoom's distance-based steps and splash mass: not used. }
             Sc.Next
           else
           begin

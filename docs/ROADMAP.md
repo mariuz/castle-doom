@@ -68,6 +68,19 @@ L = several days). Items inside a section are in suggested order.
   DOGS sprites and sounds, autotest `dogs` with goldens). Left: monster
   backing (done, see below), MBF's dog jumping across gaps.
 
+- TERRAIN, the rest: footsteps (GZDoom's `MakeFootsteps`):
+  `stepsounds`, else `leftstepsounds` / `rightstepsounds` in turn, every
+  `walkingsteptime` / `runningsteptime` (seconds, as tics; faster than 12
+  units a tic is running) while the player moves on the floor, each step
+  with a small splash that alerts nobody (`SplashOf`'s `Alert`);
+  `stepvolume` is read (the sound player has no volume per sound yet),
+  `stepdistance` is not used. `damagetype` shows in the hurt log (the
+  player has no damage factors to apply it to). A dropped item lands at
+  once (vanilla's ONFLOORZ) and splashes on a splashing floor, like
+  ZDoom's tossed items landing. `terrain.wad`'s ice and water have
+  steps (DSPSTOP / DSSWTCHN, DSPLASMA) and the water damage type Slime;
+  autotest `terrain-steps`, unit test `TestTerrain`.
+
 - MBF's monster backing (`-monster-backing`, off by default as in
   MBF's `monster_backing`; world state, saved, the demo command
   `BACKING` toggles it): a monster with a missile attack (not a lost
@@ -177,8 +190,8 @@ L = several days). Items inside a section are in suggested order.
   friction (`TerrainFriction`, where the sector has no Boom friction).
   `tools/make_terrain_wad.py` (a 16-deep FWATER1 pool in E1M1's
   corridor 141, generated SPSH sprites); autotest `terrain` (golden),
-  unit test `TestTerrain`. Left: footstep sounds, damage types, items
-  splashing (splashes on 3D-floor water are done, see above).
+  unit test `TestTerrain`. (Splashes on 3D-floor water, footsteps,
+  damage types and dropped items are done, see above.)
 
 - MBF21, stage 3a: the jumps on the walked sequences
   (`TDoomWorld.JumpToState`): a jump plays the thing's chain from the
@@ -1784,17 +1797,17 @@ play.
 
 ## Suggested next three
 
-1. TERRAIN, the rest (S): footstep sounds (ZDoom's `footstep` sounds
-   when walking on a terrain), items splashing when they land, and the
-   damage types of a terrain's `damagetype`.
-2. Boom specials, the last one (S): the sky behind upper walls between
+1. Boom specials, the last one (S): the sky behind upper walls between
    two sky sectors of different skies (Doom skips an upper wall whose
    both sides have sky ceilings; with per-sector skies the two skies
    meet there).
-3. MBF's smarter moves (S-M, P_SmartMove): monsters staying on a lift
+2. MBF's smarter moves (S-M, P_SmartMove): monsters staying on a lift
    their target is on, avoiding crushing ceilings and damaging floors
    (`monster_avoid_hazards`), and helper dogs jumping down ledges up to
    128 high after their target (`dog_jumping`).
+3. BEX renaming (S-M): DeHackEd's `[SPRITES]` and `[SOUNDS]` blocks
+   (new names for sprite prefixes and sound lumps), which many BEX
+   patches use (`DoomDehacked`, `DoomStates.Sprites` / `Sounds`).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

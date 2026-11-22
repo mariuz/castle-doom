@@ -1156,7 +1156,13 @@ autotest only checks the library loads.
   imp walking in logs `TROO splashes`, a rocket `MISL splashes`
   (autotest `terrain` with a golden, unit test `TestTerrain`). The
   corridor is only x -256..-190 wide but runs y 128..384: fire along
-  it (`G:-224:150,A:90,LOOK:-60`).
+  it (`G:-224:150,A:90,LOOK:-60`). Its ice has left / right footsteps
+  and the water a step sound: `Y,G:-500:256,A:0,W:0.3,F:0.8` logs
+  `Terrain: Footstep on Slippery: world/stepl (DSPSTOP), every 14 tics`
+  then `world/stepr`; in the pool `player's step splashes`, and a
+  zombieman killed there `CLIP splashes` (autotest `terrain-steps`).
+  The walk's height wobbles about a unit around the floor, so floor
+  checks for the player need a few units of slack.
 - **`{$ifdef WASI}` code only compiles in CI** (the web toolchain is not
   installed here). Keep such blocks small, read FPC's
   `packages/wasm-job/src/job.js.pas` for the JOB API before writing them,
