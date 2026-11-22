@@ -163,6 +163,7 @@ begin
   Result.Add('bfgCountdown', FBfgCountdown);
   Result.Add('skill', Skill);
   Result.Add('monsterBacking', FMonsterBacking);
+  Result.Add('smartMoves', FSmartMoves);
   Result.Add('brainTarget', FBrainTargetIndex);
   Result.Add('brainEasy', FBrainEasy);
   Result.Add('brainDeathTics', FBrainDeathTics);
@@ -589,6 +590,7 @@ begin
   FBfgCountdown := State.Get('bfgCountdown', 0);
   Skill := State.Get('skill', 2);
   FMonsterBacking := State.Get('monsterBacking', FMonsterBacking);
+  FSmartMoves := State.Get('smartMoves', FSmartMoves);
   FBrainTargetIndex := State.Get('brainTarget', 0);
   FBrainEasy := State.Get('brainEasy', false);
   FBrainDeathTics := State.Get('brainDeathTics', 0);

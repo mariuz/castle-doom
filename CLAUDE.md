@@ -1133,7 +1133,14 @@ autotest only checks the library loads.
   toggles it, saved as `monsterBacking`); `Y,K,C:1,W:1,G:-416:256,A:0,
   P:3001:150,W:3` logs `Backing: TROO at (-266, 256) backs away from
   the player's melee weapon` and the imp stays about 190 away (autotests
-  `monster-backing`, `monster-backing-friend`).
+  `monster-backing`, `monster-backing-friend`). MBF's smarter moves are
+  on by default (`--no-smart-moves`, demo `SMARTMOVES`, saved as
+  `smartMoves`; log `SmartMove:`): an imp backing off the E1M1 lift
+  `stays on the lift` (wait for the lift to come back up after `G`
+  onto it: `W:6`), `LINE:593:25` makes the lift a crusher an imp
+  `keeps out from under`, and a friendly dog `jumps down from -96 to
+  -160` at line 164 (`Y,D,W:1,G:1400:540,A:180,W:0.3,FRIEND:888:150`;
+  autotests `smart-moves-lift`, `smart-moves-crusher`, `smart-moves-dog`).
   Helper dogs: `-dogs N` (0..3) puts friendly dogs (thing 888) at the
   other players' starts (log `Friend: A helper dog at (-416, 304)`;
   autotest `helper-dogs`); Freedoom has no DOGS sprites or DSDG*

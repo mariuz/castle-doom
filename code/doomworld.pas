@@ -180,6 +180,11 @@ type
     { MBF's monster_backing (from MonsterBacking, saved; the demo command
       BACKING toggles it). }
     FMonsterBacking: Boolean;
+    { MBF's P_SmartMove (staying on lifts, avoiding crushing ceilings; on
+      by default as in MBF; saved, the demo command SMARTMOVES toggles
+      it) and the drop a move may take (24; 128 for a jumping dog). }
+    FSmartMoves: Boolean;
+    FDropoffLimit: Single;
     { Line grid query results (TDoomMap.LinesInBox / LinesNearSegment),
       one buffer per caller so that none overwrites another's. }
     FLinesSight, FLinesMove, FLinesShot, FLinesMissile: TLineList;
@@ -337,12 +342,21 @@ type
       walks back to within 128 of the player. True when the chase should
       not go on (no target to chase). }
     function TicFriend(const A: TDoomActor): Boolean;
+    { A helper dog following the player within 144 with a ledge up to 128
+      deep 16 units ahead (MBF's dog_jumping): it keeps going to jump. }
+    function DogAtLedge(const A: TDoomActor): Boolean;
     function LookForFriend(const A: TDoomActor): Boolean;
     { MBF's P_NewChaseDir: A (a monster with a missile attack, not a lost
       soul) backs away from its target when that fights in melee only and
       is within 128, or is the player within 192 with a FLEEMELEE weapon
       (the fist, the chainsaw); friends do not back from friends. }
     function BacksAway(const A: TDoomActor; const Dist: Single; out Why: String): Boolean;
+    { MBF's P_IsOnLift: Sec's floor is a moving lift, or a lift line
+      (vanilla's and Boom's lift and floor-to-lowest types) tags it. }
+    function SectorIsLift(const Sec: Integer): Boolean;
+    { MBF's P_IsUnderDamage: the direction (1 up, -1 down) of a moving
+      ceiling or crusher over A's sector, 0 none. }
+    function UnderDamage(const A: TDoomActor): Integer;
     procedure SpawnHelperDog(const X, Y, Angle: Single);
     { TERRAIN (LoadTerrain at the level's start). }
     procedure LoadTerrain;
@@ -847,6 +861,8 @@ var
   { MBF's monster backing (-monster-backing; off by default as in MBF):
     monsters with a missile attack back away from melee attackers. }
   MonsterBacking: Boolean;
+  { MBF's smarter moves (P_SmartMove), off with --no-smart-moves. }
+  SmartMoves: Boolean = true;
 
 implementation
 
@@ -1356,6 +1372,8 @@ begin
   FAcsHost := NewAcsHost;
   FAcsGlobals := TAcsGlobals.Create;
   FMonsterBacking := MonsterBacking;
+  FSmartMoves := SmartMoves;
+  FDropoffLimit := 24;
   Skill := 2;
   ResetPlayer;
 end;
@@ -2158,8 +2176,8 @@ begin
 end;
 
 const
-  CheatCommands: array [0..11] of String = ('K', 'Y', 'P', 'CORPSE', 'D', 'V', 'INVIS', 'INVUL', 'AMP', 'LINE',
-    'FRIEND', 'BACKING');
+  CheatCommands: array [0..12] of String = ('K', 'Y', 'P', 'CORPSE', 'D', 'V', 'INVIS', 'INVUL', 'AMP', 'LINE',
+    'FRIEND', 'BACKING', 'SMARTMOVES');
 
 class function TDoomWorld.IsCheat(const Command: String): Boolean;
 var
@@ -2195,6 +2213,11 @@ begin
     A := DebugSpawn(Round(Arg), Arg2);
     if A <> nil then
       DamageActor(A, 100000, A.DoomX, A.DoomY, A.DoomZ + 32);
+  end
+  else if Command = 'SMARTMOVES' then
+  begin
+    FSmartMoves := not FSmartMoves;
+    WritelnLog('SmartMove', 'Smart moves %s', [BoolToStr(FSmartMoves, 'on', 'off')]);
   end
   else if Command = 'BACKING' then
   begin
@@ -3407,7 +3430,7 @@ begin
     end;
     { Corpses have MF_DROPOFF: knocked off a ledge, they fall. }
     if (not A.Info^.Floats) and not (A.State in [asDying, asDead]) and
-       (OpenBottom - LowFloor > 24) and (LowFloor < Z - 24) then
+       (OpenBottom - LowFloor > FDropoffLimit) and (LowFloor < Z - 24) then
     begin
       BlockedByLine := I;
       Exit;
@@ -3607,8 +3630,10 @@ var
   DX, DY, Dist, Ang, Step, TX, TY, TZ, TR, RangeDist: Single;
   Blocked: Integer;
   Tries, MaxHold, HealS: Integer;
-  Moved, OnFriction, Backing: Boolean;
-  Why: String;
+  Moved, OnFriction, Backing, OnLift, SameSide: Boolean;
+  Why, Avoid: String;
+  OldZ: Single;
+  OldSec, TargetSec, WasUnder, Under: Integer;
 begin
   { MBF's friends pick their own enemies and follow the player. }
   if IsFriend(A) then
@@ -3756,6 +3781,26 @@ begin
   Tries := 0;
   OldX := A.DoomX;
   OldY := A.DoomY;
+  OldZ := A.DoomZ;
+  OldSec := A.Sector;
+  { MBF's P_SmartMove: stay on a lift the target stands on too (same
+    sector tag), keep out from under a moving crusher; and a helper dog
+    may jump down ledges up to 128 high after a target of its own side
+    within 144 (235 times in 256). }
+  if A.Target = nil then TargetSec := Player.Sector
+  else TargetSec := A.Target.Sector;
+  OnLift := FSmartMoves and (A.Sector >= 0) and (TargetSec >= 0) and
+    (FMap.Sectors[A.Sector].Tag <> 0) and (FMap.Sectors[TargetSec].Tag = FMap.Sectors[A.Sector].Tag) and
+    SectorIsLift(A.Sector);
+  WasUnder := 0;
+  if FSmartMoves then WasUnder := UnderDamage(A);
+  { (MBF's players are friends: the dog follows the player down.) }
+  if FSmartMoves and (A.Info^.Num = 888) and (Dist < 144) then
+  begin
+    if A.Target = nil then SameSide := IsFriend(A) else SameSide := IsFriend(A) = IsFriend(A.Target);
+    if SameSide and (Random(256) < 235) then
+      FDropoffLimit := 128;
+  end;
   while (not Moved) and (Tries < 4) do
   begin
     case Tries of
@@ -3765,6 +3810,36 @@ begin
       3: Ang := Ang + 180;
     end;
     Moved := TryMove2D(A, A.DoomX + Cos(DegToRad(Ang)) * Step, A.DoomY + Sin(DegToRad(Ang)) * Step, Blocked);
+    if Moved and FSmartMoves then
+    begin
+      Avoid := '';
+      if OnLift and not SectorIsLift(A.Sector) and (Random(256) < 230) then
+        Avoid := 'stays on the lift'
+      else if WasUnder = 0 then
+      begin
+        Under := UnderDamage(A);
+        if (Under <> 0) and ((Under < 0) or (Random(256) < 200)) then
+          Avoid := 'keeps out from under a crusher';
+      end;
+      if Avoid <> '' then
+      begin
+        { Undo the step and try another way (MBF: a new direction). }
+        A.DoomX := OldX;
+        A.DoomY := OldY;
+        A.DoomZ := OldZ;
+        A.Sector := OldSec;
+        Moved := false;
+        if not A.SmartLogged then
+        begin
+          WritelnLog('SmartMove', '%s at (%.0f, %.0f) %s', [A.Info^.Sprite, A.DoomX, A.DoomY, Avoid]);
+          A.SmartLogged := true;
+        end;
+      end;
+    end;
+    if Moved and (FDropoffLimit > 24) and (A.Sector >= 0) and
+       (FMap.FloorAt(A.Sector, A.DoomX, A.DoomY) < OldZ - 24) then
+      WritelnLog('SmartMove', '%s jumps down from %.0f to %.0f', [A.Info^.Sprite, OldZ,
+        FMap.FloorAt(A.Sector, A.DoomX, A.DoomY)]);
     if (not Moved) and A.Info^.Floats and FFloatOk then
     begin
       { P_Move: a flyer rises or sinks to fit the opening ahead (MF_INFLOAT
@@ -3785,6 +3860,7 @@ begin
     end;
     Inc(Tries);
   end;
+  FDropoffLimit := 24;
   if Moved then
     MonsterCrossLines(A, OldX, OldY);
 end;
@@ -4057,6 +4133,34 @@ begin
   end;
 end;
 
+function TDoomWorld.SectorIsLift(const Sec: Integer): Boolean;
+var
+  L, Tag: Integer;
+begin
+  Result := false;
+  if (Sec < 0) or (Sec > High(FMap.Sectors)) then Exit;
+  if (FMap.Sectors[Sec].Mover <> nil) and (TSectorMover(FMap.Sectors[Sec].Mover).Kind = mkLift) then
+    Exit(true);
+  Tag := FMap.Sectors[Sec].Tag;
+  if Tag = 0 then Exit;
+  for L := 0 to High(FMap.Linedefs) do
+    if (FMap.Linedefs[L].Tag = Tag) and (FMap.Linedefs[L].Special in [10, 14, 15, 20, 21, 22, 47, 53, 62, 66,
+       67, 68, 87, 88, 95, 120, 121, 122, 123, 143, 162, 163, 181, 182, 144, 148, 149, 211, 227, 228, 231,
+       232, 235, 236]) then
+      Exit(true);
+end;
+
+function TDoomWorld.UnderDamage(const A: TDoomActor): Integer;
+var
+  M: TSectorMover;
+begin
+  Result := 0;
+  if (A.Sector < 0) or (FMap.Sectors[A.Sector].Mover = nil) then Exit;
+  M := TSectorMover(FMap.Sectors[A.Sector].Mover);
+  if (M.Kind in [mkCeiling, mkCrusher]) and M.MovesCeiling then
+    Result := Sign(M.Direction);
+end;
+
 function TDoomWorld.BacksAway(const A: TDoomActor; const Dist: Single; out Why: String): Boolean;
 begin
   Result := false;
@@ -4106,6 +4210,22 @@ begin
   WritelnLog('Friend', 'A helper dog at (%.0f, %.0f)', [X, Y]);
 end;
 
+function TDoomWorld.DogAtLedge(const A: TDoomActor): Boolean;
+var
+  D, AX, AY: Single;
+  S: Integer;
+begin
+  Result := false;
+  if (A.Info^.Num <> 888) or not FSmartMoves then Exit;
+  D := Sqrt(Sqr(Player.X - A.DoomX) + Sqr(Player.Y - A.DoomY));
+  if (D < 1) or (D >= 144) then Exit;
+  AX := A.DoomX + (Player.X - A.DoomX) / D * 16;
+  AY := A.DoomY + (Player.Y - A.DoomY) / D * 16;
+  S := FMap.SectorAt(AX, AY);
+  Result := (S >= 0) and (FMap.FloorAt(S, AX, AY) < A.DoomZ - 24) and
+    (FMap.FloorAt(S, AX, AY) >= A.DoomZ - 128);
+end;
+
 function TDoomWorld.TicFriend(const A: TDoomActor): Boolean;
 var
   Reason: String;
@@ -4142,7 +4262,7 @@ begin
     end;
     Exit(true);
   end;
-  if Sqrt(Sqr(Player.X - A.DoomX) + Sqr(Player.Y - A.DoomY)) < 128 then
+  if (Sqrt(Sqr(Player.X - A.DoomX) + Sqr(Player.Y - A.DoomY)) < 128) and not DogAtLedge(A) then
   begin
     { Close enough: stand. }
     if A.State = asChase then

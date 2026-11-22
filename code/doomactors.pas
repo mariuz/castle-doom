@@ -131,6 +131,8 @@ type
     { Has backed away from a melee attacker (MBF's monster backing; for
       the log, once a monster). }
     Backing: Boolean;
+    { Has logged a smart move (MBF's P_SmartMove; for the log). }
+    SmartLogged: Boolean;
     { TERRAIN: a splash's chunk (thrown with Vel*, falls, gone on landing). }
     Chunk: Boolean;
     { TERRAIN's footclip: drawn this much lower, sunk into a liquid floor

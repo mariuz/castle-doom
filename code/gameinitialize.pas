@@ -313,6 +313,8 @@ begin
         Inc(I);
       end;
     end else
+    if (Parameters[I] = '-no-smart-moves') or (Parameters[I] = '--no-smart-moves') then
+      SmartMoves := false;
     if (Parameters[I] = '-monster-backing') or (Parameters[I] = '--monster-backing') then
       MonsterBacking := true;
     if ((Parameters[I] = '-dogs') or (Parameters[I] = '--dogs')) and (I + 1 <= Parameters.High) then

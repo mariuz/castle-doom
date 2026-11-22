@@ -352,7 +352,13 @@ spawn at the other players' starts up to `HelperDogs` (`-dogs N`,
 `SpawnHelperDog`). MBF's monster backing (`FMonsterBacking`, from the
 `MonsterBacking` option, saved, toggled by the recorded demo command
 `BACKING`) turns the chase step around when `BacksAway` says the target
-is a melee attacker close by.
+is a melee attacker close by. MBF's smarter moves (`FSmartMoves`,
+saved, toggled by `SMARTMOVES`) check each successful chase step:
+off a lift the target shares (`SectorIsLift`) or newly under a moving
+ceiling (`UnderDamage`) it is taken back (old position, height and
+sector) and the next try turns; a helper dog's move may drop up to 128
+(`FDropoffLimit`, read by `TryMove2D`) and `DogAtLedge` keeps it going
+past the 128 where friends stop.
 
 Weapons fire through the same walked sequences: `DoFireWeapon` starts
 the weapon's attack frames (`FCurWeaponSeq`, a copy of

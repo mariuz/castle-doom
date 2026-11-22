@@ -68,6 +68,23 @@ L = several days). Items inside a section are in suggested order.
   DOGS sprites and sounds, autotest `dogs` with goldens). Left: monster
   backing (done, see below), MBF's dog jumping across gaps.
 
+- MBF's smarter moves (P_SmartMove; on by default as in MBF,
+  `--no-smart-moves` turns them off; world state, saved as
+  `smartMoves`, the demo command `SMARTMOVES` toggles it): a monster on a
+  lift (a moving lift floor, or a lift / floor-to-lowest line tagging
+  its sector: `SectorIsLift`, P_IsOnLift's list) whose target stands in
+  a sector of the same tag takes back a step off the lift 230 times in
+  256; a step that puts it under a moving ceiling or crusher it was not
+  under (`UnderDamage`, its own sector only) is taken back always when
+  that comes down, 200 times in 256 when it goes up; the next try picks
+  another direction. Helper dogs (888) following their side within 144
+  may drop ledges up to 128 (`FDropoffLimit`, 235 times in 256), and do
+  not stop at 128 from the player while such a ledge is 16 ahead
+  (`DogAtLedge`, since our monsters do not keep walking a direction the
+  way MBF's do). Log `SmartMove: ...`; autotests `smart-moves-lift`,
+  `smart-moves-crusher` (E1M1's lift made a crusher by `LINE:593:25`),
+  `smart-moves-dog` (line 164's 64-unit ledge, and smart moves off).
+
 - Boom specials, the last one: an upper wall between two sky sectors
   is skipped (Doom's sky hack), so the higher sector's sky plane comes
   down to the lower ceiling there; when that sector has a sky of its
@@ -1806,17 +1823,17 @@ play.
 
 ## Suggested next three
 
-1. MBF's smarter moves (S-M, P_SmartMove): monsters staying on a lift
-   their target is on, avoiding crushing ceilings and damaging floors
-   (`monster_avoid_hazards`), and helper dogs jumping down ledges up to
-   128 high after their target (`dog_jumping`).
-2. BEX renaming (S-M): DeHackEd's `[SPRITES]` and `[SOUNDS]` blocks
+1. BEX renaming (S-M): DeHackEd's `[SPRITES]` and `[SOUNDS]` blocks
    (new names for sprite prefixes and sound lumps), which many BEX
    patches use (`DoomDehacked`, `DoomStates.Sprites` / `Sounds`).
-3. Doom's sound falloff (S): positional sounds fading like
+2. Doom's sound falloff (S): positional sounds fading like
    `S_AdjustSoundParams` (full volume within 160 units, silent beyond
    1200, `S_CLIPPING_DIST`) and its stereo separation, instead of the
    engine's default curve (`DoomSound`).
+3. MAPINFO's `intermission` blocks (M): ZDoom's scripted finales
+   (images, text screens, the cast call, links between them) used by
+   PWADs' MAPINFO `endgame` / cluster exits (`DoomMapInfo`,
+   `DoomFinale`).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

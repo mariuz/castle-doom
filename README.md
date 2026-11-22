@@ -163,8 +163,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   saves" section exports them to a file and imports them back, and the desktop build reads
   the same file (Options: Export / Import saves, `--export-saves` / `--import-saves`).
 - External IWADs and PWADs (menu file dialogs or `-iwad` / `-file` / `-deh` / `-warp`; `-complevel 21` or a
-  `COMPLVL` lump turns on MBF21's line flags and DeHackEd thing fields; MBF's `-dogs N` helper dogs
-  and `-monster-backing`), PWAD lumps
+  `COMPLVL` lump turns on MBF21's line flags and DeHackEd thing fields; MBF's `-dogs N` helper dogs,
+  `-monster-backing` and its smarter moves (on by default, `--no-smart-moves`)), PWAD lumps
   overriding the IWAD's like in Doom; vanilla and ZDoom extended nodes (`XNOD`, `ZNOD`,
   `XGLN`/`ZGLN`, `XGL2`/`ZGL2`, `XGL3`/`ZGL3`) and glBSP GL nodes (V1, V2, V3, V5, also from
   a `.gwa` file), so maps built with ZDBSP or glBSP load too (and maps without nodes get
@@ -204,7 +204,7 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
 See [docs/ROADMAP.md](docs/ROADMAP.md) and, for UZDoom-style rendering (slopes, 3D floors,
 coloured light, models, post-processing), [docs/RENDERING_ROADMAP.md](docs/RENDERING_ROADMAP.md).
 Headlines:
-MBF's smarter monster moves (staying on lifts, avoiding hazards, dogs jumping down) are not there yet (friendly monsters, helper dogs and monster backing are), DeHackEd patches cannot rename sprites or sounds (BEX `[SPRITES]` / `[SOUNDS]`),
+DeHackEd patches cannot rename sprites or sounds (BEX `[SPRITES]` / `[SOUNDS]`),
 the browser's music is the approximate FM model (no OPL3 emulator there).
 
 ## Build and run

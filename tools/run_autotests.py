@@ -575,6 +575,19 @@ TESTS = [
     ('monster-backing-friend', 'E1M1', 'Y,G:-416:256,A:0,W:0.3,FRIEND:3001:60,P:3002:300,W:4,S,Q',
      [r'Friend: TROO at \(-356, 256\) goes for SARG', r'Backing: TROO at \(-?\d+, -?\d+\) backs away from SARG'],
      ['--monster-backing', '--fixed-step'], None),
+    # MBF's smarter moves (P_SmartMove, on by default): an imp backing from
+    # the fist stays on the lift the player stands on; an imp keeps out
+    # from under the lift turned into a crusher (LINE:593:25); a helper dog
+    # following the player jumps down a 64-unit ledge (line 164), and with
+    # --no-smart-moves it stays up there.
+    ('smart-moves-lift', 'E1M1', 'Y,K,C:1,W:1,G:150:256,A:180,W:6,P:3001:60,W:3,SAVE:1,Q',
+     [r'SmartMove: TROO at \(-?\d+, 256\) stays on the lift'], ['--monster-backing', '--fixed-step'], None),
+    ('smart-moves-crusher', 'E1M1', 'Y,G:128:400,A:270,W:0.2,LINE:593:25,W:0.3,P:3001:300,W:5,Q',
+     [r'SmartMove: TROO at \(128, 191\) keeps out from under a crusher'], ['--fixed-step'], None),
+    ('smart-moves-dog', 'E1M1', 'Y,D,W:1,G:1400:540,A:180,W:0.3,FRIEND:888:150,W:3,SAVE:1,SMARTMOVES,'
+     'G:1400:540,A:180,W:0.3,FRIEND:888:150,W:3,SAVE:2,Q',
+     [r'SmartMove: DOGS jumps down from -96 to -160', r'SmartMove: Smart moves off'], ['--fixed-step'],
+     lambda config: check_smart_moves_dog(config)),
     # dogs.wad (tools/make_dogs_wad.py): DOGS sprites and sounds, a sleeping
     # zombieman facing away from the player and a friendly dog in front of
     # it: the hostile monster goes for the friend (P_LookForTargets).
@@ -1274,6 +1287,18 @@ def check_friends(config):
     assert len(friends) == 1, 'friends: %s' % friends
     d = abs(friends[0]['x'] - b['player']['x'])
     assert friends[0]['x'] > -260 and d < 140, 'friend at %s, player at %s' % (friends[0]['x'], b['player']['x'])
+
+
+def check_smart_moves_dog(config):
+    """The first dog jumped down to the lower floor (-160); the second,
+    with smart moves off, stayed on the ledge (-96)."""
+    a, b = save_json(config, 1), save_json(config, 2)
+    dogs_a = [round(t['z']) for t in a['actors'] if t.get('type') == 888]
+    dogs_b = sorted(round(t['z']) for t in b['actors'] if t.get('type') == 888)
+    assert a['smartMoves'] is True and b['smartMoves'] is False, 'setting: %s %s' % (
+        a.get('smartMoves'), b.get('smartMoves'))
+    assert dogs_a == [-160], 'first dog: %s' % dogs_a
+    assert dogs_b == [-160, -96], 'dogs after smart moves off: %s' % dogs_b
 
 
 def check_monster_backing(config):

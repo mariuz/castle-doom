@@ -5,6 +5,8 @@
 - MBF's friendly monsters: a monster with the FRIEND bit (DeHackEd, the THINGS flag 128 or UDMF's
   `friend`) fights the hostile monsters it sees, follows the player otherwise, and never hurts the
   player.
+- MBF's smarter moves: monsters stay on a lift their target is on, keep out from under crushers,
+  and helper dogs jump down ledges after the player (`--no-smart-moves` turns them off).
 - Per-sector skies: the gap above a lower sky sector's ceiling shows the higher sector's own sky,
   not the main one.
 - TERRAIN footsteps: a terrain's step sounds play while the player walks on it (left and right in
