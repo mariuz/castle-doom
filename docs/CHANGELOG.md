@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BEX renaming: DeHackEd patches' `[SPRITES]` and `[SOUNDS]` sections give sprite prefixes and
+  sound lumps new names (`TROO = POSS`, `PISTOL = SHOTGN`, or the table's number), as Boom does.
 - MBF's friendly monsters: a monster with the FRIEND bit (DeHackEd, the THINGS flag 128 or UDMF's
   `friend`) fights the hostile monsters it sees, follows the player otherwise, and never hurts the
   player.

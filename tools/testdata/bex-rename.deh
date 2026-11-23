@@ -1,0 +1,14 @@
+Patch File for DeHackEd v3.0
+# BEX renames: the imp drawn with the zombieman's sprites, the pistol and
+# the shotgun swap sounds (the shotgun by its number), and a name that
+# is not a vanilla sound (not supported).
+Doom version = 19
+Patch format = 6
+
+[SPRITES]
+TROO = POSS
+
+[SOUNDS]
+PISTOL = SHOTGN
+2 = PISTOL
+NOSUCH = PISTOL

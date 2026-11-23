@@ -101,6 +101,22 @@ function SpriteIndexOf(const Name: String): Integer;
 { The sound's lump name (DSPISTOL), '' for 0 or out of range. }
 function SoundName(const Index: Integer): String;
 
+{ BEX's [SPRITES] / [SOUNDS] renames: the sprite prefix (TROO) or sound
+  lump (DSPISTOL) the game asks for, and the one a patch put in its place
+  (the same name when none did). The tables keep the vanilla names, so
+  every lookup (the state table's sprites and the names in the code
+  alike) goes through these once, at the WAD lookup. }
+function RenamedSprite(const Prefix: String): String;
+function RenamedSound(const LumpName: String): String;
+{ Rename (both names without "DS" for sounds is the caller's business:
+  these take full names). False when Old is not a vanilla name or New is
+  not a valid one. }
+function RenameSprite(const Old, New: String): Boolean;
+function RenameSound(const Old, New: String): Boolean;
+{ How many renames are in effect. }
+function SpriteRenameCount: Integer;
+function SoundRenameCount: Integer;
+
 { Whether an action attacks (the ones DoomWorld dispatches on). }
 function IsAttackAction(const Action: TStateAction): Boolean;
 
@@ -110,6 +126,100 @@ function StateByName(const Name: String): Integer;
 implementation
 
 uses SysUtils;
+
+var
+  { Old name -> new name, upper case; parallel arrays (a handful at most). }
+  SpriteOld, SpriteNew, SoundOld, SoundNew: TStringArray;
+
+function Lookup(const Olds, News: array of String; const Name: String): String;
+var
+  I: Integer;
+  U: String;
+begin
+  U := UpperCase(Name);
+  for I := 0 to High(Olds) do
+    if Olds[I] = U then
+      Exit(News[I]);
+  Result := Name;
+end;
+
+function RenamedSprite(const Prefix: String): String;
+begin
+  if Length(SpriteOld) = 0 then Exit(Prefix);
+  Result := Lookup(SpriteOld, SpriteNew, Prefix);
+end;
+
+function RenamedSound(const LumpName: String): String;
+begin
+  if Length(SoundOld) = 0 then Exit(LumpName);
+  Result := Lookup(SoundOld, SoundNew, LumpName);
+end;
+
+function ValidLumpName(const S: String; const MaxLen: Integer): Boolean;
+var
+  C: Char;
+begin
+  Result := (S <> '') and (Length(S) <= MaxLen);
+  if Result then
+    for C in S do
+      if not (C in ['A'..'Z', '0'..'9', '_', '-', '[', ']', '\']) then
+        Exit(false);
+end;
+
+function AddRename(var Olds, News: TStringArray; const Old, New: String): Boolean;
+var
+  I: Integer;
+begin
+  for I := 0 to High(Olds) do
+    if Olds[I] = Old then
+    begin
+      News[I] := New;
+      Exit(true);
+    end;
+  SetLength(Olds, Length(Olds) + 1);
+  SetLength(News, Length(News) + 1);
+  Olds[High(Olds)] := Old;
+  News[High(News)] := New;
+  Result := true;
+end;
+
+function RenameSprite(const Old, New: String): Boolean;
+var
+  I: Integer;
+  O, N: String;
+begin
+  O := UpperCase(Trim(Old));
+  N := UpperCase(Trim(New));
+  Result := false;
+  if not ValidLumpName(N, 4) or (Length(N) <> 4) then Exit;
+  for I := 0 to VanillaSpriteCount - 1 do
+    if VanillaSprites[I] = O then
+      Exit(AddRename(SpriteOld, SpriteNew, O, N));
+end;
+
+function RenameSound(const Old, New: String): Boolean;
+var
+  I: Integer;
+  O, N: String;
+begin
+  O := UpperCase(Trim(Old));
+  N := UpperCase(Trim(New));
+  Result := false;
+  if not ValidLumpName(N, 8) then Exit;
+  for I := 1 to VanillaSoundCount - 1 do
+    if VanillaSounds[I] = O then
+      Exit(AddRename(SoundOld, SoundNew, O, N));
+end;
+
+function SpriteRenameCount: Integer;
+begin
+  Result := Length(SpriteOld);
+end;
+
+function SoundRenameCount: Integer;
+begin
+  Result := Length(SoundOld);
+end;
 
 const
   VanillaWeaponStates: array [0..8, 0..4] of String = (
@@ -160,6 +270,10 @@ begin
   Weapons[1].Mbf21Bits := WeaponAutoSwitchFrom;
   Weapons[6].Mbf21Bits := WeaponNoAutofire;
   Weapons[7].Mbf21Bits := WeaponNoThrust or WeaponFleeMelee or WeaponNoAutoSwitchTo;
+  SpriteOld := nil;
+  SpriteNew := nil;
+  SoundOld := nil;
+  SoundNew := nil;
   SetLength(Sprites, VanillaSpriteCount);
   for I := 0 to VanillaSpriteCount - 1 do
     Sprites[I] := VanillaSprites[I];

@@ -46,7 +46,7 @@ function DmxToWav(const Data: PByte; const Size: Integer): TMemoryStream;
 
 implementation
 
-uses CastleDownload, CastleLog, CastleUriUtils, CastleUtils;
+uses CastleDownload, CastleLog, CastleUriUtils, CastleUtils, DoomStates;
 
 function DmxToWav(const Data: PByte; const Size: Integer): TMemoryStream;
 var
@@ -137,9 +137,12 @@ function TDoomSounds.Sound(const LumpName: String): TCastleSound;
 var
   U: String;
 begin
-  U := UpperCase(LumpName);
+  { A BEX [SOUNDS] rename points the name at another lump. }
+  U := UpperCase(RenamedSound(LumpName));
   if U = '' then Exit(nil);
   if FSounds.TryGetValue(U, Result) then Exit;
+  if U <> UpperCase(LumpName) then
+    WritelnLog('Sound', '%s plays %s (BEX rename)', [UpperCase(LumpName), U]);
   if FWad.FindLump(U) < 0 then
   begin
     WritelnWarning('Sound', 'Missing sound lump %s', [U]);

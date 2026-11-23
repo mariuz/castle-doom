@@ -379,6 +379,42 @@ var
       Inc(Ignored);
   end;
 
+  { BEX "[SPRITES] TROO = IMPX" or "[SOUNDS] PISTOL = NEWPIS" (sound
+    names without Doom's "DS"; the new one gets it too, as in Boom). The
+    old name may also be the table's number ("12 = IMPX"). }
+  function BexRename(const IsSprite: Boolean; const Old, New: String): Boolean;
+  var
+    K: Integer;
+    O, NewName: String;
+  begin
+    O := UpperCase(Old);
+    K := StrToIntDef(O, -1);
+    if IsSprite then
+    begin
+      if (K >= 0) and (K < VanillaSpriteCount) then O := VanillaSprites[K];
+      NewName := UpperCase(New);
+      Result := RenameSprite(O, NewName);
+    end else
+    begin
+      if (K > 0) and (K < VanillaSoundCount) then
+        O := VanillaSounds[K]
+      else
+        O := 'DS' + O;
+      NewName := 'DS' + UpperCase(New);
+      Result := RenameSound(O, NewName);
+      if not Result and (Copy(O, 1, 4) = 'DSDS') then
+      begin
+        { A full lump name given ("DSPISTOL = DSNEWPIS"). }
+        O := Copy(O, 3, MaxInt);
+        if Copy(NewName, 1, 4) = 'DSDS' then NewName := Copy(NewName, 3, MaxInt);
+        Result := RenameSound(O, NewName);
+      end;
+    end;
+    if Result then
+      WritelnLog('DeHackEd', '%s: %s %s is now %s', [SourceName,
+        BoolToStr(IsSprite, 'sprite', 'sound'), O, NewName]);
+  end;
+
   procedure MiscField;
   begin
     if SameText(Key, 'Initial Health') then DehMisc.InitialHealth := Value
@@ -446,8 +482,9 @@ begin
         Continue;
       end;
       { [STRINGS] is TDoomStrings' (it reads the same patches); [CODEPTR]
-        names code pointers ("FRAME 452 = A_SargAttack"); other BEX
-        sections ([HELPER], [SPRITES]...) are not supported. }
+        names code pointers ("FRAME 452 = A_SargAttack"); [SPRITES] and
+        [SOUNDS] rename ("TROO = IMPX", "PISTOL = NEWPIS"); other BEX
+        sections ([HELPER]...) are not supported. }
       if (Section <> '') and (Section[1] = '[') then
       begin
         if Pos('=', Line) > 0 then
@@ -465,6 +502,14 @@ begin
               States[Frame].Action := Action;
               Inc(Changed);
             end else
+              Inc(Ignored);
+          end
+          else if (Section = '[SPRITES]') or (Section = '[SOUNDS]') then
+          begin
+            if BexRename(Section = '[SPRITES]', Trim(Copy(Line, 1, Pos('=', Line) - 1)),
+              Trim(Copy(Line, Pos('=', Line) + 1, MaxInt))) then
+              Inc(Changed)
+            else
               Inc(Ignored);
           end
           else if Section <> '[STRINGS]' then Inc(Ignored);
@@ -549,7 +594,7 @@ begin
   finally
     FreeAndNil(Lines);
   end;
-  WritelnLog('DeHackEd', '%s: %d values applied, %d not supported (sprites, sounds, cheats, text...)',
+  WritelnLog('DeHackEd', '%s: %d values applied, %d not supported (cheats, text...)',
     [SourceName, Changed, Ignored]);
 end;
 

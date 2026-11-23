@@ -811,6 +811,12 @@ finished; harness test `ghost` records under `--fixed-step`, so its
 goldens are stable). In the browser, test it on a `web-site` artifact with
 Playwright: `play/?map=E1M1&demo=W:2,Y,P:3001:300,W:2,E&record=1`
 keeps `castle-doom:castle-config:/last-demo.cdemo` in localStorage.
+BEX renames: `-deh tools/testdata/bex-rename.deh` draws the imp with
+POSS (`[SPRITES] TROO = POSS`) and swaps the pistol's and shotgun's
+sounds (`[SOUNDS]`; log `DeHackEd: bex-rename.deh: sprite TROO is now
+POSS` and, at the first play, `Sound: DSPISTOL plays DSSHOTGN (BEX
+rename)`; autotest `bex-rename` with a golden, unit test
+`TestBexRenames`).
 External WADs: `-iwad FILE -file PWAD... -warp MAP` work together with
 `--autotest`; a PWAD that replaces E1M1 with E1M2's lumps is an easy override
 test (E1M1 must then log 2231 vertices). `-deh PATCH...` (or `-bex`) applies

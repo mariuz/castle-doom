@@ -213,7 +213,8 @@ function ParseSwitchesLump(const Data: TBytes; const MaxEpisode: Integer): TSwit
 
 implementation
 
-uses Math, CastleLog, CastleStringUtils, CastleUtils, CastleDownload, DoomLighting, DoomMapInfo, DoomGldefs;
+uses Math, CastleLog, CastleStringUtils, CastleUtils, CastleDownload, DoomLighting, DoomMapInfo, DoomGldefs,
+  DoomStates;
 
 var
   LutCounter: Integer;
@@ -1417,17 +1418,19 @@ function TDoomGraphics.Sprite(const Prefix: String; const Frame: Char;
   const Rot: Integer; out Mirror: Boolean): TDoomImage;
 var
   Ref: TSpriteLumpRef;
-  Key: String;
+  Key, P: String;
 begin
   Mirror := false;
-  Key := UpperCase(Prefix) + UpCase(Frame) + IntToStr(Rot);
+  { A BEX [SPRITES] rename points the prefix at other lumps. }
+  P := UpperCase(RenamedSprite(Prefix));
+  Key := P + UpCase(Frame) + IntToStr(Rot);
   if not FSprites.TryGetValue(Key, Ref) then
   begin
-    Key := UpperCase(Prefix) + UpCase(Frame) + '0';
+    Key := P + UpCase(Frame) + '0';
     if not FSprites.TryGetValue(Key, Ref) then
     begin
       { Rotation 1 as the last resort (some WADs omit 0). }
-      Key := UpperCase(Prefix) + UpCase(Frame) + '1';
+      Key := P + UpCase(Frame) + '1';
       if not FSprites.TryGetValue(Key, Ref) then
         Exit(nil);
     end;
@@ -1439,9 +1442,11 @@ end;
 function TDoomGraphics.HasSpriteFrame(const Prefix: String; const Frame: Char): Boolean;
 var
   R: Integer;
+  P: String;
 begin
+  P := UpperCase(RenamedSprite(Prefix));
   for R := 0 to 8 do
-    if FSprites.ContainsKey(UpperCase(Prefix) + UpCase(Frame) + IntToStr(R)) then
+    if FSprites.ContainsKey(P + UpCase(Frame) + IntToStr(R)) then
       Exit(true);
   Result := false;
 end;

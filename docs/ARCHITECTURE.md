@@ -93,7 +93,7 @@ Sizes, for orientation (lines of Pascal):
 | `doomfinale.pas` | 520 | finale text, end pictures, bunny scroller, cast call |
 | `doommapinfo.pas` | 1000 | UMAPINFO and ZDoom (Z)MAPINFO: per-map names, music, sky, par, next maps, story texts, endings |
 | `doomstates.pas` | 230 | vanilla's state table and mobjinfo rows (`doomstates_table.inc`, generated from info.c): what DeHackEd edits and the things' sequences come from |
-| `doomdehacked.pas` | 560 | DeHackEd patches (`DEHACKED` lumps, `-deh` files): BEX strings, things, frames, code pointers, Misc, Ammo, par times |
+| `doomdehacked.pas` | 560 | DeHackEd patches (`DEHACKED` lumps, `-deh` files): BEX strings, things, frames, code pointers, Misc, Ammo, par times, BEX sprite and sound renames |
 | `doomautomap.pas` | 210 | automap drawn with 2D primitives |
 | `doomfont.pas` | 130 | STCFN text |
 | `doomactors.pas` | 248 | sprite billboards with animation |
@@ -2400,8 +2400,16 @@ deploys.
   `ApplyStateTable` derives every thing's sequences again. "Weapon N"
   sets a weapon's ammo type and entry frames; projectile rows (things
   this port has no thing for) also take "Speed", "Width", "Height" and
-  "Missile damage" (any row). "Sprite" / "Sound" renumbering, cheats
-  and "Text" sections are counted as not supported.
+  "Missile damage" (any row). BEX `[SPRITES]` / `[SOUNDS]` renames
+  ("TROO = POSS"; sounds without Doom's "DS", as Boom writes them, a
+  full lump name or the table's number on the left) go to
+  `DoomStates.RenameSprite` / `RenameSound`: the tables keep their
+  vanilla names, and `TDoomGraphics.Sprite` / `HasSpriteFrame` and
+  `TDoomSounds.Sound` pass the name they are asked for through
+  `RenamedSprite` / `RenamedSound` once, so the names in the code (menu
+  and intermission sounds, item sprites) follow too and two swapped
+  names do not swap back (log `Sound: DSPISTOL plays DSSHOTGN (BEX
+  rename)`). Cheats and "Text" sections are counted as not supported.
 - The state table (`DoomStates`): `tools/make_states.py` turns
   linuxdoom-1.10's `info.c`, `info.h` and `sounds.h` into
   `doomstates_table.inc` (138 sprite names, 967 states with sprite,

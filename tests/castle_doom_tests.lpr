@@ -106,6 +106,7 @@ type
     procedure TestFreedoomLump;
     procedure TestPatchFile;
     procedure TestTranslucentBits;
+    procedure TestBexRenames;
     procedure TestMbf21;
   end;
 
@@ -3400,6 +3401,60 @@ begin
     AssertFalse('sergeant untouched', FindThingInfo(9)^.Translucent);
   finally
     FreeAndNil(W);
+  end;
+end;
+
+procedure TTestDehacked.TestBexRenames;
+var
+  W: TDoomWad;
+  Patch, Extra: String;
+  L: TStringList;
+begin
+  Patch := 'tools/testdata/bex-rename.deh';
+  if not FileExists(Patch) then
+    Patch := '../tools/testdata/bex-rename.deh';
+  { Numbers, full lump names and names that are too long or unknown. }
+  Extra := GetTempDir + 'castle_doom_bex_extra.deh';
+  L := TStringList.Create;
+  try
+    L.Add('[SPRITES]');
+    L.Add('12 = PLSX');
+    L.Add('SHTG = TOOLONG');
+    L.Add('ZZZZ = ABCD');
+    L.Add('[SOUNDS]');
+    L.Add('DSDOROPN = DSNEWDR');
+    L.Add('POPAIN = BIGPN  # a comment');
+    L.SaveToFile(Extra);
+  finally
+    FreeAndNil(L);
+  end;
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    ClearDehackedFiles;
+    AddDehackedFile(Patch);
+    AddDehackedFile(Extra);
+    ApplyDehacked(W);
+    AssertEquals('imp drawn as zombieman', 'POSS', RenamedSprite('TROO'));
+    AssertEquals('case-insensitive', 'POSS', RenamedSprite('troo'));
+    AssertEquals('zombieman not renamed in turn', 'POSS', RenamedSprite('POSS'));
+    AssertEquals('by number (12 = PLSG)', 'PLSX', RenamedSprite('PLSG'));
+    AssertEquals('a name too long is refused', 'SHTG', RenamedSprite('SHTG'));
+    AssertEquals('sprite renames', 2, SpriteRenameCount);
+    AssertEquals('pistol sounds like the shotgun', 'DSSHOTGN', RenamedSound('DSPISTOL'));
+    AssertEquals('shotgun (by number) like the pistol', 'DSPISTOL', RenamedSound('DSSHOTGN'));
+    AssertEquals('full lump names', 'DSNEWDR', RenamedSound('DSDOROPN'));
+    AssertEquals('comment stripped', 'DSBIGPN', RenamedSound('DSPOPAIN'));
+    AssertEquals('others untouched', 'DSDORCLS', RenamedSound('DSDORCLS'));
+    AssertEquals('sound renames', 4, SoundRenameCount);
+    { Without the patches every name is its own again. }
+    ClearDehackedFiles;
+    ApplyDehacked(W);
+    AssertEquals('reset sprites', 'TROO', RenamedSprite('TROO'));
+    AssertEquals('reset sounds', 'DSPISTOL', RenamedSound('DSPISTOL'));
+    AssertEquals('no renames', 0, SpriteRenameCount + SoundRenameCount);
+  finally
+    FreeAndNil(W);
+    DeleteFile(Extra);
   end;
 end;
 
