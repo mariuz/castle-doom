@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Doom's sound falloff: monsters, doors and lifts are heard at full volume within 160 units, fade
+  linearly to silence at 1200 (sounds farther away are not played) and pan by Doom's stereo
+  separation; on the eighth maps distant sounds stay audible, as in Doom.
 - BEX renaming: DeHackEd patches' `[SPRITES]` and `[SOUNDS]` sections give sprite prefixes and
   sound lumps new names (`TROO = POSS`, `PISTOL = SHOTGN`, or the table's number), as Boom does.
 - MBF's friendly monsters: a monster with the FRIEND bit (DeHackEd, the THINGS flag 128 or UDMF's

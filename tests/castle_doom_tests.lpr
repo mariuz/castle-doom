@@ -19,7 +19,7 @@ program castle_doom_tests;
 
 uses FpJson, SysUtils, Classes, Math, fpcunit, testregistry, consoletestrunner,
   CastleVectors, CastleImages, CastleUriUtils, CastleGameControllers, CastleKeysMouse,
-  DoomWad, DoomGraphics, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
+  DoomWad, DoomGraphics, DoomSound, DoomMap, DoomMusic, DoomOpl3, DoomThings, DoomDehacked, DoomStates, GameGamepad, GameSettings, GameTouch, GameLogFilter, DoomMapInfo, DoomWorld, DoomIntermission, DoomFinale,
   DoomGeneralized, DoomWiScript, DoomRandomMap, DoomDemo, DoomLighting, X3DNodes, X3DFields, DoomCaptions, DoomMenu, DoomEditMap, DoomNodeBuilder, DoomExport, X3DLoad, DoomUdmf, DoomGldefs, DoomAcs, DoomSoundSeq, DoomTerrain;
 
 function DataPath(const Name: String): String;
@@ -99,6 +99,7 @@ type
     procedure TestOpl3Synth;
     procedure TestEnvelopeFm;
     procedure TestEnvelopeOpl3;
+    procedure TestSoundFalloff;
   end;
 
   TTestDehacked = class(TTestCase)
@@ -3113,6 +3114,39 @@ end;
 procedure TTestMusic.TestEnvelopeFm;
 begin
   CheckEnvelope(true);
+end;
+
+procedure TTestMusic.TestSoundFalloff;
+var
+  Vol, Sep: Single;
+begin
+  { Within 160 units: full volume; straight ahead: centred. }
+  AssertTrue('close', DoomSoundParams(0, 0, 0, 100, 0, false, Vol, Sep));
+  AssertEquals('close volume', 1, Vol, 1e-5);
+  AssertEquals('ahead', 0, Sep, 1e-5);
+  { Doom's approximate distance: 300 + 400 - 150 = 550. }
+  AssertTrue('mid', DoomSoundParams(0, 0, 0, 300, 400, false, Vol, Sep));
+  AssertEquals('mid volume', (1200 - 550) / 1040, Vol, 1e-5);
+  { Linear to silence at 1200, nothing beyond. }
+  AssertTrue('far', DoomSoundParams(0, 0, 0, -1100, 0, false, Vol, Sep));
+  AssertEquals('far volume', 100 / 1040, Vol, 1e-5);
+  AssertFalse('out of range', DoomSoundParams(0, 0, 0, 0, 1300, false, Vol, Sep));
+  AssertEquals('silent', 0, Vol, 1e-5);
+  { On the eighth map never below 15 of 127, at any distance. }
+  AssertTrue('boss map', DoomSoundParams(0, 0, 0, 0, 5000, true, Vol, Sep));
+  AssertEquals('boss map floor', 15 / 127, Vol, 1e-5);
+  AssertTrue('boss map mid', DoomSoundParams(0, 0, 0, 680, 0, true, Vol, Sep));
+  AssertEquals('boss map mid volume', 15 / 127 + (112 / 127) * 0.5, Vol, 1e-5);
+  { Separation: 0.75 of the sine, negative on the left (north of an
+    east-facing listener), none behind. }
+  DoomSoundParams(0, 0, 0, 0, 500, false, Vol, Sep);
+  AssertEquals('left', -0.75, Sep, 1e-5);
+  DoomSoundParams(0, 0, 90, 500, 0, false, Vol, Sep);
+  AssertEquals('right of a north-facing listener', 0.75, Sep, 1e-5);
+  DoomSoundParams(0, 0, 0, -500, 0, false, Vol, Sep);
+  AssertEquals('behind', 0, Sep, 1e-5);
+  DoomSoundParams(0, 0, 0, 300, -300, false, Vol, Sep);
+  AssertEquals('45 degrees right', 0.75 * Sqrt(0.5), Sep, 1e-5);
 end;
 
 procedure TTestMusic.TestEnvelopeOpl3;

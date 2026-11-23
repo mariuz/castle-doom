@@ -44,7 +44,7 @@ is mapped onto a Castle Game Engine feature.
 | Things / monsters | one `TCastleTransform` per thing with a `TCastleBillboard` behavior and a quad `TCastleScene`; sprite rotations picked like `R_ProjectSprite` |
 | Shooting | Doom's autoaim (`P_AimLineAttack`) and line attacks traced in Doom units against linedefs and thing boxes |
 | Doors, lifts, floors, ceilings, stairs, crushers | sector height changes regenerate the affected `TCastleScene` coordinates in place |
-| Sounds (`DS*` DMX lumps) | converted to WAV on the fly via `doomsfx:/DSPISTOL` URL protocol, positional audio with `TCastleSoundSource` |
+| Sounds (`DS*` DMX lumps) | converted to WAV on the fly via `doomsfx:/DSPISTOL` URL protocol, positional audio with Doom's own falloff (full volume within 160 units, silent past 1200, louder on the eighth maps) and stereo separation |
 | Music (`D_*` MUS or MIDI lumps + `GENMIDI` OPL patches) | `DoomMusic` programs Nuked OPL3 (a shared library loaded by `DoomOpl3`; a built-in FM model otherwise) with the GENMIDI registers and renders the song to WAV (`doommus:/D_E1M1.wav`), looped on `SoundEngine.LoopingChannel[0]` |
 | Status bar | `STBAR` + digit patches composed into one image shown by a pixel-perfect `TCastleImageControl` |
 | Weapon sprites, flashes, screen flashes, messages | `TCastleImageControl`, `TCastleRectangleControl`, `TCastleLabel` |

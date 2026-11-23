@@ -68,6 +68,17 @@ L = several days). Items inside a section are in suggested order.
   DOGS sprites and sounds, autotest `dogs` with goldens). Left: monster
   backing (done, see below), MBF's dog jumping across gaps.
 
+- Doom's sound falloff (`S_AdjustSoundParams`, `DoomSound`'s
+  `DoomSoundParams`): full volume within 160 units of Doom's
+  approximate distance, linear to silence at 1200 (not started beyond,
+  stopped when the emitter leaves the range), at least 15 / 127 and
+  never cut on the eighth maps, 0.75 stereo separation; each sound
+  plays through a channel transform kept beside the listener, so the
+  engine's distance model and panning do not change it, and one
+  emitter plays one sound at a time. Demo `SOUNDLOG`; autotests
+  `sound-falloff`, `sound-falloff-boss`, unit test `TestSoundFalloff`.
+  Left: Doom's eight-channel limit with its priorities.
+
 - BEX renaming: DeHackEd's `[SPRITES]` and `[SOUNDS]` sections
   (`DoomDehacked`'s `BexRename`) rename vanilla sprite prefixes (four
   characters) and sound lumps (Boom's names without "DS"; a full lump
@@ -1833,18 +1844,18 @@ play.
 
 ## Suggested next three
 
-1. Doom's sound falloff (S): positional sounds fading like
-   `S_AdjustSoundParams` (full volume within 160 units, silent beyond
-   1200, `S_CLIPPING_DIST`) and its stereo separation, instead of the
-   engine's default curve (`DoomSound`).
-2. MAPINFO's `intermission` blocks (M): ZDoom's scripted finales
+1. MAPINFO's `intermission` blocks (M): ZDoom's scripted finales
    (images, text screens, the cast call, links between them) used by
    PWADs' MAPINFO `endgame` / cluster exits (`DoomMapInfo`,
    `DoomFinale`).
-3. The weapons' select / deselect chains from the state table (S-M):
+2. The weapons' select / deselect chains from the state table (S-M):
    DeHackEd's "Select frame" / "Deselect frame" sequences played
    instead of the coded raise and lower (`TDoomWorld.BuildWeaponSeqs`,
    A_Raise / A_Lower).
+3. Doom's sound channels (S): at most eight sounds at once
+   (`snd_channels`), a new one taking the farthest or lowest-priority
+   channel (`S_getChannel`, the sounds' priorities from `sounds.c`), and
+   the player's own sounds replacing each other (`DoomSound`).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

@@ -99,7 +99,7 @@ Sizes, for orientation (lines of Pascal):
 | `doomactors.pas` | 248 | sprite billboards with animation |
 | `doomwad.pas` | 225 | WAD directory and palette |
 | `doomhud.pas` | 193 | status bar composition |
-| `doomsound.pas` | 173 | DMX to WAV, positional sound |
+| `doomsound.pas` | 424 | DMX to WAV, positional sound with Doom's falloff and separation |
 | `doomcaptions.pas` | 260 | closed captions for sounds |
 | `gameinitialize.pas` | 47 | window, views, command line |
 
@@ -1470,10 +1470,31 @@ sample count) and 8-bit unsigned PCM with 16 padding bytes on each side.
 any WAV.
 
 `TDoomSounds.Play` uses `SoundEngine.Play` (non-positional: the player's
-weapon, pickups, UI). `PlayAt(Lump, Transform)` attaches a `TCastleSoundSource`
-behavior to the given transform (an actor, a mover's emitter) and plays
-through it, so monsters and doors are heard where they are. The sounds'
-`ReferenceDistance`/`MaxDistance` are set to Doom-like 200/1800 units.
+weapon, pickups, UI). `PlayAt(Lump, Transform)` plays a sound from a
+transform (an actor, a mover's emitter) the way Doom's
+`S_AdjustSoundParams` does (`DoomSoundParams`, unit-tested by
+`TestSoundFalloff`): the approximate 2D distance `adx + ady - min / 2`
+gives full volume within 160 units, then `(1200 - d) / 1040`, and
+nothing beyond 1200 (the sound is not started, `S_CLIPPING_DIST`); on
+the eighth map (E?M8, MAP08) the volume never drops below 15 of 127 and
+nothing is cut. The separation is `0.75 * sin` of the angle from the
+listener's facing, negative on the left, none straight behind (Doom has
+no front / back). The engine's distance model and full panning would
+differ, so each sound gets a channel (`TDoomSoundChannel`): its own
+small transform under the emitter's world with a `TCastleSoundSource`,
+placed 16 units from the listener in the front direction whose sine is
+the separation, and a `TCastlePlayingSoundSource` whose `Volume` is the
+volume. `UpdateListener` (each frame from `TViewPlay.Update`, with the
+camera's place and yaw) moves the channels as their emitters move,
+stops the ones that leave the range (`S_UpdateSounds`) and frees the
+finished ones; a new sound from an emitter stops its last one (one
+channel per origin), and a freed emitter stops its sound (P_RemoveMobj).
+Before the first listener update (and for an emitter outside a world)
+the old behaviour plays: a `TCastleSoundSource` on the emitter with
+`ReferenceDistance`/`MaxDistance` 200/1800. `SOUNDLOG` in a demo logs
+each positional sound's volume and separation (`Sound: DSDOROPN at
+(552, 712): volume 1.00, separation 0.00` or `out of range, not
+played`).
 
 Closed captions: both calls report the sound through `OnPlay` (lump,
 emitter or nil). `TViewPlay.SoundPlayed` turns it into a line with

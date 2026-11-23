@@ -647,7 +647,10 @@ begin
   FreeAndNil(FDemoSteps);
   FWorldStatus.World := nil;
   if Sounds <> nil then
+  begin
     Sounds.OnPlay := nil;
+    Sounds.StopPositional;
+  end;
   FreeAndNil(FCaptions);
   FreeAndNil(FWorld);
   FreeAndNil(FStrings);
@@ -821,6 +824,10 @@ begin
     FWorld.Cheat(Cmd, Arg, Arg2)
   else if Cmd = 'SHOTS' then
     FWorld.DebugShots := true
+  else if Cmd = 'SOUNDLOG' then
+  begin
+    if Sounds <> nil then Sounds.LogPositional := not Sounds.LogPositional;
+  end
   else if Cmd = 'SIGHT' then
     FWorld.DebugSight
   else if Cmd = 'DLIGHTS' then
@@ -2864,6 +2871,16 @@ begin
     FFixedStepStarted := true;
   end;
   if FWorld = nil then Exit;
+  { Doom's sound falloff and separation are heard from the camera. }
+  if Sounds <> nil then
+  begin
+    CamPos := FViewport.Camera.WorldTranslation;
+    CamDir := FViewport.Camera.Direction;
+    Sounds.UpdateListener(CamPos.X, -CamPos.Z, RadToDeg(ArcTan2(-CamDir.Z, CamDir.X)), CamPos,
+      { Doom's gamemap == 8: E1M8..E4M8 and MAP08. }
+      ((Length(FMapName) = 4) and (UpCase(FMapName[1]) = 'E') and (FMapName[4] = '8')) or
+      SameText(FMapName, 'MAP08'));
+  end;
   { Songs are rendered a slice per frame (no freeze at a level start). }
   if Music <> nil then Music.Update;
   { An ACS script's SetMusic. }

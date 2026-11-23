@@ -811,6 +811,13 @@ finished; harness test `ghost` records under `--fixed-step`, so its
 goldens are stable). In the browser, test it on a `web-site` artifact with
 Playwright: `play/?map=E1M1&demo=W:2,Y,P:3001:300,W:2,E&record=1`
 keeps `castle-doom:castle-config:/last-demo.cdemo` in localStorage.
+Sound falloff (`DoomSound`, Doom's `S_AdjustSoundParams`): `SOUNDLOG`
+in a demo logs each positional sound (`Sound: DSBGSIT1 at (-416, 200):
+volume 0.67, separation 0.00`, `... out of range, not played` beyond
+1200 units; separation negative on the left, at most 0.75); E1M8 and
+MAP08 keep far sounds at 0.12 (autotests `sound-falloff`,
+`sound-falloff-boss`, unit test `TestSoundFalloff`). There is no sound
+device in the cloud container, so only the numbers are tested there.
 BEX renames: `-deh tools/testdata/bex-rename.deh` draws the imp with
 POSS (`[SPRITES] TROO = POSS`) and swaps the pistol's and shotgun's
 sounds (`[SOUNDS]`; log `DeHackEd: bex-rename.deh: sprite TROO is now
