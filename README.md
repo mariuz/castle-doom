@@ -191,7 +191,8 @@ what is still missing, prioritized; [CLAUDE.md](CLAUDE.md) has build, test and c
   `SWITCHES` lumps give PWADs their own animated textures and switches, and a `UMAPINFO`
   lump (or ZDoom's `MAPINFO` / `ZMAPINFO`, old or new syntax: maps, clusters, episodes) their
   level names, music, skies, par times, map order, story texts, intermission pictures and
-  endings; ZDoom's `LANGUAGE` lumps give the strings those name (and replace the game's own
+  endings, including ZDoom's scripted finales (`intermission` blocks: pictures, typed text
+  screens, scrollers and fades linked one after the other); ZDoom's `LANGUAGE` lumps give the strings those name (and replace the game's own
   messages and texts like BEX strings). ZDoom's `TERRAIN` lumps say what each floor flat is:
   things landing in a liquid and missiles hitting it splash (with ZDoom's splash sprites
   when the WAD has them), the player and monsters sink in by its footclip, a terrain

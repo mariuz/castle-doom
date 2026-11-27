@@ -1679,7 +1679,31 @@ next cluster's `entertext` (`exittextislump` reads a lump), on the
 cluster's `flat` or `pic` with its `music`. `episode MAP { name, key,
 picname }` and `clearepisodes` are entries added after the maps (a
 clearing entry first), so the menu builds them like UMAPINFO's.
-`gameinfo`, `skill`, `intermission` and other ports' blocks are skipped.
+`intermission Name { ... }` blocks (`ReadIntermission`, global like the
+entries: `IntermissionByName`, `MapInfoIntermissions`, cleared by each
+`LoadMapInfo`, a later block replacing one of the same name) hold
+actions, each `Key = value, value` inside its braces: `Image`,
+`TextScreen`, `Scroller`, `Fader`, `Wiper`, `GotoTitle` and `Cast` (all
+of a block's Cast blocks make one action: Doom's cast call), with
+`Background` (`, 1` a tiled flat), `Background2`, `Music`, `Sound`,
+`Time` (seconds, or tics when negative; 0 or none waits for a key),
+`Draw` / `DrawConditional` patches, `Text` (a "$" lookup, a lump of that
+name, or the text) / `TextLump`, `Position`, `TextSpeed` (tics a
+character), `ScrollDirection`, `InitialDelay`, `ScrollTime` and
+`FadeType`; then `Link = Other`. A map's `next = EndSequence, "Name"`
+sets `EndSequence` (and `EndGame`); `EndTitle` is `Inter_Titlescreen`.
+`TDoomFinale` (stage `fsSequence`, after the cluster's story text) plays
+the actions in order (`NextAction`, log `Finale: Intermission TestEnd,
+action 1: image TITLEPIC, 70 tics`), each for its time or until a key (a
+key first completes a typing text), drawing in `ComposeAction`: the
+background patch or tiled flat, the draws, the typed text, the scroller's
+two pictures sliding a screen's width (height) over its scroll time
+after its delay, the fader's brightness. A wiper changes the screen at
+once, `GotoTitle` ends, `Cast` runs the cast call; after the last action
+the link plays (32 at most), else the game ends. Doom's own names
+(`Inter_Pic1`..`3`, `Inter_Bunny`, `Inter_Cast`, `Inter_Titlescreen`)
+play the vanilla endings unless the PWAD defines them.
+`gameinfo`, `skill` and other ports' blocks are skipped.
 `include "LUMP"` splices the lump's text into the tokenizer's text right
 after the name (16 includes at most, so a lump including itself stops
 with an error), and `exitpic` / `enterpic = "$LUMP"` read a ZDoom

@@ -37,6 +37,51 @@ type
     ThingType, Special, Tag: Integer;
   end;
 
+  { ZDoom's intermission blocks ("intermission Name { Image { ... } ... }"):
+    the actions of a scripted finale, played by DoomFinale. }
+  TIntermissionKind = (ikImage, ikScroller, ikTextScreen, ikFader, ikWiper, ikGotoTitle, ikCast);
+  TScrollDirection = (sdLeft, sdRight, sdUp, sdDown);
+
+  TIntermissionDraw = record
+    Patch: String;
+    X, Y: Integer;
+  end;
+
+  TIntermissionAction = record
+    Kind: TIntermissionKind;
+    { A patch drawn at the top left, or (BackgroundFlat) a flat tiled. }
+    Background, Background2: String;
+    BackgroundFlat: Boolean;
+    Music, Sound: String;
+    MusicLoop: Boolean;
+    { Tics (ZDoom: "Time = 5" seconds, "Time = -35" tics); 0 waits for a
+      key. }
+    Duration: Integer;
+    { Patches drawn over the background ("Draw = PATCH, x, y"). }
+    Draws: array of TIntermissionDraw;
+    { TextScreen: the text (looked up / read from a lump), its position
+      and tics per character. }
+    Text: String;
+    TextX, TextY, TextSpeed: Integer;
+    { Scroller: Background moves away in ScrollDirection, Background2
+      comes in behind it, from InitialDelay over ScrollTime tics. }
+    ScrollDirection: TScrollDirection;
+    InitialDelay, ScrollTime: Integer;
+    { Fader: in from black (else out to black) over Duration. }
+    FadeIn: Boolean;
+  end;
+
+  TIntermissionDef = class
+    Name: String;
+    Actions: array of TIntermissionAction;
+    { The intermission that follows ("Link = Name"), '' for none (the
+      game ends). }
+    Link: String;
+    function Summary: String;
+  end;
+
+  TIntermissionList = {$ifdef FPC}specialize{$endif} TObjectList<TIntermissionDef>;
+
   TMapInfoEntry = class
     MapName: String;
     LevelName, LevelPic, Music, SkyTexture, Next, NextSecret: String;
@@ -60,6 +105,11 @@ type
     EndGame: TMapInfoEndGame;
     EndPic: String;
     EndBunny, EndCast: Boolean;
+    { "next = EndSequence, "Name"": the intermission played after this
+      map (with EndGame meYes); Doom's own names (Inter_Pic1, Inter_Bunny,
+      Inter_Cast, Inter_Titlescreen...) play the vanilla endings unless a
+      PWAD defines them. }
+    EndSequence: String;
     NoIntermission: Boolean;
     { "episode = patch, name, key": this map starts a New Game episode;
       EpisodeClear ("episode = clear") drops the episodes defined before
@@ -112,16 +162,25 @@ function MapInfoEntries: TMapInfoList;
   -> 3003), 0 for an unknown one; a number is taken as a type. }
 function MapInfoThingType(const ClassName: String): Integer;
 
+{ The intermission with this name from the loaded MAPINFO (case does not
+  matter), nil when none defines it. }
+function IntermissionByName(const Name: String): TIntermissionDef;
+
+{ The intermissions of the loaded MAPINFO (ParseZMapInfo adds to them; a
+  later block with the same name replaces an earlier one). }
+function MapInfoIntermissions: TIntermissionList;
+
 { The next map by UMAPINFO: True with Next set when the entry names one
   ("nextsecret" for the secret exit, else "next"). }
 function MapInfoNext(const MapName: String; const Secret: Boolean; out Next: String): Boolean;
 
 implementation
 
-uses SysUtils, CastleLog;
+uses SysUtils, Math, CastleLog;
 
 var
   Entries: TMapInfoList;
+  Intermissions: TIntermissionList;
 
 function TMapInfoEntry.Summary: String;
 begin
@@ -135,7 +194,8 @@ begin
     Result := Result + Format(', text of %d characters on %s', [Length(InterText), InterBackdrop]);
   if EndGame = meYes then
   begin
-    if EndCast then Result := Result + ', ends with the cast'
+    if EndSequence <> '' then Result := Result + ', ends with the intermission ' + EndSequence
+    else if EndCast then Result := Result + ', ends with the cast'
     else if EndBunny then Result := Result + ', ends with the bunny'
     else Result := Result + ', ends with ' + EndPic;
   end;
@@ -162,6 +222,25 @@ begin
   EndPic := Src.EndPic;
   EndBunny := Src.EndBunny;
   EndCast := Src.EndCast;
+  EndSequence := Src.EndSequence;
+end;
+
+function TIntermissionDef.Summary: String;
+const
+  KindNames: array [TIntermissionKind] of String = ('image', 'scroller', 'text screen', 'fader',
+    'wiper', 'title', 'cast');
+var
+  I: Integer;
+begin
+  Result := Format('intermission %s: %d actions (', [Name, Length(Actions)]);
+  for I := 0 to High(Actions) do
+  begin
+    if I > 0 then Result := Result + ', ';
+    Result := Result + KindNames[Actions[I].Kind];
+    if Actions[I].Background <> '' then Result := Result + ' ' + Actions[I].Background;
+  end;
+  Result := Result + ')';
+  if Link <> '' then Result := Result + ', then ' + Link;
 end;
 
 type
@@ -634,7 +713,17 @@ var
       E.EndGame := meYes;
       E.EndPic := UpperCase(Values[1]);
     end else
-    if (Copy(N, 1, 7) = 'ENDGAME') or (N = 'ENDTITLE') or (N = 'ENDSEQUENCE') then
+    if (N = 'ENDSEQUENCE') and (Values.Count > 1) then
+    begin
+      E.EndGame := meYes;
+      E.EndSequence := Values[1];
+    end else
+    if N = 'ENDTITLE' then
+    begin
+      E.EndGame := meYes;
+      E.EndSequence := 'Inter_Titlescreen';
+    end else
+    if (Copy(N, 1, 7) = 'ENDGAME') or (N = 'ENDSEQUENCE') then
     begin
       E.EndGame := meYes;
       if (N = 'ENDGAME3') or (N = 'ENDGAMEW') then E.EndBunny := true
@@ -847,6 +936,189 @@ var
     Inc(Result);
   end;
 
+  { "intermission Name { Image { Background = "X" Time = 5 } ... Link = Y }":
+    every key of an action has its "=" and comma-separated values. }
+  procedure ReadIntermission;
+  var
+    D: TIntermissionDef;
+    A: TIntermissionAction;
+    J: Integer;
+    ActionName, K: String;
+
+    { Key "=" values (strings, numbers, names) separated by commas. }
+    procedure ReadKeyValues;
+    begin
+      Values.Clear;
+      if T.Value = '=' then T.Next;
+      while T.Kind in [tkString, tkNumber, tkIdent] do
+      begin
+        Values.Add(T.Value);
+        T.Next;
+        if T.Value <> ',' then Break;
+        T.Next;
+      end;
+    end;
+
+    function ValueAt(const I: Integer): String;
+    begin
+      if I < Values.Count then Result := Values[I] else Result := '';
+    end;
+
+    { "$NAME" looked up in LANGUAGE (unknown names stay as they are). }
+    function Looked(const V: String): String;
+    begin
+      Result := V;
+      if (Copy(V, 1, 1) = '$') and (Lookup(Copy(V, 2, MaxInt)) <> '') then
+        Result := Lookup(Copy(V, 2, MaxInt));
+    end;
+
+    { Seconds, or tics when negative (ZDoom's Time). }
+    function TicsOf(const V: String): Integer;
+    var
+      F: Double;
+    begin
+      F := StrToFloatDef(V, 0, DefaultFormatSettings);
+      if F < 0 then Result := Round(-F) else Result := Round(F * 35);
+    end;
+
+    procedure ApplyActionKey;
+    var
+      V: String;
+    begin
+      if SameText(K, 'Background') then
+      begin
+        A.Background := UpperCase(Looked(ValueAt(0)));
+        A.BackgroundFlat := StrToIntDef(ValueAt(1), 0) <> 0;
+      end
+      else if SameText(K, 'Background2') then A.Background2 := UpperCase(Looked(ValueAt(0)))
+      else if SameText(K, 'Music') then
+      begin
+        V := ValueAt(0);
+        if Copy(V, 1, 1) = '$' then
+        begin
+          V := Lookup(Copy(V, 2, MaxInt));
+          if V <> '' then V := 'D_' + V;
+        end;
+        A.Music := UpperCase(V);
+        A.MusicLoop := not SameText(ValueAt(1), 'false') and (ValueAt(1) <> '0');
+      end
+      else if SameText(K, 'Sound') then A.Sound := UpperCase(ValueAt(0))
+      else if SameText(K, 'Time') then A.Duration := TicsOf(ValueAt(0))
+      else if SameText(K, 'Draw') or SameText(K, 'DrawConditional') then
+      begin
+        { DrawConditional's first value is a condition (an earlier map):
+          drawn always here. }
+        if SameText(K, 'DrawConditional') then Values.Delete(0);
+        SetLength(A.Draws, Length(A.Draws) + 1);
+        A.Draws[High(A.Draws)].Patch := UpperCase(ValueAt(0));
+        A.Draws[High(A.Draws)].X := StrToIntDef(ValueAt(1), 0);
+        A.Draws[High(A.Draws)].Y := StrToIntDef(ValueAt(2), 0);
+      end
+      else if SameText(K, 'Text') then
+      begin
+        V := ValueAt(0);
+        if Copy(V, 1, 1) = '$' then
+          A.Text := Looked(V)
+        else if (AWad <> nil) and (Length(V) <= 8) and (AWad.FindLump(UpperCase(V)) >= 0) then
+          A.Text := LumpText(V)
+        else
+          A.Text := V;
+      end
+      else if SameText(K, 'TextLump') then A.Text := LumpText(ValueAt(0))
+      else if SameText(K, 'Position') then
+      begin
+        A.TextX := StrToIntDef(ValueAt(0), 10);
+        A.TextY := StrToIntDef(ValueAt(1), 10);
+      end
+      else if SameText(K, 'TextSpeed') then A.TextSpeed := Max(0, StrToIntDef(ValueAt(0), 3))
+      else if SameText(K, 'ScrollDirection') then
+      begin
+        V := ValueAt(0);
+        if SameText(V, 'Right') then A.ScrollDirection := sdRight
+        else if SameText(V, 'Up') then A.ScrollDirection := sdUp
+        else if SameText(V, 'Down') then A.ScrollDirection := sdDown
+        else A.ScrollDirection := sdLeft;
+      end
+      else if SameText(K, 'InitialDelay') then A.InitialDelay := TicsOf(ValueAt(0))
+      else if SameText(K, 'ScrollTime') then A.ScrollTime := TicsOf(ValueAt(0))
+      else if SameText(K, 'FadeType') then A.FadeIn := SameText(ValueAt(0), 'FadeIn');
+      { TextColor, TextDelay, CastClass, CastName, WipeType... are skipped. }
+    end;
+
+  begin
+    D := TIntermissionDef.Create;
+    D.Name := T.Value;
+    T.Next;
+    if T.Value <> '{' then
+    begin
+      Error('intermission ' + D.Name + ' has no block');
+      FreeAndNil(D);
+      Exit;
+    end;
+    T.Next;
+    while (T.Kind <> tkEnd) and (T.Value <> '}') do
+    begin
+      if T.Kind <> tkIdent then
+      begin
+        T.Next;
+        Continue;
+      end;
+      ActionName := T.Value;
+      T.Next;
+      if SameText(ActionName, 'Link') then
+      begin
+        ReadKeyValues;
+        D.Link := ValueAt(0);
+        Continue;
+      end;
+      A := Default(TIntermissionAction);
+      A.TextX := 10;
+      A.TextY := 10;
+      A.TextSpeed := 3;
+      A.FadeIn := true;
+      if SameText(ActionName, 'Image') then A.Kind := ikImage
+      else if SameText(ActionName, 'Scroller') then A.Kind := ikScroller
+      else if SameText(ActionName, 'TextScreen') then A.Kind := ikTextScreen
+      else if SameText(ActionName, 'Fader') then A.Kind := ikFader
+      else if SameText(ActionName, 'Wiper') then A.Kind := ikWiper
+      else if SameText(ActionName, 'GotoTitle') then A.Kind := ikGotoTitle
+      else if SameText(ActionName, 'Cast') then A.Kind := ikCast
+      else
+      begin
+        Error('intermission ' + D.Name + ': unknown action ' + ActionName);
+        if T.Value = '{' then ReadBlock(akSkip, nil, nil);
+        Continue;
+      end;
+      if T.Value = '{' then
+      begin
+        T.Next;
+        while (T.Kind <> tkEnd) and (T.Value <> '}') do
+        begin
+          if T.Kind <> tkIdent then
+          begin
+            T.Next;
+            Continue;
+          end;
+          K := T.Value;
+          T.Next;
+          ReadKeyValues;
+          ApplyActionKey;
+        end;
+        T.Next;
+      end;
+      { Doom's cast call is one action here, however many Cast blocks. }
+      if (A.Kind = ikCast) and (Length(D.Actions) > 0) and (D.Actions[High(D.Actions)].Kind = ikCast) then
+        Continue;
+      SetLength(D.Actions, Length(D.Actions) + 1);
+      D.Actions[High(D.Actions)] := A;
+    end;
+    T.Next;
+    for J := Intermissions.Count - 1 downto 0 do
+      if SameText(Intermissions[J].Name, D.Name) then
+        Intermissions.Delete(J);
+    Intermissions.Add(D);
+  end;
+
   procedure ReadCluster;
   var
     C: TMapInfoCluster;
@@ -983,6 +1255,8 @@ begin
         ReadEpisode
       else if SameText(Key, 'clearepisodes') then
         ClearEpisodes := true
+      else if SameText(Key, 'intermission') then
+        ReadIntermission
       else if SameText(Key, 'include') then
       begin
         { The lump's text is parsed in place (16 includes at most, so a
@@ -1153,6 +1427,7 @@ var
   I: Integer;
 begin
   Entries.Clear;
+  Intermissions.Clear;
   { UMAPINFO first (the Doom ports' own format), then ZDoom's. }
   LumpName := 'UMAPINFO';
   Lump := AWad.FindLump(LumpName);
@@ -1191,6 +1466,23 @@ begin
   WritelnLog('MapInfo', '%s: %d maps', [LumpName, N]);
   for I := 0 to Entries.Count - 1 do
     WritelnLog('MapInfo', Entries[I].Summary);
+  for I := 0 to Intermissions.Count - 1 do
+    WritelnLog('MapInfo', Intermissions[I].Summary);
+end;
+
+function IntermissionByName(const Name: String): TIntermissionDef;
+var
+  I: Integer;
+begin
+  for I := Intermissions.Count - 1 downto 0 do
+    if SameText(Intermissions[I].Name, Name) then
+      Exit(Intermissions[I]);
+  Result := nil;
+end;
+
+function MapInfoIntermissions: TIntermissionList;
+begin
+  Result := Intermissions;
 end;
 
 function MapInfoFor(const MapName: String): TMapInfoEntry;
@@ -1243,6 +1535,8 @@ end;
 
 initialization
   Entries := TMapInfoList.Create(true);
+  Intermissions := TIntermissionList.Create(true);
 finalization
+  FreeAndNil(Intermissions);
   FreeAndNil(Entries);
 end.

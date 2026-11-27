@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- MAPINFO's `intermission` blocks: a PWAD's map that ends with `next = EndSequence, "Name"` plays
+  ZDoom's scripted finale: pictures with patches over them, typed text screens, scrollers, fades
+  and links between intermissions, each with its music and sound, shown for its time or until a
+  key.
 - Doom's sound falloff: monsters, doors and lifts are heard at full volume within 160 units, fade
   linearly to silence at 1200 (sounds farther away are not played) and pan by Doom's stereo
   separation; on the eighth maps distant sounds stay audible, as in Doom.

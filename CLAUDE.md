@@ -533,7 +533,19 @@ FLOOR7_2; E1M3 keeps its vanilla name (`lookup`), shows CREDIT while
 and one episode starting E1M3. The log says `MapInfo: MAPINFO: 2 maps`
 and a summary per entry (autotests `mapinfo` with golden screenshots of
 the two intermission pictures: `E,W:3,S,U,W:0.5,S` under
-`--fixed-step`, and `mapinfo-episode`). LANGUAGE lumps: `tools/testdata/language.wad`
+`--fixed-step`, and `mapinfo-episode`). MAPINFO `intermission` blocks:
+`tools/testdata/intermission.wad` (`tools/make_intermission_wad.py`)
+ends E1M1 with `next = EndSequence, "TestEnd"`: after the cluster text,
+TITLEPIC with M_NGAME drawn over it, a text screen typed from a lump,
+CREDIT scrolling to HELP1, a fade and a wipe, then its `Link` TestEnd2
+(CREDIT until a key; do not press `U` there in a script: the game ends);
+log `MapInfo: intermission TestEnd: 5 actions (...)` and `Finale:
+Intermission TestEnd, action 1: image TITLEPIC, 70 tics` per action
+(autotest `intermission` with goldens under `--fixed-step`, unit test
+`TestIntermission`); E1M2 names Doom's `Inter_Bunny` (`Finale:
+Intermission Inter_Bunny: the vanilla ending`, autotest
+`intermission-vanilla`).
+LANGUAGE lumps: `tools/testdata/language.wad`
 (`tools/make_language_wad.py`) has a LANGUAGE and a MAPINFO that looks
 its strings up: E1M1 "E1M1: Language Hangar", music `$MUSIC_LNG`
 (D_E1M5), a looked-up cluster text, a "Language Episode" and a new

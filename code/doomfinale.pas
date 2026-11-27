@@ -4,17 +4,25 @@
   scroller with "THE END" after E3M8, or Doom 2's cast call after MAP30.
   Texts, flats and cast names come from the WAD's DEHACKED strings
   (TDoomStrings); a text that is missing is skipped. Like the intermission,
-  the 320x200 screen is composed into one image each tic. }
+  the 320x200 screen is composed into one image each tic.
+
+  A MAPINFO map whose next is "EndSequence, Name" plays the intermission
+  Name (DoomMapInfo's TIntermissionDef) after its story text: images,
+  text screens, scrollers and fades one after the other, each for its
+  Time or until a key, with its music and sound, then its Link; Doom's
+  own names (Inter_Pic1..3, Inter_Bunny, Inter_Cast, Inter_Titlescreen)
+  play the vanilla endings when no PWAD defines them. The game ends
+  after it. }
 unit DoomFinale;
 
 interface
 
 uses Classes,
   CastleControls, CastleImages,
-  DoomGraphics, DoomSound, DoomMusic, DoomDehacked;
+  DoomGraphics, DoomSound, DoomMusic, DoomDehacked, DoomMapInfo;
 
 type
-  TFinaleStage = (fsText, fsPicture, fsBunny, fsCast, fsDone);
+  TFinaleStage = (fsText, fsPicture, fsBunny, fsCast, fsSequence, fsDone);
   TCastPhase = (cpWalk, cpAttack, cpDeath);
 
   TDoomFinale = class(TCastleImageControl)
@@ -34,6 +42,14 @@ type
     FCastPhase: TCastPhase;
     FCastFrame, FCastFrameTics, FCastWalked: Integer;
     FCastNames: array of String;
+    { Intermission sequence }
+    FSeqName: String;
+    FSeq: TIntermissionDef;
+    FSeqIndex, FSeqLinks: Integer;
+    procedure StartSequence(const SeqName: String);
+    procedure NextAction;
+    function SeqAction: TIntermissionAction;
+    procedure ComposeAction(const Img: TRGBAlphaImage);
     procedure Compose;
     procedure SetStage(const S: TFinaleStage);
     procedure StartCastMember;
@@ -55,6 +71,9 @@ type
     { True when the game goes on to the next map after this finale (Doom 2
       texts before MAP30); false when it ends (back to the title). }
     property Continues: Boolean read FContinues;
+    { The intermission playing (fsSequence) and its action. }
+    property Sequence: TIntermissionDef read FSeq;
+    property SequenceIndex: Integer read FSeqIndex;
   end;
 
 { Does leaving this map show a finale? Doom 1: E?M8. Doom 2: MAP06, 11, 20,
@@ -67,8 +86,8 @@ function MapInfoDecidesFinale(const MapName: String; const Secret: Boolean): Boo
 
 implementation
 
-uses SysUtils, Math, DoomMapInfo,
-  CastleVectors, CastleUtils,
+uses SysUtils, Math,
+  CastleVectors, CastleUtils, CastleLog,
   DoomHud, DoomFont, DoomThings, CastleComponentSerialize;
 
 const
@@ -213,7 +232,10 @@ begin
     if Info.EndGame = meYes then
     begin
       FContinues := false;
-      if Info.EndCast then
+      FSeqName := Info.EndSequence;
+      if FSeqName <> '' then
+        FAfterText := fsSequence
+      else if Info.EndCast then
         FAfterText := fsCast
       else if Info.EndBunny then
         FAfterText := fsBunny
@@ -301,8 +323,100 @@ begin
         FCastIndex := 0;
         StartCastMember;
       end;
+    fsSequence:
+      begin
+        FSeqLinks := 0;
+        StartSequence(FSeqName);
+        Exit;
+      end;
   end;
   if S <> fsDone then Compose;
+end;
+
+procedure TDoomFinale.StartSequence(const SeqName: String);
+var
+  N: String;
+begin
+  FSeq := IntermissionByName(SeqName);
+  Inc(FSeqLinks);
+  if (FSeq = nil) or (FSeqLinks > 32) then
+  begin
+    FSeq := nil;
+    { Doom's own intermissions (zdoom.pk3's doomcommon), when no PWAD
+      defines them. }
+    N := UpperCase(SeqName);
+    WritelnLog('Finale', 'Intermission %s: the vanilla ending', [SeqName]);
+    if N = 'INTER_TITLESCREEN' then SetStage(fsDone)
+    else if N = 'INTER_BUNNY' then SetStage(fsBunny)
+    else if N = 'INTER_CAST' then SetStage(fsCast)
+    else
+    begin
+      if N = 'INTER_PIC2' then FPicture := 'VICTORY2'
+      else if N = 'INTER_PIC3' then FPicture := 'ENDPIC'
+      else if FGraphics.Patch('CREDIT') <> nil then FPicture := 'CREDIT'
+      else FPicture := 'HELP2';
+      if (N <> 'INTER_PIC1') and (N <> 'INTER_PIC2') and (N <> 'INTER_PIC3') then
+        WritelnWarning('Finale', 'No intermission %s, showing %s', [SeqName, FPicture]);
+      SetStage(fsPicture);
+    end;
+    Exit;
+  end;
+  FStage := fsSequence;
+  FSeqIndex := -1;
+  NextAction;
+end;
+
+function TDoomFinale.SeqAction: TIntermissionAction;
+begin
+  Result := FSeq.Actions[FSeqIndex];
+end;
+
+{ The next action of the intermission, else its link, else the end. }
+procedure TDoomFinale.NextAction;
+const
+  KindNames: array [TIntermissionKind] of String = ('image', 'scroller', 'text screen', 'fader',
+    'wiper', 'title', 'cast');
+var
+  A: TIntermissionAction;
+begin
+  while true do
+  begin
+    Inc(FSeqIndex);
+    FTic := 0;
+    if FSeqIndex > High(FSeq.Actions) then
+    begin
+      if FSeq.Link <> '' then
+      begin
+        WritelnLog('Finale', 'Intermission %s links to %s', [FSeq.Name, FSeq.Link]);
+        StartSequence(FSeq.Link);
+      end else
+        SetStage(fsDone);
+      Exit;
+    end;
+    A := SeqAction;
+    WritelnLog('Finale', 'Intermission %s, action %d: %s %s, %d tics', [FSeq.Name, FSeqIndex + 1,
+      KindNames[A.Kind], A.Background, A.Duration]);
+    if (A.Music <> '') and (FMusic <> nil) and FMusic.HasLump(A.Music) then FMusic.Play(A.Music);
+    if (A.Sound <> '') and (FSounds <> nil) then FSounds.Play(A.Sound);
+    case A.Kind of
+      ikGotoTitle:
+        begin
+          SetStage(fsDone);
+          Exit;
+        end;
+      ikCast:
+        begin
+          { Doom's cast call, which loops until the player leaves. }
+          SetStage(fsCast);
+          Exit;
+        end;
+      ikWiper:
+        { The screen changes at once (no wipe between actions). }
+        Continue;
+    end;
+    Compose;
+    Exit;
+  end;
 end;
 
 function TDoomFinale.TextComplete: Boolean;
@@ -422,6 +536,12 @@ begin
       end;
     fsCast:
       TicCast;
+    fsSequence:
+      if (SeqAction.Duration > 0) and (FTic >= SeqAction.Duration) then
+      begin
+        NextAction;
+        Exit;
+      end;
   end;
   Compose;
 end;
@@ -438,6 +558,18 @@ begin
         SetStage(FAfterText);
     fsPicture, fsBunny:
       SetStage(fsDone);
+    fsSequence:
+      begin
+        { A typing text completes first. }
+        if (SeqAction.Kind = ikTextScreen) and (SeqAction.TextSpeed > 0) and
+           (FTic div SeqAction.TextSpeed < Length(SeqAction.Text)) then
+          FTic := Length(SeqAction.Text) * SeqAction.TextSpeed
+        else
+        begin
+          NextAction;
+          Exit;
+        end;
+      end;
     fsCast:
       if FCastPhase <> cpDeath then
       begin
@@ -461,6 +593,104 @@ end;
 function TDoomFinale.Done: Boolean;
 begin
   Result := FStage = fsDone;
+end;
+
+procedure TDoomFinale.ComposeAction(const Img: TRGBAlphaImage);
+var
+  A: TIntermissionAction;
+  F: TDoomImage;
+  X, Y, I, Count, DX, DY: Integer;
+  P: Single;
+  Lines: TStringList;
+  Ptr: PVector4Byte;
+
+  { A background: a patch at the top left (its offsets kept), or a flat
+    tiled over the screen. }
+  procedure DrawBackground(const Name: String; const Flat: Boolean; const OX, OY: Integer);
+  var
+    BX, BY: Integer;
+    B: TDoomImage;
+  begin
+    if Name = '' then Exit;
+    B := nil;
+    if Flat then B := FGraphics.Flat(Name);
+    if B <> nil then
+    begin
+      for BY := 0 to 200 div 64 do
+        for BX := 0 to 320 div 64 do
+          BlitDoomImage(Img, B, OX + BX * 64, OY + BY * 64);
+      Exit;
+    end;
+    B := FGraphics.Patch(Name);
+    if B = nil then B := FGraphics.Flat(Name);
+    if B <> nil then
+      BlitDoomImage(Img, B, OX - B.LeftOffset, OY - B.TopOffset);
+  end;
+
+begin
+  A := SeqAction;
+  if A.Kind = ikScroller then
+  begin
+    { Background leaves in the scroll direction, Background2 follows. }
+    if A.ScrollTime > 0 then
+      P := Clamped((FTic - A.InitialDelay) / A.ScrollTime, 0, 1)
+    else if FTic >= A.InitialDelay then
+      P := 1
+    else
+      P := 0;
+    DX := 0;
+    DY := 0;
+    case A.ScrollDirection of
+      sdLeft: DX := -Round(320 * P);
+      sdRight: DX := Round(320 * P);
+      sdUp: DY := -Round(200 * P);
+      sdDown: DY := Round(200 * P);
+    end;
+    DrawBackground(A.Background, A.BackgroundFlat, DX, DY);
+    case A.ScrollDirection of
+      sdLeft: DrawBackground(A.Background2, A.BackgroundFlat, DX + 320, 0);
+      sdRight: DrawBackground(A.Background2, A.BackgroundFlat, DX - 320, 0);
+      sdUp: DrawBackground(A.Background2, A.BackgroundFlat, 0, DY + 200);
+      sdDown: DrawBackground(A.Background2, A.BackgroundFlat, 0, DY - 200);
+    end;
+  end else
+    DrawBackground(A.Background, A.BackgroundFlat, 0, 0);
+  for I := 0 to High(A.Draws) do
+  begin
+    F := FGraphics.Patch(A.Draws[I].Patch);
+    if F <> nil then
+      BlitDoomImage(Img, F, A.Draws[I].X - F.LeftOffset, A.Draws[I].Y - F.TopOffset);
+  end;
+  if A.Kind = ikTextScreen then
+  begin
+    if A.TextSpeed > 0 then Count := FTic div A.TextSpeed else Count := Length(A.Text);
+    Lines := TStringList.Create;
+    try
+      Lines.Text := Copy(A.Text, 1, Count);
+      Y := A.TextY;
+      for I := 0 to Lines.Count - 1 do
+      begin
+        DrawDoomText(FGraphics, Img, A.TextX, Y, Lines[I]);
+        Inc(Y, 11);
+      end;
+    finally
+      FreeAndNil(Lines);
+    end;
+  end;
+  if A.Kind = ikFader then
+  begin
+    { From black (FadeIn) or to black over the action's time. }
+    if A.Duration > 0 then P := Clamped(FTic / A.Duration, 0, 1) else P := 1;
+    if not A.FadeIn then P := 1 - P;
+    Ptr := Img.Pixels;
+    for X := 0 to Img.Width * Img.Height - 1 do
+    begin
+      Ptr^.X := Round(Ptr^.X * P);
+      Ptr^.Y := Round(Ptr^.Y * P);
+      Ptr^.Z := Round(Ptr^.Z * P);
+      Inc(Ptr);
+    end;
+  end;
 end;
 
 procedure TDoomFinale.Compose;
@@ -511,6 +741,8 @@ begin
       end;
     fsPicture:
       DrawPatch(FGraphics.Patch(FPicture), 0, 0);
+    fsSequence:
+      ComposeAction(Img);
     fsBunny:
       begin
         { F_BunnyScroll: PFUB2 slides left to reveal PFUB1, then THE END. }

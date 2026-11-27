@@ -47,6 +47,7 @@ type
     procedure TestLogFilter;
     procedure TestUMapInfo;
     procedure TestZMapInfo;
+    procedure TestIntermission;
     procedure TestLanguage;
     procedure TestWiScript;
     procedure TestDemoFile;
@@ -396,6 +397,83 @@ begin
   finally
     FreeAndNil(Errors);
     FreeAndNil(List);
+  end;
+end;
+
+procedure TTestWad.TestIntermission;
+var
+  W: TDoomWad;
+  Path: String;
+  D: TIntermissionDef;
+  E: TMapInfoEntry;
+  List: TMapInfoList;
+  Errors: TStringList;
+begin
+  Path := 'tools/testdata/intermission.wad';
+  if not FileExists(Path) then
+    Path := '../tools/testdata/intermission.wad';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    W.AddFile(FilenameToUriSafe(ExpandFileName(Path)));
+    LoadMapInfo(W);
+    E := MapInfoFor('E1M1');
+    AssertTrue('EndSequence ends the game', E.EndGame = meYes);
+    AssertEquals('its intermission', 'TestEnd', E.EndSequence);
+    AssertEquals('the cluster text still comes first', 'The hangar is clear.', E.InterText);
+    AssertEquals('Doom''s own name', 'Inter_Bunny', MapInfoFor('E1M2').EndSequence);
+    AssertEquals('two intermissions', 2, MapInfoIntermissions.Count);
+    D := IntermissionByName('testend');
+    AssertTrue('by name, any case', D <> nil);
+    AssertEquals('five actions', 5, Length(D.Actions));
+    AssertEquals('link', 'TestEnd2', D.Link);
+    AssertTrue('image', D.Actions[0].Kind = ikImage);
+    AssertEquals('background', 'TITLEPIC', D.Actions[0].Background);
+    AssertEquals('music', 'D_VICTOR', D.Actions[0].Music);
+    AssertEquals('Time in seconds', 70, D.Actions[0].Duration);
+    AssertEquals('one draw', 1, Length(D.Actions[0].Draws));
+    AssertEquals('draw patch', 'M_NGAME', D.Actions[0].Draws[0].Patch);
+    AssertEquals('draw y', 150, D.Actions[0].Draws[0].Y);
+    AssertTrue('text screen', D.Actions[1].Kind = ikTextScreen);
+    AssertTrue('a tiled flat', D.Actions[1].BackgroundFlat);
+    AssertEquals('text from the INTRTEXT lump', 'THE SCRIPTED FINALE BEGINS.', Copy(D.Actions[1].Text, 1, 27));
+    AssertEquals('position', 40, D.Actions[1].TextY);
+    AssertEquals('speed', 2, D.Actions[1].TextSpeed);
+    AssertEquals('until a key', 0, D.Actions[1].Duration);
+    AssertTrue('scroller', D.Actions[2].Kind = ikScroller);
+    AssertEquals('second background', 'HELP1', D.Actions[2].Background2);
+    AssertTrue('left', D.Actions[2].ScrollDirection = sdLeft);
+    AssertEquals('negative values are tics', 10, D.Actions[2].InitialDelay);
+    AssertEquals('scroll time', 70, D.Actions[2].ScrollTime);
+    AssertEquals('scroller time', 100, D.Actions[2].Duration);
+    AssertTrue('fader out', (D.Actions[3].Kind = ikFader) and not D.Actions[3].FadeIn);
+    AssertTrue('wiper', D.Actions[4].Kind = ikWiper);
+    AssertEquals('linked one', 1, Length(IntermissionByName('TestEnd2').Actions));
+    { A later block replaces an earlier one; Cast blocks make one action;
+      EndTitle goes to the title; an unknown action is reported. }
+    List := TMapInfoList.Create(true);
+    Errors := TStringList.Create;
+    try
+      ParseZMapInfo(
+        'map E1M3 "T" { next = EndTitle }' + LineEnding +
+        'intermission TestEnd { Cast { CastName = "$CC_ZOMBIE" } Cast { CastName = "$CC_IMP" } ' +
+        'Bogus { } GotoTitle { } }', List, Errors, W);
+      AssertEquals('EndTitle', 'Inter_Titlescreen', List[0].EndSequence);
+      D := IntermissionByName('TestEnd');
+      AssertEquals('replaced: cast, title', 2, Length(D.Actions));
+      AssertTrue('cast', D.Actions[0].Kind = ikCast);
+      AssertTrue('title', D.Actions[1].Kind = ikGotoTitle);
+      AssertTrue('unknown action reported', Pos('unknown action Bogus', Errors.Text) > 0);
+    finally
+      FreeAndNil(Errors);
+      FreeAndNil(List);
+    end;
+    { Back to plain Freedoom: the intermissions go too. }
+    FreeAndNil(W);
+    W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+    LoadMapInfo(W);
+    AssertTrue('cleared', IntermissionByName('TestEnd') = nil);
+  finally
+    FreeAndNil(W);
   end;
 end;
 

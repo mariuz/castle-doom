@@ -68,6 +68,18 @@ L = several days). Items inside a section are in suggested order.
   DOGS sprites and sounds, autotest `dogs` with goldens). Left: monster
   backing (done, see below), MBF's dog jumping across gaps.
 
+- MAPINFO's `intermission` blocks (`DoomMapInfo.ReadIntermission`,
+  `TDoomFinale`'s `fsSequence`): Image, TextScreen, Scroller, Fader,
+  Wiper, GotoTitle and Cast actions with backgrounds (patches or tiled
+  flats), draws, music, sounds, times (seconds, negative tics, none =
+  a key), typed texts from strings, lumps or LANGUAGE, scroll
+  directions and delays, fades and `Link`; `next = EndSequence,
+  "Name"` after a map (and `EndTitle`); Doom's own `Inter_*` names
+  fall back to the vanilla endings. `tools/make_intermission_wad.py`;
+  autotests `intermission` (goldens), `intermission-vanilla`, unit test
+  `TestIntermission`. Left: a real wipe for `Wiper` (the change is
+  instant), `TextColor` / `TextDelay`, the cast's own members.
+
 - Doom's sound falloff (`S_AdjustSoundParams`, `DoomSound`'s
   `DoomSoundParams`): full volume within 160 units of Doom's
   approximate distance, linear to silence at 1200 (not started beyond,
@@ -1832,7 +1844,7 @@ play.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **MAPINFO, the rest**: UMAPINFO, the common ZDoom MAPINFO keys, LANGUAGE, `include` and the intermission scripts' backgrounds are done (see above); left are MAPINFO's `intermission` blocks (scripted finales), hubs and the per-map flags of other ports. | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
+| **MAPINFO, the rest**: UMAPINFO, the common ZDoom MAPINFO keys, LANGUAGE, `include` and the intermission scripts' backgrounds are done (see above); `intermission` blocks are done too (see above); left are hubs, the per-map flags of other ports, intermission actions' text colours and the cast call's own members (`CastClass`). | Fuller PWAD support. | `DoomMapInfo`, `DoomIntermission`, `DoomFinale` | M |
 
 ## 8. New features (suggested)
 
@@ -1844,18 +1856,17 @@ play.
 
 ## Suggested next three
 
-1. MAPINFO's `intermission` blocks (M): ZDoom's scripted finales
-   (images, text screens, the cast call, links between them) used by
-   PWADs' MAPINFO `endgame` / cluster exits (`DoomMapInfo`,
-   `DoomFinale`).
-2. The weapons' select / deselect chains from the state table (S-M):
+1. The weapons' select / deselect chains from the state table (S-M):
    DeHackEd's "Select frame" / "Deselect frame" sequences played
    instead of the coded raise and lower (`TDoomWorld.BuildWeaponSeqs`,
    A_Raise / A_Lower).
-3. Doom's sound channels (S): at most eight sounds at once
+2. Doom's sound channels (S): at most eight sounds at once
    (`snd_channels`), a new one taking the farthest or lowest-priority
    channel (`S_getChannel`, the sounds' priorities from `sounds.c`), and
    the player's own sounds replacing each other (`DoomSound`).
+3. A real wipe between intermission actions (S): ZDoom's `Wiper`
+   (Melt, Crossfade, Burn) through the view's melt (`TDoomWipe`), and
+   Doom's own Inter_Pic1 crossfade (`DoomFinale`, `GameViewPlay`).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

@@ -279,6 +279,21 @@ TESTS = [
       r'MapInfo: E1M3: no intermission', r'Finale: Finale after E1M3 \(stage 2\)'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mapinfo.wad'), '--fixed-step'],
      None),
+    ('intermission', 'E1M1',
+     'Y,W:0.5,E,W:3,U,W:0.5,U,W:0.5,U,W:0.5,U,W:0.5,S,U,W:0.5,S,U,W:0.2,S,U,W:1,S,W:2.2,S,W:2,S,Q',
+     [r'MapInfo: intermission TestEnd: 5 actions \(image TITLEPIC, text screen FLOOR4_8, scroller CREDIT, '
+      r'fader TITLEPIC, wiper\), then TestEnd2',
+      r'MapInfo: E1M1: .*ends with the intermission TestEnd',
+      r'Finale: Intermission TestEnd, action 1: image TITLEPIC, 70 tics',
+      r'Finale: Intermission TestEnd, action 3: scroller CREDIT, 100 tics',
+      r'Finale: Intermission TestEnd links to TestEnd2',
+      r'Finale: Intermission TestEnd2, action 1: image CREDIT, 0 tics'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'intermission.wad'), '--fixed-step'],
+     None),
+    ('intermission-vanilla', 'E1M2', 'Y,W:0.5,E,W:3,U,W:0.5,U,W:2.5,S,Q',
+     [r'Finale: Intermission Inter_Bunny: the vanilla ending'],
+     ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'intermission.wad'), '--fixed-step'],
+     None),
     ('mapinfo-episode', 'MENUKEYS', 'W:1,S,Q', [r'Load: E1M3: map parsed'],
      ['-file', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mapinfo.wad'),
       '--menukeys', 'E,E,E'], None),
@@ -1845,6 +1860,8 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'intermission_1.png', 'intermission_2.png', 'intermission_3.png', 'intermission_4.png',
+    'intermission_5.png', 'intermission_6.png', 'intermission-vanilla_1.png',
     'monster-backing-friend_1.png',
     'sky-offsets_1.png',
     'sky-offsets_2.png',
