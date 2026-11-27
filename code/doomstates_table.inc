@@ -99,6 +99,17 @@ const
     'DSKEENDT', 'DSSKEACT', 'DSSKESIT', 'DSSKEATK', 'DSRADIO', 'DSDGSIT', 'DSDGATK', 'DSDGACT',
     'DSDGDTH', 'DSDGPAIN');
 
+  { sounds.c's priorities (S_getChannel: a lower number wins a channel). }
+  VanillaSoundPriorities: array [0..VanillaSoundCount - 1] of Integer = (
+    0, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 118, 64, 64, 64, 70,
+    70, 70, 100, 100, 100, 100, 119, 78, 78, 96, 96, 96, 96, 96, 96, 78,
+    78, 78, 96, 32, 98, 98, 98, 98, 98, 98, 98, 94, 92, 90, 90, 90,
+    90, 90, 90, 70, 70, 70, 70, 70, 70, 32, 32, 70, 70, 70, 70, 70,
+    70, 70, 70, 32, 32, 32, 32, 32, 32, 32, 32, 120, 120, 120, 100, 100,
+    100, 78, 60, 64, 70, 70, 64, 60, 100, 100, 100, 32, 32, 60, 70, 70,
+    70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 60, 98, 70, 120,
+    70, 96);
+
   { Sprite index, frame (bit 15 = full bright), tics (-1 = forever), action, next state. }
   VanillaStates: array [0..VanillaStateCount - 1] of TStateDef = (
     (Sprite: 0; Frame: 0; Tics: -1; Action: saNone; Next: 0), { 0 S_NULL }

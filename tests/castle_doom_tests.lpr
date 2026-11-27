@@ -101,6 +101,7 @@ type
     procedure TestEnvelopeFm;
     procedure TestEnvelopeOpl3;
     procedure TestSoundFalloff;
+    procedure TestSoundChannels;
   end;
 
   TTestDehacked = class(TTestCase)
@@ -3226,6 +3227,44 @@ begin
   AssertEquals('behind', 0, Sep, 1e-5);
   DoomSoundParams(0, 0, 0, 300, -300, false, Vol, Sep);
   AssertEquals('45 degrees right', 0.75 * Sqrt(0.5), Sep, 1e-5);
+end;
+
+procedure TTestMusic.TestSoundChannels;
+var
+  W: TDoomWad;
+  Sounds: TDoomSounds;
+  I: Integer;
+begin
+  AssertEquals('pistol', 64, SoundPriority('DSPISTOL'));
+  AssertEquals('teleport', 32, SoundPriority('dstelept'));
+  AssertEquals('posact', 120, SoundPriority('DSPOSACT'));
+  AssertEquals('a lump of no sound', 64, SoundPriority('DSNOSUCH'));
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  Sounds := TDoomSounds.Create(W);
+  try
+    AssertEquals('eight channels', 8, Sounds.MaxChannels);
+    for I := 1 to 8 do
+      Sounds.Play('DSPISTOL');
+    AssertEquals('eight sounds', 8, Sounds.ChannelCount);
+    { A worse sound finds no channel; a better one takes the first. }
+    Sounds.Play('DSPOSACT');
+    AssertEquals('still eight', 8, Sounds.ChannelCount);
+    Sounds.Play('DSTELEPT');
+    AssertEquals('teleport took one', 8, Sounds.ChannelCount);
+    { The sounds end after their length (DSPISTOL: under a second). }
+    Sounds.Advance(5);
+    AssertEquals('all ended', 0, Sounds.ChannelCount);
+    { The player's own sounds replace each other; others do not. }
+    Sounds.PlayOwn('DSPISTOL');
+    Sounds.PlayOwn('DSSHOTGN');
+    AssertEquals('one own sound', 1, Sounds.ChannelCount);
+    Sounds.Play('DSDOROPN');
+    Sounds.Play('DSDOROPN');
+    AssertEquals('and two without an origin', 3, Sounds.ChannelCount);
+  finally
+    FreeAndNil(Sounds);
+    FreeAndNil(W);
+  end;
 end;
 
 procedure TTestMusic.TestEnvelopeOpl3;

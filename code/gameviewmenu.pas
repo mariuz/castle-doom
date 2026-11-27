@@ -2383,6 +2383,8 @@ end;
 procedure TViewMenu.Update(const SecondsPassed: Single; var HandleInput: Boolean);
 begin
   inherited;
+  { The menus' sounds hold Doom's channels for their length too. }
+  if FSounds <> nil then FSounds.Advance(SecondsPassed);
   if FFetch <> nil then
   begin
     if FFetch.TotalBytes > 0 then

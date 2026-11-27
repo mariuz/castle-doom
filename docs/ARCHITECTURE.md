@@ -1491,10 +1491,24 @@ finished ones; a new sound from an emitter stops its last one (one
 channel per origin), and a freed emitter stops its sound (P_RemoveMobj).
 Before the first listener update (and for an emitter outside a world)
 the old behaviour plays: a `TCastleSoundSource` on the emitter with
-`ReferenceDistance`/`MaxDistance` 200/1800. `SOUNDLOG` in a demo logs
+`ReferenceDistance`/`MaxDistance` 200/1800. Every sound also takes one
+of Doom's eight channels (`MaxChannels`, `S_getChannel`; the channel
+list holds the positional and the other sounds alike): `PlayOwn` (the
+player's weapons, pickups, pain: Doom's player-origin sounds) replaces
+the player's last sound, `PlayAt` its emitter's, and when all eight are
+busy the new sound takes the first channel whose priority (sounds.c's,
+`DoomStates.SoundPriority` from `VanillaSoundPriorities`, which
+`tools/make_states.py` reads from sounds.c; lower wins) is not better,
+else it is not played. `Play` (menus, the boss brain, monsters heard
+everywhere) has no origin. A channel is busy for its sound's length from
+the DMX header (`Duration`), in the game time `Advance` is given (the
+play and menu views, every frame), not until the engine says it stopped
+(there is no sound device in the autotests). `SOUNDLOG` in a demo logs
 each positional sound's volume and separation (`Sound: DSDOROPN at
 (552, 712): volume 1.00, separation 0.00` or `out of range, not
-played`).
+played`) and the channels (`DSPISTOL replaces DSPISTOL (the same
+origin)`, `DSBGSIT1 (priority 98) takes the channel of DSBGSIT1
+(priority 98)`, `... not played: 8 channels hold better sounds`).
 
 Closed captions: both calls report the sound through `OnPlay` (lump,
 emitter or nil). `TViewPlay.SoundPlayed` turns it into a line with

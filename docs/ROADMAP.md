@@ -68,6 +68,13 @@ L = several days). Items inside a section are in suggested order.
   DOGS sprites and sounds, autotest `dogs` with goldens). Left: monster
   backing (done, see below), MBF's dog jumping across gaps.
 
+- Doom's sound channels (`DoomSound`'s `FreeChannel`, S_getChannel):
+  eight at most, one per origin (the player's own sounds through
+  `PlayOwn`, an emitter's), a busy set losing its first sound of no
+  better priority (sounds.c's table, generated into
+  `VanillaSoundPriorities`), each channel busy for its DMX length in
+  game time. Autotest `sound-channels`, unit test `TestSoundChannels`.
+
 - The weapons' select / deselect / ready chains from the state table
   (`TDoomWorld.StepWeaponSwitch`, `SetReadyFrame`): DeHackEd's "Select
   frame", "Deselect frame" and "Bobbing frame" chains give the sprites
@@ -1865,17 +1872,17 @@ play.
 
 ## Suggested next three
 
-1. Doom's sound channels (S): at most eight sounds at once
-   (`snd_channels`), a new one taking the farthest or lowest-priority
-   channel (`S_getChannel`, the sounds' priorities from `sounds.c`), and
-   the player's own sounds replacing each other (`DoomSound`).
-2. A real wipe between intermission actions (S): ZDoom's `Wiper`
+1. A real wipe between intermission actions (S): ZDoom's `Wiper`
    (Melt, Crossfade, Burn) through the view's melt (`TDoomWipe`), and
    Doom's own Inter_Pic1 crossfade (`DoomFinale`, `GameViewPlay`).
-3. The chainsaw's idle and the weapons' sounds from the state table (S):
+2. The chainsaw's idle and the weapons' sounds from the state table (S):
    A_WeaponReady's DSSAWIDL while the chainsaw is up, and DeHackEd
    weapons whose ready frames carry other pointers (`DoomWorld`
    `SetReadyFrame`, `WeaponAction`).
+3. Sound options (S): the channel count (Doom's 1..8, Boom's up to 32)
+   and Doom's random pitch shifts (vanilla 1.2's `snd_pitchshift`)
+   in the F4 page and `settings.json` (`DoomSound`, `GameSettings`,
+   `DoomMenu`).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

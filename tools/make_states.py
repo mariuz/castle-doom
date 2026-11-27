@@ -8,7 +8,8 @@ patches edit copies of them (DoomStates); the thing table (DoomThings)
 derives its frame sequences from them.
 
 Usage: make_states.py SRCDIR [OUTFILE]
-  SRCDIR holds info.c, info.h and sounds.h from linuxdoom-1.10 (the
+  SRCDIR holds info.c, info.h, sounds.h and sounds.c (the sounds'
+  priorities, S_getChannel's) from linuxdoom-1.10 (the
   released Doom source, https://github.com/id-Software/DOOM); OUTFILE
   defaults to code/doomstates_table.inc next to this tools/ directory.
 """
@@ -23,6 +24,8 @@ import sys
 # friend", thing 888), from prboom-plus / dsda-doom's info.c.
 MBF_SPRITES = ['TNT1', 'DOGS']
 MBF_SOUNDS = ['sfx_dgsit', 'sfx_dgatk', 'sfx_dgact', 'sfx_dgdth', 'sfx_dgpain']
+# Their priorities (prboom-plus' sounds.c).
+MBF_SOUND_PRIORITIES = [98, 70, 120, 70, 96]
 MBF_STATES = [
     # name, sprite, frame, tics, action, next
     ('S_TNT1', 'TNT1', 0, -1, 'NULL', 'S_TNT1'),
@@ -112,6 +115,7 @@ def main():
     info_c = read(os.path.join(src, 'info.c'))
     info_h = read(os.path.join(src, 'info.h'))
     sounds_h = read(os.path.join(src, 'sounds.h'))
+    sounds_c = read(os.path.join(src, 'sounds.c'))
 
     # Sprite names: char *sprnames[NUMSPRITES] = { "TROO", ... };
     m = re.search(r'sprnames\[NUMSPRITES\]\s*=\s*\{(.*?)\};', info_c, re.S)
@@ -121,6 +125,10 @@ def main():
     sfx_names = enum_names(sounds_h, 'sfx_None', 'sfx_radio')
     vanilla_states = len(state_names)
     sprites += MBF_SPRITES
+    # sfxinfo_t S_sfx[] = { { "none", false,  0, ... }, { "pistol", false, 64, ...
+    priorities = [int(p) for p in re.findall(r'\{\s*"\w+",\s*(?:true|false),\s*(\d+)', sounds_c)]
+    assert len(priorities) == len(sfx_names), (len(priorities), len(sfx_names))
+    priorities += MBF_SOUND_PRIORITIES
     sfx_names += MBF_SOUNDS
     state_names += [st[0] for st in MBF_STATES]
     sprite_index = {name: i for i, name in enumerate(sprites)}
@@ -268,6 +276,12 @@ def main():
     for i in range(0, len(names), 8):
         w.append('    ' + ', '.join("'%s'" % s for s in names[i:i + 8]) +
                  (',' if i + 8 < len(names) else ');'))
+    w.append('')
+    w.append('  { sounds.c\'s priorities (S_getChannel: a lower number wins a channel). }')
+    w.append('  VanillaSoundPriorities: array [0..VanillaSoundCount - 1] of Integer = (')
+    for i in range(0, len(priorities), 16):
+        w.append('    ' + ', '.join(str(p) for p in priorities[i:i + 16]) +
+                 (',' if i + 16 < len(priorities) else ');'))
     w.append('')
     w.append('  { Sprite index, frame (bit 15 = full bright), tics (-1 = forever), action, next state. }')
     w.append('  VanillaStates: array [0..VanillaStateCount - 1] of TStateDef = (')

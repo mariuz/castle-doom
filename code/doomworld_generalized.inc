@@ -75,7 +75,7 @@ begin
   if not Result then
   begin
     ShowMessage(Text(MsgName, Msg));
-    FSounds.Play('DSOOF');
+    FSounds.PlayOwn('DSOOF');
   end;
 end;
 

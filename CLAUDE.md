@@ -828,7 +828,11 @@ in a demo logs each positional sound (`Sound: DSBGSIT1 at (-416, 200):
 volume 0.67, separation 0.00`, `... out of range, not played` beyond
 1200 units; separation negative on the left, at most 0.75); E1M8 and
 MAP08 keep far sounds at 0.12 (autotests `sound-falloff`,
-`sound-falloff-boss`, unit test `TestSoundFalloff`). There is no sound
+`sound-falloff-boss`, unit test `TestSoundFalloff`). It also logs
+Doom's eight channels: `DSPISTOL replaces DSPISTOL (the same origin)`
+(the player's own sounds, `PlayOwn`), `DSBGSIT1 (priority 98) takes
+the channel of DSBGSIT1 (priority 98)` (ten imps spawned around the
+start; autotest `sound-channels`, unit test `TestSoundChannels`). There is no sound
 device in the cloud container, so only the numbers are tested there.
 Weapon changes: the log says `Weapon: Lowered PISG in 16 tics` and
 `Raised SHTG in 16 tics`; `-deh tools/testdata/weaponswitch.deh` makes

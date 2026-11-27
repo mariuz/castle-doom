@@ -17,7 +17,16 @@
   with the volume set on the playing sound; it is recomputed every frame
   while the emitter moves, and the sound stops when it goes out of range
   (S_UpdateSounds). A new sound from an emitter stops the one it was
-  playing, like Doom's one channel per origin. }
+  playing, like Doom's one channel per origin.
+
+  Like Doom, at most eight sounds play at once (snd_channels): the
+  player's own sounds (PlayOwn) replace each other, positional ones those
+  of the same emitter, and when all eight channels are busy a new sound
+  takes the first one whose priority (sounds.c's, lower wins) is not
+  better, or is not played (S_getChannel). A channel is busy for its
+  sound's length (from the DMX lump), counted in the game time Advance
+  is given. Sounds started without an origin (Play: menus, the boss
+  brain) only take channels. }
 unit DoomSound;
 
 interface
@@ -42,7 +51,18 @@ type
     FListenerX, FListenerY, FListenerAngle: Single;
     FListenerEye: TVector3;
     FHaveListener, FBossMap, FLogPositional: Boolean;
+    FTime: Double;
+    FDurations: {$ifdef FPC}specialize{$endif} TDictionary<String, Single>;
+    FMaxChannels: Integer;
     procedure PlaceChannel(const C: TDoomSoundChannel);
+    function Duration(const LumpName: String): Single;
+    procedure PurgeChannels;
+    { S_getChannel: room for a new sound (stopping the one it replaces);
+      False when every channel holds a better sound. }
+    function FreeChannel(const LumpName: String; const Emitter: TCastleTransform;
+      const Own: Boolean): Boolean;
+    function NewChannel(const LumpName: String; const S: TCastleSound; const Emitter: TCastleTransform;
+      const Own: Boolean): TDoomSoundChannel;
     function ReadSfx(const Url: String; out MimeType: String): TStream;
     procedure SetVolume(const Value: Single);
   public
@@ -50,8 +70,18 @@ type
     destructor Destroy; override;
     { TCastleSound for a lump like 'DSPISTOL' (nil when the lump is missing). }
     function Sound(const LumpName: String): TCastleSound;
-    { Non-positional playback (UI, player's own weapon). }
+    { Non-positional playback without an origin (menus, the boss brain,
+      monsters heard everywhere). }
     procedure Play(const LumpName: String);
+    { The player's own sound (weapons, pickups, pain): a new one stops the
+      last. }
+    procedure PlayOwn(const LumpName: String);
+    { Game time passes (the channels' sounds end). }
+    procedure Advance(const SecondsPassed: Single);
+    { Sounds playing now (busy channels). }
+    function ChannelCount: Integer;
+    { Doom's snd_channels: 8. }
+    property MaxChannels: Integer read FMaxChannels write FMaxChannels;
     { A positional sound from a transform (an actor, a sector's sound
       origin), with Doom's falloff and separation (see the unit's comment).
       Not played when out of range of the listener. }
@@ -82,9 +112,13 @@ type
   public
     Emitter: TCastleTransform;
     Place: TCastleTransform;
-    Playing: TCastlePlayingSoundSource;
+    Playing: TCastlePlayingSound;
     LumpName: String;
     Done: Boolean;
+    { The player's own sound; its priority; when it ends (game time). }
+    Own: Boolean;
+    Priority: Integer;
+    EndTime: Double;
     destructor Destroy; override;
   end;
 
@@ -226,12 +260,15 @@ begin
   FVolume := 1;
   FSounds := {$ifdef FPC}specialize{$endif} TObjectDictionary<String, TCastleSound>.Create([doOwnsValues]);
   FChannels := {$ifdef FPC}specialize{$endif} TObjectList<TDoomSoundChannel>.Create(true);
+  FDurations := {$ifdef FPC}specialize{$endif} TDictionary<String, Single>.Create;
+  FMaxChannels := 8;
   RegisterUrlProtocol('doomsfx', {$ifdef FPC}@{$endif} ReadSfx, nil);
 end;
 
 destructor TDoomSounds.Destroy;
 begin
   FreeAndNil(FChannels);
+  FreeAndNil(FDurations);
   FreeAndNil(FSounds);
   UnregisterUrlProtocol('doomsfx');
   inherited;
@@ -289,14 +326,150 @@ begin
       S.Volume := Value;
 end;
 
+function TDoomSounds.Duration(const LumpName: String): Single;
+var
+  U: String;
+  Lump: Integer;
+  P: PByte;
+  Rate: Word;
+  Count: LongWord;
+begin
+  U := UpperCase(LumpName);
+  if FDurations.TryGetValue(U, Result) then Exit;
+  Result := 1;
+  Lump := FWad.FindLump(U);
+  if (Lump >= 0) and (FWad.LumpSize(Lump) >= 8) then
+  begin
+    { DMX: format, sample rate, sample count (with 32 padding bytes). }
+    P := FWad.LumpPointer(Lump);
+    Rate := PWord(P + 2)^;
+    Count := PLongWord(P + 4)^;
+    if (Rate > 0) and (Count > 32) then
+      Result := (Count - 32) / Rate;
+  end;
+  FDurations.Add(U, Result);
+end;
+
+procedure TDoomSounds.PurgeChannels;
+var
+  I: Integer;
+  C: TDoomSoundChannel;
+begin
+  for I := FChannels.Count - 1 downto 0 do
+  begin
+    C := FChannels[I];
+    if C.Done or (FTime >= C.EndTime) then
+    begin
+      if C.Emitter <> nil then
+      begin
+        C.Emitter.RemoveFreeNotification(C);
+        C.Emitter := nil;
+      end;
+      FChannels.Delete(I);
+    end;
+  end;
+end;
+
+function TDoomSounds.FreeChannel(const LumpName: String; const Emitter: TCastleTransform;
+  const Own: Boolean): Boolean;
+var
+  I, Priority: Integer;
+  C: TDoomSoundChannel;
+begin
+  PurgeChannels;
+  { One sound per origin: a new one stops the last. }
+  if (Emitter <> nil) or Own then
+    for I := 0 to FChannels.Count - 1 do
+    begin
+      C := FChannels[I];
+      if ((Emitter <> nil) and (C.Emitter = Emitter)) or (Own and C.Own) then
+      begin
+        if FLogPositional then
+          WritelnLog('Sound', '%s replaces %s (the same origin)', [UpperCase(LumpName), C.LumpName]);
+        C.Done := true;
+        if C.Playing <> nil then C.Playing.Stop;
+        PurgeChannels;
+        Exit(true);
+      end;
+    end;
+  if FChannels.Count < FMaxChannels then Exit(true);
+  { All busy: the first sound whose priority is not better goes. }
+  Priority := SoundPriority(LumpName);
+  for I := 0 to FChannels.Count - 1 do
+  begin
+    C := FChannels[I];
+    if C.Priority >= Priority then
+    begin
+      if FLogPositional then
+        WritelnLog('Sound', '%s (priority %d) takes the channel of %s (priority %d)',
+          [UpperCase(LumpName), Priority, C.LumpName, C.Priority]);
+      C.Done := true;
+      if C.Playing <> nil then C.Playing.Stop;
+      PurgeChannels;
+      Exit(true);
+    end;
+  end;
+  if FLogPositional then
+    WritelnLog('Sound', '%s (priority %d) not played: %d channels hold better sounds',
+      [UpperCase(LumpName), Priority, FChannels.Count]);
+  Result := false;
+end;
+
+function TDoomSounds.NewChannel(const LumpName: String; const S: TCastleSound; const Emitter: TCastleTransform;
+  const Own: Boolean): TDoomSoundChannel;
+begin
+  Result := TDoomSoundChannel.Create(nil);
+  Result.LumpName := UpperCase(LumpName);
+  Result.Own := Own;
+  Result.Priority := SoundPriority(LumpName);
+  Result.EndTime := FTime + Duration(RenamedSound(LumpName));
+  if Emitter <> nil then
+  begin
+    Result.Emitter := Emitter;
+    Emitter.FreeNotification(Result);
+  end;
+  FChannels.Add(Result);
+end;
+
 procedure TDoomSounds.Play(const LumpName: String);
 var
   S: TCastleSound;
+  C: TDoomSoundChannel;
 begin
   S := Sound(LumpName);
   if S = nil then Exit;
-  SoundEngine.Play(S);
+  if not FreeChannel(LumpName, nil, false) then Exit;
+  C := NewChannel(LumpName, S, nil, false);
+  C.Playing := TCastlePlayingSound.Create(nil);
+  C.Playing.Sound := S;
+  SoundEngine.Play(C.Playing);
   if Assigned(FOnPlay) then FOnPlay(LumpName, nil);
+end;
+
+procedure TDoomSounds.PlayOwn(const LumpName: String);
+var
+  S: TCastleSound;
+  C: TDoomSoundChannel;
+begin
+  S := Sound(LumpName);
+  if S = nil then Exit;
+  if not FreeChannel(LumpName, nil, true) then Exit;
+  C := NewChannel(LumpName, S, nil, true);
+  C.Playing := TCastlePlayingSound.Create(nil);
+  C.Playing.Sound := S;
+  SoundEngine.Play(C.Playing);
+  if Assigned(FOnPlay) then FOnPlay(LumpName, nil);
+end;
+
+procedure TDoomSounds.Advance(const SecondsPassed: Single);
+begin
+  FTime := FTime + SecondsPassed;
+end;
+
+function TDoomSounds.ChannelCount: Integer;
+begin
+  PurgeChannels;
+  Result := FChannels.Count;
 end;
 
 procedure TDoomSounds.PlaceChannel(const C: TDoomSoundChannel);
@@ -326,7 +499,6 @@ var
   S: TCastleSound;
   Source: TCastleSoundSource;
   C: TDoomSoundChannel;
-  I: Integer;
   P: TVector3;
   Vol, Sep: Single;
 begin
@@ -353,17 +525,8 @@ begin
       WritelnLog('Sound', '%s at (%.0f, %.0f): out of range, not played', [UpperCase(LumpName), P.X, -P.Z]);
     Exit;
   end;
-  { One sound per origin: a new one stops the last. }
-  for I := 0 to FChannels.Count - 1 do
-    if (FChannels[I].Emitter = Emitter) and not FChannels[I].Done then
-    begin
-      FChannels[I].Done := true;
-      if FChannels[I].Playing <> nil then FChannels[I].Playing.Stop;
-    end;
-  C := TDoomSoundChannel.Create(nil);
-  C.LumpName := UpperCase(LumpName);
-  C.Emitter := Emitter;
-  Emitter.FreeNotification(C);
+  if not FreeChannel(LumpName, Emitter, false) then Exit;
+  C := NewChannel(LumpName, S, Emitter, false);
   C.Place := TCastleTransform.Create(nil);
   C.Place.Name := 'SoundChannel';
   Emitter.World.Add(C.Place);
@@ -372,9 +535,8 @@ begin
   C.Place.AddBehavior(Source);
   C.Playing := TCastlePlayingSoundSource.Create(nil);
   C.Playing.Sound := S;
-  FChannels.Add(C);
   PlaceChannel(C);
-  Source.Play(C.Playing);
+  Source.Play(TCastlePlayingSoundSource(C.Playing));
   if FLogPositional then
     WritelnLog('Sound', '%s at (%.0f, %.0f): volume %.2f, separation %.2f', [C.LumpName, P.X, -P.Z, Vol, Sep]);
   if Assigned(FOnPlay) then FOnPlay(LumpName, Emitter);
@@ -384,7 +546,6 @@ procedure TDoomSounds.UpdateListener(const DoomX, DoomY, AngleDeg: Single; const
   const BossMap: Boolean);
 var
   I: Integer;
-  C: TDoomSoundChannel;
 begin
   FListenerX := DoomX;
   FListenerY := DoomY;
@@ -392,22 +553,9 @@ begin
   FListenerEye := Eye;
   FBossMap := BossMap;
   FHaveListener := true;
+  PurgeChannels;
   for I := FChannels.Count - 1 downto 0 do
-  begin
-    C := FChannels[I];
-    if (not C.Done) and (C.Playing <> nil) and not C.Playing.Playing then
-      C.Done := true;
-    if C.Done then
-    begin
-      if C.Emitter <> nil then
-      begin
-        C.Emitter.RemoveFreeNotification(C);
-        C.Emitter := nil;
-      end;
-      FChannels.Delete(I);
-    end else
-      PlaceChannel(C);
-  end;
+    PlaceChannel(FChannels[I]);
 end;
 
 procedure TDoomSounds.StopPositional;

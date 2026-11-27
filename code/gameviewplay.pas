@@ -2871,9 +2871,11 @@ begin
     FFixedStepStarted := true;
   end;
   if FWorld = nil then Exit;
-  { Doom's sound falloff and separation are heard from the camera. }
+  { Doom's sound falloff and separation are heard from the camera; the
+    channels' sounds end in game time. }
   if Sounds <> nil then
   begin
+    Sounds.Advance(SecondsPassed);
     CamPos := FViewport.Camera.WorldTranslation;
     CamDir := FViewport.Camera.Direction;
     Sounds.UpdateListener(CamPos.X, -CamPos.Z, RadToDeg(ArcTan2(-CamDir.Z, CamDir.X)), CamPos,

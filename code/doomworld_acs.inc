@@ -895,7 +895,7 @@ begin
         if not Result then
         begin
           ShowMessage('You need a key to activate this object');
-          FSounds.Play('DSOOF');
+          FSounds.PlayOwn('DSOOF');
         end;
       end;
     101, 229:
@@ -904,7 +904,7 @@ begin
         if not Result then
         begin
           ShowMessage('You need all six keys to activate this object');
-          FSounds.Play('DSOOF');
+          FSounds.PlayOwn('DSOOF');
         end;
       end;
     else

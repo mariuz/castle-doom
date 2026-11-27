@@ -2746,7 +2746,7 @@ begin
     FMap.Sectors[Sec].Special := Special;
     Inc(Player.Secrets);
     ShowMessage('A secret is revealed!');
-    FSounds.Play('DSITEMUP');
+    FSounds.PlayOwn('DSITEMUP');
   end;
   { Damaging floors, only when standing on them; Boom's types (32 and
     up) say the damage in bits 5-6: 5, 10 or 20 a hit, the last one
@@ -2824,7 +2824,7 @@ begin
       end;
       if Step <> '' then
       begin
-        FSounds.Play(FSoundSeqs.LumpOf(Step));
+        FSounds.PlayOwn(FSoundSeqs.LumpOf(Step));
         WritelnLog('Terrain', 'Footstep on %s: %s (%s), every %d tics', [FTerrain.Terrains[T].Name, Step,
           FSoundSeqs.LumpOf(Step), Delay]);
       end;
@@ -3135,7 +3135,7 @@ begin
           Player.SwitchFrame := 0;
           Player.SwitchFrameTics := 0;
           Player.SwitchStart := -1;
-          if Player.Weapon = wpChainsaw then FSounds.Play('DSSAWUP');
+          if Player.Weapon = wpChainsaw then FSounds.PlayOwn('DSSAWUP');
         end;
       end;
     2:
@@ -6483,7 +6483,7 @@ begin
   FActors.Add(M);
   FThingsGroup.Add(M);
   if EffectInfos[Kind].AttackSound <> '' then
-    FSounds.Play(EffectInfos[Kind].AttackSound);
+    FSounds.PlayOwn(EffectInfos[Kind].AttackSound);
 end;
 
 procedure TDoomWorld.BfgSpray(const X, Y: Single);
@@ -6589,12 +6589,12 @@ begin
   begin
     Player.Health := 0;
     Player.Dead := true;
-    FSounds.Play('DSPLDETH');
+    FSounds.PlayOwn('DSPLDETH');
     ShowMessage('You died. Press USE to try again.');
     if FAcs <> nil then
       FAcs.StartType(AcsDeath, aaPlayer);
   end else
-    FSounds.Play('DSPLPAIN');
+    FSounds.PlayOwn('DSPLPAIN');
 end;
 
 procedure TDoomWorld.DamageActor(const A: TDoomActor; const Damage: Integer; const HitX, HitY, HitZ: Single;
@@ -7352,14 +7352,14 @@ begin
         PlayerLineAttack(Angle, Slope, Range, Dmg);
         if AimTarget <> nil then
         begin
-          if SoundName(Snd) <> '' then FSounds.Play(SoundName(Snd));
+          if SoundName(Snd) <> '' then FSounds.PlayOwn(SoundName(Snd));
           TurnPlayer(RadToDeg(ArcTan2(AimTarget.DoomY - Player.Y, AimTarget.DoomX - Player.X)));
         end;
       end;
     saWeaponSound:
       begin
         WritelnLog('Mbf21', 'Weapon: A_WeaponSound, %s', [SoundName(StateArg(S, 0, 0))]);
-        if SoundName(StateArg(S, 0, 0)) <> '' then FSounds.Play(SoundName(StateArg(S, 0, 0)));
+        if SoundName(StateArg(S, 0, 0)) <> '' then FSounds.PlayOwn(SoundName(StateArg(S, 0, 0)));
       end;
     saWeaponAlert:
       begin
@@ -7488,10 +7488,10 @@ begin
   end;
   { Sounds of the super shotgun's reload and the BFG's charge. }
   case Action of
-    saOpenShotgun2: begin FSounds.Play('DSDBOPN'); Exit; end;
-    saLoadShotgun2: begin FSounds.Play('DSDBLOAD'); Exit; end;
-    saCloseShotgun2: begin FSounds.Play('DSDBCLS'); Exit; end;
-    saBFGsound: begin FSounds.Play('DSBFG'); Exit; end;
+    saOpenShotgun2: begin FSounds.PlayOwn('DSDBOPN'); Exit; end;
+    saLoadShotgun2: begin FSounds.PlayOwn('DSDBLOAD'); Exit; end;
+    saCloseShotgun2: begin FSounds.PlayOwn('DSDBCLS'); Exit; end;
+    saBFGsound: begin FSounds.PlayOwn('DSBFG'); Exit; end;
     saPunch, saSaw, saFirePistol, saFireShotgun, saFireShotgun2, saFireCGun,
     saFireMissile, saFirePlasma, saFireBFG: ;
     else Exit;
@@ -7534,29 +7534,29 @@ begin
         if Action = saSaw then
         begin
           if AimTarget = nil then
-            FSounds.Play('DSSAWFUL')
+            FSounds.PlayOwn('DSSAWFUL')
           else
           begin
-            FSounds.Play('DSSAWHIT');
+            FSounds.PlayOwn('DSSAWHIT');
             SawTurn(AimTarget);
           end;
         end else
         if AimTarget <> nil then
         begin
-          FSounds.Play('DSPUNCH');
+          FSounds.PlayOwn('DSPUNCH');
           { A_Punch: face the target. }
           TurnPlayer(RadToDeg(ArcTan2(AimTarget.DoomY - Player.Y, AimTarget.DoomX - Player.X)));
         end;
       end;
     saFirePistol:
       begin
-        FSounds.Play('DSPISTOL');
+        FSounds.PlayOwn('DSPISTOL');
         BulletSlope;
         GunShot(not Player.Refire);
       end;
     saFireShotgun:
       begin
-        FSounds.Play('DSSHOTGN');
+        FSounds.PlayOwn('DSSHOTGN');
         BulletSlope;
         for I := 1 to 7 do
           GunShot(false);
@@ -7564,7 +7564,7 @@ begin
     saFireShotgun2:
       begin
         { A_FireShotgun2: 20 pellets, wider spread and a vertical one. }
-        FSounds.Play('DSDSHTGN');
+        FSounds.PlayOwn('DSDSHTGN');
         BulletSlope;
         for I := 1 to 20 do
           PlayerLineAttack(Angle + Spread(11.2),
@@ -7572,7 +7572,7 @@ begin
       end;
     saFireCGun:
       begin
-        FSounds.Play('DSPISTOL');
+        FSounds.PlayOwn('DSPISTOL');
         BulletSlope;
         GunShot(not Player.Refire);
       end;
@@ -7761,7 +7761,7 @@ begin
         pkMegasphere, pkBerserk, pkInvulnerability, pkInvisibility, pkRadSuit, pkComputerMap, pkLightAmp] then
         Inc(Player.Items);
       ShowMessage(Msg);
-      FSounds.Play(Sound);
+      FSounds.PlayOwn(Sound);
       Player.BonusCount := Player.BonusCount + 6; { BONUSADD }
       A.Removed := true;
       RunThingSpecial(A);
@@ -7858,7 +7858,7 @@ begin
        (Min(FMap.Sectors[F].CeilingHeight, FMap.Sectors[B].CeilingHeight) <=
         Max(FMap.Sectors[F].FloorHeight, FMap.Sectors[B].FloorHeight)) then
     begin
-      FSounds.Play('DSNOWAY');
+      FSounds.PlayOwn('DSNOWAY');
       Used := true;
       Break;
     end;
@@ -7868,7 +7868,7 @@ begin
   for K := 0 to N - 1 do
     FMap.Linedefs[Found[K]].Used := false;
   if not Used then
-    FSounds.Play('DSNOWAY');
+    FSounds.PlayOwn('DSNOWAY');
 end;
 
 function TDoomWorld.CheckKey(const Line: Integer; const Key: TDoomKey; const Skull: TDoomKey; const IsDoor: Boolean): Boolean;
@@ -7886,7 +7886,7 @@ begin
   { PD_BLUEK (doors) / PD_BLUEO (switches) like vanilla. }
   if IsDoor then KeyName := 'PD_' + KeyName + 'K' else KeyName := 'PD_' + KeyName + 'O';
   ShowMessage(Text(KeyName, Format('You need a %s key to %s', [Color, What])));
-  FSounds.Play('DSOOF');
+  FSounds.PlayOwn('DSOOF');
 end;
 
 procedure TDoomWorld.ChangeLineButton(const Line: Integer; const Repeatable: Boolean);
@@ -8608,7 +8608,7 @@ begin
         Fog.UpdateTransform;
         FActors.Add(Fog);
         FThingsGroup.Add(Fog);
-        FSounds.Play('DSTELEPT');
+        FSounds.PlayOwn('DSTELEPT');
         WritelnLog('Teleport', 'player to (%.0f, %.0f) by line %d', [Player.X, Player.Y, Line]);
         Exit;
       end;
@@ -8845,8 +8845,8 @@ begin
         139: begin S := -1; while NextTagged(S) do DoLight(S, 35); Done := true; Repeatable := true; end;
 
         { Exits }
-        11: begin FSounds.Play('DSSWTCHX'); FExitRequested := true; FSecretExit := false; Exit(true); end;
-        51: begin FSounds.Play('DSSWTCHX'); FExitRequested := true; FSecretExit := true; Exit(true); end;
+        11: begin FSounds.PlayOwn('DSSWTCHX'); FExitRequested := true; FSecretExit := false; Exit(true); end;
+        51: begin FSounds.PlayOwn('DSSWTCHX'); FExitRequested := true; FSecretExit := true; Exit(true); end;
 
         9: begin DoDonut(Tag); Done := true; end;
 

@@ -101,6 +101,10 @@ function SpriteIndexOf(const Name: String): Integer;
 { The sound's lump name (DSPISTOL), '' for 0 or out of range. }
 function SoundName(const Index: Integer): String;
 
+{ sounds.c's priority of a sound lump (DSPISTOL 64, DSPOSACT 120; lower
+  wins a channel); 64 for a lump that is not one of Doom's sounds. }
+function SoundPriority(const LumpName: String): Integer;
+
 { BEX's [SPRITES] / [SOUNDS] renames: the sprite prefix (TROO) or sound
   lump (DSPISTOL) the game asks for, and the one a patch put in its place
   (the same name when none did). The tables keep the vanilla names, so
@@ -453,6 +457,18 @@ begin
     if SameText(Sprites[I], Name) then
       Exit(I);
   Result := -1;
+end;
+
+function SoundPriority(const LumpName: String): Integer;
+var
+  I: Integer;
+  U: String;
+begin
+  U := UpperCase(LumpName);
+  for I := 1 to VanillaSoundCount - 1 do
+    if VanillaSounds[I] = U then
+      Exit(VanillaSoundPriorities[I]);
+  Result := 64;
 end;
 
 function SoundName(const Index: Integer): String;

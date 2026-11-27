@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Doom's eight sound channels: at most eight sounds play at once, a new one taking the channel of
+  a sound with no better priority (Doom's own table), and the player's own sounds (weapons,
+  pickups, pain) cut each other off like a monster's do.
 - Weapon changes follow the state table: DeHackEd patches that change a weapon's select, deselect
   or ready frames now change the sprites and timing of raising and lowering it, and the chainsaw
   idles with its own two frames.
