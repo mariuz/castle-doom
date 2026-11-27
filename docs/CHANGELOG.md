@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Weapon changes follow the state table: DeHackEd patches that change a weapon's select, deselect
+  or ready frames now change the sprites and timing of raising and lowering it, and the chainsaw
+  idles with its own two frames.
 - MAPINFO's `intermission` blocks: a PWAD's map that ends with `next = EndSequence, "Name"` plays
   ZDoom's scripted finale: pictures with patches over them, typed text screens, scrollers, fades
   and links between intermissions, each with its music and sound, shown for its time or until a

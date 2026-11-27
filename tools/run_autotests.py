@@ -1033,6 +1033,15 @@ TESTS = [
      [r'Sound: DSBRSDTH at \(1152, -1568\): volume 0\.12',
       r'!out of range'],
      ['--fixed-step'], None),
+    ('weapon-switch', 'E1M1', 'Y,W:0.6,S,W:1,K,C:3,W:0.3,S,W:1.5,C:8,W:1.5,S,W:0.12,S,Q',
+     [r'DeHackEd: weaponswitch.deh: 8 values applied',
+      r'Weapon: Raised PISG in 31 tics', r'Weapon: Lowered PISG in 31 tics',
+      r'Weapon: Raised SHTG in 16 tics', r'Weapon: Raised SAWG in 16 tics'],
+     ['-deh', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'weaponswitch.deh'), '--fixed-step'],
+     None),
+    ('weapon-switch-vanilla', 'E1M1', 'Y,W:1,K,C:3,W:1.5,Q',
+     [r'Weapon: Raised PISG in 16 tics', r'Weapon: Lowered PISG in 16 tics', r'Weapon: Raised SHTG in 16 tics'],
+     ['--fixed-step'], None),
     ('bex-rename', 'E1M1', 'Y,SHOTS,A:0,P:3001:120,W:0.5,S,X,W:0.5,K,C:3,W:1,X,W:0.5,Q',
      [r'DeHackEd: bex-rename.deh: sprite TROO is now POSS',
       r'DeHackEd: bex-rename.deh: sound DSSHOTGN is now DSPISTOL',
@@ -1860,6 +1869,7 @@ GOLDEN_MAX_CHANGED = 0.015
 # map loads, and the moving scenes of the tests run with --fixed-step
 # (one tic a frame, a fixed random seed).
 GOLDEN = [
+    'weapon-switch_1.png', 'weapon-switch_2.png', 'weapon-switch_3.png', 'weapon-switch_4.png',
     'intermission_1.png', 'intermission_2.png', 'intermission_3.png', 'intermission_4.png',
     'intermission_5.png', 'intermission_6.png', 'intermission-vanilla_1.png',
     'monster-backing-friend_1.png',

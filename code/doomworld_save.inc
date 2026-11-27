@@ -197,6 +197,8 @@ begin
   PJ.Add('weapon', Ord(Player.Weapon));
   PJ.Add('pendingWeapon', Ord(Player.PendingWeapon));
   PJ.Add('weaponSwitch', Player.WeaponSwitch);
+  PJ.Add('switchFrame', Player.SwitchFrame);
+  PJ.Add('switchFrameTics', Player.SwitchFrameTics);
   PJ.Add('weaponOffset', Double(Player.WeaponOffset));
   Bits := 0;
   for K := Low(TDoomKey) to High(TDoomKey) do
@@ -631,6 +633,9 @@ begin
     Player.Weapon := TWeapon(Clamped(PJ.Get('weapon', Ord(wpPistol)), Ord(Low(TWeapon)), Ord(High(TWeapon))));
     Player.PendingWeapon := TWeapon(Clamped(PJ.Get('pendingWeapon', Ord(Player.Weapon)), Ord(Low(TWeapon)), Ord(High(TWeapon))));
     Player.WeaponSwitch := PJ.Get('weaponSwitch', 0);
+    Player.SwitchFrame := PJ.Get('switchFrame', 0);
+    Player.SwitchFrameTics := PJ.Get('switchFrameTics', 0);
+    Player.SwitchStart := -1;
     Player.WeaponOffset := PJ.Get('weaponOffset', 0.0);
     Bits := PJ.Get('keys', 0);
     Player.Keys := [];

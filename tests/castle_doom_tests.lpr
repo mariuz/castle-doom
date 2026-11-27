@@ -109,6 +109,7 @@ type
     procedure TestPatchFile;
     procedure TestTranslucentBits;
     procedure TestBexRenames;
+    procedure TestWeaponChains;
     procedure TestMbf21;
   end;
 
@@ -3511,6 +3512,50 @@ begin
     AssertTrue('zombieman translucent (by number)', FindThingInfo(3004)^.Translucent);
     AssertTrue('zombieman still solid', FindThingInfo(3004)^.Solid);
     AssertFalse('sergeant untouched', FindThingInfo(9)^.Translucent);
+  finally
+    FreeAndNil(W);
+  end;
+end;
+
+procedure TTestDehacked.TestWeaponChains;
+var
+  W: TDoomWad;
+  Patch: String;
+  D: TWeaponDef;
+  Seq: TFrameSeq;
+begin
+  Patch := 'tools/testdata/weaponswitch.deh';
+  if not FileExists(Patch) then
+    Patch := '../tools/testdata/weaponswitch.deh';
+  W := TDoomWad.Create(WadUrl('freedoom1.wad'));
+  try
+    { Vanilla: one-tic A_Lower / A_Raise frames that loop. }
+    ClearDehackedFiles;
+    ApplyDehacked(W);
+    D := Weapons[1];
+    Seq := WalkStates(D.Down, [D.Ready, D.Up, D.Attack]);
+    AssertEquals('vanilla deselect: one frame', 1, Length(Seq.Tics));
+    AssertTrue('A_Lower', Seq.Actions[0] = saLower);
+    AssertTrue('loops', Seq.Loop);
+    Seq := WalkStates(Weapons[7].Ready, [Weapons[7].Up, Weapons[7].Down, Weapons[7].Attack]);
+    AssertEquals('the chainsaw''s ready frames', 'CD', Seq.Frames);
+    AssertEquals('4 tics each', 4, Seq.Tics[1]);
+    { The patch: a slow select frame, a two-frame deselect loop. }
+    AddDehackedFile(Patch);
+    ApplyDehacked(W);
+    D := Weapons[1];
+    Seq := WalkStates(D.Up, [D.Ready, D.Down, D.Attack]);
+    AssertEquals('select: 2 tics', 2, Seq.Tics[0]);
+    AssertEquals('select: PISG B', 'B', Seq.Frames);
+    AssertTrue('A_Raise', Seq.Actions[0] = saRaise);
+    Seq := WalkStates(D.Down, [D.Ready, D.Up, D.Attack]);
+    AssertEquals('deselect: two frames', 2, Length(Seq.Tics));
+    AssertEquals('the shotgun''s sprite', 'SHTG', Seq.Sprites[0]);
+    AssertEquals('second frame', 'SHTG', Seq.Sprites[1]);
+    AssertTrue('only the first lowers', (Seq.Actions[0] = saLower) and (Seq.Actions[1] = saNone));
+    AssertTrue('a loop', Seq.Loop);
+    ClearDehackedFiles;
+    ApplyDehacked(W);
   finally
     FreeAndNil(W);
   end;

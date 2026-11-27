@@ -76,6 +76,11 @@ type
     WeaponSwitch: Integer;
     WeaponOffset: Single;
     PendingWeapon: TWeapon;
+    { Where the switch is in the weapon's deselect / select chain (the
+      frame index and the tics left in it; 0 tics: the frame is entered
+      next tic) and the tic it began at (for the log). }
+    SwitchFrame, SwitchFrameTics: Integer;
+    SwitchStart: Int64;
     { Status bar face: tics left for the "ouch" / "evil grin" expressions. }
     FaceTics: Integer;
     FaceState: Integer;
@@ -233,6 +238,9 @@ type
     FBfgCountdown: Integer;
     { The weapons' attack and flash frames from the state table. }
     FWeaponSeqs, FFlashSeqs: array [TWeapon] of TFrameSeq;
+    { The deselect (A_Lower), select (A_Raise) and ready (A_WeaponReady)
+      chains of each weapon, from the live state table. }
+    FDownSeqs, FUpSeqs, FReadySeqs: array [TWeapon] of TFrameSeq;
     { A_ReFire reached with the trigger held: the attack starts over. }
     FRefirePending: Boolean;
     { The attack and flash frames playing (the weapon's own, or a chain
@@ -541,6 +549,8 @@ type
       when it ends the attack (the ready, raise or lower state). }
     function JumpWeapon(const S: Integer): Boolean;
     procedure BuildWeaponSeqs;
+    function StepWeaponSwitch(const Seq: TFrameSeq; const Lowering: Boolean): Boolean;
+    procedure SetReadyFrame;
     function Random1(const N: Integer): Integer;
     { System.Random, or the demo's own stream while a demo records or
       plays (other code draws System.Random too, at frame times). }
@@ -1895,6 +1905,9 @@ begin
   Player.PendingWeapon := Player.Weapon;
   Player.WeaponSwitch := 2;
   Player.WeaponOffset := 96;
+  Player.SwitchFrame := 0;
+  Player.SwitchFrameTics := 0;
+  Player.SwitchStart := -1;
   Player.AttackTics := 0;
   if State = nil then
     SpawnThings;
@@ -2087,6 +2100,12 @@ procedure TDoomWorld.ChangeWeapon(const W: TWeapon);
 begin
   if (W = Player.Weapon) and (Player.WeaponSwitch <> 1) then Exit;
   Player.PendingWeapon := W;
+  if Player.WeaponSwitch <> 1 then
+  begin
+    Player.SwitchFrame := 0;
+    Player.SwitchFrameTics := 0;
+    Player.SwitchStart := -1;
+  end;
   Player.WeaponSwitch := 1;
 end;
 
@@ -2995,6 +3014,100 @@ begin
     D := Weapons[Ord(W)];
     FWeaponSeqs[W] := WalkStates(D.Attack, [D.Ready, D.Up, D.Down]);
     FFlashSeqs[W] := WalkStates(D.Flash, [D.Ready, D.Up, D.Down, D.Attack]);
+    FDownSeqs[W] := WalkStates(D.Down, [D.Ready, D.Up, D.Attack]);
+    FUpSeqs[W] := WalkStates(D.Up, [D.Ready, D.Down, D.Attack]);
+    FReadySeqs[W] := WalkStates(D.Ready, [D.Up, D.Down, D.Attack]);
+  end;
+end;
+
+{ One tic of A_Lower / A_Raise through the weapon's deselect or select
+  chain: entering a frame shows its sprite and, when its code pointer is
+  A_Lower / A_Raise, moves the weapon 6 pixels (LOWERSPEED, RAISESPEED);
+  the frame's tics pass, then the next one (a looping chain starts over,
+  the end of another finishes the move). A chain without A_Lower / A_Raise
+  moves 6 pixels a tic as before. True when the move is complete. }
+function TDoomWorld.StepWeaponSwitch(const Seq: TFrameSeq; const Lowering: Boolean): Boolean;
+var
+  Act: TStateAction;
+  I, N: Integer;
+  HasAct: Boolean;
+
+  function MoveOnce: Boolean;
+  begin
+    if Lowering then
+    begin
+      Player.WeaponOffset := Player.WeaponOffset + 6;
+      Result := Player.WeaponOffset >= 96;
+    end else
+    begin
+      Player.WeaponOffset := Player.WeaponOffset - 6;
+      Result := Player.WeaponOffset <= 0;
+    end;
+  end;
+
+begin
+  if Lowering then Act := saLower else Act := saRaise;
+  N := Length(Seq.Tics);
+  HasAct := false;
+  for I := 0 to N - 1 do
+    if Seq.Actions[I] = Act then
+    begin
+      HasAct := true;
+      Break;
+    end;
+  if not HasAct then
+  begin
+    Player.WeaponFrame := 'A';
+    Player.WeaponSprite := '';
+    Exit(MoveOnce);
+  end;
+  Result := false;
+  if Player.SwitchFrame >= N then
+  begin
+    if not Seq.Loop then Exit(true);
+    Player.SwitchFrame := 0;
+  end;
+  if Player.SwitchFrameTics <= 0 then
+  begin
+    { The frame is entered: its sprite and its code pointer. }
+    Player.WeaponFrame := Seq.Frames[Player.SwitchFrame + 1];
+    Player.WeaponSprite := Seq.Sprites[Player.SwitchFrame];
+    Player.SwitchFrameTics := Max(1, Seq.Tics[Player.SwitchFrame]);
+    if Seq.Actions[Player.SwitchFrame] = Act then
+      Result := MoveOnce;
+  end;
+  Dec(Player.SwitchFrameTics);
+  if Player.SwitchFrameTics <= 0 then
+    Inc(Player.SwitchFrame);
+end;
+
+{ The ready chain's frame (A_WeaponReady's bobbing frames; the chainsaw's
+  two), by the level's tic. }
+procedure TDoomWorld.SetReadyFrame;
+var
+  Seq: TFrameSeq;
+  Total, T, I: Integer;
+begin
+  Seq := FReadySeqs[Player.Weapon];
+  Player.WeaponFrame := 'A';
+  Player.WeaponSprite := '';
+  if Length(Seq.Tics) = 0 then Exit;
+  Total := 0;
+  for I := 0 to High(Seq.Tics) do
+    Total := Total + Max(1, Seq.Tics[I]);
+  if Seq.Loop then
+    T := FTic mod Total
+  else
+    T := Total - 1;
+  for I := 0 to High(Seq.Tics) do
+  begin
+    if T < Max(1, Seq.Tics[I]) then
+    begin
+      Player.WeaponFrame := Seq.Frames[I + 1];
+      Player.WeaponSprite := Seq.Sprites[I];
+      Exit;
+    end;
+    T := T - Max(1, Seq.Tics[I]);
   end;
 end;
 
@@ -3002,30 +3115,40 @@ procedure TDoomWorld.UpdateWeaponAnimation;
 begin
   if Player.AttackTics > 0 then
     Dec(Player.AttackTics);
-  { A_Lower / A_Raise at 6 pixels per tic; the old weapon finishes its
-    attack first. }
+  { A_Lower / A_Raise through the weapons' deselect and select chains
+    (6 pixels each time the code pointer runs: every tic in vanilla); the
+    old weapon finishes its attack first. }
   case Player.WeaponSwitch of
     1:
       if Player.AttackTics <= 0 then
       begin
-        Player.WeaponOffset := Player.WeaponOffset + 6;
-        if Player.WeaponOffset >= 96 then
+        if Player.SwitchStart < 0 then Player.SwitchStart := FTic;
+        if StepWeaponSwitch(FDownSeqs[Player.Weapon], true) then
         begin
+          WritelnLog('Weapon', 'Lowered %s in %d tics', [WeaponSprite(Player.Weapon), FTic - Player.SwitchStart + 1]);
           Player.WeaponOffset := 96;
           Player.Weapon := Player.PendingWeapon;
           Player.WeaponFrame := 'A';
+          Player.WeaponSprite := '';
           Player.FlashFrame := #0;
           Player.WeaponSwitch := 2;
+          Player.SwitchFrame := 0;
+          Player.SwitchFrameTics := 0;
+          Player.SwitchStart := -1;
           if Player.Weapon = wpChainsaw then FSounds.Play('DSSAWUP');
         end;
       end;
     2:
       begin
-        Player.WeaponOffset := Player.WeaponOffset - 6;
-        if Player.WeaponOffset <= 0 then
+        if Player.SwitchStart < 0 then Player.SwitchStart := FTic;
+        if StepWeaponSwitch(FUpSeqs[Player.Weapon], false) then
         begin
+          WritelnLog('Weapon', 'Raised %s in %d tics', [WeaponSprite(Player.Weapon), FTic - Player.SwitchStart + 1]);
           Player.WeaponOffset := 0;
           Player.WeaponSwitch := 0;
+          Player.SwitchFrame := 0;
+          Player.SwitchFrameTics := 0;
+          Player.SwitchStart := -1;
           { MBF21's NOAUTOFIRE: a trigger held through the switch fires
             only once let go and pressed again. }
           if Player.FireHeld and WeaponHasBit(Player.Weapon, WeaponNoAutofire) then
@@ -3039,14 +3162,13 @@ begin
   if Player.AttackTics <= 0 then
   begin
     Player.AttackTics := 0;
-    Player.WeaponFrame := 'A';
-    Player.WeaponSprite := '';
+    { Switching: the chain's frame stays; else the ready chain's. }
+    if Player.WeaponSwitch = 0 then
+      SetReadyFrame;
     Player.FlashFrame := #0;
     Player.FlashSprite := '';
     Player.ExtraLight := 0;
     Player.FlashStart := -1;
-    if (Player.Weapon = wpChainsaw) and ((FTic div 4) mod 2 = 1) then
-      Player.WeaponFrame := 'B';
     Exit;
   end;
   AdvanceWeaponFrames;

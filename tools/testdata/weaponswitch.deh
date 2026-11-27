@@ -1,0 +1,23 @@
+Patch File for DeHackEd v3.0
+# The weapons' select / deselect chains from the state table: the
+# pistol comes up slowly (2 tics a frame, PISG B), and goes down showing
+# the shotgun's sprite in two frames that loop (only the first lowers it,
+# so it takes twice as long; frame 763 is one of Keen's, free in Doom 1);
+# the chainsaw's ready frames come from the
+# table too (SAWG C and D).
+Doom version = 19
+Patch format = 6
+
+Frame 12
+Duration = 2
+Sprite subnumber = 1
+
+Frame 11
+Sprite number = 1
+Next frame = 763
+
+Frame 763
+Sprite number = 1
+Sprite subnumber = 1
+Duration = 1
+Next frame = 11

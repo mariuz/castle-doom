@@ -68,6 +68,15 @@ L = several days). Items inside a section are in suggested order.
   DOGS sprites and sounds, autotest `dogs` with goldens). Left: monster
   backing (done, see below), MBF's dog jumping across gaps.
 
+- The weapons' select / deselect / ready chains from the state table
+  (`TDoomWorld.StepWeaponSwitch`, `SetReadyFrame`): DeHackEd's "Select
+  frame", "Deselect frame" and "Bobbing frame" chains give the sprites
+  and timing of a weapon change (A_Lower / A_Raise move 6 pixels each
+  time they run) and the frames at rest (the chainsaw's SAWG C / D from
+  the table). `tools/testdata/weaponswitch.deh`; autotests
+  `weapon-switch` (goldens), `weapon-switch-vanilla`, unit test
+  `TestWeaponChains`.
+
 - MAPINFO's `intermission` blocks (`DoomMapInfo.ReadIntermission`,
   `TDoomFinale`'s `fsSequence`): Image, TextScreen, Scroller, Fader,
   Wiper, GotoTitle and Cast actions with backgrounds (patches or tiled
@@ -1797,7 +1806,7 @@ L = several days). Items inside a section are in suggested order.
 
 | Item | Why | Where | Size |
 |---|---|---|---|
-| **DeHackEd new monsters**: frames, code pointers, weapons, projectiles and BEX `[SPRITES]` / `[SOUNDS]` renaming are done (see above); the weapons' bobbing / select / deselect chains (the raise and lower still move the ready sprite by code) and new monsters built from decoration rows (no AI for them) are not. | The rest of what mods change. | `DoomDehacked`, `DoomThings` | M |
+| **DeHackEd new monsters**: frames, code pointers, weapons, projectiles and BEX `[SPRITES]` / `[SOUNDS]` renaming are done (see above); the weapons' bobbing / select / deselect chains are done too; new monsters built from decoration rows (no AI for them) are not. | The rest of what mods change. | `DoomDehacked`, `DoomThings` | M |
 | **Browser frame rate**, measured (headless Chromium + SwiftShader on the live page, Chrome CPU profile, `PerfView:` statistics): a frame on E1M1 at the door spot draws 255 shapes = 255 draw calls (map 151 of its 206 per-texture shapes, sprites 104, one scene each); per frame the CPU time is ~94 ms in wasm (game logic 13 ms, the rest CGE's per-shape rendering and the music synth slice) + ~66 ms in the JOB JS bridge (`HaveSharedArrayBuffer`, `decode`, `Invoke_*`, then the WebGL calls: `bindBuffer`, `enable/disableVertexAttribArray`, `activeTexture`, `uniform*`), i.e. about 0.6 ms per shape, so the frame rate is the number of draw calls. Tried and reverted: splitting the static map geometry into 1024-unit cells for frustum culling (151 -> 249 map draw calls: textures repeat per cell and a 90-degree view covers most cells of a flat level). Done: (1) sprites in one scene per (light group, kind), each texture's quads merged by us in one persistent shape (`TSpriteBatch` / `TSpriteShape`; E1M1 door spot: sprites 104 -> 35 draw calls, 104 -> 9 scenes, the whole frame 255 -> 186 draw calls; CGE's own dynamic batching was tried in between: 8 merge slots a pass and shader relinks every frame from its pool shapes); (2) the map in a texture atlas with `fract` wrapping in the shader, padded tiles and no mipmaps (one shape per chunk and page: the frame 186 -> 56 draw calls, 12 for the map alone). Left: in CGE for the web, vertex array objects and cached uniform locations to cut WebGL calls per shape (every call crosses wasm -> JS); the atlas mipmaps are done (see above). | Playable speed on the Pages site. | `DoomActors`, CGE web renderer, `DoomGeometry` | M each |
 
 ## 3. Audio
@@ -1856,17 +1865,17 @@ play.
 
 ## Suggested next three
 
-1. The weapons' select / deselect chains from the state table (S-M):
-   DeHackEd's "Select frame" / "Deselect frame" sequences played
-   instead of the coded raise and lower (`TDoomWorld.BuildWeaponSeqs`,
-   A_Raise / A_Lower).
-2. Doom's sound channels (S): at most eight sounds at once
+1. Doom's sound channels (S): at most eight sounds at once
    (`snd_channels`), a new one taking the farthest or lowest-priority
    channel (`S_getChannel`, the sounds' priorities from `sounds.c`), and
    the player's own sounds replacing each other (`DoomSound`).
-3. A real wipe between intermission actions (S): ZDoom's `Wiper`
+2. A real wipe between intermission actions (S): ZDoom's `Wiper`
    (Melt, Crossfade, Burn) through the view's melt (`TDoomWipe`), and
    Doom's own Inter_Pic1 crossfade (`DoomFinale`, `GameViewPlay`).
+3. The chainsaw's idle and the weapons' sounds from the state table (S):
+   A_WeaponReady's DSSAWIDL while the chainsaw is up, and DeHackEd
+   weapons whose ready frames carry other pointers (`DoomWorld`
+   `SetReadyFrame`, `WeaponAction`).
 
 Mobile, the rest (testing on devices, the release signing keys) needs
 a device and the repository's secrets.

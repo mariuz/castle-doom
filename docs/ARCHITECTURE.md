@@ -1750,10 +1750,21 @@ The weapon sprite and muzzle flash are two more `TCastleImageControl`s placed
 with Doom's formula (`x1 = centerx + (1 - 160 - leftoffset) * scale`,
 `WEAPONTOP = 32`) and bobbed with the camera speed. A weapon change goes
 through `TDoomWorld.ChangeWeapon`: `Player.WeaponSwitch` 1 lowers the sprite
-by 6 Doom pixels per tic (`WeaponOffset`, added to `WEAPONTOP`) once the
-current attack has finished, swaps in `PendingWeapon` at 96, then 2 raises
-it back to 0 (`A_Lower` / `A_Raise`); `FireWeapon` refuses meanwhile and the
-bob stops. Every level starts at 96 (raising).
+(`WeaponOffset`, added to `WEAPONTOP`) once the current attack has
+finished, swaps in `PendingWeapon` at 96, then 2 raises it back to 0;
+`FireWeapon` refuses meanwhile and the bob stops. Every level starts at
+96 (raising). Both run through the weapon's deselect / select chains
+from the state table (`FDownSeqs` / `FUpSeqs`, built with the attack
+chains in `BuildWeaponSeqs`, so DeHackEd's "Deselect frame" / "Select
+frame" and the frames' sprites, tics and pointers count):
+`StepWeaponSwitch` enters a frame (its sprite shows, `Player.SwitchFrame`
+/ `SwitchFrameTics`, saved), moves 6 pixels when its pointer is
+`A_Lower` / `A_Raise` (each tic in vanilla, whose frames are one-tic
+loops), waits its tics, goes on (a looping chain starts over, the end of
+another finishes the move); a chain without those pointers moves 6 a
+tic. The log says `Weapon: Lowered PISG in 16 tics` / `Raised ...`. At
+rest the ready chain (`FReadySeqs`, "Bobbing frame") gives the frame by
+the level's tic (`SetReadyFrame`: the chainsaw's SAWG C / D).
 
 The screen melt (`doomwipe.pas`, `f_wipe.c`): `TViewPlay.BeginWipe` renders
 the old screen into a GPU texture and keeps it there: a `TDrawableImage` of

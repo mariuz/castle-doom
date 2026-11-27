@@ -830,6 +830,11 @@ volume 0.67, separation 0.00`, `... out of range, not played` beyond
 MAP08 keep far sounds at 0.12 (autotests `sound-falloff`,
 `sound-falloff-boss`, unit test `TestSoundFalloff`). There is no sound
 device in the cloud container, so only the numbers are tested there.
+Weapon changes: the log says `Weapon: Lowered PISG in 16 tics` and
+`Raised SHTG in 16 tics`; `-deh tools/testdata/weaponswitch.deh` makes
+the pistol rise in 31 tics as PISG B and go down as the shotgun's sprite
+in a two-frame loop (autotests `weapon-switch` with goldens,
+`weapon-switch-vanilla`, unit test `TestWeaponChains`).
 BEX renames: `-deh tools/testdata/bex-rename.deh` draws the imp with
 POSS (`[SPRITES] TROO = POSS`) and swaps the pistol's and shotgun's
 sounds (`[SOUNDS]`; log `DeHackEd: bex-rename.deh: sprite TROO is now
